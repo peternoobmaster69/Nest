@@ -2,9 +2,6 @@ import "./globals.css";
 import { Inter } from "next/font/google";
 import type { Metadata } from "next";
 
-import { AuthControls } from "@/components/AuthControls";
-import { getCurrentUser } from "@/lib/session";
-
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -12,9 +9,7 @@ export const metadata: Metadata = {
     description: "A modern, readable SaveTogether experience with clear calls-to-action and fintech-inspired styling.",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-    const user = await getCurrentUser();
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en">
             <body className={`${inter.className} app-body`}>
@@ -29,7 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                                 <p className="brand-sub">Clarity for collaborative finances</p>
                             </div>
                         </div>
-                        <AuthControls user={user} />
+                        <div className="badge-soft">Live product preview</div>
                     </header>
                     <main className="app-main">{children}</main>
                     <footer className="app-footer">
