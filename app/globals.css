@@ -97,64 +97,6 @@ body {
   gap: 0.85rem;
 }
 
-.auth-controls {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.auth-identity {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 0.9rem;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-card) 85%, transparent);
-  border: 1px solid var(--color-card-border);
-  color: var(--color-foreground);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.auth-button,
-.auth-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  padding: 0.65rem 1rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-card-border);
-  font-weight: 700;
-  text-decoration: none;
-  color: var(--color-foreground);
-  transition: transform 120ms ease, box-shadow 160ms ease;
-}
-
-.auth-button {
-  background: linear-gradient(120deg, var(--color-accent), var(--color-accent-strong));
-  color: #0b1021;
-  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
-  box-shadow: 0 10px 24px -14px rgba(92, 124, 250, 0.8);
-}
-
-.auth-button:disabled {
-  opacity: 0.8;
-  cursor: not-allowed;
-}
-
-.auth-link {
-  background: color-mix(in srgb, var(--color-card) 90%, transparent);
-}
-
-.auth-button:hover,
-.auth-link:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 24px -18px rgba(12, 18, 38, 0.35);
-}
-
 .brand-icon {
   width: 46px;
   height: 46px;
