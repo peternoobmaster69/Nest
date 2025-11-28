@@ -9,7 +9,7 @@ const SwaggerUI = dynamic(() => import("swagger-ui-react"), {
   loading: () => <p>Loading Component...</p>,
 });
 
-export default async function ApiDocsPage() {
+export default function ApiDocsPage() {
   return (
     <section>
       <SwaggerUI url="/openapi.json" />

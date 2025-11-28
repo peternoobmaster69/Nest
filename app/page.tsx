@@ -1,65 +1,151 @@
-import Image from "next/image";
+import {
+  Activity,
+  ArrowRight,
+  CheckCircle,
+  Fingerprint,
+  Layers,
+  PiggyBank,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Wallet,
+} from "lucide-react";
 
-export default function Home() {
+import { getCurrentUser } from "@/lib/session";
+
+const quickActions = [
+  {
+    title: "Open a shared pot",
+    description: "Spin up a secure pool with caps, guardrails, and invites in seconds.",
+    icon: PiggyBank,
+  },
+  {
+    title: "Invite collaborators",
+    description: "Send access links with policies baked in so everyone starts aligned.",
+    icon: Users,
+  },
+  {
+    title: "Set approvals",
+    description: "Dual sign-offs and spending thresholds keep every move intentional.",
+    icon: ShieldCheck,
+  },
+];
+
+const trustSignals = [
+  {
+    label: "Identity locks",
+    detail: "Passkeys and device checks guard every session.",
+    icon: Fingerprint,
+  },
+  {
+    label: "Real-time alerts",
+    detail: "Instant pings for withdrawals, caps, and approvals.",
+    icon: Activity,
+  },
+  {
+    label: "Layered visibility",
+    detail: "Policy-aware views keep stakeholders focused.",
+    icon: Layers,
+  },
+];
+
+export default async function Home() {
+  const user = await getCurrentUser();
+  const displayName = user?.Name?.trim() || user?.Email || "Welcome to SaveTogether";
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="page-grid">
+      <section className="section-card hero-panel">
+        <div className="pill">
+          <Sparkles size={16} />
+          Built for modern finance teams
+        </div>
+        <div className="hero-banner">
+          {user ? (
+            <div className="hero-identity" aria-label="Signed in user">
+              <CheckCircle size={18} />
+              Signed in as {displayName}
+            </div>
+          ) : (
+            <a className="btn btn-primary" href="/login">
+              Log in to your workspace
+              <ArrowRight size={16} />
+            </a>
+          )}
+          <h1 className="hero-title hero-title--center">{displayName}</h1>
+          <p className="hero-subtext">
+            Crisp, distraction-free oversight for shared saving. Everything you need stays readable in light or dark mode.
           </p>
+          <div className="hero-actions">
+            <a className="btn btn-secondary" href={user ? "/dashboard" : "/register"}>
+              {user ? "View your pools" : "Create an account"}
+              <ArrowRight size={16} />
+            </a>
+            <div className="hero-glow" aria-hidden="true" />
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      <section className="section-card minimal-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="pill" style={{ margin: 0 }}>
+              <Wallet size={16} />
+              Clear control surface
+            </p>
+            <h2 className="card-title" style={{ marginTop: "0.75rem" }}>
+              Quick actions tuned for focus
+            </h2>
+          </div>
         </div>
-      </main>
+        <div className="grid-3">
+          {quickActions.map(({ title, description, icon: Icon }) => (
+            <div key={title} className="stat-card">
+              <div className="icon-pill">
+                <Icon size={18} />
+              </div>
+              <p className="card-title" style={{ marginTop: "0.35rem" }}>
+                {title}
+              </p>
+              <p className="text-muted" style={{ margin: "0.35rem 0 0" }}>
+                {description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-card trust-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="pill" style={{ margin: 0 }}>
+              <ShieldCheck size={16} />
+              Trust-first by default
+            </p>
+            <h2 className="card-title" style={{ marginTop: "0.75rem" }}>
+              Safeguards that stay out of your way
+            </h2>
+            <p className="text-muted" style={{ marginTop: "0.35rem" }}>
+              Every control favors clarity: concise copy, strong contrast, and motion kept to a minimum.
+            </p>
+          </div>
+        </div>
+        <div className="grid-3">
+          {trustSignals.map(({ label, detail, icon: Icon }) => (
+            <div key={label} className="section-card glass-card">
+              <div className="icon-pill">
+                <Icon size={18} />
+              </div>
+              <p className="card-title" style={{ marginTop: "0.4rem" }}>
+                {label}
+              </p>
+              <p className="text-muted" style={{ marginTop: "0.3rem" }}>
+                {detail}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
