@@ -41,7 +41,7 @@ export default async function EditAccountPage({ params }: PageProps) {
   if (accountResult.recordset.length === 0) {
     return (
       <main className="min-h-screen bg-slate-100">
-        <div className="mx-auto max-w-5xl px-4 py-8">
+        <div className="mx-auto max-w-8xl px-4 py-8">
           <div className="rounded-2xl bg-white p-6 shadow">
             <h1 className="text-lg font-semibold text-slate-900">
               Account not found
@@ -97,7 +97,7 @@ export default async function EditAccountPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+      <div className="mx-auto  max-w-8xl px-4 py-8 space-y-6">
         {/* Top ~10%: compact account update card */}
         <section className="rounded-2xl bg-white p-4 shadow-sm">
           <HideableAccountForm mode="edit" account={acc} defaultVisible={false} />
