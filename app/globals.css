@@ -42,7 +42,7 @@ body {
 }
 
 .app-body {
-  margin-top: 2rem;
+  margin-top: 3rem;
   background: var(--color-background);
   color: var(--color-foreground);
 }
