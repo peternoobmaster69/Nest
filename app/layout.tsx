@@ -1,45 +1,31 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
-import type { Metadata } from "next";
-
-import { AuthControls } from "@/components/AuthControls";
+import type { Metadata } from "next";   
+import Header from "../components/Header";  
 import { getCurrentUser } from "@/lib/session";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-    title: "SaveTogether | Collaborative finance that feels modern",
-    description: "A modern, readable SaveTogether experience with clear calls-to-action and fintech-inspired styling.",
+    title: "SaveTogether",
+    description: "A modern financial app for modern households.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-    const user = await getCurrentUser();
 
+    const user = await getCurrentUser();
+    
     return (
         <html lang="en">
             <body className={`${inter.className} app-body`}>
                 <div className="app-surface">
                     <div className="app-surface__glow" aria-hidden="true" />
                     <div className="app-surface__grid" aria-hidden="true" />
-                    <header className="app-header">
-                        <div className="brand-mark">
-                            <div className="brand-icon" aria-hidden="true" />
-                            <div>
-                                <p className="brand-name">SaveTogether</p>
-                                <p className="brand-sub">Clarity for collaborative finances</p>
-                            </div>
-                        </div>
-                        <AuthControls user={user} />
-                    </header>
-                    <main className="app-main">{children}</main>
-                    <footer className="app-footer">
-                        <p className="text-muted">Built for teams who want trust, transparency, and effortless growth.</p>
-                        <div className="footer-dots" aria-hidden="true">
-                            <span />
-                            <span />
-                            <span />
-                        </div>
-                    </footer>
+                        
+                    <main className="app-main">
+                        <Header user={user} />
+                        {children}
+                    </main>
                 </div>
             </body>
         </html>
