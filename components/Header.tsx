@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Landmark } from "lucide-react";
 
 type HeaderProps = {
   user:
@@ -35,11 +36,21 @@ export default function Header({ user }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+    <header
+      className="
+        fixed inset-x-0 top-0 z-20
+        border-b border-slate-200
+        bg-white/80 backdrop-blur
+      "
+    >
+      <div className="mx-auto flex h-14 max-w-8xl items-center justify-between px-4">
         {/* App name / logo */}
-        <Link href="/accounts" className="text-sm font-semibold text-slate-900">
-          SaveTogether
+        <Link
+          href="/accounts"
+          className="flex items-center gap-2 text-sm font-semibold text-primary"
+        >
+          <Landmark size={24} strokeWidth={1.4} />
+          <span>SaveTogether</span>
         </Link>
 
         {/* Right side: auth buttons */}
@@ -47,7 +58,7 @@ export default function Header({ user }: HeaderProps) {
           {user ? (
             <>
               <span className="hidden text-xs text-slate-600 sm:inline">
-                {user.Name || user.Email}
+                Hi, {user.Name || user.Email}
               </span>
               <button
                 onClick={handleLogout}

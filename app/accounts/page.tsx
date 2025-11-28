@@ -15,6 +15,8 @@ type Account = {
 };
 
 export default function AccountsPage() {
+
+  
   const [accounts, setAccounts] = useState<Account[]>([]);
   const totalsByCurrency = accounts.reduce<Record<string, number>>((acc, a) => {
     acc[a.Currency] = (acc[a.Currency] ?? 0) + Number(a.CurrentAmount || 0);
@@ -54,7 +56,7 @@ export default function AccountsPage() {
 
   return (
     <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mx-auto max-w-8xl px-4 py-8">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
@@ -134,7 +136,7 @@ export default function AccountsPage() {
 
         {/* Grid */}
         {!loading && !error && accounts.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
             {accounts.map((acc) => (
               <Link
                 key={acc.Id}
@@ -162,7 +164,7 @@ export default function AccountsPage() {
 
                 <div className="mb-3">
                   <p
-                    className={`text-2xl font-semibold ${
+                    className={`text-xl font-semibold ${
                       Number(acc.CurrentAmount) <= 0 ? "text-rose-600" : "text-emerald-600"
                     }`}
                   >

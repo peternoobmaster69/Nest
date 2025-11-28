@@ -3,6 +3,7 @@
 :root {
   --color-background: #f6f8fb;
   --color-foreground: #0b1021;
+  --color-primary: #2f3447;
   --color-muted: #5f6b7f;
   --color-accent: #5c7cfa;
   --color-accent-strong: #5ce0ff;
@@ -41,6 +42,7 @@ body {
 }
 
 .app-body {
+  margin-top: 2rem;
   background: var(--color-background);
   color: var(--color-foreground);
 }
@@ -49,7 +51,6 @@ body {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  padding: clamp(1.5rem, 3vw, 3.5rem);
   isolation: isolate;
 }
 
@@ -79,7 +80,6 @@ body {
 .app-footer {
   position: relative;
   z-index: 1;
-  max-width: 1120px;
   margin: 0 auto;
 }
 
@@ -88,7 +88,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.25rem 0;
+  padding: 0;
 }
 
 .brand-mark {
@@ -145,13 +145,12 @@ body {
 .app-main {
   display: flex;
   flex-direction: column;
-  gap: clamp(1.5rem, 2vw, 2.5rem);
-  padding: clamp(0.5rem, 1vw, 1rem) 0;
+  gap: clamp(1rem, 1.4vw, 1rem);
 }
 
 .app-footer {
-  margin-top: clamp(2rem, 4vw, 3rem);
-  padding-bottom: clamp(1rem, 2vw, 1.5rem);
+  margin-top: clamp(1.25rem, 2vw, 2rem); 
+  padding-bottom: clamp(0.75rem, 1.4vw, 1.25rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -178,7 +177,7 @@ body {
   backdrop-filter: blur(14px);
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-large);
-  padding: clamp(1.5rem, 2.4vw, 2.4rem);
+  padding: clamp(1.1rem, 1.8vw, 1.8rem);
   box-shadow: var(--shadow-lifted);
 }
 
@@ -204,6 +203,9 @@ body {
   color: var(--color-muted);
 }
 
+.text-primary{
+  color: var(--color-primary);
+}
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
