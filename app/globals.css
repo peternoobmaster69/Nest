@@ -50,6 +50,9 @@
   --warning-bg: #fff8ec;
   --danger: #dc2626;
   --danger-bg: #fef2f2;
+  --amount-positive: #1a8f58;
+  --amount-negative: #d97706;
+  --amount-zero: var(--text-primary);
 
   /* Radius */
   --r-sm: 6px;
@@ -903,12 +906,17 @@ body {
 }
 
 .positive {
-  color: var(--success);
+  color: var(--amount-positive);
   font-weight: 600;
 }
 
 .negative {
-  color: var(--danger);
+  color: var(--amount-negative);
+  font-weight: 600;
+}
+
+.zero {
+  color: var(--amount-zero);
   font-weight: 600;
 }
 
@@ -1049,11 +1057,15 @@ body {
 }
 
 .tx-amount.negative {
-  color: var(--danger);
+  color: var(--amount-negative);
 }
 
 .tx-amount.positive {
-  color: var(--success);
+  color: var(--amount-positive);
+}
+
+.tx-amount.zero {
+  color: var(--amount-zero);
 }
 
 .tx-sub {
@@ -1086,6 +1098,13 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 8px;
+}
+
+.bm-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .bm-top-right {
@@ -2622,6 +2641,9 @@ body {
   --warning-bg: #2d1d00;
   --danger: #f87171;
   --danger-bg: #2d0a0a;
+  --amount-positive: #4ade80;
+  --amount-negative: #fbbf24;
+  --amount-zero: var(--text-primary);
   --brand-50: #0a2e1e;
   --brand-100: #147349;
   --brand-500: #34d399;
@@ -3072,5 +3094,93 @@ body {
 
   .cct-modal-actions .btn {
     flex: 1;
+  }
+}
+
+.recv-month-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.recv-month-chip {
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  padding: 8px 6px;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  background: var(--bg-elevated);
+  transition: all var(--t);
+}
+
+.recv-month-chip-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.recv-month-chip-count {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.recv-month-chip.is-empty {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border-default));
+}
+
+.recv-month-chip.is-has-items {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border-default));
+}
+
+.recv-month-chip.is-active {
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 720px) {
+  .recv-month-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.tx-account-grid {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tx-account-card {
+  padding: 8px;
+}
+
+.tx-account-card .bm-name {
+  font-size: 11px;
+  margin-bottom: 0;
+}
+
+.tx-account-card .bm-amount {
+  font-size: 14px;
+  margin-bottom: 0;
+}
+
+.tx-account-card .bm-target,
+.tx-account-card .bm-foot {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .tx-account-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .tx-account-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

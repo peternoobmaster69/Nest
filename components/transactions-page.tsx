@@ -12,6 +12,7 @@ type Budget = {
   id: string;
   accountId: string;
   name: string;
+  icon?: string | null;
   availableCents: number;
   targetCents: number;
 };
@@ -36,6 +37,23 @@ type BankAccount = {
 
 function formatCents(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
+}
+
+function getAmountToneClass(valueCents: number) {
+  if (valueCents < 0) return "negative";
+  if (valueCents > 0) return "positive";
+  return "zero";
+}
+
+function getBudgetIcon(name: string, icon?: string | null) {
+  if (icon) return icon;
+  const key = name.toLowerCase();
+  if (key.includes("save")) return "🛡️";
+  if (key.includes("loan")) return "🏠";
+  if (key.includes("insurance")) return "🧾";
+  if (key.includes("phone")) return "📱";
+  if (key.includes("credit")) return "💳";
+  return "💰";
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -260,7 +278,7 @@ export function TransactionsPage() {
             }}
           >
             <div className="bm-name">All banks</div>
-            <div className="bm-amount">{formatCents(totalBankBalanceCents)}</div>
+            <div className={`bm-amount ${getAmountToneClass(totalBankBalanceCents)}`}>{formatCents(totalBankBalanceCents)}</div>
           </div>
           {(bankAccounts.data ?? []).map((bank) => (
             <div
@@ -294,7 +312,7 @@ export function TransactionsPage() {
                 })()}
                 <span>{bank.name}</span>
               </div>
-              <div className="bm-amount">{formatCents(bank.currentBalanceCents)}</div>
+              <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
             </div>
           ))}
         </div>
@@ -304,14 +322,14 @@ export function TransactionsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "relative", zIndex: 2 }}>
           <div>
             <div className="hero-label">Total Transactions</div>
-            <div className="hero-amount">{formatCents(totalFilteredCents)}</div>
+            <div className={`hero-amount ${getAmountToneClass(totalFilteredCents)}`}>{formatCents(totalFilteredCents)}</div>
             <div className="hero-sub">
               {selectedBankId ? bankAccounts.data?.find((b) => b.id === selectedBankId)?.name || "Selected bank" : "All banks"}
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "11px", marginBottom: "4px", color: "var(--success)" }}>In {formatCents(totalIncomingCents)}</div>
-            <div style={{ fontSize: "11px", color: "var(--danger)" }}>Out {formatCents(totalOutgoingCents)}</div>
+            <div className="positive" style={{ fontSize: "11px", marginBottom: "4px" }}>In {formatCents(totalIncomingCents)}</div>
+            <div className="negative" style={{ fontSize: "11px" }}>Out {formatCents(totalOutgoingCents)}</div>
           </div>
         </div>
       </section>
@@ -319,7 +337,6 @@ export function TransactionsPage() {
       <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
         <div>
           <div style={{ fontSize: "13px", fontWeight: 600 }}>Add Transaction</div>
-          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Use popup form to save space</div>
         </div>
         <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
           Add Transaction
@@ -327,34 +344,45 @@ export function TransactionsPage() {
       </section>
 
       <section className="card">
-        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Accounts</div>
-        <div className="account-cards-grid">
+        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span aria-hidden="true">📁</span>
+          <span>Sub-Accounts</span>
+        </div>
+        <div className="account-cards-grid tx-account-grid">
+          {/*
+            Transactions page: compact account chips with only name + amount.
+          */}
           <div
-            className="budget-mini budget-mini-compact"
+            className="budget-mini budget-mini-compact tx-account-card"
             onClick={() => setActiveBudgetFilterId("ALL")}
             style={{
               borderColor: activeBudgetFilterId === "ALL" ? "var(--brand-500)" : undefined,
               boxShadow: activeBudgetFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
             }}
           >
-            <div className="bm-name">All accounts</div>
-            <div className="bm-target">{filteredTransactions.length} transactions</div>
+            <div className="bm-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <span aria-hidden="true">📁</span>
+              <span>All accounts</span>
+            </div>
+            <div className={`bm-amount ${getAmountToneClass(visibleBudgets.reduce((sum, budget) => sum + budget.availableCents, 0))}`}>
+              {formatCents(visibleBudgets.reduce((sum, budget) => sum + budget.availableCents, 0))}
+            </div>
           </div>
           {visibleBudgets.map((b) => (
             <div
               key={b.id}
-              className="budget-mini budget-mini-compact"
+              className="budget-mini budget-mini-compact tx-account-card"
               onClick={() => setActiveBudgetFilterId(b.id)}
               style={{
                 borderColor: activeBudgetFilterId === b.id ? "var(--brand-500)" : undefined,
                 boxShadow: activeBudgetFilterId === b.id ? "var(--shadow-sm)" : undefined,
               }}
             >
-              <div className="bm-name">{b.name}</div>
-              <div className="bm-amount">{formatCents(b.availableCents)}</div>
-              <div className="bm-target">
-                {b.targetCents > 0 ? `${formatCents(b.availableCents)} / ${formatCents(b.targetCents)}` : "No target"}
+              <div className="bm-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <span aria-hidden="true">{getBudgetIcon(b.name, b.icon)}</span>
+                <span>{b.name}</span>
               </div>
+              <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
             </div>
           ))}
         </div>
@@ -380,7 +408,7 @@ export function TransactionsPage() {
                     className="input"
                     value={editOperation}
                     onChange={(e) => setEditOperation(e.target.value as "DEDUCT" | "ADD")}
-                    style={{ color: editOperation === "DEDUCT" ? "var(--danger)" : "var(--success)" }}
+                    style={{ color: editOperation === "DEDUCT" ? "var(--amount-negative)" : "var(--amount-positive)" }}
                   >
                     <option value="DEDUCT">Deduct</option>
                     <option value="ADD">Add</option>
@@ -407,7 +435,7 @@ export function TransactionsPage() {
             ) : (
               <div key={tx.id} className="crud-row">
                 <div style={{ display: "grid", gap: "3px" }}>
-                  <span className={tx.direction === "DEBIT" ? "negative" : "positive"}>
+                  <span className={getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}>
                     {tx.subject} {formatCents(tx.amountCents)}
                   </span>
                   <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(tx.date).toLocaleString()}</span>
@@ -479,7 +507,7 @@ export function TransactionsPage() {
                   className="input"
                   value={operation}
                   onChange={(e) => setOperation(e.target.value as "DEDUCT" | "ADD")}
-                  style={{ color: operation === "DEDUCT" ? "var(--danger)" : "var(--success)" }}
+                  style={{ color: operation === "DEDUCT" ? "var(--amount-negative)" : "var(--amount-positive)" }}
                 >
                   <option value="DEDUCT">Deduct</option>
                   <option value="ADD">Add</option>

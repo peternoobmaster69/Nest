@@ -102,6 +102,12 @@ function formatCentsShort(value: number) {
   return `$${dollars.toFixed(dollars % 1 === 0 ? 0 : 2)}`;
 }
 
+function getAmountToneClass(valueCents: number) {
+  if (valueCents < 0) return "negative";
+  if (valueCents > 0) return "positive";
+  return "zero";
+}
+
 async function getSummary(): Promise<DashboardSummary> {
   const res = await fetch("/api/dashboard/summary", { cache: "no-store" });
   if (!res.ok) {
@@ -215,6 +221,7 @@ export function DashboardShell({
   const [budgetName, setBudgetName] = useState("");
   const [budgetTarget, setBudgetTarget] = useState("");
   const [budgetAccountId, setBudgetAccountId] = useState("");
+  const [createBudgetOpen, setCreateBudgetOpen] = useState(false);
   const [txSubject, setTxSubject] = useState("");
   const [txAmount, setTxAmount] = useState("");
   const [txAccountId, setTxAccountId] = useState("");
@@ -329,7 +336,13 @@ export function DashboardShell({
       }
       pushToast("error", "Budget creation failed.");
     },
-    onSuccess: () => pushToast("success", "Budget created."),
+    onSuccess: () => {
+      pushToast("success", "Budget created.");
+      setCreateBudgetOpen(false);
+      setBudgetName("");
+      setBudgetTarget("");
+      setBudgetAccountId("");
+    },
     onSettled: refreshAll,
   });
 
@@ -565,9 +578,6 @@ export function DashboardShell({
     const parsedTarget = budgetTarget.trim() ? Number(budgetTarget) : 0;
     if (Number.isNaN(parsedTarget) || parsedTarget < 0) return;
     createBudget.mutate({ name: budgetName.trim(), targetCents: Math.round(parsedTarget * 100), accountId: budgetAccountId });
-    setBudgetName("");
-    setBudgetTarget("");
-    setBudgetAccountId("");
   };
 
   const onCreateTx = (event: FormEvent) => {
@@ -655,6 +665,10 @@ export function DashboardShell({
   );
   const budgetNameById = useMemo(
     () => new Map((budgetsQuery.data ?? []).map((b) => [b.id, b.name])),
+    [budgetsQuery.data],
+  );
+  const budgetById = useMemo(
+    () => new Map((budgetsQuery.data ?? []).map((b) => [b.id, b])),
     [budgetsQuery.data],
   );
   const filteredBankDiscrepancies = useMemo(
@@ -756,7 +770,7 @@ export function DashboardShell({
                 }}
               >
                 <div className="bm-name">All banks</div>
-                <div className="bm-amount">{formatCents(summary.totalBalanceCents)}</div>
+                <div className={`bm-amount ${getAmountToneClass(summary.totalBalanceCents)}`}>{formatCents(summary.totalBalanceCents)}</div>
               </div>
               {bankAccountsQuery.data?.map((bank) => (
                 <div
@@ -790,7 +804,7 @@ export function DashboardShell({
                     })()}
                     <span>{bank.name}</span>
                   </div>
-                  <div className="bm-amount">{formatCents(bank.currentBalanceCents)}</div>
+                  <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
                 </div>
               ))}
             </div>
@@ -801,15 +815,15 @@ export function DashboardShell({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "relative", zIndex: 2 }}>
               <div>
                 <div className="hero-label">Total Allocated</div>
-                <div className="hero-amount">{isLoading ? "Loading..." : formatCents(totalBudgeted)}</div>
+                <div className={`hero-amount ${getAmountToneClass(totalBudgeted)}`}>{isLoading ? "Loading..." : formatCents(totalBudgeted)}</div>
                 <div className="hero-sub">Across {filteredBudgets.length} budget accounts</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: "10px", opacity: 0.55, marginBottom: "3px" }}>Available in bank</div>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
+                <div className={getAmountToneClass(filteredBankBalance)} style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
                   {isLoading ? "—" : formatCents(filteredBankBalance)}
                 </div>
-                <div style={{ fontSize: "10px", opacity: 0.55, marginTop: "2px" }}>
+                <div className={getAmountToneClass(freeAmount)} style={{ fontSize: "10px", opacity: 0.55, marginTop: "2px" }}>
                   {isLoading ? "—" : formatCents(freeAmount)} free
                 </div>
               </div>
@@ -979,14 +993,24 @@ export function DashboardShell({
                   <div key={tx.id} className="tx-item">
                     <div className="tx-icon">{getTxEmoji(tx.subject)}</div>
                     <div className="tx-meta">
-                      <div className="tx-name">{tx.subject}</div>
+                      <div className="tx-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        {selectedBankFilterId === "ALL" && tx.budgetId && budgetById.get(tx.budgetId) ? (
+                          <span aria-hidden="true">
+                            {getBudgetIcon(
+                              budgetById.get(tx.budgetId)?.name || "",
+                              budgetById.get(tx.budgetId)?.icon,
+                            )}
+                          </span>
+                        ) : null}
+                        <span>{tx.subject}</span>
+                      </div>
                       <div className="tx-date">
                         {new Date(tx.date).toLocaleDateString()} ·{" "}
                         {(tx.budgetId && budgetNameById.get(tx.budgetId)) || "Unassigned"}
                       </div>
                     </div>
                     <div>
-                      <div className={`tx-amount ${tx.direction === "DEBIT" ? "negative" : "positive"}`}>
+                      <div className={`tx-amount ${getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}`}>
                         {tx.direction === "DEBIT" ? "−" : "+"}
                         {formatCents(tx.amountCents)}
                       </div>
@@ -1003,10 +1027,29 @@ export function DashboardShell({
           {/* Budget Accounts Grid */}
           <div className="card" style={{ marginTop: "14px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <div style={{ fontSize: "13px", fontWeight: 600 }}>Sub-Accounts</div>
-              <span style={{ fontSize: "11px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                {formatCents(totalBudgeted)} / {formatCents(filteredBankBalance)}
-              </span>
+              <div style={{ fontSize: "13px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <span aria-hidden="true">📁</span>
+                <span>Sub-Accounts</span>
+              </div>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                  {formatCents(totalBudgeted)} / {formatCents(filteredBankBalance)}
+                </span>
+                <button
+                  className="btn btn-primary btn-xs"
+                  type="button"
+                  onClick={() => {
+                    setCreateBudgetOpen(true);
+                    if (!budgetAccountId) {
+                      setBudgetAccountId(selectedBankFilterId !== "ALL" ? selectedBankFilterId : firstBankAccountId ?? "");
+                    }
+                  }}
+                  aria-label="Add sub-account"
+                  title="Add sub-account"
+                >
+                  +
+                </button>
+              </div>
             </div>
 
             <div className="account-cards-grid" style={{ marginBottom: "12px" }}>
@@ -1030,7 +1073,10 @@ export function DashboardShell({
                 return (
                   <div key={budget.id} className="budget-mini budget-mini-compact">
                     <div className="bm-top">
-                      <div className="bm-icon">{getBudgetIcon(budget.name, budget.icon)}</div>
+                      <div className="bm-title">
+                        <div className="bm-icon">{getBudgetIcon(budget.name, budget.icon)}</div>
+                        <div className="bm-name">{budget.name}</div>
+                      </div>
                       <div className="bm-top-right">
                         <button
                           className="bm-edit-btn"
@@ -1048,8 +1094,7 @@ export function DashboardShell({
                         ) : null}
                       </div>
                     </div>
-                    <div className="bm-name">{budget.name}</div>
-                    <div className="bm-amount">
+                    <div className={`bm-amount ${getAmountToneClass(hasMonthlyLimit ? outgoingCents : budget.availableCents)}`}>
                       {hasMonthlyLimit ? formatCents(outgoingCents) : formatCents(budget.availableCents)}
                     </div>
                     {hasMonthlyLimit ? (
@@ -1081,40 +1126,62 @@ export function DashboardShell({
               })}
             </div>
 
-            {/* Add Budget Form */}
-            <form className="crud-form" onSubmit={onCreateBudget}>
-              <input
-                className="input"
-                placeholder="Sub-account name"
-                value={budgetName}
-                onChange={(e) => setBudgetName(e.target.value)}
-              />
-              <select className="input" value={budgetAccountId} onChange={(e) => setBudgetAccountId(e.target.value)}>
-                <option value="" disabled>
-                  Select bank account
-                </option>
-                {bankAccountsQuery.data?.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                className="input"
-                placeholder="Monthly limit (optional)"
-                type="number"
-                min="0"
-                step="0.01"
-                value={budgetTarget}
-                onChange={(e) => setBudgetTarget(e.target.value)}
-              />
-              <button className="btn btn-primary" type="submit" disabled={createBudget.isPending}>
-                + New account
-              </button>
-            </form>
           </div>
 
         </div>
+
+        {createBudgetOpen && (
+          <div className="profile-modal-overlay" onClick={() => setCreateBudgetOpen(false)}>
+            <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="profile-modal-head">
+                <h3>New Sub-Account</h3>
+                <button className="profile-modal-close" onClick={() => setCreateBudgetOpen(false)}>
+                  ✕
+                </button>
+              </div>
+              <div className="profile-modal-body">
+                <form onSubmit={onCreateBudget} className="profile-field" style={{ display: "grid", gap: "10px" }}>
+                  <span>Name</span>
+                  <input
+                    className="input"
+                    placeholder="Sub-account name"
+                    value={budgetName}
+                    onChange={(e) => setBudgetName(e.target.value)}
+                  />
+                  <span>Bank account</span>
+                  <select className="input" value={budgetAccountId} onChange={(e) => setBudgetAccountId(e.target.value)}>
+                    <option value="" disabled>
+                      Select bank account
+                    </option>
+                    {bankAccountsQuery.data?.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span>Monthly limit (optional)</span>
+                  <input
+                    className="input"
+                    placeholder="0.00"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={budgetTarget}
+                    onChange={(e) => setBudgetTarget(e.target.value)}
+                  />
+                  <div className="profile-actions">
+                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => setCreateBudgetOpen(false)}>
+                      Cancel
+                    </button>
+                    <button className="btn btn-primary btn-xs" type="submit" disabled={createBudget.isPending}>
+                      {createBudget.isPending ? "Creating..." : "Create"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
 
         {editingBudgetId && (
           <div className="profile-modal-overlay" onClick={() => setEditingBudgetId(null)}>

@@ -157,6 +157,9 @@ export function AppSidebar({
         <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick}>
           <span className="sb-ic">▣</span>Credit Cards
         </Link>
+        <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
+          <span className="sb-ic">💳</span>Card Transactions
+        </Link>
         <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
           <span className="sb-ic">↩</span>Receivables
           {badgeCounts?.receivables ? <span className="sb-badge">{badgeCounts.receivables}</span> : null}
@@ -166,9 +169,6 @@ export function AppSidebar({
         </Link>
         <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href="/rewards" onClick={handleNavClick}>
           <span className="sb-ic">◎</span>Rewards
-        </Link>
-        <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
-          <span className="sb-ic">💳</span>Card Transactions
         </Link>
 
         <div className="sb-sec">Workspace</div>

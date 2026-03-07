@@ -13,11 +13,17 @@ type Receivable = {
   date: string;
   transactionDate?: string | null;
   remarkTogether?: string | null;
-  status: string;
+  status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
 };
 
 function formatCents(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
+}
+
+function getAmountToneClass(valueCents: number) {
+  if (valueCents < 0) return "negative";
+  if (valueCents > 0) return "positive";
+  return "zero";
 }
 
 function toIsoFromDateInput(value: string) {
@@ -32,18 +38,19 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function ReceivablesPage() {
   const queryClient = useQueryClient();
-  const [receivableDate, setReceivableDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [transactionDate, setTransactionDate] = useState("");
-  const [amount, setAmount] = useState("");
-  const [remarks, setRemarks] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [sortBy, setSortBy] = useState<"amount" | "remarks" | "receivableDate" | "transactionDate">("receivableDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingReceivableDate, setEditingReceivableDate] = useState("");
-  const [editingTransactionDate, setEditingTransactionDate] = useState("");
-  const [editingAmount, setEditingAmount] = useState("");
-  const [editingRemarks, setEditingRemarks] = useState("");
-  const [editingStatus, setEditingStatus] = useState<Receivable["status"]>("OPEN");
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const [formReceivableDate, setFormReceivableDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formTransactionDate, setFormTransactionDate] = useState("");
+  const [formAmount, setFormAmount] = useState("");
+  const [formRemarks, setFormRemarks] = useState("");
+  const [formStatus, setFormStatus] = useState<Receivable["status"]>("OPEN");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -73,9 +80,7 @@ export function ReceivablesPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
-      setTransactionDate("");
-      setAmount("");
-      setRemarks("");
+      closeModal();
     },
   });
 
@@ -101,34 +106,20 @@ export function ReceivablesPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
-      setEditingId(null);
-      setEditingReceivableDate("");
-      setEditingTransactionDate("");
-      setEditingAmount("");
-      setEditingRemarks("");
-      setEditingStatus("OPEN");
+      closeModal();
     },
   });
-
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!workspaceId || !receivableDate || !amount) return;
-    createReceivable.mutate({
-      receivableDate: toIsoFromDateInput(receivableDate),
-      transactionDate: transactionDate ? toIsoFromDateInput(transactionDate) : undefined,
-      amountCents: Math.round(Number(amount) * 100),
-      remarks: remarks.trim() || undefined,
-    });
-  };
 
   const pendingCount = useMemo(
     () => (receivables.data ?? []).filter((r) => r.status === "OPEN").length,
     [receivables.data],
   );
+
   const totalReceivableCents = useMemo(
     () => (receivables.data ?? []).reduce((sum, r) => sum + r.amountCents, 0),
     [receivables.data],
   );
+
   const sortedReceivables = useMemo(() => {
     const list = [...(receivables.data ?? [])];
     const dir = sortDir === "asc" ? 1 : -1;
@@ -151,63 +142,116 @@ export function ReceivablesPage() {
     return list;
   }, [receivables.data, sortBy, sortDir]);
 
-  const beginEdit = (r: Receivable) => {
-    setEditingId(r.id);
-    setEditingReceivableDate(new Date(r.date).toISOString().slice(0, 10));
-    setEditingTransactionDate(r.transactionDate ? new Date(r.transactionDate).toISOString().slice(0, 10) : "");
-    setEditingAmount((r.amountCents / 100).toFixed(2));
-    setEditingRemarks(r.remarkTogether || "");
-    setEditingStatus(r.status);
+  const monthlyCounts = useMemo(() => {
+    const counts = Array.from({ length: 12 }, () => 0);
+    for (const item of receivables.data ?? []) {
+      const month = new Date(item.date).getMonth();
+      counts[month] += 1;
+    }
+    return counts;
+  }, [receivables.data]);
+
+  const monthFilteredReceivables = useMemo(
+    () => sortedReceivables.filter((r) => new Date(r.date).getMonth() + 1 === selectedMonth),
+    [sortedReceivables, selectedMonth],
+  );
+
+  const monthLabels = useMemo(
+    () => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    [],
+  );
+
+  const resetForm = () => {
+    setFormReceivableDate(new Date().toISOString().slice(0, 10));
+    setFormTransactionDate("");
+    setFormAmount("");
+    setFormRemarks("");
+    setFormStatus("OPEN");
+    setActiveId(null);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setModalMode("create");
+    resetForm();
+  };
+
+  const openCreateModal = () => {
+    setModalMode("create");
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (r: Receivable) => {
+    setModalMode("edit");
+    setActiveId(r.id);
+    setFormReceivableDate(new Date(r.date).toISOString().slice(0, 10));
+    setFormTransactionDate(r.transactionDate ? new Date(r.transactionDate).toISOString().slice(0, 10) : "");
+    setFormAmount((r.amountCents / 100).toFixed(2));
+    setFormRemarks(r.remarkTogether || "");
+    setFormStatus(r.status);
+    setIsModalOpen(true);
+  };
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId || !formReceivableDate || !formAmount) return;
+
+    if (modalMode === "edit" && activeId) {
+      updateReceivable.mutate({
+        id: activeId,
+        receivableDate: toIsoFromDateInput(formReceivableDate),
+        transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : null,
+        amountCents: Math.round(Number(formAmount || "0") * 100),
+        remarks: formRemarks.trim() || undefined,
+        status: formStatus,
+      });
+      return;
+    }
+
+    createReceivable.mutate({
+      receivableDate: toIsoFromDateInput(formReceivableDate),
+      transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : undefined,
+      amountCents: Math.round(Number(formAmount) * 100),
+      remarks: formRemarks.trim() || undefined,
+    });
   };
 
   return (
     <div style={{ display: "grid", gap: "14px" }}>
-      <section className="card">
-        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Add Receivable</div>
-        <form className="crud-form" style={{ gridTemplateColumns: "150px 150px 140px 1fr auto" }} onSubmit={onSubmit}>
-          <input
-            className="input"
-            type="date"
-            value={receivableDate}
-            onChange={(e) => setReceivableDate(e.target.value)}
-            title="Receivable date"
-          />
-          <input
-            className="input"
-            type="date"
-            value={transactionDate}
-            onChange={(e) => setTransactionDate(e.target.value)}
-            title="Transaction date"
-          />
-          <input
-            className="input"
-            type="number"
-            min="0.01"
-            step="0.01"
-            placeholder="Amount"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <input
-            className="input"
-            placeholder="Remarks"
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
-          />
-          <button className="btn btn-primary" type="submit" disabled={createReceivable.isPending}>
-            Add
-          </button>
-        </form>
+      <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivables</div>
+        <button className="btn btn-primary" type="button" onClick={openCreateModal} title="Add receivable" aria-label="Add receivable">
+          +
+        </button>
       </section>
 
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 600 }}>
-            Receivables ({pendingCount} open)
-          </div>
-          <div style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+          <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivables ({pendingCount} open)</div>
+          <div className={getAmountToneClass(totalReceivableCents)} style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
             {formatCents(totalReceivableCents)}
           </div>
+        </div>
+        <div className="recv-month-grid">
+          {monthLabels.map((label, index) => {
+            const month = index + 1;
+            const count = monthlyCounts[index] ?? 0;
+            const isActive = selectedMonth === month;
+            const stateClass = count === 0 ? "is-empty" : "is-has-items";
+
+            return (
+              <button
+                key={label}
+                className={`recv-month-chip ${stateClass} ${isActive ? "is-active" : ""}`}
+                onClick={() => setSelectedMonth(month)}
+                type="button"
+              >
+                <span className="recv-month-chip-label">{label}</span>
+                <span className="recv-month-chip-count">{count}</span>
+              </button>
+            );
+          })}
         </div>
         <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
           <select
@@ -227,99 +271,104 @@ export function ReceivablesPage() {
           </select>
         </div>
         <div className="simple-list">
-          {sortedReceivables.map((r) => (
+          {monthFilteredReceivables.map((r) => (
             <div key={r.id} className="crud-row">
-              {editingId === r.id ? (
-                <div className="crud-edit" style={{ gridTemplateColumns: "150px 150px 130px 120px 1fr auto auto" }}>
-                  <input
-                    className="input"
-                    type="date"
-                    value={editingReceivableDate}
-                    onChange={(e) => setEditingReceivableDate(e.target.value)}
-                  />
-                  <input
-                    className="input"
-                    type="date"
-                    value={editingTransactionDate}
-                    onChange={(e) => setEditingTransactionDate(e.target.value)}
-                  />
+              <span style={{ display: "grid", gap: "4px", minWidth: 0 }}>
+                <span
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: 700,
+                    lineHeight: 1.25,
+                    color: "var(--text-primary)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {r.remarkTogether || "No remarks"}
+                </span>
+                <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>
+                  Receivable: {new Date(r.date).toLocaleDateString()} · Transaction:{" "}
+                  {r.transactionDate ? new Date(r.transactionDate).toLocaleDateString() : "—"} · Status: {r.status}
+                </span>
+              </span>
+              <span style={{ display: "inline-flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
+                <span className={getAmountToneClass(r.amountCents)} style={{ fontWeight: 700 }}>
+                  {formatCents(r.amountCents)}
+                </span>
+                <button className="btn btn-ghost btn-xs" onClick={() => openEditModal(r)}>
+                  Edit
+                </button>
+              </span>
+            </div>
+          ))}
+          {!monthFilteredReceivables.length && <p className="muted">No receivables for this month.</p>}
+        </div>
+      </section>
+
+      {isModalOpen && (
+        <div className="profile-modal-overlay" onClick={closeModal}>
+          <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>
+              <button className="profile-modal-close" onClick={closeModal}>
+                Close
+              </button>
+            </div>
+            <div className="profile-modal-body" style={{ display: "grid", gap: "12px" }}>
+              <form style={{ display: "grid", gap: "10px" }} onSubmit={onSubmit}>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Receivable Date
+                  <input className="input" type="date" value={formReceivableDate} onChange={(e) => setFormReceivableDate(e.target.value)} />
+                </label>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Transaction Date
+                  <input className="input" type="date" value={formTransactionDate} onChange={(e) => setFormTransactionDate(e.target.value)} />
+                </label>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Amount
                   <input
                     className="input"
                     type="number"
                     min="0.01"
                     step="0.01"
-                    value={editingAmount}
-                    onChange={(e) => setEditingAmount(e.target.value)}
+                    placeholder="0.00"
+                    value={formAmount}
+                    onChange={(e) => setFormAmount(e.target.value)}
                   />
-                  <select
-                    className="input"
-                    value={editingStatus}
-                    onChange={(e) => setEditingStatus(e.target.value as Receivable["status"])}
-                  >
-                    <option value="OPEN">OPEN</option>
-                    <option value="PARTIAL">PARTIAL</option>
-                    <option value="PAID">PAID</option>
-                    <option value="VOID">VOID</option>
-                  </select>
-                  <input
-                    className="input"
-                    placeholder="Remarks"
-                    value={editingRemarks}
-                    onChange={(e) => setEditingRemarks(e.target.value)}
-                  />
-                  <button
-                    className="btn btn-secondary btn-xs"
-                    onClick={() =>
-                      updateReceivable.mutate({
-                        id: r.id,
-                        receivableDate: toIsoFromDateInput(editingReceivableDate),
-                        transactionDate: editingTransactionDate ? toIsoFromDateInput(editingTransactionDate) : null,
-                        amountCents: Math.round(Number(editingAmount || "0") * 100),
-                        remarks: editingRemarks.trim() || undefined,
-                        status: editingStatus,
-                      })
-                    }
-                  >
-                    Save
-                  </button>
-                  <button className="btn btn-ghost btn-xs" onClick={() => setEditingId(null)}>
+                </label>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Remarks
+                  <input className="input" placeholder="Remarks" value={formRemarks} onChange={(e) => setFormRemarks(e.target.value)} />
+                </label>
+                {modalMode === "edit" && (
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Status
+                    <select className="input" value={formStatus} onChange={(e) => setFormStatus(e.target.value as Receivable["status"])}>
+                      <option value="OPEN">OPEN</option>
+                      <option value="PARTIAL">PARTIAL</option>
+                      <option value="PAID">PAID</option>
+                      <option value="VOID">VOID</option>
+                    </select>
+                  </label>
+                )}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "6px" }}>
+                  <button className="btn btn-ghost" type="button" onClick={closeModal}>
                     Cancel
                   </button>
+                  <button
+                    className="btn btn-primary"
+                    type="submit"
+                    disabled={createReceivable.isPending || updateReceivable.isPending}
+                  >
+                    {modalMode === "edit" ? "Save" : "Add"}
+                  </button>
                 </div>
-              ) : (
-                <>
-                  <span style={{ display: "grid", gap: "4px", minWidth: 0 }}>
-                    <span
-                      style={{
-                        fontSize: "16px",
-                        fontWeight: 700,
-                        lineHeight: 1.25,
-                        color: "var(--text-primary)",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {r.remarkTogether || "No remarks"}
-                    </span>
-                    <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>
-                      Receivable: {new Date(r.date).toLocaleDateString()} · Transaction:{" "}
-                      {r.transactionDate ? new Date(r.transactionDate).toLocaleDateString() : "—"} · Status: {r.status}
-                    </span>
-                  </span>
-                  <span style={{ display: "inline-flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
-                    <span style={{ fontWeight: 700 }}>{formatCents(r.amountCents)}</span>
-                    <button className="btn btn-ghost btn-xs" onClick={() => beginEdit(r)}>
-                      Edit
-                    </button>
-                  </span>
-                </>
-              )}
+              </form>
             </div>
-          ))}
-          {!receivables.data?.length && <p className="muted">No receivables yet.</p>}
+          </div>
         </div>
-      </section>
+      )}
     </div>
   );
 }

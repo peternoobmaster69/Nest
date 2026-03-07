@@ -50,6 +50,12 @@ function formatCurrency(cents: number): string {
   }).format(cents / 100);
 }
 
+function getAmountToneClass(valueCents: number) {
+  if (valueCents < 0) return "negative";
+  if (valueCents > 0) return "positive";
+  return "zero";
+}
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
@@ -247,7 +253,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         <div className="cct-summary-left">
           <div className="cct-summary-item">
             <span className="cct-summary-label">Total Amount</span>
-            <span className="cct-summary-value">{formatCurrency(totals.total)}</span>
+            <span className={`cct-summary-value ${getAmountToneClass(totals.total)}`}>{formatCurrency(totals.total)}</span>
           </div>
           <label className="cct-toggle">
             <input
@@ -261,7 +267,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         <div className="cct-summary-right">
           <div className="cct-summary-item cct-summary-deficit">
             <span className="cct-summary-label">Unallocated</span>
-            <span className="cct-summary-value">{formatCurrency(totals.unaccounted)}</span>
+            <span className={`cct-summary-value ${getAmountToneClass(totals.unaccounted)}`}>{formatCurrency(totals.unaccounted)}</span>
           </div>
         </div>
       </div>
@@ -318,7 +324,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                       )}
                     </div>
                   </td>
-                  <td className="cct-tx-amount">{formatCurrency(tx.amountCents)}</td>
+                  <td className={`cct-tx-amount ${getAmountToneClass(tx.amountCents)}`}>{formatCurrency(tx.amountCents)}</td>
                   <td className="cct-tx-card">
                     <label className="cct-card-checkbox">
                       <input
