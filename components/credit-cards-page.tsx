@@ -43,6 +43,38 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+async function copyTextToClipboard(text: string) {
+  // Primary path: modern Clipboard API (requires secure context + browser permission).
+  if (typeof navigator !== "undefined" && navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fallback below for browsers/webviews that deny async clipboard permissions.
+    }
+  }
+
+  // Fallback path: legacy execCommand copy.
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard is unavailable in this environment.");
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+
+  if (!copied) {
+    throw new Error("Copy was blocked by this browser. Please copy manually.");
+  }
+}
+
 // Bank color schemes for card backgrounds
 const BANK_GRADIENTS: Record<string, string> = {
   "DBS Bank": "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)",
@@ -188,7 +220,7 @@ export function CreditCardsPage() {
       if (digits.length !== 16) {
         throw new Error("Card number is unavailable or not 16 digits.");
       }
-      await navigator.clipboard.writeText(digits);
+      await copyTextToClipboard(digits);
       return digits;
     },
     onSuccess: () => {
@@ -211,7 +243,7 @@ export function CreditCardsPage() {
       if (cvv.length < 3 || cvv.length > 4) {
         throw new Error("CVV unavailable.");
       }
-      await navigator.clipboard.writeText(cvv);
+      await copyTextToClipboard(cvv);
       return cvv;
     },
     onSuccess: () => {

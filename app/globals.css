@@ -88,7 +88,7 @@ html {
 
 body {
   font-family: var(--font-body);
-  background: #dedbd4;
+  background: var(--bg-base);
   color: var(--text-primary);
   min-height: 100vh;
   line-height: 1.5;
@@ -3182,5 +3182,395 @@ body {
 @media (max-width: 768px) {
   .tx-account-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ============================================================
+   SETTINGS PAGE - Bank Accounts
+   ============================================================ */
+
+.st-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.st-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.st-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.st-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.st-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  position: relative;
+  transition: all var(--t);
+}
+
+.st-card:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+.st-card.inactive {
+  opacity: 0.6;
+}
+
+.st-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.st-card-bank {
+  display: flex;
+  align-items: center;
+}
+
+.st-bank-logo {
+  width: 40px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: white;
+  border: 1px solid var(--border-subtle);
+  padding: 2px;
+}
+
+.st-bank-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 24px;
+  border-radius: 4px;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.st-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.st-card-body {
+  margin-bottom: 16px;
+}
+
+.st-card-name {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--text-primary);
+}
+
+.st-card-bankname {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.st-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+.st-card-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.st-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.st-stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.st-stat-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.st-stat-value.warning {
+  color: var(--warning);
+}
+
+.st-discrepancy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: var(--danger-bg);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.st-discrepancy-icon {
+  font-size: 14px;
+}
+
+.st-discrepancy-text {
+  font-weight: 500;
+}
+
+.st-inactive-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 3px 8px;
+  background: var(--text-disabled);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+}
+
+/* Add Card Placeholder */
+.st-add-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 24px;
+  background: var(--bg-surface);
+  border: 2px dashed var(--border-default);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: all var(--t);
+  color: var(--text-secondary);
+  min-height: 180px;
+}
+
+.st-add-card:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+  background: var(--brand-50);
+}
+
+.st-add-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 300;
+  transition: all var(--t);
+}
+
+.st-add-card:hover .st-add-icon {
+  background: var(--brand-500);
+  color: white;
+}
+
+.st-add-hint {
+  font-size: 12px;
+  margin: 0;
+  opacity: 0.8;
+}
+
+/* Empty State */
+.st-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.st-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.st-empty p {
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+/* Modal Styles */
+.st-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.st-modal {
+  background: var(--bg-elevated);
+  border-radius: var(--r-xl);
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  animation: modalSlide 0.3s ease;
+}
+
+.st-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.st-modal-header h3 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.st-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.st-close-btn:hover {
+  background: var(--border-default);
+  color: var(--text-primary);
+}
+
+.st-modal-form {
+  overflow-y: auto;
+  max-height: calc(90vh - 60px);
+}
+
+.st-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 20px;
+}
+
+.st-span-2 {
+  grid-column: span 2;
+}
+
+.st-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  display: block;
+}
+
+.st-error {
+  padding: 0 20px;
+  margin-bottom: 12px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.st-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .st-bank-logo {
+  background: white;
+}
+
+[data-theme="dark"] .st-add-card:hover {
+  background: rgba(52, 211, 153, 0.1);
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+  .st-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .st-modal {
+    max-width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .st-modal-form {
+    flex: 1;
+    max-height: none;
+  }
+
+  .st-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .st-span-2 {
+    grid-column: span 1;
+  }
+
+  .st-modal-actions {
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    padding: 16px 20px;
+    border-top: 2px solid var(--border-subtle);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .st-modal-actions .btn {
+    flex: 1;
+    padding: 14px 20px;
   }
 }

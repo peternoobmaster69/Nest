@@ -40,18 +40,23 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
+
+  // Add modal state
   const [name, setName] = useState("");
   const [selectedBankName, setSelectedBankName] = useState(SINGAPORE_BANKS[0].name);
   const [balance, setBalance] = useState("");
   const [description, setDescription] = useState("");
-  const [editingBalanceId, setEditingBalanceId] = useState<string | null>(null);
-  const [editingBalance, setEditingBalance] = useState("");
+
+  // Edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [editingBankName, setEditingBankName] = useState(SINGAPORE_BANKS[0].name);
+  const [editingBalance, setEditingBalance] = useState("");
   const [editingDescription, setEditingDescription] = useState("");
   const [editingIsActive, setEditingIsActive] = useState(true);
-  const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -80,27 +85,9 @@ export function SettingsPage() {
         }),
       }),
     onSuccess: () => {
-      setName("");
-      setSelectedBankName(SINGAPORE_BANKS[0].name);
-      setBalance("");
-      setDescription("");
+      closeAddModal();
       queryClient.invalidateQueries({ queryKey: ["app-context"] });
       queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-    },
-  });
-
-  const updateBalance = useMutation({
-    mutationFn: (payload: { id: string; startingCents: number }) =>
-      fetchJson(`/api/accounts/${payload.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startingCents: payload.startingCents }),
-      }),
-    onSuccess: () => {
-      setEditingBalanceId(null);
-      setEditingBalance("");
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 
@@ -125,79 +112,278 @@ export function SettingsPage() {
         }),
       }),
     onSuccess: () => {
-      setEditingAccountId(null);
-      setEditingName("");
-      setEditingBankName(SINGAPORE_BANKS[0].name);
-      setEditingDescription("");
-      setEditingIsActive(true);
+      closeEditModal();
       queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 
-  const onSubmit = (event: FormEvent) => {
+  const openAddModal = () => {
+    setName("");
+    setSelectedBankName(SINGAPORE_BANKS[0].name);
+    setBalance("");
+    setDescription("");
+    setIsAddModalOpen(true);
+  };
+
+  const closeAddModal = () => {
+    setIsAddModalOpen(false);
+    setName("");
+    setSelectedBankName(SINGAPORE_BANKS[0].name);
+    setBalance("");
+    setDescription("");
+  };
+
+  const openEditModal = (account: BankAccount) => {
+    setEditingAccountId(account.id);
+    setEditingName(account.name);
+    setEditingBankName(account.bankName || SINGAPORE_BANKS[0].name);
+    setEditingBalance((account.startingCents / 100).toFixed(2));
+    setEditingDescription(account.description || "");
+    setEditingIsActive(account.isActive);
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingAccountId(null);
+    setEditingName("");
+    setEditingBankName(SINGAPORE_BANKS[0].name);
+    setEditingBalance("");
+    setEditingDescription("");
+    setEditingIsActive(true);
+  };
+
+  const onSubmitAdd = (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() && !selectedBankName) return;
     createAccount.mutate();
   };
 
-  return (
-    <div className="grid-2">
-      <section className="card">
-        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Add Bank Account</div>
-        <form className="crud-form" style={{ gridTemplateColumns: "1fr 120px 1fr auto" }} onSubmit={onSubmit}>
-          <select className="input" value={selectedBankName} onChange={(e) => setSelectedBankName(e.target.value)}>
-            {SINGAPORE_BANKS.map((bank) => (
-              <option key={bank.code} value={bank.name}>
-                {bank.name}
-              </option>
-            ))}
-          </select>
-          <input className="input" placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input
-            className="input"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="Starting balance"
-            value={balance}
-            onChange={(e) => setBalance(e.target.value)}
-          />
-          <input
-            className="input"
-            placeholder="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <button className="btn btn-primary" type="submit" disabled={createAccount.isPending}>
-            Add
-          </button>
-        </form>
-        {createAccount.isError && (
-          <p className="muted" style={{ marginTop: "8px", fontSize: "12px", color: "var(--danger)" }}>
-            Failed to save bank account. {(createAccount.error as Error)?.message || ""}
-          </p>
-        )}
-        <p className="muted" style={{ marginTop: "8px", fontSize: "12px" }}>
-          If account name is empty, Nest will use the selected bank name. If this is your first account, Nest auto-creates your workspace.
-        </p>
-      </section>
+  const onSubmitEdit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingAccountId) return;
+    updateAccount.mutate({
+      id: editingAccountId,
+      name: editingName.trim(),
+      bankName: editingBankName,
+      description: editingDescription.trim() || null,
+      startingCents: Math.round(Number(editingBalance || "0") * 100),
+      isActive: editingIsActive,
+    });
+  };
 
-      <section className="card">
-        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Bank Accounts</div>
-        <div className="simple-list">
-          {accounts.data?.map((a) => (
-            <div key={a.id} className="crud-row">
-              {editingAccountId === a.id ? (
-                <div className="crud-edit" style={{ gridTemplateColumns: "1fr 1fr 130px 1fr 120px auto auto" }}>
-                  <input className="input" value={editingName} onChange={(e) => setEditingName(e.target.value)} placeholder="Account name" />
-                  <select className="input" value={editingBankName} onChange={(e) => setEditingBankName(e.target.value)}>
+  return (
+    <div className="st-container">
+      {/* Header with Add Button */}
+      <div className="st-header">
+        <h2 className="st-title">Bank Accounts</h2>
+        <button className="btn btn-primary" onClick={openAddModal}>
+          + Add Account
+        </button>
+      </div>
+
+      {/* Accounts Grid */}
+      <div className="st-grid">
+        {accounts.data?.map((account) => {
+          const bank = getSingaporeBankByName(account.bankName);
+          const logo = getBankLogoUrl(bank);
+          const hasDiscrepancy = account.discrepancyCents !== 0;
+
+          return (
+            <div key={account.id} className={`st-card ${!account.isActive ? 'inactive' : ''}`}>
+              <div className="st-card-header">
+                <div className="st-card-bank">
+                  {logo && !failedLogos[account.id] ? (
+                    <img
+                      src={logo}
+                      alt={bank?.name || "Bank"}
+                      className="st-bank-logo"
+                      loading="lazy"
+                      onError={() => setFailedLogos((prev) => ({ ...prev, [account.id]: true }))}
+                    />
+                  ) : bank ? (
+                    <span className="st-bank-fallback" style={{ backgroundColor: bank.color }}>
+                      {bank.short}
+                    </span>
+                  ) : (
+                    <span className="st-bank-fallback" style={{ backgroundColor: '#64748b' }}>
+                      BNK
+                    </span>
+                  )}
+                </div>
+                <div className="st-card-actions">
+                  <button className="btn btn-ghost btn-xs" onClick={() => openEditModal(account)}>
+                    Edit
+                  </button>
+                </div>
+              </div>
+
+              <div className="st-card-body">
+                <h3 className="st-card-name">{account.name}</h3>
+                <p className="st-card-bankname">{account.bankName || "Bank"}</p>
+                {account.description && (
+                  <p className="st-card-desc">{account.description}</p>
+                )}
+              </div>
+
+              <div className="st-card-stats">
+                <div className="st-stat">
+                  <span className="st-stat-label">Balance</span>
+                  <span className={`st-stat-value ${hasDiscrepancy ? 'warning' : ''}`}>
+                    {formatCents(account.currentBalanceCents)}
+                  </span>
+                </div>
+                <div className="st-stat">
+                  <span className="st-stat-label">In Budgets</span>
+                  <span className="st-stat-value">{formatCents(account.linkedBudgetTotalCents)}</span>
+                </div>
+              </div>
+
+              {hasDiscrepancy && (
+                <div className="st-discrepancy">
+                  <span className="st-discrepancy-icon">⚠️</span>
+                  <span className="st-discrepancy-text">
+                    Discrepancy: {account.discrepancyCents > 0 ? "+" : ""}
+                    {formatCents(account.discrepancyCents)}
+                  </span>
+                </div>
+              )}
+
+              {!account.isActive && (
+                <div className="st-inactive-badge">Inactive</div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Add New Card Placeholder */}
+        <button className="st-add-card" onClick={openAddModal}>
+          <div className="st-add-icon">+</div>
+          <span>Add Bank Account</span>
+          <p className="st-add-hint">Connect a new bank to track your finances</p>
+        </button>
+
+        {!accounts.data?.length && (
+          <div className="st-empty">
+            <div className="st-empty-icon">🏦</div>
+            <p>No bank accounts yet</p>
+            <button className="btn btn-primary" onClick={openAddModal}>
+              Add your first account
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Add Account Modal */}
+      {isAddModalOpen && (
+        <div className="st-modal-overlay" onClick={closeAddModal}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Add Bank Account</h3>
+              <button className="st-close-btn" onClick={closeAddModal}>✕</button>
+            </div>
+            <form className="st-modal-form" onSubmit={onSubmitAdd}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label">Bank</label>
+                  <select
+                    className="input"
+                    value={selectedBankName}
+                    onChange={(e) => setSelectedBankName(e.target.value)}
+                  >
                     {SINGAPORE_BANKS.map((bank) => (
                       <option key={bank.code} value={bank.name}>
                         {bank.name}
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Account Name</label>
+                  <input
+                    className="input"
+                    placeholder="e.g., DBS Savings"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                  <span className="st-hint">If left empty, the bank name will be used</span>
+                </div>
+                <div className="form-group">
+                  <label className="label">Starting Balance</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={balance}
+                    onChange={(e) => setBalance(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Description</label>
+                  <input
+                    className="input"
+                    placeholder="Optional"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+              {createAccount.isError && (
+                <div className="st-error">
+                  Failed to save: {(createAccount.error as Error)?.message || "Unknown error"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeAddModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={createAccount.isPending}>
+                  {createAccount.isPending ? "Adding..." : "Add Account"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Account Modal */}
+      {isEditModalOpen && editingAccountId && (
+        <div className="st-modal-overlay" onClick={closeEditModal}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Edit Bank Account</h3>
+              <button className="st-close-btn" onClick={closeEditModal}>✕</button>
+            </div>
+            <form className="st-modal-form" onSubmit={onSubmitEdit}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label">Bank</label>
+                  <select
+                    className="input"
+                    value={editingBankName}
+                    onChange={(e) => setEditingBankName(e.target.value)}
+                  >
+                    {SINGAPORE_BANKS.map((bank) => (
+                      <option key={bank.code} value={bank.name}>
+                        {bank.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Account Name</label>
+                  <input
+                    className="input"
+                    placeholder="Account name"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Balance</label>
                   <input
                     className="input"
                     type="number"
@@ -205,133 +391,46 @@ export function SettingsPage() {
                     step="0.01"
                     value={editingBalance}
                     onChange={(e) => setEditingBalance(e.target.value)}
-                    placeholder="Balance"
                   />
-                  <input
+                </div>
+                <div className="form-group">
+                  <label className="label">Status</label>
+                  <select
                     className="input"
-                    value={editingDescription}
-                    onChange={(e) => setEditingDescription(e.target.value)}
-                    placeholder="Description"
-                  />
-                  <select className="input" value={editingIsActive ? "ACTIVE" : "INACTIVE"} onChange={(e) => setEditingIsActive(e.target.value === "ACTIVE")}>
+                    value={editingIsActive ? "ACTIVE" : "INACTIVE"}
+                    onChange={(e) => setEditingIsActive(e.target.value === "ACTIVE")}
+                  >
                     <option value="ACTIVE">Active</option>
                     <option value="INACTIVE">Inactive</option>
                   </select>
-                  <button
-                    className="btn btn-secondary btn-xs"
-                    onClick={() =>
-                      updateAccount.mutate({
-                        id: a.id,
-                        name: editingName.trim() || a.name,
-                        bankName: editingBankName,
-                        description: editingDescription.trim() || null,
-                        startingCents: Math.round(Number(editingBalance || "0") * 100),
-                        isActive: editingIsActive,
-                      })
-                    }
-                  >
-                    Save
-                  </button>
-                  <button className="btn btn-ghost btn-xs" onClick={() => setEditingAccountId(null)}>
-                    Cancel
-                  </button>
                 </div>
-              ) : (
-                <>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      {(() => {
-                        const bank = getSingaporeBankByName(a.bankName);
-                        const logo = getBankLogoUrl(bank);
-                        return logo && !failedLogos[a.id] ? (
-                          <img
-                            src={logo}
-                            alt={bank?.name || "Bank"}
-                            className="bank-logo-img"
-                            loading="lazy"
-                            onError={() => setFailedLogos((prev) => ({ ...prev, [a.id]: true }))}
-                          />
-                        ) : bank ? (
-                          <span className="bank-icon" style={{ backgroundColor: bank.color }}>
-                            {bank.short}
-                          </span>
-                        ) : (
-                          <span className="bank-icon bank-icon-default">BNK</span>
-                        );
-                      })()}
-                      {a.name}
-                    </span>
-                    <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-                      {(a.bankName || "Bank")} · Linked budgets: {formatCents(a.linkedBudgetTotalCents)} | Current balance:{" "}
-                      {formatCents(a.currentBalanceCents)}
-                    </span>
-                    {a.discrepancyCents !== 0 && (
-                      <span style={{ fontSize: "11px", color: "var(--danger)" }}>
-                        Discrepancy: {a.discrepancyCents > 0 ? "+" : ""}
-                        {formatCents(a.discrepancyCents)}
-                      </span>
-                    )}
-                  </div>
-                  {editingBalanceId === a.id ? (
-                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                      <input
-                        className="input"
-                        style={{ width: "130px" }}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editingBalance}
-                        onChange={(e) => setEditingBalance(e.target.value)}
-                      />
-                      <button
-                        className="btn btn-secondary btn-xs"
-                        onClick={() =>
-                          updateBalance.mutate({
-                            id: a.id,
-                            startingCents: Math.round(Number(editingBalance || "0") * 100),
-                          })
-                        }
-                      >
-                        Save
-                      </button>
-                      <button className="btn btn-ghost btn-xs" onClick={() => setEditingBalanceId(null)}>
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                      <button
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => {
-                          setEditingBalanceId(a.id);
-                          setEditingBalance((a.startingCents / 100).toFixed(2));
-                        }}
-                      >
-                        Set balance
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => {
-                          setEditingAccountId(a.id);
-                          setEditingBalanceId(null);
-                          setEditingName(a.name);
-                          setEditingBankName(a.bankName || SINGAPORE_BANKS[0].name);
-                          setEditingBalance((a.startingCents / 100).toFixed(2));
-                          setEditingDescription(a.description || "");
-                          setEditingIsActive(a.isActive);
-                        }}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  )}
-                </>
+                <div className="form-group st-span-2">
+                  <label className="label">Description</label>
+                  <input
+                    className="input"
+                    placeholder="Optional"
+                    value={editingDescription}
+                    onChange={(e) => setEditingDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+              {updateAccount.isError && (
+                <div className="st-error">
+                  Failed to update: {(updateAccount.error as Error)?.message || "Unknown error"}
+                </div>
               )}
-            </div>
-          ))}
-          {!accounts.data?.length && <p className="muted">No bank accounts yet.</p>}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeEditModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={updateAccount.isPending}>
+                  {updateAccount.isPending ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </section>
+      )}
     </div>
   );
 }
