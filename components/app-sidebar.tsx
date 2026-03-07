@@ -167,6 +167,9 @@ export function AppSidebar({
         <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href="/rewards" onClick={handleNavClick}>
           <span className="sb-ic">◎</span>Rewards
         </Link>
+        <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
+          <span className="sb-ic">💳</span>Card Transactions
+        </Link>
 
         <div className="sb-sec">Workspace</div>
         <Link className={`sb-item${currentPath === "/collaborators" ? " on" : ""}`} href="/collaborators" onClick={handleNavClick}>
@@ -175,6 +178,11 @@ export function AppSidebar({
         <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href="/settings" onClick={handleNavClick}>
           <span className="sb-ic">⚙</span>Settings
         </Link>
+
+        {/* Mobile-only logout button */}
+        <button className="sb-item sb-logout-mobile" onClick={() => signOut({ callbackUrl: "/signin" })}>
+          <span className="sb-ic">⎋</span>Log Out
+        </button>
       </div>
 
       <div className="sb-bot">

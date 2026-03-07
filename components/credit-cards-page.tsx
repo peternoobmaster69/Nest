@@ -97,6 +97,7 @@ export function CreditCardsPage() {
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [flippedCardId, setFlippedCardId] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
+  const [copyMessageKind, setCopyMessageKind] = useState<"success" | "error">("success");
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [formError, setFormError] = useState("");
   const [requireCardNumberInput, setRequireCardNumberInput] = useState(false);
@@ -191,11 +192,14 @@ export function CreditCardsPage() {
       return digits;
     },
     onSuccess: () => {
+      setCopyMessageKind("success");
       setCopyMessage("Copied 16-digit card number");
       setTimeout(() => setCopyMessage(""), 1800);
     },
-    onError: () => {
-      setCopyMessage("Unable to copy 16-digit card number");
+    onError: (error) => {
+      setCopyMessageKind("error");
+      const message = error instanceof Error ? error.message : "Unable to copy 16-digit card number";
+      setCopyMessage(message);
       setTimeout(() => setCopyMessage(""), 1800);
     },
   });
@@ -211,11 +215,14 @@ export function CreditCardsPage() {
       return cvv;
     },
     onSuccess: () => {
+      setCopyMessageKind("success");
       setCopyMessage("Copied CVV");
       setTimeout(() => setCopyMessage(""), 1800);
     },
-    onError: () => {
-      setCopyMessage("Unable to copy CVV");
+    onError: (error) => {
+      setCopyMessageKind("error");
+      const message = error instanceof Error ? error.message : "Unable to copy CVV";
+      setCopyMessage(message);
       setTimeout(() => setCopyMessage(""), 1800);
     },
   });
@@ -305,7 +312,18 @@ export function CreditCardsPage() {
       </div>
 
       {/* Copy Toast */}
-      {copyMessage && <div className="cc-toast">{copyMessage}</div>}
+      {copyMessage && (
+        <div
+          className="cc-toast"
+          style={{
+            background: copyMessageKind === "error" ? "#991b1b" : "#14532d",
+            color: "#ffffff",
+            border: "1px solid rgba(255,255,255,0.2)",
+          }}
+        >
+          {copyMessage}
+        </div>
+      )}
 
       {/* Cards Grid - Apple Wallet Style */}
       <div className="cc-grid">
@@ -408,16 +426,16 @@ export function CreditCardsPage() {
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => copyFullCard.mutate(card.id)}
-                    disabled={copyFullCard.isPending}
+                    disabled={copyFullCard.isPending || !card.hasCardNumber}
                   >
-                    {copyFullCard.isPending ? "Decrypting..." : "Copy Number"}
+                    {copyFullCard.isPending ? "Decrypting..." : card.hasCardNumber ? "Copy Number" : "No Number Saved"}
                   </button>
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => copyCvv.mutate(card.id)}
-                    disabled={copyCvv.isPending}
+                    disabled={copyCvv.isPending || !card.hasSecurityCode}
                   >
-                    {copyCvv.isPending ? "Decrypting..." : "Copy CVV"}
+                    {copyCvv.isPending ? "Decrypting..." : card.hasSecurityCode ? "Copy CVV" : "No CVV Saved"}
                   </button>
                   <button
                     className="btn btn-ghost btn-xs"

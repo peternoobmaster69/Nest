@@ -153,8 +153,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         data.encryptedCardNumber = encrypted.encrypted;
         data.encryptionIv = encrypted.iv;
         data.encryptionTag = encrypted.tag;
-      } catch {
-        // Ignore encryption error and keep old encrypted payload.
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        throw new Error(`Card number encryption failed: ${message}`);
       }
     }
 
@@ -169,8 +170,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           data.encryptedSecurityCode = encrypted.encrypted;
           data.securityCodeIv = encrypted.iv;
           data.securityCodeTag = encrypted.tag;
-        } catch {
-          // Ignore encryption error and keep old encrypted payload.
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          throw new Error(`CVV encryption failed: ${message}`);
         }
       }
     }

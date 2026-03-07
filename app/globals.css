@@ -212,6 +212,19 @@ body {
   color: var(--brand-600);
 }
 
+.sb-logout-mobile {
+  display: none;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  font-family: inherit;
+}
+
+.sb-logout-mobile:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
 .sb-ic {
   width: 18px;
   text-align: center;
@@ -395,6 +408,38 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .profile-modal-overlay {
+    align-items: flex-end;
+  }
+
+  .profile-modal {
+    width: 100%;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    max-height: 90dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .profile-modal-body {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .profile-actions {
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+    position: sticky;
+    bottom: 0;
+  }
+
+  .profile-actions .btn {
+    flex: 1;
+    padding: 12px 20px;
+    font-size: 15px;
+  }
 }
 
 .icon-picker {
@@ -1462,6 +1507,10 @@ body {
     display: block;
   }
 
+  .sb-logout-mobile {
+    display: flex;
+  }
+
   .sidebar-overlay {
     display: block;
     position: fixed;
@@ -2239,14 +2288,23 @@ body {
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--text-primary);
-  color: white;
+  color: #fff;
   padding: 10px 20px;
   border-radius: var(--r-pill);
   font-size: 13px;
   font-weight: 500;
   z-index: 100;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: var(--shadow-md);
   animation: toastSlide 0.3s ease;
+}
+
+.cc-toast-success {
+  background: #14532d;
+}
+
+.cc-toast-error {
+  background: #b91c1c;
 }
 
 @keyframes toastSlide {
@@ -2456,8 +2514,81 @@ body {
 
   .cc-modal {
     max-width: 100%;
-    max-height: 95vh;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
   }
+
+  .cc-modal-header {
+    padding: 16px 20px;
+    flex-shrink: 0;
+  }
+
+  .cc-close-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+    background: var(--bg-subtle);
+  }
+
+  .cc-modal-form {
+    max-height: none;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .cc-modal-actions {
+    flex-shrink: 0;
+    padding: 16px 20px;
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-elevated);
+    border-top: 2px solid var(--border-subtle);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .cc-modal-actions .btn {
+    flex: 1;
+    padding: 14px 20px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .cc-modal-actions .btn-primary {
+    background: var(--brand-500);
+    color: white;
+  }
+
+  .cc-preview {
+    margin: 16px 20px;
+    height: 120px;
+  }
+
+  .cc-form-grid {
+    padding-bottom: 24px;
+  }
+}
+
+[data-theme="dark"] .cc-modal-actions {
+  background: var(--bg-elevated);
+  border-top-color: var(--border-default);
+}
+
+[data-theme="dark"] .cc-modal-actions .btn-primary {
+  background: var(--brand-500);
+  color: #fff;
+}
+
+[data-theme="dark"] .cc-close-btn {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .cc-close-btn:hover {
+  background: var(--border-default);
+  color: var(--text-primary);
 }
 
 [data-theme="dark"] .cc-card-front {
@@ -2475,26 +2606,28 @@ body {
 }
 
 [data-theme="dark"] {
-  --bg-base: #141210;
-  --bg-surface: #1e1c19;
-  --bg-elevated: #28251f;
-  --bg-subtle: #2e2b24;
-  --text-primary: #f0ede8;
-  --text-secondary: #b8b2aa;
-  --text-tertiary: #7d7770;
-  --text-disabled: #4a4540;
-  --border-subtle: #2e2b24;
-  --border-default: #3c3830;
-  --success: #34d399;
+  --bg-base: #0a0908;
+  --bg-surface: #141210;
+  --bg-elevated: #1e1c19;
+  --bg-subtle: #2a2721;
+  --text-primary: #faf8f5;
+  --text-secondary: #d4cfc7;
+  --text-tertiary: #9a948a;
+  --text-disabled: #6b655d;
+  --border-subtle: #3c3830;
+  --border-default: #5c574f;
+  --success: #4ade80;
   --success-bg: #0a2e1e;
   --warning: #fbbf24;
   --warning-bg: #2d1d00;
   --danger: #f87171;
   --danger-bg: #2d0a0a;
-  --brand-50: #062518;
-  --brand-100: #0a3d27;
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --brand-50: #0a2e1e;
+  --brand-100: #147349;
+  --brand-500: #34d399;
+  --brand-600: #4ade80;
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.7);
 }
 
 [data-theme="dark"] body {
@@ -2503,4 +2636,441 @@ body {
 
 [data-theme="dark"] .hero-card {
   background: linear-gradient(135deg, #1a8f58, #0a3d27);
+}
+
+/* ============================================================
+   CREDIT CARD TRANSACTIONS PAGE
+   ============================================================ */
+
+.cct-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Card Bar */
+.cct-card-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px;
+  margin: -4px;
+  scrollbar-width: none;
+}
+
+.cct-card-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.cct-card-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: all var(--t);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cct-card-chip:hover {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+}
+
+.cct-card-chip.active {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: white;
+}
+
+.cct-card-chip-logo {
+  width: 24px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 2px;
+  background: white;
+}
+
+.cct-card-chip-icon {
+  font-size: 16px;
+}
+
+.cct-card-chip-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cct-card-chip-badge {
+  background: var(--danger);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+  min-width: 18px;
+  text-align: center;
+}
+
+.cct-card-chip.active .cct-card-chip-badge {
+  background: white;
+  color: var(--brand-500);
+}
+
+/* Month Tabs */
+.cct-month-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.cct-month-tab {
+  padding: 6px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--t);
+  white-space: nowrap;
+}
+
+.cct-month-tab:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+}
+
+.cct-month-tab.active {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: white;
+}
+
+/* Summary */
+.cct-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+}
+
+.cct-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.cct-summary-right {
+  text-align: right;
+}
+
+.cct-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cct-summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.cct-summary-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cct-summary-deficit .cct-summary-value {
+  color: var(--danger);
+}
+
+.cct-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cct-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand-500);
+}
+
+/* Actions */
+.cct-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Table */
+.cct-table-wrapper {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+.cct-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cct-table th {
+  background: var(--bg-subtle);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.cct-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.cct-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cct-table tbody tr.allocated {
+  background: var(--success-bg);
+}
+
+.cct-table tbody tr.unallocated {
+  background: var(--danger-bg);
+}
+
+.cct-tx-date {
+  white-space: nowrap;
+}
+
+.cct-tx-day {
+  font-weight: 500;
+}
+
+.cct-due-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  background: var(--bg-subtle);
+}
+
+.cct-due-badge.overdue {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.cct-due-badge.urgent {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.cct-subject-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cct-subject-icon {
+  font-size: 16px;
+}
+
+.cct-installment-badge {
+  background: var(--brand-500);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+}
+
+.cct-tx-amount {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cct-card-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.cct-card-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand-500);
+}
+
+.cct-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-tertiary);
+}
+
+/* Modal */
+.cct-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  padding: 20px;
+}
+
+.cct-modal {
+  background: var(--bg-elevated);
+  border-radius: var(--r-xl);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.cct-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.cct-modal-header h3 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.cct-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cct-close-btn:hover {
+  background: var(--border-default);
+  color: var(--text-primary);
+}
+
+.cct-modal-form {
+  overflow-y: auto;
+  max-height: calc(90vh - 60px);
+}
+
+.cct-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 20px;
+}
+
+.cct-span-2 {
+  grid-column: span 2;
+}
+
+.cct-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .cct-summary {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .cct-summary-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .cct-summary-right {
+    width: 100%;
+    text-align: left;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 12px;
+  }
+
+  .cct-table th,
+  .cct-table td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .cct-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cct-span-2 {
+    grid-column: span 1;
+  }
+
+  .cct-modal {
+    max-width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cct-modal-form {
+    flex: 1;
+    max-height: none;
+  }
+
+  .cct-modal-actions {
+    position: sticky;
+    bottom: 0;
+  }
+
+  .cct-modal-actions .btn {
+    flex: 1;
+  }
 }

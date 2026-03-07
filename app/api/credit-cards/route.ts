@@ -133,8 +133,9 @@ export async function POST(request: Request) {
         encryptedCardNumber = encrypted.encrypted;
         encryptionIv = encrypted.iv;
         encryptionTag = encrypted.tag;
-      } catch {
-        // Allow creation even when encryption key is missing/misconfigured.
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        throw new Error(`Card number encryption failed: ${message}`);
       }
     }
 
@@ -144,8 +145,9 @@ export async function POST(request: Request) {
         encryptedSecurityCodeBytes = encrypted.encrypted;
         securityCodeIv = encrypted.iv;
         securityCodeTag = encrypted.tag;
-      } catch {
-        // Allow creation even when encryption key is missing/misconfigured.
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        throw new Error(`CVV encryption failed: ${message}`);
       }
     }
 

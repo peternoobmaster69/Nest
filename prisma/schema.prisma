@@ -85,6 +85,7 @@ model Workspace {
   frequentFlyerAccounts FrequentFlyerAccount[]
   creditCardRewards    CreditCardReward[]
   pointConversions     PointConversion[]
+  creditCardTransactions CreditCardTransaction[]
 }
 
 model WorkspaceMember {
@@ -225,7 +226,7 @@ model Expense {
 }
 
 model CreditCardAccount {
-  id                     String              @id @default(cuid())
+  id                     String                  @id @default(cuid())
   workspaceId            String
   cardName               String
   bankName               String?
@@ -238,9 +239,9 @@ model CreditCardAccount {
   bonusLimitCents        Int?
   bonusStatementCents    Int?
   notes                  String?
-  isFullySynced          Boolean             @default(false)
+  isFullySynced          Boolean                 @default(false)
   fullySyncedDate        DateTime?
-  isActive               Boolean             @default(true)
+  isActive               Boolean                 @default(true)
   encryptedCardNumber    Bytes?
   encryptedHolderName    Bytes?
   encryptedSecurityCode  Bytes?
@@ -248,11 +249,12 @@ model CreditCardAccount {
   securityCodeTag        Bytes?
   encryptionIv           Bytes?
   encryptionTag          Bytes?
-  createdAt              DateTime            @default(now())
-  updatedAt              DateTime            @updatedAt
-  workspace              Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   transactions           CreditCardTxnLink[]
   reward                 CreditCardReward?
+  ccTransactions         CreditCardTransaction[]
 
   @@unique([workspaceId, cardName])
   @@index([workspaceId, isActive])
@@ -464,4 +466,30 @@ model PointConversion {
   @@index([workspaceId])
   @@index([creditCardRewardId])
   @@index([frequentFlyerId])
+}
+
+model CreditCardTransaction {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  creditCardId      String
+  transactionDate   DateTime          // Date of the transaction
+  paymentDueDate    DateTime?         // When payment is due
+  statementMonth    Int               // Month of statement (1-12)
+  statementYear     Int               // Year of statement
+  amountCents       Int               // Transaction amount
+  subject           String            // Transaction description/subject
+  isInstallment     Boolean           @default(false)
+  installmentNo     Int?              // Current installment number
+  totalInstallments Int?              // Total number of installments
+  isAllocated       Boolean           @default(false) // Whether allocated to budget
+  budgetId          String?           // Linked budget if allocated
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creditCard        CreditCardAccount @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([creditCardId])
+  @@index([statementYear, statementMonth])
+  @@index([transactionDate])
 }

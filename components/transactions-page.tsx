@@ -46,6 +46,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function TransactionsPage() {
   const queryClient = useQueryClient();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [amount, setAmount] = useState("");
   const [budgetId, setBudgetId] = useState("");
@@ -146,6 +147,9 @@ export function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
       setSubject("");
       setAmount("");
+      setBudgetId("");
+      setOperation("DEDUCT");
+      setIsCreateModalOpen(false);
     },
   });
 
@@ -312,51 +316,14 @@ export function TransactionsPage() {
         </div>
       </section>
 
-      <section className="card" style={{ display: "grid", gap: "12px" }}>
-        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Add Transaction</div>
-        <div style={{ display: "grid", gap: "10px" }}>
-          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Bank account</div>
-          {bankAccounts.data && bankAccounts.data.length === 1 ? (
-            <div className="crud-row" style={{ marginBottom: 0 }}>
-              <span>{bankAccounts.data[0].name}</span>
-            </div>
-          ) : (
-            <select className="input" value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)}>
-              <option value="" disabled>
-                Select bank account
-              </option>
-              {bankAccounts.data?.map((bank) => (
-                <option key={bank.id} value={bank.id}>
-                  {bank.name}
-                </option>
-              ))}
-            </select>
-          )}
+      <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 600 }}>Add Transaction</div>
+          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Use popup form to save space</div>
         </div>
-        <form className="crud-form" style={{ gridTemplateColumns: "1fr 120px 1fr 120px auto" }} onSubmit={onSubmit}>
-          <input className="input" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
-          <input className="input" type="number" min="1" step="0.01" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
-            <option value="">No account</option>
-            {visibleBudgets.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="input"
-            value={operation}
-            onChange={(e) => setOperation(e.target.value as "DEDUCT" | "ADD")}
-            style={{ color: operation === "DEDUCT" ? "var(--danger)" : "var(--success)" }}
-          >
-            <option value="DEDUCT">Deduct</option>
-            <option value="ADD">Add</option>
-          </select>
-          <button className="btn btn-primary" type="submit" disabled={createTx.isPending}>
-            Add
-          </button>
-        </form>
+        <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+          Add Transaction
+        </button>
       </section>
 
       <section className="card">
@@ -459,6 +426,77 @@ export function TransactionsPage() {
           {!filteredTransactions.length && <p className="muted">No transactions yet.</p>}
         </div>
       </section>
+
+      {isCreateModalOpen && (
+        <div className="profile-modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
+          <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>Add Transaction</h3>
+              <button className="profile-modal-close" onClick={() => setIsCreateModalOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="profile-modal-body" style={{ display: "grid", gap: "12px" }}>
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Bank account</div>
+                {bankAccounts.data && bankAccounts.data.length === 1 ? (
+                  <div className="crud-row" style={{ marginBottom: 0 }}>
+                    <span>{bankAccounts.data[0].name}</span>
+                  </div>
+                ) : (
+                  <select className="input" value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)}>
+                    <option value="" disabled>
+                      Select bank account
+                    </option>
+                    {bankAccounts.data?.map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <form style={{ display: "grid", gap: "10px" }} onSubmit={onSubmit}>
+                <input className="input" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  placeholder="Amount"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+                <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
+                  <option value="">No account</option>
+                  {visibleBudgets.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="input"
+                  value={operation}
+                  onChange={(e) => setOperation(e.target.value as "DEDUCT" | "ADD")}
+                  style={{ color: operation === "DEDUCT" ? "var(--danger)" : "var(--success)" }}
+                >
+                  <option value="DEDUCT">Deduct</option>
+                  <option value="ADD">Add</option>
+                </select>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button className="btn btn-ghost" type="button" onClick={() => setIsCreateModalOpen(false)}>
+                    Cancel
+                  </button>
+                  <button className="btn btn-primary" type="submit" disabled={createTx.isPending}>
+                    {createTx.isPending ? "Adding..." : "Add"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
