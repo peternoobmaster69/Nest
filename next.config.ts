@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Keep default root detection for local dev/workspaces.
 };
 
 export default nextConfig;

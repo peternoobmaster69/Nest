@@ -1,0 +1,60 @@
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+const CreateReceivableSchema = z.object({
+  workspaceId: z.string().min(1),
+  title: z.string().min(1).max(120).optional(),
+  amountCents: z.number().int().positive(),
+  date: z.string().datetime().optional(),
+  receivableDate: z.string().datetime().optional(),
+  transactionDate: z.string().datetime().optional(),
+  remarks: z.string().max(500).optional(),
+  accountId: z.string().optional(),
+  fromUserId: z.string().optional(),
+  status: z.enum(["OPEN", "PARTIAL", "PAID", "VOID"]).default("OPEN"),
+});
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const workspaceId = searchParams.get("workspaceId");
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
+
+  const receivables = await prisma.receivable.findMany({
+    where: { workspaceId },
+    orderBy: { date: "desc" },
+    take: 100,
+  });
+
+  return NextResponse.json(receivables);
+}
+
+export async function POST(request: Request) {
+  const parsed = CreateReceivableSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const receivableDate = parsed.data.receivableDate ?? parsed.data.date;
+  if (!receivableDate) {
+    return NextResponse.json({ error: "receivableDate is required" }, { status: 400 });
+  }
+
+  const created = await prisma.receivable.create({
+    data: {
+      workspaceId: parsed.data.workspaceId,
+      title: parsed.data.title ?? "Receivable",
+      amountCents: parsed.data.amountCents,
+      date: new Date(receivableDate),
+      transactionDate: parsed.data.transactionDate ? new Date(parsed.data.transactionDate) : null,
+      remarkTogether: parsed.data.remarks,
+      accountId: parsed.data.accountId,
+      fromUserId: parsed.data.fromUserId,
+      status: parsed.data.status,
+    },
+  });
+
+  return NextResponse.json(created, { status: 201 });
+}

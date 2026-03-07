@@ -1,0 +1,2012 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nest — Screen Proposals</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+
+  --brand-50: #edfaf3;
+  --brand-100: #c6f0d9;
+  --brand-200: #8eddb8;
+  --brand-300: #52c490;
+  --brand-400: #27a96d;
+  --brand-500: #1a8f58;
+  --brand-600: #147349;
+  --brand-700: #0f5737;
+  --brand-800: #0a3d27;
+
+  --teal: #3aada6;
+  --peach: #f0926a;
+  --lime: #8cc832;
+  --accent-500: #d97706;
+
+  --bg-base: #f5f2ed;
+  --bg-surface: #fdfcfa;
+  --bg-elevated: #ffffff;
+  --bg-subtle: #eae6de;
+
+  --text-primary: #1c1916;
+  --text-secondary: #4a4540;
+  --text-tertiary: #78716c;
+  --text-disabled: #a8a29e;
+
+  --border-subtle: #ddd9d1;
+  --border-default: #c5bfb5;
+
+  --success: #1a8f58;
+  --success-bg: #edfaf3;
+  --warning: #d97706;
+  --warning-bg: #fff8ec;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --r-pill: 9999px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.07);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.12);
+
+  --t: 170ms cubic-bezier(0.4,0,0.2,1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background: #dedbd4;
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* OUTER CHROME */
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar-proto {
+  height: 52px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+}
+
+.proto-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.proto-nav {
+  display: flex;
+  gap: 3px;
+}
+
+.pnb {
+  padding: 5px 14px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all var(--t);
+}
+
+.pnb:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.pnb.active {
+  background: var(--brand-500);
+  color: #fff;
+}
+
+.theme-btn {
+  padding: 6px 16px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid var(--brand-500);
+  background: var(--brand-500);
+  color: #fff;
+  transition: all var(--t);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-btn:hover {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.screens-area {
+  flex: 1;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.screen-block {
+  width: 100%;
+  max-width: 1120px;
+  animation: fadeUp 0.4s ease both;
+}
+
+.screen-lbl {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.screen-lbl::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.screen-frame {
+  background: var(--bg-base);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+/* APP SHELL */
+.app {
+  display: flex;
+  height: 700px;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: 216px;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sb-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sb-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 52px;
+  padding: 0 18px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.sb-sec {
+  padding: 14px 18px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+}
+
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 18px;
+  margin: 1px 6px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all var(--t);
+  text-decoration: none;
+}
+
+.sb-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.sb-item.on {
+  background: var(--brand-50);
+  color: var(--brand-600);
+}
+
+.sb-ic {
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.sb-badge {
+  margin-left: auto;
+  background: var(--brand-500);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+}
+
+.sb-bot {
+  margin-top: auto;
+  padding: 10px 6px;
+  border-top: 1px solid var(--border-subtle);
+  position: relative;
+}
+
+.sb-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background var(--t);
+  min-width: 0;
+}
+
+.sb-user:hover {
+  background: var(--bg-subtle);
+}
+
+/* MAIN */
+.main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+}
+
+.topbar {
+  height: 52px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.tb-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.hamburger span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text-secondary);
+  border-radius: 2px;
+  transition: all var(--t);
+}
+
+.hamburger:hover span {
+  background: var(--text-primary);
+}
+
+.tb-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* AVATAR */
+.avatar {
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+.avatar-md {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+
+.avatar-lg {
+  width: 44px;
+  height: 44px;
+  font-size: 16px;
+}
+
+.avatar-green {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+
+.avatar-peach {
+  background: #ffe8dc;
+  color: #c05030;
+}
+
+.avatar-teal {
+  background: #d0f0ee;
+  color: #1a7a76;
+}
+
+.avatar-amber {
+  background: #fff0cc;
+  color: #a06010;
+}
+
+/* BUTTONS */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 15px;
+  border-radius: var(--r-md);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all var(--t);
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--brand-500);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--brand-600);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+.btn-secondary:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.btn-xs {
+  padding: 5px 11px;
+  font-size: 12px;
+  border-radius: var(--r-sm);
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--t);
+}
+
+.btn-icon:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+}
+
+/* CARD */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 18px;
+}
+
+.card-sm {
+  padding: 13px 15px;
+  border-radius: var(--r-md);
+}
+
+/* BADGE */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+
+.badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.badge-ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.badge-ok .badge-dot {
+  background: var(--success);
+}
+
+.badge-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.badge-warn .badge-dot {
+  background: var(--warning);
+}
+
+.badge-err {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.badge-err .badge-dot {
+  background: var(--danger);
+}
+
+.badge-neutral {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.badge-brand {
+  background: var(--brand-50);
+  color: var(--brand-600);
+}
+
+.badge-teal {
+  background: #d0f0ee;
+  color: #1a7a76;
+}
+
+.badge-amber {
+  background: #fff0cc;
+  color: #a06010;
+}
+
+/* PROGRESS */
+.prog-track {
+  height: 6px;
+  background: var(--bg-subtle);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.prog-bar {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--brand-500);
+  transition: width var(--t);
+}
+
+.prog-bar-warn {
+  background: var(--warning);
+}
+
+.prog-bar-err {
+  background: var(--danger);
+}
+
+/* INPUT */
+.input {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  width: 100%;
+  outline: none;
+  transition: all var(--t);
+}
+
+.input:focus {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px rgba(26,143,88,0.1);
+}
+
+.input::placeholder {
+  color: var(--text-disabled);
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* DIVIDER */
+.divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 14px 0;
+}
+
+/* GRID */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/* STAT CARD */
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 16px;
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 5px;
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.stat-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 3px;
+}
+
+.positive {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.negative {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+/* HERO CARD */
+.hero-card {
+  background: linear-gradient(135deg, var(--brand-600), var(--brand-800));
+  color: #fff;
+  border-radius: var(--r-xl);
+  padding: 22px 26px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+}
+
+.hero-card::after {
+  content: '';
+  position: absolute;
+  bottom: -70px;
+  right: 50px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+}
+
+.hero-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 5px;
+}
+
+.hero-amount {
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 3px;
+}
+
+.hero-sub {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.hero-chips {
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-chip {
+  opacity: 0.8;
+}
+
+.hero-chip-label {
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+.hero-chip-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* TX ITEM */
+.tx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tx-item:last-child {
+  border-bottom: none;
+}
+
+.tx-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.tx-meta {
+  flex: 1;
+}
+
+.tx-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tx-date {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+.tx-amount {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+}
+
+.tx-amount.negative {
+  color: var(--danger);
+}
+
+.tx-amount.positive {
+  color: var(--success);
+}
+
+.tx-sub {
+  font-size: 10px;
+  text-align: right;
+  margin-top: 2px;
+}
+
+/* BUDGET MINI */
+.budget-mini {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 15px;
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.budget-mini:hover {
+  border-color: var(--brand-400);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.bm-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.bm-icon {
+  font-size: 18px;
+}
+
+.bm-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.bm-amount {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.bm-target {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.bm-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 5px;
+}
+
+/* CC VISUAL */
+.cc-visual {
+  background: linear-gradient(135deg, #2d3a4a, #1a2535);
+  border-radius: var(--r-xl);
+  padding: 18px 20px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 160px;
+}
+
+.cc-visual::before {
+  content: '';
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+}
+
+.cc-num {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  opacity: 0.75;
+}
+
+.cc-bot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.cc-holder {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.65;
+}
+
+.cc-exp-lbl {
+  font-size: 8px;
+  opacity: 0.45;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cc-exp {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.cc-net {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  opacity: 0.8;
+}
+
+/* TAG */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+}
+
+.tag-link {
+  background: var(--brand-50);
+  color: var(--brand-600);
+  border: 1px solid var(--brand-100);
+}
+
+.tag-receivable {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--brand-200);
+}
+
+.tag-dash {
+  border: 1px dashed var(--border-default);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.tag-dash:hover {
+  border-color: var(--brand-400);
+  color: var(--brand-500);
+}
+
+/* RING CHART */
+.ring-wrap {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  flex-shrink: 0;
+}
+
+.ring-wrap svg {
+  transform: rotate(-90deg);
+}
+
+.ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring-value {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ring-label {
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.legend-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+/* SEGMENTED */
+.segmented {
+  display: flex;
+  background: var(--bg-subtle);
+  border-radius: var(--r-md);
+  padding: 3px;
+}
+
+.segmented-btn {
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all var(--t);
+}
+
+.segmented-btn.on {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* RECEIVABLE ITEM */
+.receivable-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 7px;
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.receivable-item:hover {
+  border-color: var(--brand-400);
+}
+
+.receivable-item:last-child {
+  margin-bottom: 0;
+}
+
+.ri-who {
+  flex: 1;
+}
+
+.ri-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ri-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+.ri-right {
+  text-align: right;
+}
+
+.ri-amount {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
+}
+
+/* CC DETAIL ROW */
+.cc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.cc-row:last-child {
+  border-bottom: none;
+}
+
+.cc-row-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.cc-row-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.copy-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.copy-btn:hover {
+  background: var(--brand-50);
+  color: var(--brand-600);
+  border-color: var(--brand-300);
+}
+
+/* REWARD BAR */
+.reward-bar {
+  background: var(--bg-subtle);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reward-points {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--brand-500);
+}
+
+.reward-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.reward-sub {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* MODAL */
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(28,25,22,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xl);
+}
+
+.modal {
+  background: var(--bg-elevated);
+  border-radius: var(--r-xl);
+  padding: 28px;
+  width: 400px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-subtle);
+}
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.modal-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.choice {
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all var(--t);
+  margin-bottom: 9px;
+  display: flex;
+  gap: 12px;
+}
+
+.choice:hover {
+  border-color: var(--brand-400);
+}
+
+.choice.sel {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+}
+
+.choice-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.choice-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.choice-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+/* ALLOC BAR */
+.alloc-bar {
+  padding: 11px 24px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.alloc-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.alloc-track {
+  display: flex;
+  height: 7px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  gap: 1px;
+}
+
+/* DARK MODE */
+[data-theme="dark"] {
+  --bg-base: #141210;
+  --bg-surface: #1e1c19;
+  --bg-elevated: #28251f;
+  --bg-subtle: #2e2b24;
+  --text-primary: #f0ede8;
+  --text-secondary: #b8b2aa;
+  --text-tertiary: #7d7770;
+  --text-disabled: #4a4540;
+  --border-subtle: #2e2b24;
+  --border-default: #3c3830;
+  --success: #34d399;
+  --success-bg: #0a2e1e;
+  --warning: #fbbf24;
+  --warning-bg: #2d1d00;
+  --danger: #f87171;
+  --danger-bg: #2d0a0a;
+  --brand-50: #062518;
+  --brand-100: #0a3d27;
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.55);
+}
+
+[data-theme="dark"] body {
+  background: #0e0c0a;
+}
+
+[data-theme="dark"] .hero-card {
+  background: linear-gradient(135deg, #1a8f58, #0a3d27);
+}
+
+[data-theme="dark"] .cc-visual {
+  background: linear-gradient(135deg, #2a3545, #151e2a);
+}
+
+[data-theme="dark"] .screen-frame {
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* RESPONSIVE */
+@media (max-width: 1024px) {
+  .hamburger {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .proto-nav {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-amount {
+    font-size: 28px;
+  }
+
+  .hero-chips {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .screens-area {
+    padding: 16px;
+  }
+
+  .body {
+    padding: 16px;
+  }
+
+  .modal {
+    width: min(92vw, 400px);
+    padding: 20px;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="topbar-proto">
+    <div class="proto-logo">
+      <svg width="30" height="30" viewBox="0 0 100 100" fill="none" style="flex-shrink:0">
+        <circle cx="50" cy="50" r="45" fill="var(--brand-500)"/>
+        <circle cx="35" cy="40" r="12" fill="#7dd3c0"/>
+        <circle cx="50" cy="35" r="14" fill="#a3d952"/>
+        <circle cx="65" cy="40" r="12" fill="#f4a584"/>
+        <ellipse cx="50" cy="75" rx="30" ry="10" fill="#8b4513" opacity="0.3"/>
+        <path d="M25 50 Q50 85 75 50" stroke="#6b3410" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </svg>
+      Nest
+    </div>
+    <div class="proto-nav">
+      <button class="pnb" onclick="showScreen('dashboard',this)">Dashboard</button>
+      <button class="pnb" onclick="showScreen('budget',this)">Budget Accounts</button>
+      <button class="pnb" onclick="showScreen('cards',this)">Credit Cards</button>
+      <button class="pnb" onclick="showScreen('receivables',this)">Receivables</button>
+      <button class="pnb" onclick="showScreen('collab',this)">Collaboration</button>
+    </div>
+    <button class="theme-btn" id="themebtn" onclick="toggleTheme()">🌙 Dark</button>
+  </div>
+
+  <!-- Floating Theme Toggle -->
+  <button class="theme-float" onclick="toggleTheme()" aria-label="Toggle theme">🌙</button>
+
+  <div class="screens-area" id="area"></div>
+</div>
+
+<script>
+const SCREENS = {
+
+dashboard: `<div class="app">
+  <aside class="sidebar" id="sidebar-dashboard">
+    <a href="/" class="sb-logo">
+      <svg width="30" height="30" viewBox="0 0 100 100" fill="none" style="flex-shrink:0">
+        <circle cx="50" cy="50" r="45" fill="var(--brand-500)"/>
+        <circle cx="35" cy="40" r="12" fill="#7dd3c0"/>
+        <circle cx="50" cy="35" r="14" fill="#a3d952"/>
+        <circle cx="65" cy="40" r="12" fill="#f4a584"/>
+        <ellipse cx="50" cy="75" rx="30" ry="10" fill="#8b4513" opacity="0.3"/>
+        <path d="M25 50 Q50 85 75 50" stroke="#6b3410" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </svg>
+      Nest
+    </a>
+    <div class="sb-scroll">
+      <div class="sb-sec">Overview</div>
+      <a class="sb-item on" href="#"><span class="sb-ic">⌂</span>Dashboard</a>
+      <a class="sb-item" href="#"><span class="sb-ic">◫</span>Budget Accounts<span class="sb-badge">6</span></a>
+      <div class="sb-sec">Money</div>
+      <a class="sb-item" href="#"><span class="sb-ic">▣</span>Credit Cards</a>
+      <a class="sb-item" href="#"><span class="sb-ic">↩</span>Receivables<span class="sb-badge">3</span></a>
+      <a class="sb-item" href="#"><span class="sb-ic">≡</span>Transactions</a>
+      <div class="sb-sec">Workspace</div>
+      <a class="sb-item" href="#"><span class="sb-ic">👥</span>Collaborators</a>
+      <a class="sb-item" href="#"><span class="sb-ic">⚙</span>Settings</a>
+    </div>
+    <div class="sb-bot">
+      <div class="sb-user">
+        <div class="avatar avatar-md avatar-green">JL</div>
+        <div>
+          <div style="font-size:12px;font-weight:500">Jamie Lee</div>
+          <div style="font-size:10px;color:var(--text-tertiary)">Personal</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <button class="hamburger" onclick="toggleSidebar('sidebar-dashboard')" aria-label="Open sidebar">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="tb-title">Good morning, Jamie 👋</div>
+      </div>
+      <div class="tb-actions">
+        <button class="btn btn-secondary btn-xs">+ Add transaction</button>
+        <button class="btn btn-primary btn-xs">⚡ Quick add</button>
+        <button class="btn-icon">🔔</button>
+      </div>
+    </header>
+    <div class="body">
+      <div class="hero-card" style="position:relative;z-index:1">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:2">
+          <div>
+            <div class="hero-label">DBS Multiplier · •••• 8821</div>
+            <div class="hero-amount">$24,891.50</div>
+            <div class="hero-sub">Bank balance · synced 2 min ago</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:10px;opacity:0.55;margin-bottom:3px">In budget accounts</div>
+            <div style="font-family:var(--font-display);font-size:20px;font-weight:700">$21,340.00</div>
+            <div style="font-size:10px;opacity:0.55;margin-top:2px">$3,551.50 free</div>
+          </div>
+        </div>
+        <div class="hero-chips">
+          <div class="hero-chip"><div class="hero-chip-label">🏠 Housing</div><div class="hero-chip-val">$8,200</div></div>
+          <div class="hero-chip"><div class="hero-chip-label">🛡 Emergency</div><div class="hero-chip-val">$5,000</div></div>
+          <div class="hero-chip"><div class="hero-chip-label">✈️ Travel</div><div class="hero-chip-val">$3,200</div></div>
+          <div class="hero-chip"><div class="hero-chip-label">🍔 Food</div><div class="hero-chip-val">$640</div></div>
+          <div class="hero-chip"><div class="hero-chip-label">+2 more</div><div class="hero-chip-val">$4,300</div></div>
+        </div>
+      </div>
+
+      <div class="grid-4" style="margin-bottom:14px">
+        <div class="stat-card">
+          <div class="stat-label">Spent this month</div>
+          <div class="stat-value">$2,841</div>
+          <div class="stat-sub"><span class="negative">↑ 12%</span> vs last month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">CC balance due</div>
+          <div class="stat-value">$1,240</div>
+          <div class="stat-sub">Due <span class="warning">Mar 18</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Receivables</div>
+          <div class="stat-value">$680</div>
+          <div class="stat-sub"><span class="positive">3 pending</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Reward points</div>
+          <div class="stat-value">18,420</div>
+          <div class="stat-sub"><span class="positive">↑ 840</span> this month</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div style="font-size:13px;font-weight:600">Spending breakdown</div>
+            <div class="segmented"><button class="segmented-btn on">Month</button><button class="segmented-btn">Year</button></div>
+          </div>
+          <div style="display:flex;gap:16px;align-items:center">
+            <div class="ring-wrap">
+              <svg width="110" height="110" viewBox="0 0 110 110">
+                <circle cx="55" cy="55" r="44" fill="none" stroke="var(--bg-subtle)" stroke-width="12"/>
+                <circle cx="55" cy="55" r="44" fill="none" stroke="#3AADA6" stroke-width="12" stroke-dasharray="73 203" stroke-dashoffset="0" stroke-linecap="round"/>
+                <circle cx="55" cy="55" r="44" fill="none" stroke="#8CC832" stroke-width="12" stroke-dasharray="55 203" stroke-dashoffset="-73" stroke-linecap="round"/>
+                <circle cx="55" cy="55" r="44" fill="none" stroke="#F0926A" stroke-width="12" stroke-dasharray="41 203" stroke-dashoffset="-128" stroke-linecap="round"/>
+                <circle cx="55" cy="55" r="44" fill="none" stroke="#D97706" stroke-width="12" stroke-dasharray="34 203" stroke-dashoffset="-169" stroke-linecap="round"/>
+              </svg>
+              <div class="ring-center"><div class="ring-value">$2.8k</div><div class="ring-label">total</div></div>
+            </div>
+            <div style="flex:1">
+              <div class="legend"><div class="legend-dot" style="background:#3AADA6"></div><div class="legend-name">Dining</div><div class="legend-value">$780</div></div>
+              <div class="legend"><div class="legend-dot" style="background:#8CC832"></div><div class="legend-name">Groceries</div><div class="legend-value">$580</div></div>
+              <div class="legend"><div class="legend-dot" style="background:#F0926A"></div><div class="legend-name">Transport</div><div class="legend-value">$440</div></div>
+              <div class="legend"><div class="legend-dot" style="background:#D97706"></div><div class="legend-name">Shopping</div><div class="legend-value">$350</div></div>
+              <div class="legend"><div class="legend-dot" style="background:var(--border-default)"></div><div class="legend-name">Others</div><div class="legend-value">$691</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:600">Recent transactions</div>
+            <button class="btn btn-ghost btn-xs">View all →</button>
+          </div>
+          <div>
+            <div class="tx-item"><div class="tx-icon">🛒</div><div class="tx-meta"><div class="tx-name">Cold Storage</div><div class="tx-date">Today 10:22 AM</div></div><div><div class="tx-amount negative">−$87.40</div><div class="tx-sub"><span class="tag tag-link">🍔 Food</span></div></div></div>
+            <div class="tx-item"><div class="tx-icon">🚗</div><div class="tx-meta"><div class="tx-name">Grab</div><div class="tx-date">Yesterday 8:14 PM</div></div><div><div class="tx-amount negative">−$18.50</div><div class="tx-sub"><span class="tag tag-link">🚌 Transport</span></div></div></div>
+            <div class="tx-item"><div class="tx-icon">💵</div><div class="tx-meta"><div class="tx-name">Received — Alex Tan</div><div class="tx-date">Yesterday 3:00 PM</div></div><div><div class="tx-amount positive">+$120.00</div><div class="tx-sub" style="color:var(--success);font-size:10px">Receivable offset</div></div></div>
+            <div class="tx-item"><div class="tx-icon">☕</div><div class="tx-meta"><div class="tx-name">Starbucks</div><div class="tx-date">Mar 5, 9:00 AM</div></div><div><div class="tx-amount negative">−$8.90</div><div class="tx-sub"><span class="tag tag-link">🍔 Food</span></div></div></div>
+            <div class="tx-item"><div class="tx-icon">🏋️</div><div class="tx-meta"><div class="tx-name">Anytime Fitness</div><div class="tx-date">Mar 1</div></div><div><div class="tx-amount negative">−$88.00</div><div class="tx-sub"><span class="tag tag-link">💪 Health</span></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>`,
+
+budget: `<div class="app">
+  <aside class="sidebar" id="sidebar-budget">
+    <a href="/" class="sb-logo">
+      <svg width="30" height="30" viewBox="0 0 100 100" fill="none" style="flex-shrink:0">
+        <circle cx="50" cy="50" r="45" fill="var(--brand-500)"/>
+        <circle cx="35" cy="40" r="12" fill="#7dd3c0"/>
+        <circle cx="50" cy="35" r="14" fill="#a3d952"/>
+        <circle cx="65" cy="40" r="12" fill="#f4a584"/>
+        <ellipse cx="50" cy="75" rx="30" ry="10" fill="#8b4513" opacity="0.3"/>
+        <path d="M25 50 Q50 85 75 50" stroke="#6b3410" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </svg>
+      Nest
+    </a>
+    <div class="sb-scroll">
+      <div class="sb-sec">Overview</div>
+      <a class="sb-item" href="#"><span class="sb-ic">⌂</span>Dashboard</a>
+      <a class="sb-item on" href="#"><span class="sb-ic">◫</span>Budget Accounts<span class="sb-badge">6</span></a>
+      <div class="sb-sec">Money</div>
+      <a class="sb-item" href="#"><span class="sb-ic">▣</span>Credit Cards</a>
+      <a class="sb-item" href="#"><span class="sb-ic">↩</span>Receivables</a>
+      <a class="sb-item" href="#"><span class="sb-ic">≡</span>Transactions</a>
+      <div class="sb-sec">Workspace</div>
+      <a class="sb-item" href="#"><span class="sb-ic">👥</span>Collaborators</a>
+      <a class="sb-item" href="#"><span class="sb-ic">⚙</span>Settings</a>
+    </div>
+    <div class="sb-bot">
+      <div class="sb-user">
+        <div class="avatar avatar-md avatar-green">JL</div>
+        <div>
+          <div style="font-size:12px;font-weight:500">Jamie Lee</div>
+          <div style="font-size:10px;color:var(--text-tertiary)">Personal</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <button class="hamburger" onclick="toggleSidebar('sidebar-budget')" aria-label="Open sidebar">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="tb-title">Budget Accounts</div>
+      </div>
+      <div class="tb-actions">
+        <span style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono)">$21,340 / $24,891.50</span>
+        <button class="btn btn-primary btn-xs">+ New account</button>
+      </div>
+    </header>
+    <div class="alloc-bar">
+      <div class="alloc-label"><span>Bank balance allocated</span><span style="font-weight:600;color:var(--text-primary)">85.7% · $3,551.50 free</span></div>
+      <div class="alloc-track">
+        <div style="width:33%;background:#1A8F58;border-radius:99px 0 0 99px"></div>
+        <div style="width:20%;background:#3AADA6"></div>
+        <div style="width:13%;background:#8CC832"></div>
+        <div style="width:11%;background:#F0926A"></div>
+        <div style="width:8.7%;background:#D97706"></div>
+        <div style="width:14.3%;background:var(--bg-subtle);border-radius:0 99px 99px 0"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="grid-3" style="margin-bottom:12px">
+        <div class="budget-mini">
+          <div class="bm-top"><div class="bm-icon">🏠</div><span class="badge badge-ok">On track</span></div>
+          <div class="bm-name">Housing Fund</div>
+          <div class="bm-amount">$8,200.00</div>
+          <div class="bm-target">Target $10,000</div>
+          <div class="prog-track"><div class="prog-bar" style="width:82%"></div></div>
+          <div class="bm-foot"><span>82% saved</span><span>$1,800 to go</span></div>
+        </div>
+        <div class="budget-mini">
+          <div class="bm-top"><div class="bm-icon">🛡</div><span class="badge badge-brand">Savings</span></div>
+          <div class="bm-name">Emergency Fund</div>
+          <div class="bm-amount">$5,000.00</div>
+          <div class="bm-target">Target 6 months expenses</div>
+          <div class="prog-track"><div class="prog-bar" style="width:65%"></div></div>
+          <div class="bm-foot"><span>65% funded</span><span>$2,700 to go</span></div>
+        </div>
+        <div class="budget-mini">
+          <div class="bm-top"><div class="bm-icon">✈️</div><span class="badge badge-teal">Travel</span></div>
+          <div class="bm-name">Travel Savings</div>
+          <div class="bm-amount">$3,200.00</div>
+          <div class="bm-target">Japan trip · Target $5,000</div>
+          <div class="prog-track"><div class="prog-bar" style="width:64%"></div></div>
+          <div class="bm-foot"><span>64% saved</span><span>$1,800 to go</span></div>
+        </div>
+        <div class="budget-mini">
+          <div class="bm-top"><div class="bm-icon">🍔</div><span class="badge badge-warn"><span class="badge-dot"></span>Near limit</span></div>
+          <div class="bm-name">Food & Dining</div>
+          <div class="bm-amount">$640.00</div>
+          <div class="bm-target">Monthly budget $800</div>
+          <div class="prog-track"><div class="prog-bar prog-bar-warn" style="width:80%"></div></div>
+          <div class="bm-foot"><span>80% used</span><span>$160 left</span></div>
+        </div>
+        <div class="budget-mini">
+          <div class="bm-top"><div class="bm-icon">🚌</div><span class="badge badge-ok">On track</span></div>
+          <div class="bm-name">Transport</div>
+          <div class="bm-amount">$180.00</div>
+          <div class="bm-target">Monthly budget $300</div>
+          <div class="prog-track"><div class="prog-bar" style="width:40%"></div></div>
+          <div class="bm-foot"><span>40% used</span><span>$120 left</span></div>
+        </div>
+        <div class="budget-mini">
+          <div class="bm-top"><div class="bm-icon">🛍</div><span class="badge badge-err"><span class="badge-dot"></span>Over!</span></div>
+          <div class="bm-name">Shopping</div>
+          <div class="bm-amount">$520.00</div>
+          <div class="bm-target">Monthly budget $400</div>
+          <div class="prog-track"><div class="prog-bar prog-bar-err" style="width:100%"></div></div>
+          <div class="bm-foot" style="color:var(--danger)"><span>$120 over budget</span><span>↑ 30%</span></div>
+        </div>
+      </div>
+      <div class="card" style="border:1.5px dashed var(--border-default);background:transparent;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:36px;height:36px;border-radius:var(--r-md);background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;font-size:18px">💰</div>
+          <div>
+            <div style="font-size:13px;font-weight:600">$3,551.50 unallocated</div>
+            <div style="font-size:11px;color:var(--text-tertiary)">Sitting in your bank — assign it to a budget account</div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-xs">Allocate now →</button>
+      </div>
+    </div>
+  </main>
+</div>`,
+
+cards: `<div class="app">
+  <aside class="sidebar" id="sidebar-cards">
+    <a href="/" class="sb-logo">
+      <svg width="30" height="30" viewBox="0 0 100 100" fill="none" style="flex-shrink:0">
+        <circle cx="50" cy="50" r="45" fill="var(--brand-500)"/>
+        <circle cx="35" cy="40" r="12" fill="#7dd3c0"/>
+        <circle cx="50" cy="35" r="14" fill="#a3d952"/>
+        <circle cx="65" cy="40" r="12" fill="#f4a584"/>
+        <ellipse cx="50" cy="75" rx="30" ry="10" fill="#8b4513" opacity="0.3"/>
+        <path d="M25 50 Q50 85 75 50" stroke="#6b3410" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </svg>
+      Nest
+    </a>
+    <div class="sb-scroll">
+      <div class="sb-sec">Overview</div>
+      <a class="sb-item" href="#"><span class="sb-ic">⌂</span>Dashboard</a>
+      <a class="sb-item" href="#"><span class="sb-ic">◫</span>Budget Accounts</a>
+      <div class="sb-sec">Money</div>
+      <a class="sb-item on" href="#"><span class="sb-ic">▣</span>Credit Cards</a>
+      <a class="sb-item" href="#"><span class="sb-ic">↩</span>Receivables</a>
+      <a class="sb-item" href="#"><span class="sb-ic">≡</span>Transactions</a>
+      <div class="sb-sec">Workspace</div>
+      <a class="sb-item" href="#"><span class="sb-ic">👥</span>Collaborators</a>
+      <a class="sb-item" href="#"><span class="sb-ic">⚙</span>Settings</a>
+    </div>
+    <div class="sb-bot">
+      <div class="sb-user">
+        <div class="avatar avatar-md avatar-green">JL</div>
+        <div>
+          <div style="font-size:12px;font-weight:500">Jamie Lee</div>
+          <div style="font-size:10px;color:var(--text-tertiary)">Personal</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <button class="hamburger" onclick="toggleSidebar('sidebar-cards')" aria-label="Open sidebar">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="tb-title">Credit Cards</div>
+      </div>
+      <div class="tb-actions"><button class="btn btn-primary btn-xs">+ Add card</button></div>
+    </header>
+    <div class="body">
+      <div class="grid-2">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="cc-visual">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div style="font-size:12px;font-weight:600;opacity:0.7">DBS Altitude Visa</div>
+              <div style="font-size:18px">🏦</div>
+            </div>
+            <div style="margin-top:auto">
+              <div class="cc-num">•••• &nbsp;•••• &nbsp;•••• &nbsp;4821</div>
+              <div class="cc-bot" style="margin-top:10px">
+                <div><div class="cc-holder">JAMIE LEE</div><div class="cc-exp-lbl">Expires</div><div class="cc-exp">08/27</div></div>
+                <div class="cc-net">VISA</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:7px">
+            <button class="btn btn-secondary btn-xs" style="flex:1">📋 Copy number</button>
+            <button class="btn btn-secondary btn-xs" style="flex:1">👁 Show CVV</button>
+            <div class="btn-icon" style="width:28px;height:28px;font-size:12px">✏️</div>
+          </div>
+          <div class="card card-sm">
+            <div class="cc-row"><span class="cc-row-label">Card number</span><div style="display:flex;align-items:center;gap:7px"><span class="cc-row-value">•••• 4821</span><button class="copy-btn">Copy</button></div></div>
+            <div class="cc-row"><span class="cc-row-label">Expiry</span><span class="cc-row-value">08 / 27</span></div>
+            <div class="cc-row"><span class="cc-row-label">CVV</span><div style="display:flex;align-items:center;gap:7px"><span class="cc-row-value">• • •</span><button class="copy-btn">Reveal</button></div></div>
+            <div class="cc-row"><span class="cc-row-label">Network</span><span class="cc-row-value">Visa</span></div>
+            <div class="cc-row"><span class="cc-row-label">Bank</span><span class="cc-row-value">DBS Bank</span></div>
+          </div>
+          <div class="reward-bar">
+            <div style="font-size:20px">✈️</div>
+            <div style="flex:1">
+              <div style="display:flex;align-items:baseline;gap:5px"><div class="reward-points">14,280</div><div class="reward-label">miles</div></div>
+              <div class="reward-sub">DBS Altitude · ~$142 value</div>
+            </div>
+            <button class="btn btn-secondary btn-xs">History</button>
+          </div>
+        </div>
+        <div class="card" style="display:flex;flex-direction:column;gap:0">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <div style="font-size:13px;font-weight:600">Statement · Mar 2026</div>
+            <span class="badge badge-warn"><span class="badge-dot"></span>Due Mar 18</span>
+          </div>
+          <div style="font-family:var(--font-display);font-size:26px;font-weight:700;margin-bottom:2px">$1,240.00</div>
+          <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:12px">12 transactions · $320 offset by receivables</div>
+          <div style="display:flex;gap:7px;margin-bottom:12px">
+            <button class="btn btn-primary btn-xs">Pay full amount</button>
+            <button class="btn btn-secondary btn-xs">Pay from budget</button>
+          </div>
+          <div class="divider" style="margin:0 0 8px 0"></div>
+          <div style="overflow-y:auto;flex:1">
+            <div class="tx-item"><div class="tx-icon">🛒</div><div class="tx-meta"><div class="tx-name">Cold Storage</div><div class="tx-date">Mar 6</div><div style="margin-top:3px"><span class="tag tag-link">🍔 Food −$87.40</span></div></div><div class="tx-amount negative">−$87.40</div></div>
+            <div class="tx-item"><div class="tx-icon">✈️</div><div class="tx-meta"><div class="tx-name">Singapore Airlines</div><div class="tx-date">Mar 4</div><div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap"><span class="tag tag-receivable">↩ Recv −$400</span><span class="tag tag-link">✈️ Travel −$180</span></div></div><div class="tx-amount negative">−$580.00</div></div>
+            <div class="tx-item"><div class="tx-icon">🍜</div><div class="tx-meta"><div class="tx-name">Odette Restaurant</div><div class="tx-date">Mar 3</div><div style="margin-top:3px"><span class="tag tag-dash">+ Link account</span></div></div><div class="tx-amount negative">−$220.00</div></div>
+            <div class="tx-item"><div class="tx-icon">🚗</div><div class="tx-meta"><div class="tx-name">Grab</div><div class="tx-date">Mar 2</div><div style="margin-top:3px"><span class="tag tag-link">🚌 Transport −$18.50</span></div></div><div class="tx-amount negative">−$18.50</div></div>
+            <div class="tx-item"><div class="tx-icon">☕</div><div class="tx-meta"><div class="tx-name">Starbucks</div><div class="tx-date">Mar 1</div><div style="margin-top:3px"><span class="tag tag-link">🍔 Food −$8.90</span></div></div><div class="tx-amount negative">−$8.90</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>`,
+
+receivables: `<div class="app">
+  <aside class="sidebar" id="sidebar-receivables">
+    <a href="/" class="sb-logo">
+      <svg width="30" height="30" viewBox="0 0 100 100" fill="none" style="flex-shrink:0">
+        <circle cx="50" cy="50" r="45" fill="var(--brand-500)"/>
+        <circle cx="35" cy="40" r="12" fill="#7dd3c0"/>
+        <circle cx="50" cy="35" r="14" fill="#a3d952"/>
+        <circle cx="65" cy="40" r="12" fill="#f4a584"/>
+        <ellipse cx="50" cy="75" rx="30" ry="10" fill="#8b4513" opacity="0.3"/>
+        <path d="M25 50 Q50 85 75 50" stroke="#6b3410" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </svg>
+      Nest
+    </a>
+    <div class="sb-scroll">
+      <div class="sb-sec">Overview</div>
+      <a class="sb-item" href="#"><span class="sb-ic">⌂</span>Dashboard</a>
+      <a class="sb-item" href="#"><span class="sb-ic">◫</span>Budget Accounts</a>
+      <div class="sb-sec">Money</div>
+      <a class="sb-item" href="#"><span class="sb-ic">▣</span>Credit Cards</a>
+      <a class="sb-item on" href="#"><span class="sb-ic">↩</span>Receivables<span class="sb-badge">3</span></a>
+      <a class="sb-item" href="#"><span class="sb-ic">≡</span>Transactions</a>
+      <div class="sb-sec">Workspace</div>
+      <a class="sb-item" href="#"><span class="sb-ic">👥</span>Collaborators</a>
+      <a class="sb-item" href="#"><span class="sb-ic">⚙</span>Settings</a>
+    </div>
+    <div class="sb-bot">
+      <div class="sb-user">
+        <div class="avatar avatar-md avatar-green">JL</div>
+        <div>
+          <div style="font-size:12px;font-weight:500">Jamie Lee</div>
+          <div style="font-size:10px;color:var(--text-tertiary)">Personal</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <button class="hamburger" onclick="toggleSidebar('sidebar-receivables')" aria-label="Open sidebar">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="tb-title">Receivables</div>
+      </div>
+      <div class="tb-actions"><button class="btn btn-primary btn-xs">+ Record receivable</button></div>
+    </header>
+    <div class="body">
+      <div class="grid-3" style="margin-bottom:16px">
+        <div class="stat-card"><div class="stat-label">Total outstanding</div><div class="stat-value">$680.00</div><div class="stat-sub">3 pending</div></div>
+        <div class="stat-card"><div class="stat-label">Offset against CC</div><div class="stat-value">$400.00</div><div class="stat-sub" style="color:var(--success)">↩ SIA booking</div></div>
+        <div class="stat-card"><div class="stat-label">Collected this month</div><div class="stat-value">$120.00</div><div class="stat-sub"><span class="positive">1 received</span></div></div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:10px">Pending · 3 items</div>
+          <div class="receivable-item"><div class="avatar avatar-sm avatar-peach">AT</div><div class="ri-who"><div class="ri-name">Alex Tan</div><div class="ri-desc">Dinner split · Odette · Mar 3</div></div><div class="ri-right"><div class="ri-amount">$110.00</div><span class="badge badge-warn"><span class="badge-dot"></span>Pending</span></div></div>
+          <div class="receivable-item" style="border-color:var(--brand-300);background:var(--brand-50)"><div class="avatar avatar-sm avatar-teal">SC</div><div class="ri-who"><div class="ri-name">Sarah Chen</div><div class="ri-desc">SIA flights · Linked to CC bill</div><div style="margin-top:3px"><span class="tag tag-receivable">↩ Offset: DBS •4821 −$400</span></div></div><div class="ri-right"><div class="ri-amount">$400.00</div><span class="badge badge-brand">CC offset</span></div></div>
+          <div class="receivable-item"><div class="avatar avatar-sm avatar-amber">MR</div><div class="ri-who"><div class="ri-name">Marcus Rajan</div><div class="ri-desc">Concert tickets · Mar 1</div></div><div class="ri-right"><div class="ri-amount">$170.00</div><span class="badge badge-warn"><span class="badge-dot"></span>Pending</span></div></div>
+          <div class="divider"></div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:8px">Collected recently</div>
+          <div class="receivable-item" style="opacity:0.6"><div class="avatar avatar-sm" style="background:var(--bg-subtle);color:var(--text-tertiary)">KW</div><div class="ri-who"><div class="ri-name">Kai Wen</div><div class="ri-desc">Grocery split · Feb 28</div></div><div class="ri-right"><div style="font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text-secondary)">$120.00</div><span class="badge badge-neutral">Collected</span></div></div>
+        </div>
+        <div class="card">
+          <div style="font-size:14px;font-weight:600;margin-bottom:3px">Record a receivable</div>
+          <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:16px">Track money owed to you and optionally link it to offset a credit card bill.</div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div class="form-group"><label class="label">Who owes you?</label><input class="input" placeholder="Name or contact"/></div>
+            <div class="form-group"><label class="label">Amount (SGD)</label><div style="display:flex"><span style="padding:8px 11px;background:var(--bg-subtle);border:1px solid var(--border-default);border-right:none;border-radius:var(--r-md) 0 0 var(--r-md);font-size:12px;color:var(--text-tertiary);font-family:var(--font-mono)">$</span><input class="input" placeholder="0.00" style="border-radius:0 var(--r-md) var(--r-md) 0"/></div></div>
+            <div class="form-group"><label class="label">Description</label><input class="input" placeholder="What's it for?"/></div>
+            <div class="form-group"><label class="label">Link to credit card bill? <span style="font-weight:400;color:var(--text-tertiary)">(optional)</span></label><select class="input" style="appearance:none"><option>Don't link to a card</option><option>DBS Altitude ••4821</option><option>OCBC Titanium ••9902</option></select></div>
+            <button class="btn btn-primary" style="width:100%;justify-content:center">Save receivable</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>`,
+
+collab: `<div class="app" style="position:relative">
+  <aside class="sidebar" id="sidebar-collab">
+    <a href="/" class="sb-logo">
+      <svg width="30" height="30" viewBox="0 0 100 100" fill="none" style="flex-shrink:0">
+        <circle cx="50" cy="50" r="45" fill="var(--brand-500)"/>
+        <circle cx="35" cy="40" r="12" fill="#7dd3c0"/>
+        <circle cx="50" cy="35" r="14" fill="#a3d952"/>
+        <circle cx="65" cy="40" r="12" fill="#f4a584"/>
+        <ellipse cx="50" cy="75" rx="30" ry="10" fill="#8b4513" opacity="0.3"/>
+        <path d="M25 50 Q50 85 75 50" stroke="#6b3410" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </svg>
+      Nest
+    </a>
+    <div class="sb-scroll">
+      <div class="sb-sec">Overview</div>
+      <a class="sb-item" href="#"><span class="sb-ic">⌂</span>Dashboard</a>
+      <a class="sb-item" href="#"><span class="sb-ic">◫</span>Budget Accounts</a>
+      <div class="sb-sec">Money</div>
+      <a class="sb-item" href="#"><span class="sb-ic">▣</span>Credit Cards</a>
+      <a class="sb-item" href="#"><span class="sb-ic">↩</span>Receivables</a>
+      <a class="sb-item" href="#"><span class="sb-ic">≡</span>Transactions</a>
+      <div class="sb-sec">Workspace</div>
+      <a class="sb-item on" href="#"><span class="sb-ic">👥</span>Collaborators</a>
+      <a class="sb-item" href="#"><span class="sb-ic">⚙</span>Settings</a>
+    </div>
+    <div class="sb-bot">
+      <div class="sb-user">
+        <div class="avatar avatar-md avatar-green">JL</div>
+        <div>
+          <div style="font-size:12px;font-weight:500">Jamie Lee</div>
+          <div style="font-size:10px;color:var(--text-tertiary)">Personal</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <main class="main" style="filter:blur(1.5px);pointer-events:none">
+    <header class="topbar"><div class="tb-title">Collaborators</div></header>
+    <div class="body">
+      <div class="card">
+        <div style="font-size:14px;font-weight:600;margin-bottom:10px">Current workspace · Personal</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar avatar-lg avatar-green">JL</div>
+          <div>
+            <div style="font-size:13px;font-weight:600">Jamie Lee</div>
+            <div style="font-size:11px;color:var(--text-tertiary)">Owner · Personal workspace</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-title">Invite a collaborator</div>
+      <div class="modal-sub">Choose how you'd like to share your financial workspace. Both collaborators can manage budgets, transactions and credit cards.</div>
+      <div class="choice sel" onclick="pickChoice(this)">
+        <div class="choice-icon">🔄</div>
+        <div><div class="choice-title">Convert this workspace</div><div class="choice-desc">Turn your existing Personal workspace into a shared space. You'll both see and manage the same accounts, budgets and cards.</div></div>
+      </div>
+      <div class="choice" onclick="pickChoice(this)">
+        <div class="choice-icon">✨</div>
+        <div><div class="choice-title">Create a new shared workspace</div><div class="choice-desc">Keep your personal workspace private and start a fresh shared space — ideal for couples or family budgeting.</div></div>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="form-group"><label class="label">Invite by email</label><input class="input" value="sarah.chen@gmail.com"/></div>
+        <div class="form-group"><label class="label">Their role</label><select class="input" style="appearance:none"><option>Editor — can add & edit transactions</option><option>Viewer — read only</option></select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost btn-xs">Cancel</button>
+        <button class="btn btn-primary btn-xs">Send invite →</button>
+      </div>
+    </div>
+  </div>
+</div>`
+
+};
+
+function showScreen(name, btn) {
+  const area = document.getElementById('area');
+  const labels = {dashboard:'01 — Dashboard',budget:'02 — Budget Accounts',cards:'03 — Credit Cards',receivables:'04 — Receivables',collab:'05 — Collaboration'};
+  area.innerHTML = `<div class="screen-block"><div class="screen-lbl">${labels[name]}</div><div class="screen-frame">${SCREENS[name]}</div></div>`;
+  document.querySelectorAll('.pnb').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
+
+function pickChoice(el){
+  document.querySelectorAll('.choice').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function toggleTheme(){
+  const h=document.documentElement;
+  const next=h.getAttribute('data-theme')==='light'?'dark':'light';
+  h.setAttribute('data-theme',next);
+  document.getElementById('themebtn').textContent=next==='dark'?'☀️ Light':'🌙 Dark';
+}
+
+function toggleSidebar(id) {
+  const sidebar = document.getElementById(id);
+  if (sidebar) {
+    sidebar.classList.toggle('open');
+  }
+}
+
+// boot
+document.querySelector('.pnb').click();
+</script>
+</body>
+</html>

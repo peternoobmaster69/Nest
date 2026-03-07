@@ -1,0 +1,48 @@
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+const UpdateReceivableSchema = z.object({
+  title: z.string().min(1).max(120).optional(),
+  amountCents: z.number().int().positive().optional(),
+  date: z.string().datetime().optional(),
+  transactionDate: z.string().datetime().nullable().optional(),
+  remarks: z.string().max(500).optional(),
+  status: z.enum(["OPEN", "PARTIAL", "PAID", "VOID"]).optional(),
+  isFamily: z.boolean().optional(),
+  isMom: z.boolean().optional(),
+});
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const parsed = UpdateReceivableSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const updated = await prisma.receivable.update({
+    where: { id },
+    data: {
+      title: parsed.data.title,
+      amountCents: parsed.data.amountCents,
+      date: parsed.data.date ? new Date(parsed.data.date) : undefined,
+      transactionDate:
+        parsed.data.transactionDate === undefined
+          ? undefined
+          : parsed.data.transactionDate === null
+            ? null
+            : new Date(parsed.data.transactionDate),
+      remarkTogether: parsed.data.remarks,
+      status: parsed.data.status,
+      isFamily: parsed.data.isFamily,
+      isMom: parsed.data.isMom,
+    },
+  });
+  return NextResponse.json(updated);
+}
+
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  await prisma.receivable.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
