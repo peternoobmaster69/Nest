@@ -1,5 +1,6 @@
 import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -30,6 +31,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         throw new Error("Transaction not found");
       }
 
+      await requireWorkspaceAccess(existing.workspaceId);
+
       const updated = await db.transaction.update({
         where: { id },
         data: parsed.data,
@@ -44,6 +47,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     if (message === "Transaction not found") {
       return NextResponse.json({ error: message }, { status: 404 });
@@ -70,6 +76,8 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
         throw new Error("Transaction not found");
       }
 
+      await requireWorkspaceAccess(existing.workspaceId);
+
       await db.transaction.delete({ where: { id } });
 
       if (existing.budgetId) {
@@ -79,6 +87,9 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     if (message === "Transaction not found") {
       return NextResponse.json({ error: message }, { status: 404 });

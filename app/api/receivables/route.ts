@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -16,45 +17,65 @@ const CreateReceivableSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const workspaceId = searchParams.get("workspaceId");
-  if (!workspaceId) {
-    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  try {
+    const { searchParams } = new URL(request.url);
+    const workspaceId = searchParams.get("workspaceId");
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+    }
+
+    await requireWorkspaceAccess(workspaceId);
+
+    const receivables = await prisma.receivable.findMany({
+      where: { workspaceId },
+      orderBy: { date: "desc" },
+      take: 100,
+    });
+
+    return NextResponse.json(receivables);
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to fetch receivables", message }, { status: 500 });
   }
-
-  const receivables = await prisma.receivable.findMany({
-    where: { workspaceId },
-    orderBy: { date: "desc" },
-    take: 100,
-  });
-
-  return NextResponse.json(receivables);
 }
 
 export async function POST(request: Request) {
-  const parsed = CreateReceivableSchema.safeParse(await request.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  try {
+    const parsed = CreateReceivableSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+
+    await requireWorkspaceAccess(parsed.data.workspaceId);
+
+    const receivableDate = parsed.data.receivableDate ?? parsed.data.date;
+    if (!receivableDate) {
+      return NextResponse.json({ error: "receivableDate is required" }, { status: 400 });
+    }
+
+    const created = await prisma.receivable.create({
+      data: {
+        workspaceId: parsed.data.workspaceId,
+        title: parsed.data.title ?? "Receivable",
+        amountCents: parsed.data.amountCents,
+        date: new Date(receivableDate),
+        transactionDate: parsed.data.transactionDate ? new Date(parsed.data.transactionDate) : null,
+        remarkTogether: parsed.data.remarks,
+        accountId: parsed.data.accountId,
+        fromUserId: parsed.data.fromUserId,
+        status: parsed.data.status,
+      },
+    });
+
+    return NextResponse.json(created, { status: 201 });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to create receivable", message }, { status: 500 });
   }
-
-  const receivableDate = parsed.data.receivableDate ?? parsed.data.date;
-  if (!receivableDate) {
-    return NextResponse.json({ error: "receivableDate is required" }, { status: 400 });
-  }
-
-  const created = await prisma.receivable.create({
-    data: {
-      workspaceId: parsed.data.workspaceId,
-      title: parsed.data.title ?? "Receivable",
-      amountCents: parsed.data.amountCents,
-      date: new Date(receivableDate),
-      transactionDate: parsed.data.transactionDate ? new Date(parsed.data.transactionDate) : null,
-      remarkTogether: parsed.data.remarks,
-      accountId: parsed.data.accountId,
-      fromUserId: parsed.data.fromUserId,
-      status: parsed.data.status,
-    },
-  });
-
-  return NextResponse.json(created, { status: 201 });
 }

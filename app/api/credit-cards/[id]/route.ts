@@ -1,6 +1,7 @@
 import { authOptions } from "@/lib/auth";
 import { decryptText, encryptText } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -39,6 +40,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       where: { id },
       select: {
         id: true,
+        workspaceId: true,
         last4Digit: true,
         encryptedCardNumber: true,
         encryptionIv: true,
@@ -52,6 +54,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     if (!card) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+
+    await requireWorkspaceAccess(card.workspaceId);
 
     let fullCardNumber: string | null = null;
     if (card.encryptedCardNumber && card.encryptionIv && card.encryptionTag) {
@@ -86,6 +90,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       securityCode,
     });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to reveal credit card", message }, { status: 500 });
   }
@@ -98,6 +105,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
+
+    const existing = await prisma.creditCardAccount.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
+    }
+
+    await requireWorkspaceAccess(existing.workspaceId);
 
     const data: {
       cardName?: string;
@@ -218,13 +235,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       hasSecurityCode: Boolean(encryptedSecurityCode),
     });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to update credit card", message }, { status: 500 });
   }
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  await prisma.creditCardAccount.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
+  try {
+    const { id } = await params;
+
+    const existing = await prisma.creditCardAccount.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
+    }
+
+    await requireWorkspaceAccess(existing.workspaceId);
+
+    await prisma.creditCardAccount.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to delete credit card", message }, { status: 500 });
+  }
 }

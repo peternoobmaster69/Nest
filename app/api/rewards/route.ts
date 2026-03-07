@@ -1,31 +1,22 @@
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const workspace = await prisma.workspace.findFirst({
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!workspace) {
-      return NextResponse.json({
-        creditCards: [],
-        frequentFlyers: [],
-        conversions: [],
-      });
-    }
+    const { workspaceId } = await requireWorkspaceAccess();
 
     const [creditCardRewards, frequentFlyers, conversions] = await Promise.all([
       prisma.creditCardReward.findMany({
-        where: { workspaceId: workspace.id },
+        where: { workspaceId },
         include: { creditCard: true },
       }),
       prisma.frequentFlyerAccount.findMany({
-        where: { workspaceId: workspace.id },
+        where: { workspaceId },
         orderBy: { programName: "asc" },
       }),
       prisma.pointConversion.findMany({
-        where: { workspaceId: workspace.id },
+        where: { workspaceId },
         include: {
           creditCardReward: { include: { creditCard: true } },
           frequentFlyer: true,
@@ -34,9 +25,8 @@ export async function GET() {
       }),
     ]);
 
-    // Get all credit cards that don't have rewards yet
     const allCards = await prisma.creditCardAccount.findMany({
-      where: { workspaceId: workspace.id, isActive: true },
+      where: { workspaceId, isActive: true },
       select: { id: true, cardName: true, bankName: true, last4Digit: true },
     });
 
@@ -50,10 +40,17 @@ export async function GET() {
       cardsWithoutRewards,
     });
   } catch (error) {
-    console.error("Rewards fetch error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch rewards data" },
-      { status: 500 }
-    );
+    if (error instanceof ApiAuthError) {
+      if (error.status === 404) {
+        return NextResponse.json({
+          creditCards: [],
+          frequentFlyers: [],
+          conversions: [],
+          cardsWithoutRewards: [],
+        });
+      }
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Failed to fetch rewards data" }, { status: 500 });
   }
 }

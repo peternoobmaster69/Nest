@@ -1,5 +1,6 @@
 import { encryptText } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -33,6 +34,8 @@ export async function GET(request: Request) {
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
     }
+
+    await requireWorkspaceAccess(workspaceId);
 
     let cards;
     try {
@@ -97,6 +100,9 @@ export async function GET(request: Request) {
       }),
     );
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to fetch credit cards", message }, { status: 500 });
   }
@@ -108,6 +114,8 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
+
+    await requireWorkspaceAccess(parsed.data.workspaceId);
 
     const normalizedCardNumber = parsed.data.cardNumber ? normalizeCardNumber(parsed.data.cardNumber) : "";
     const last4Digit = normalizedCardNumber ? normalizedCardNumber.slice(-4) : "0000";
@@ -240,6 +248,9 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to create credit card", message }, { status: 500 });
   }

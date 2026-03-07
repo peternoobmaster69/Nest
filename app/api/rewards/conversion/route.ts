@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -19,57 +20,39 @@ const UpdateConversionSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const workspace = await prisma.workspace.findFirst({
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!workspace) {
-      return NextResponse.json({ error: "No workspace found" }, { status: 404 });
-    }
+    const { workspaceId } = await requireWorkspaceAccess();
 
     const body = await request.json();
     const parsed = CreateConversionSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { creditCardRewardId, frequentFlyerId, fromPoints, toMiles, description } =
-      parsed.data;
+    const { creditCardRewardId, frequentFlyerId, fromPoints, toMiles, description } = parsed.data;
 
-    // Calculate conversion rate (miles per point)
     const conversionRate = toMiles / fromPoints;
 
-    // Verify both accounts belong to the workspace
     const [reward, flyer] = await Promise.all([
       prisma.creditCardReward.findFirst({
-        where: { id: creditCardRewardId, workspaceId: workspace.id },
+        where: { id: creditCardRewardId, workspaceId },
       }),
       prisma.frequentFlyerAccount.findFirst({
-        where: { id: frequentFlyerId, workspaceId: workspace.id },
+        where: { id: frequentFlyerId, workspaceId },
       }),
     ]);
 
     if (!reward) {
-      return NextResponse.json(
-        { error: "Credit card reward not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Credit card reward not found" }, { status: 404 });
     }
 
     if (!flyer) {
-      return NextResponse.json(
-        { error: "Frequent flyer account not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Frequent flyer account not found" }, { status: 404 });
     }
 
     const conversion = await prisma.pointConversion.create({
       data: {
-        workspaceId: workspace.id,
+        workspaceId,
         creditCardRewardId,
         frequentFlyerId,
         fromPoints,
@@ -85,21 +68,30 @@ export async function POST(request: Request) {
 
     return NextResponse.json(conversion, { status: 201 });
   } catch (error) {
-    console.error("Conversion create error:", error);
-    return NextResponse.json(
-      { error: "Failed to create conversion" },
-      { status: 500 }
-    );
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Failed to create conversion" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    const { workspaceId } = await requireWorkspaceAccess();
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
     if (!id) {
       return NextResponse.json({ error: "ID is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.pointConversion.findFirst({
+      where: { id, workspaceId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Conversion not found" }, { status: 404 });
     }
 
     await prisma.pointConversion.delete({
@@ -108,28 +100,26 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Conversion delete error:", error);
-    return NextResponse.json(
-      { error: "Failed to delete conversion" },
-      { status: 500 }
-    );
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Failed to delete conversion" }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request) {
   try {
+    const { workspaceId } = await requireWorkspaceAccess();
+
     const body = await request.json();
     const parsed = UpdateConversionSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const existing = await prisma.pointConversion.findUnique({
-      where: { id: parsed.data.id },
+    const existing = await prisma.pointConversion.findFirst({
+      where: { id: parsed.data.id, workspaceId },
       select: { fromPoints: true, toMiles: true },
     });
 
@@ -157,10 +147,9 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("Conversion update error:", error);
-    return NextResponse.json(
-      { error: "Failed to update conversion" },
-      { status: 500 }
-    );
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Failed to update conversion" }, { status: 500 });
   }
 }

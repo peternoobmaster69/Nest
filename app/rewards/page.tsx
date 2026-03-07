@@ -2,39 +2,46 @@ import { PageFrame } from "@/components/page-frame";
 import { RewardsPage } from "@/components/rewards-page";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/require-session";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 
 export default async function RewardsRoute() {
   const session = await requireSession();
   const userName = session.user?.name || session.user?.email || "User";
 
-  const workspace = await prisma.workspace.findFirst({
-    orderBy: { createdAt: "asc" },
-  });
+  let workspaceId: string | null = null;
+  try {
+    const auth = await requireWorkspaceAccess();
+    workspaceId = auth.workspaceId;
+  } catch (error) {
+    if (!(error instanceof ApiAuthError) || error.status !== 404) {
+      throw error;
+    }
+  }
 
-  const creditCardsRaw = workspace
+  const creditCardsRaw = workspaceId
     ? await prisma.creditCardReward.findMany({
-        where: { workspaceId: workspace.id },
+        where: { workspaceId },
         include: { creditCard: true },
       })
     : [];
 
-  const frequentFlyersRaw = workspace
+  const frequentFlyersRaw = workspaceId
     ? await prisma.frequentFlyerAccount.findMany({
-        where: { workspaceId: workspace.id, isActive: true },
+        where: { workspaceId, isActive: true },
         orderBy: { programName: "asc" },
       })
     : [];
 
-  const availableCards = workspace
+  const availableCards = workspaceId
     ? await prisma.creditCardAccount.findMany({
-        where: { workspaceId: workspace.id, isActive: true, reward: null },
+        where: { workspaceId, isActive: true, reward: null },
         select: { id: true, cardName: true, bankName: true, last4Digit: true },
       })
     : [];
 
-  const conversionsRaw = workspace
+  const conversionsRaw = workspaceId
     ? await prisma.pointConversion.findMany({
-        where: { workspaceId: workspace.id },
+        where: { workspaceId },
         include: {
           creditCardReward: { include: { creditCard: true } },
           frequentFlyer: true,
@@ -43,7 +50,6 @@ export default async function RewardsRoute() {
       })
     : [];
 
-  // Serialize dates for client components
   const creditCards = creditCardsRaw.map((card) => ({
     ...card,
     lastUpdated: card.lastUpdated.toISOString(),

@@ -1,19 +1,30 @@
 import { PageFrame } from "@/components/page-frame";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/require-session";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 
 export default async function CollaboratorsRoute() {
   const session = await requireSession();
   const userName = session.user?.name || session.user?.email || "User";
 
-  const workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: "asc" } });
-  const members = workspace
-    ? await prisma.workspaceMember.findMany({
-        where: { workspaceId: workspace.id },
-        include: { user: true },
-        orderBy: { createdAt: "asc" },
-      })
-    : [];
+  let members: Array<{
+    id: string;
+    role: string;
+    user: { id: string; name: string | null; email: string | null };
+  }> = [];
+
+  try {
+    const { workspaceId } = await requireWorkspaceAccess();
+    members = await prisma.workspaceMember.findMany({
+      where: { workspaceId },
+      include: { user: true },
+      orderBy: { createdAt: "asc" },
+    });
+  } catch (error) {
+    if (!(error instanceof ApiAuthError) || error.status !== 404) {
+      throw error;
+    }
+  }
 
   return (
     <PageFrame title="Collaborators" current="/collaborators" userName={userName}>

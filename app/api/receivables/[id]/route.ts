@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -14,35 +15,72 @@ const UpdateReceivableSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const parsed = UpdateReceivableSchema.safeParse(await request.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+  try {
+    const { id } = await params;
+    const parsed = UpdateReceivableSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
 
-  const updated = await prisma.receivable.update({
-    where: { id },
-    data: {
-      title: parsed.data.title,
-      amountCents: parsed.data.amountCents,
-      date: parsed.data.date ? new Date(parsed.data.date) : undefined,
-      transactionDate:
-        parsed.data.transactionDate === undefined
-          ? undefined
-          : parsed.data.transactionDate === null
-            ? null
-            : new Date(parsed.data.transactionDate),
-      remarkTogether: parsed.data.remarks,
-      status: parsed.data.status,
-      isFamily: parsed.data.isFamily,
-      isMom: parsed.data.isMom,
-    },
-  });
-  return NextResponse.json(updated);
+    const existing = await prisma.receivable.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Receivable not found" }, { status: 404 });
+    }
+
+    await requireWorkspaceAccess(existing.workspaceId);
+
+    const updated = await prisma.receivable.update({
+      where: { id },
+      data: {
+        title: parsed.data.title,
+        amountCents: parsed.data.amountCents,
+        date: parsed.data.date ? new Date(parsed.data.date) : undefined,
+        transactionDate:
+          parsed.data.transactionDate === undefined
+            ? undefined
+            : parsed.data.transactionDate === null
+              ? null
+              : new Date(parsed.data.transactionDate),
+        remarkTogether: parsed.data.remarks,
+        status: parsed.data.status,
+        isFamily: parsed.data.isFamily,
+        isMom: parsed.data.isMom,
+      },
+    });
+    return NextResponse.json(updated);
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to update receivable", message }, { status: 500 });
+  }
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  await prisma.receivable.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
+  try {
+    const { id } = await params;
+
+    const existing = await prisma.receivable.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Receivable not found" }, { status: 404 });
+    }
+
+    await requireWorkspaceAccess(existing.workspaceId);
+
+    await prisma.receivable.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to delete receivable", message }, { status: 500 });
+  }
 }

@@ -1,6 +1,7 @@
 import { authOptions } from "@/lib/auth";
 import { getBankConsistency } from "@/lib/bank-consistency";
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -14,29 +15,39 @@ const CreateAccountSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const workspaceId = searchParams.get("workspaceId");
+  try {
+    const { searchParams } = new URL(request.url);
+    const workspaceId = searchParams.get("workspaceId");
 
-  if (!workspaceId) {
-    return NextResponse.json([]);
+    if (!workspaceId) {
+      return NextResponse.json([]);
+    }
+
+    await requireWorkspaceAccess(workspaceId);
+
+    const accounts = await prisma.financialAccount.findMany({
+      where: { workspaceId, kind: "BANK" },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const consistency = await getBankConsistency(prisma, workspaceId);
+    const map = new Map(consistency.map((c) => [c.id, c]));
+
+    return NextResponse.json(
+      accounts.map((a) => ({
+        ...a,
+        currentBalanceCents: map.get(a.id)?.currentBalanceCents ?? a.startingCents,
+        linkedBudgetTotalCents: map.get(a.id)?.linkedBudgetTotalCents ?? 0,
+        discrepancyCents: map.get(a.id)?.discrepancyCents ?? a.startingCents,
+      })),
+    );
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to fetch bank accounts", message }, { status: 500 });
   }
-
-  const accounts = await prisma.financialAccount.findMany({
-    where: { workspaceId, kind: "BANK" },
-    orderBy: { createdAt: "asc" },
-  });
-
-  const consistency = await getBankConsistency(prisma, workspaceId);
-  const map = new Map(consistency.map((c) => [c.id, c]));
-
-  return NextResponse.json(
-    accounts.map((a) => ({
-      ...a,
-      currentBalanceCents: map.get(a.id)?.currentBalanceCents ?? a.startingCents,
-      linkedBudgetTotalCents: map.get(a.id)?.linkedBudgetTotalCents ?? 0,
-      discrepancyCents: map.get(a.id)?.discrepancyCents ?? a.startingCents,
-    })),
-  );
 }
 
 export async function POST(request: Request) {
@@ -55,8 +66,6 @@ export async function POST(request: Request) {
     const sessionEmail = session.user.email ?? null;
     const sessionName = session.user.name ?? null;
 
-    // Recover gracefully if DB was reset and the session points to a stale user id.
-    // Priority: existing by id -> existing by email -> create by session id.
     let userId = sessionUserId;
     const byId = await prisma.user.findUnique({
       where: { id: sessionUserId },
@@ -88,7 +97,20 @@ export async function POST(request: Request) {
 
     let workspaceId = parsed.data.workspaceId;
 
-    if (!workspaceId) {
+    if (workspaceId) {
+      const membership = await prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId,
+            userId,
+          },
+        },
+        select: { workspaceId: true },
+      });
+      if (!membership) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else {
       const existingMembership = await prisma.workspaceMember.findFirst({
         where: { userId },
         orderBy: { createdAt: "asc" },

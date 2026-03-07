@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -19,22 +20,13 @@ const UpdateCreditCardRewardSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const workspace = await prisma.workspace.findFirst({
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!workspace) {
-      return NextResponse.json({ error: "No workspace found" }, { status: 404 });
-    }
+    const { workspaceId } = await requireWorkspaceAccess();
 
     const body = await request.json();
     const parsed = CreateCreditCardRewardSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
     }
 
     const {
@@ -46,22 +38,18 @@ export async function POST(request: Request) {
       conversionDescription,
     } = parsed.data;
 
-    // Verify the credit card belongs to the workspace
     const card = await prisma.creditCardAccount.findFirst({
-      where: { id: creditCardId, workspaceId: workspace.id },
+      where: { id: creditCardId, workspaceId },
     });
 
     if (!card) {
-      return NextResponse.json(
-        { error: "Credit card not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
     }
 
     const reward = await prisma.$transaction(async (tx) => {
       const createdReward = await tx.creditCardReward.create({
         data: {
-          workspaceId: workspace.id,
+          workspaceId,
           creditCardId,
           currentPoints,
           pointsValueCents,
@@ -71,7 +59,7 @@ export async function POST(request: Request) {
 
       await tx.pointConversion.create({
         data: {
-          workspaceId: workspace.id,
+          workspaceId,
           creditCardRewardId: createdReward.id,
           fromPoints: conversionFromPoints,
           toMiles: conversionToMiles,
@@ -85,24 +73,30 @@ export async function POST(request: Request) {
 
     return NextResponse.json(reward, { status: 201 });
   } catch (error) {
-    console.error("Credit card reward create error:", error);
-    return NextResponse.json(
-      { error: "Failed to create credit card reward" },
-      { status: 500 }
-    );
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Failed to create credit card reward" }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request) {
   try {
+    const { workspaceId } = await requireWorkspaceAccess();
+
     const body = await request.json();
     const parsed = UpdateCreditCardRewardSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const existing = await prisma.creditCardReward.findFirst({
+      where: { id: parsed.data.id, workspaceId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Credit card reward not found" }, { status: 404 });
     }
 
     const { id, currentPoints, pointsValueCents } = parsed.data;
@@ -119,24 +113,30 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(reward);
   } catch (error) {
-    console.error("Credit card reward update error:", error);
-    return NextResponse.json(
-      { error: "Failed to update credit card reward" },
-      { status: 500 }
-    );
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Failed to update credit card reward" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    const { workspaceId } = await requireWorkspaceAccess();
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json(
-        { error: "ID is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "ID is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.creditCardReward.findFirst({
+      where: { id, workspaceId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Credit card reward not found" }, { status: 404 });
     }
 
     await prisma.creditCardReward.delete({
@@ -145,10 +145,9 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Credit card reward delete error:", error);
-    return NextResponse.json(
-      { error: "Failed to delete credit card reward" },
-      { status: 500 }
-    );
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Failed to delete credit card reward" }, { status: 500 });
   }
 }

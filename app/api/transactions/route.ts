@@ -1,5 +1,6 @@
 import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -31,6 +32,8 @@ export async function GET(request: Request) {
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
     }
+
+    await requireWorkspaceAccess(workspaceId);
 
     const txs = await prisma.transaction.findMany({
       where: { workspaceId },
@@ -64,6 +67,9 @@ export async function GET(request: Request) {
       })),
     );
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to fetch transactions", message }, { status: 500 });
   }
@@ -78,6 +84,19 @@ export async function POST(request: Request) {
     }
 
     const { budgetId, budgetOperation, ...txPayload } = parsed.data;
+    await requireWorkspaceAccess(txPayload.workspaceId);
+
+    const account = await prisma.financialAccount.findFirst({
+      where: {
+        id: txPayload.accountId,
+        workspaceId: txPayload.workspaceId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!account) {
+      return NextResponse.json({ error: "Invalid account for workspace." }, { status: 400 });
+    }
 
     if ((budgetId && !budgetOperation) || (!budgetId && budgetOperation)) {
       return NextResponse.json({ error: "budgetId and budgetOperation must be provided together." }, { status: 400 });
@@ -121,6 +140,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to create transaction", message }, { status: 500 });
   }

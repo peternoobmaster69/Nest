@@ -1,23 +1,11 @@
 import { getBankConsistency } from "@/lib/bank-consistency";
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const workspace = await prisma.workspace.findFirst({
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!workspace) {
-      return NextResponse.json({
-        totalBalanceCents: 0,
-        bankDiscrepancies: [],
-        budgets: [],
-        recentTransactions: [],
-      });
-    }
-
-    const workspaceId = workspace.id;
+    const { workspaceId } = await requireWorkspaceAccess();
 
     const budgets = await prisma.budgetEnvelope.findMany({
       where: { workspaceId },
@@ -84,13 +72,26 @@ export async function GET() {
       })),
     });
   } catch (err) {
-    console.error("Dashboard summary error:", err);
-    return NextResponse.json({
-      totalBalanceCents: 0,
-      bankDiscrepancies: [],
-      budgets: [],
-      recentTransactions: [],
-      error: err instanceof Error ? err.message : "Unknown error",
-    }, { status: 500 });
+    if (err instanceof ApiAuthError) {
+      if (err.status === 404) {
+        return NextResponse.json({
+          totalBalanceCents: 0,
+          bankDiscrepancies: [],
+          budgets: [],
+          recentTransactions: [],
+        });
+      }
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json(
+      {
+        totalBalanceCents: 0,
+        bankDiscrepancies: [],
+        budgets: [],
+        recentTransactions: [],
+        error: err instanceof Error ? err.message : "Unknown error",
+      },
+      { status: 500 },
+    );
   }
 }
