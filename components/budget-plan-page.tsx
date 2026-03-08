@@ -89,6 +89,9 @@ export function BudgetPlanPage() {
   // Preview state for editable allocation
   const [previewAllocations, setPreviewAllocations] = useState<AllocationPreview[] | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [persistForFutureMonths, setPersistForFutureMonths] = useState(true);
+  const [editingAllocationIndex, setEditingAllocationIndex] = useState<number | null>(null);
+  const [editingAllocationAmount, setEditingAllocationAmount] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -130,6 +133,11 @@ export function BudgetPlanPage() {
     return monthlyBudgets.reduce((sum, mb) => sum + mb.allocatedCents, 0);
   }, [monthlyBudgets, previewAllocations, isPreviewMode]);
 
+  const totalSourcesCents = useMemo(
+    () => budgetSources.reduce((sum, source) => sum + source.amountCents, 0),
+    [budgetSources],
+  );
+
   const createBudgetItem = useMutation({
     mutationFn: (payload: {
       workspaceId: string;
@@ -167,6 +175,7 @@ export function BudgetPlanPage() {
       month: number;
       allocations: AllocationPreview[];
       applyToSubAccounts: boolean;
+      persistForFutureMonths: boolean;
     }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
@@ -322,12 +331,13 @@ export function BudgetPlanPage() {
     const allocations: AllocationPreview[] = [];
     for (const item of budgetItems) {
       if (item.amountCents === 0) continue;
+      const activeSources = budgetSources.filter((source) => source.amountCents > 0);
+      let remaining = item.amountCents;
 
-      for (const source of budgetSources) {
-        if (source.amountCents === 0) continue;
-
+      activeSources.forEach((source, index) => {
+        const isLast = index === activeSources.length - 1;
         const sourceProportion = totalSourceCents > 0 ? source.amountCents / totalSourceCents : 0;
-        const allocatedCents = Math.round(item.amountCents * sourceProportion);
+        const allocatedCents = isLast ? remaining : Math.min(remaining, Math.round(item.amountCents * sourceProportion));
 
         if (allocatedCents > 0) {
           allocations.push({
@@ -337,8 +347,9 @@ export function BudgetPlanPage() {
             budgetSourceTitle: source.title,
             allocatedCents,
           });
+          remaining -= allocatedCents;
         }
-      }
+      });
     }
 
     setPreviewAllocations(allocations);
@@ -361,12 +372,32 @@ export function BudgetPlanPage() {
       month: selectedMonth,
       allocations: previewAllocations,
       applyToSubAccounts,
+      persistForFutureMonths,
     });
   };
 
   const cancelPreview = () => {
     setIsPreviewMode(false);
     setPreviewAllocations(null);
+  };
+
+  const openEditAllocationModal = (index: number) => {
+    if (!previewAllocations) return;
+    setEditingAllocationIndex(index);
+    setEditingAllocationAmount((previewAllocations[index].allocatedCents / 100).toFixed(2));
+  };
+
+  const closeEditAllocationModal = () => {
+    setEditingAllocationIndex(null);
+    setEditingAllocationAmount("");
+  };
+
+  const saveAllocationEdit = () => {
+    if (editingAllocationIndex === null || !previewAllocations) return;
+    const value = parseFloat(editingAllocationAmount || "0");
+    if (Number.isNaN(value) || value < 0) return;
+    updateAllocation(editingAllocationIndex, Math.round(value * 100));
+    closeEditAllocationModal();
   };
 
   const displayAllocations = isPreviewMode && previewAllocations
@@ -443,6 +474,14 @@ export function BudgetPlanPage() {
                 {confirmMonthly.isPending ? "Confirming..." : "Confirm & Add to Sub-Accounts"}
               </button>
             </div>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginTop: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+              <input
+                type="checkbox"
+                checked={persistForFutureMonths}
+                onChange={(event) => setPersistForFutureMonths(event.target.checked)}
+              />
+              Persist monthly allocations for future months
+            </label>
             <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "8px" }}>
               This will create the monthly budget and add the allocated amounts to the respective sub-accounts.
             </p>
@@ -458,7 +497,7 @@ export function BudgetPlanPage() {
             </div>
             <div className="bp-stat">
               <div className="bp-stat-label">Total Sources</div>
-              <div className="bp-stat-value">{formatCents(isPreviewMode ? previewAllocations?.reduce((sum, s) => sum + (budgetSources.find(bs => bs.id === s.budgetSourceId)?.amountCents || 0), 0) || 0 : monthlyBudgets.reduce((sum, mb) => sum + mb.allocatedCents, 0))}</div>
+              <div className="bp-stat-value">{formatCents(totalSourcesCents)}</div>
             </div>
             <div className="bp-stat">
               <div className="bp-stat-label">Allocations</div>
@@ -484,51 +523,55 @@ export function BudgetPlanPage() {
           </div>
         )}
 
+        {/* Allocation Cards - Click to edit */}
+        {isPreviewMode && previewAllocations && previewAllocations.length > 0 && (
+          <section className="card" style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "10px" }}>Allocations (click to edit)</div>
+            <div style={{ display: "grid", gap: "8px" }}>
+              {previewAllocations.map((allocation, index) => (
+                <div
+                  key={`${allocation.budgetItemId}-${allocation.budgetSourceId}-${index}`}
+                  className="bp-allocation-card"
+                  onClick={() => openEditAllocationModal(index)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--r-md)",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+                    <span style={{ fontSize: "16px" }}>📋</span>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-primary)" }}>
+                        {allocation.budgetItemTitle}
+                      </span>
+                      <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                        {allocation.budgetSourceTitle}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)" }}>
+                      {formatCents(allocation.allocatedCents)}
+                    </span>
+                    <span style={{ fontSize: "14px", color: "var(--text-tertiary)", opacity: 0.5 }}>✏️</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Two Column Layout for Monthly Budget */}
         {displayAllocations.length > 0 && (
           <div className="bp-two-col">
-            {/* Budget Items Column */}
-            <div className="bp-col">
-              <div className="st-header">
-                <h4 className="st-title">Budgeted Items</h4>
-              </div>
-              <div className="st-grid">
-                {/* Group allocations by budget item */}
-                {(() => {
-                  const itemTotals = new Map<string, { title: string; total: number }>();
-                  displayAllocations.forEach(alloc => {
-                    const existing = itemTotals.get(alloc.budgetItemId);
-                    if (existing) {
-                      existing.total += alloc.allocatedCents;
-                    } else {
-                      itemTotals.set(alloc.budgetItemId, { title: alloc.budgetItemTitle, total: alloc.allocatedCents });
-                    }
-                  });
-                  return Array.from(itemTotals.entries()).map(([id, data]) => (
-                    <div key={id} className="st-card">
-                      <div className="st-card-header">
-                        <div className="st-card-bank">
-                          <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58' }}>
-                            📋
-                          </span>
-                        </div>
-                      </div>
-                      <div className="st-card-body">
-                        <h5 className="st-card-name">{data.title}</h5>
-                      </div>
-                      <div className="st-card-stats">
-                        <div className="st-stat">
-                          <span className="st-stat-label">Allocated</span>
-                          <span className="st-stat-value">{formatCents(data.total)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
-            </div>
-
-            {/* Budget Sources Column */}
+            {/* Budget Sources Column - Left */}
             <div className="bp-col">
               <div className="st-header">
                 <h4 className="st-title">Source Breakdown</h4>
@@ -560,6 +603,47 @@ export function BudgetPlanPage() {
                       <div className="st-card-stats">
                         <div className="st-stat">
                           <span className="st-stat-label">Contribution</span>
+                          <span className="st-stat-value">{formatCents(data.total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+
+            {/* Budget Items Column - Right */}
+            <div className="bp-col">
+              <div className="st-header">
+                <h4 className="st-title">Budgeted Items</h4>
+              </div>
+              <div className="st-grid">
+                {/* Group allocations by budget item */}
+                {(() => {
+                  const itemTotals = new Map<string, { title: string; total: number }>();
+                  displayAllocations.forEach(alloc => {
+                    const existing = itemTotals.get(alloc.budgetItemId);
+                    if (existing) {
+                      existing.total += alloc.allocatedCents;
+                    } else {
+                      itemTotals.set(alloc.budgetItemId, { title: alloc.budgetItemTitle, total: alloc.allocatedCents });
+                    }
+                  });
+                  return Array.from(itemTotals.entries()).map(([id, data]) => (
+                    <div key={id} className="st-card">
+                      <div className="st-card-header">
+                        <div className="st-card-bank">
+                          <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58' }}>
+                            📋
+                          </span>
+                        </div>
+                      </div>
+                      <div className="st-card-body">
+                        <h5 className="st-card-name">{data.title}</h5>
+                      </div>
+                      <div className="st-card-stats">
+                        <div className="st-stat">
+                          <span className="st-stat-label">Allocated</span>
                           <span className="st-stat-value">{formatCents(data.total)}</span>
                         </div>
                       </div>
@@ -870,6 +954,52 @@ export function BudgetPlanPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Allocation Modal */}
+      {editingAllocationIndex !== null && previewAllocations && (
+        <div className="st-modal-overlay" onClick={closeEditAllocationModal}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Edit Allocation</h3>
+              <button className="st-close-btn" onClick={closeEditAllocationModal}>✕</button>
+            </div>
+            <div className="st-modal-form">
+              <div className="form-group">
+                <label className="label">Budget Item</label>
+                <div className="input" style={{ background: "var(--bg-subtle)" }}>
+                  {previewAllocations[editingAllocationIndex]?.budgetItemTitle}
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="label">Source</label>
+                <div className="input" style={{ background: "var(--bg-subtle)" }}>
+                  {previewAllocations[editingAllocationIndex]?.budgetSourceTitle}
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="label">Amount</label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingAllocationAmount}
+                  onChange={(e) => setEditingAllocationAmount(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="st-modal-actions" style={{ marginTop: "16px" }}>
+                <button type="button" className="btn btn-ghost" onClick={closeEditAllocationModal}>
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-primary" onClick={saveAllocationEdit}>
+                  Save Changes
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
