@@ -14,8 +14,15 @@ const UpdateContextSchema = z.object({
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
     const email = session?.user?.email?.toLowerCase();
+    let userId = session?.user?.id ?? null;
+    if (!userId && email) {
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+      userId = user?.id ?? null;
+    }
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
