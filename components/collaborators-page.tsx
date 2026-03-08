@@ -130,7 +130,7 @@ export function CollaboratorsPage() {
 
   const updateWorkspace = useMutation({
     mutationFn: () =>
-      fetchJson(`/api/workspaces/${workspaceMeta?.id ?? workspaceId}`, {
+      fetchJson<{ id: string; name: string; isShared: boolean }>(`/api/workspaces/${workspaceMeta?.id ?? workspaceId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -138,10 +138,30 @@ export function CollaboratorsPage() {
           isShared: workspaceMode === "SHARED",
         }),
       }),
-    onSuccess: async () => {
+    onSuccess: async (updatedWorkspace) => {
+      queryClient.setQueryData<AppContext>(["app-context"], (existing) => {
+        if (!existing) return existing;
+        return {
+          ...existing,
+          workspaceName: existing.workspaceId === updatedWorkspace.id ? updatedWorkspace.name : existing.workspaceName,
+          isShared: existing.workspaceId === updatedWorkspace.id ? updatedWorkspace.isShared : existing.isShared,
+          workspaces: (existing.workspaces ?? []).map((workspace) =>
+            workspace.id === updatedWorkspace.id ? { ...workspace, name: updatedWorkspace.name } : workspace,
+          ),
+        };
+      });
+      queryClient.setQueryData<CollaboratorData>(["collaborators", updatedWorkspace.id], (existing) => {
+        if (!existing) return existing;
+        return {
+          ...existing,
+          workspace: existing.workspace
+            ? { ...existing.workspace, name: updatedWorkspace.name, isShared: updatedWorkspace.isShared }
+            : { id: updatedWorkspace.id, name: updatedWorkspace.name, isShared: updatedWorkspace.isShared },
+        };
+      });
       setMessage("Workspace info updated.");
       await queryClient.invalidateQueries({ queryKey: ["app-context"] });
-      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["collaborators", updatedWorkspace.id] });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to update workspace."),
   });
@@ -252,6 +272,11 @@ export function CollaboratorsPage() {
       <section className="card">
         <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
           <div style={{ fontSize: "13px", fontWeight: 700 }}>Workspace Info</div>
+          {updateWorkspace.isPending ? (
+            <div className="workspace-save-progress" aria-label="Saving workspace info">
+              <div className="workspace-save-progress-bar" />
+            </div>
+          ) : null}
           <form onSubmit={onUpdateWorkspace} style={{ display: "grid", gap: "8px", maxWidth: "380px" }}>
             <input
               className="input"
@@ -372,22 +397,23 @@ export function CollaboratorsPage() {
       {isShared ? (
         <section className="card">
           <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Audit Logs</div>
-          <div className="simple-list">
+          <div className="audit-timeline">
             {isCollabLoading && (
               <>
-                <div className="crud-row"><SkeletonText lines={2} /></div>
-                <div className="crud-row"><SkeletonText lines={2} /></div>
+                <div className="audit-item"><SkeletonText lines={2} /></div>
+                <div className="audit-item"><SkeletonText lines={2} /></div>
               </>
             )}
             {!isCollabLoading && !isCollabError && (collab.data?.auditLogs ?? []).map((log) => (
-              <div key={log.id} className="crud-row" style={{ alignItems: "flex-start", gap: "6px" }}>
-                <div style={{ display: "grid", gap: "1px" }}>
-                  <span>{log.details}</span>
-                  <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+              <article key={log.id} className="audit-item">
+                <div className="audit-dot" aria-hidden="true" />
+                <div className="audit-content">
+                  <p className="audit-details">{log.details}</p>
+                  <p className="audit-meta">
                     {log.actorUser?.name || log.actorUser?.email || "System"} · {new Date(log.createdAt).toLocaleString()}
-                  </span>
+                  </p>
                 </div>
-              </div>
+              </article>
             ))}
             {!isCollabLoading && !isCollabError && !(collab.data?.auditLogs?.length) && (
               <EmptyState icon="📋" title="No audit logs yet" description="Activity in this workspace will be recorded here." />

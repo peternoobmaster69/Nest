@@ -268,7 +268,12 @@ export function TransactionsPage() {
   return (
     <div style={{ display: "grid", gap: "14px" }}>
       <section className="card">
-        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Bank Accounts</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "10px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 600 }}>Bank Accounts</div>
+          <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+            Add Transaction
+          </button>
+        </div>
         <div className="account-cards-grid">
           {bankAccounts.isLoading && (
             <>
@@ -346,15 +351,6 @@ export function TransactionsPage() {
             <div className="negative" style={{ fontSize: "11px" }}>Out {formatCents(totalOutgoingCents)}</div>
           </div>
         </div>
-      </section>
-
-      <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-        <div>
-          <div style={{ fontSize: "13px", fontWeight: 600 }}>Add Transaction</div>
-        </div>
-        <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
-          Add Transaction
-        </button>
       </section>
 
       <section className="card">

@@ -6,6 +6,7 @@ import { ReactNode, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CollaborationBanner } from "@/components/collaboration-banner";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
+import { NavigationLoader } from "@/components/navigation-loader";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -25,6 +26,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           {children}
+          <NavigationLoader />
           <CollaborationBanner />
           <CookieConsentBanner />
         </QueryClientProvider>

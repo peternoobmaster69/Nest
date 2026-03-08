@@ -221,16 +221,8 @@ export function ReceivablesPage() {
 
   return (
     <div style={{ display: "grid", gap: "14px" }}>
-      <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivables</div>
-        <button className="btn btn-primary" type="button" onClick={openCreateModal} title="Add receivable" aria-label="Add receivable">
-          +
-        </button>
-      </section>
-
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivables ({pendingCount} open)</div>
           {isLoading ? (
             <SkeletonMiniCard />
           ) : (
@@ -259,7 +251,7 @@ export function ReceivablesPage() {
             );
           })}
         </div>
-        <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+        <div className="recv-toolbar">
           <select
             className="input"
             style={{ maxWidth: "190px" }}
@@ -275,6 +267,9 @@ export function ReceivablesPage() {
             <option value="desc">Desc</option>
             <option value="asc">Asc</option>
           </select>
+          <button className="btn btn-primary recv-add-btn" type="button" onClick={openCreateModal} title="Add receivable" aria-label="Add receivable">
+            Add Receivable
+          </button>
         </div>
         <div className="simple-list">
           {isLoading && <SkeletonList count={4} type="transaction" />}

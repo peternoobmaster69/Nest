@@ -13,7 +13,14 @@ export class ApiAuthError extends Error {
 
 export async function requireSessionUserId() {
   const session = await getServerSession(authOptions);
-  const userId = session?.user?.id;
+  let userId = session?.user?.id;
+  if (!userId && session?.user?.email) {
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email.toLowerCase() },
+      select: { id: true },
+    });
+    userId = user?.id;
+  }
   if (!userId) {
     throw new ApiAuthError(401, "Unauthorized");
   }
