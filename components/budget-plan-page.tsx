@@ -523,50 +523,6 @@ export function BudgetPlanPage() {
           </div>
         )}
 
-        {/* Allocation Cards - Click to edit */}
-        {isPreviewMode && previewAllocations && previewAllocations.length > 0 && (
-          <section className="card" style={{ marginBottom: "16px" }}>
-            <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "10px" }}>Allocations (click to edit)</div>
-            <div style={{ display: "grid", gap: "8px" }}>
-              {previewAllocations.map((allocation, index) => (
-                <div
-                  key={`${allocation.budgetItemId}-${allocation.budgetSourceId}-${index}`}
-                  className="bp-allocation-card"
-                  onClick={() => openEditAllocationModal(index)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "12px 16px",
-                    background: "var(--bg-surface)",
-                    border: "1px solid var(--border-subtle)",
-                    borderRadius: "var(--r-md)",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
-                    <span style={{ fontSize: "16px" }}>📋</span>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-primary)" }}>
-                        {allocation.budgetItemTitle}
-                      </span>
-                      <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-                        {allocation.budgetSourceTitle}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)" }}>
-                      {formatCents(allocation.allocatedCents)}
-                    </span>
-                    <span style={{ fontSize: "14px", color: "var(--text-tertiary)", opacity: 0.5 }}>✏️</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* Two Column Layout for Monthly Budget */}
         {displayAllocations.length > 0 && (
@@ -615,28 +571,46 @@ export function BudgetPlanPage() {
             {/* Budget Items Column - Right */}
             <div className="bp-col">
               <div className="st-header">
-                <h4 className="st-title">Budgeted Items</h4>
+                <h4 className="st-title">Budgeted Items {isPreviewMode && "(click to edit)"}</h4>
               </div>
               <div className="st-grid">
                 {/* Group allocations by budget item */}
                 {(() => {
-                  const itemTotals = new Map<string, { title: string; total: number }>();
+                  const itemTotals = new Map<string, { title: string; total: number; allocations: AllocationPreview[] }>();
                   displayAllocations.forEach(alloc => {
                     const existing = itemTotals.get(alloc.budgetItemId);
                     if (existing) {
                       existing.total += alloc.allocatedCents;
+                      existing.allocations.push(alloc);
                     } else {
-                      itemTotals.set(alloc.budgetItemId, { title: alloc.budgetItemTitle, total: alloc.allocatedCents });
+                      itemTotals.set(alloc.budgetItemId, { title: alloc.budgetItemTitle, total: alloc.allocatedCents, allocations: [alloc] });
                     }
                   });
                   return Array.from(itemTotals.entries()).map(([id, data]) => (
-                    <div key={id} className="st-card">
+                    <div
+                      key={id}
+                      className={`st-card ${isPreviewMode ? 'bp-editable-card' : ''}`}
+                      onClick={isPreviewMode ? () => {
+                        // Find first allocation index for this item in previewAllocations
+                        if (previewAllocations && data.allocations.length > 0) {
+                          const firstAlloc = data.allocations[0];
+                          const index = previewAllocations.findIndex(
+                            a => a.budgetItemId === firstAlloc.budgetItemId && a.budgetSourceId === firstAlloc.budgetSourceId
+                          );
+                          if (index !== -1) openEditAllocationModal(index);
+                        }
+                      } : undefined}
+                      style={isPreviewMode ? { cursor: 'pointer' } : undefined}
+                    >
                       <div className="st-card-header">
                         <div className="st-card-bank">
                           <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58' }}>
                             📋
                           </span>
                         </div>
+                        {isPreviewMode && (
+                          <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', opacity: 0.5 }}>✏️</span>
+                        )}
                       </div>
                       <div className="st-card-body">
                         <h5 className="st-card-name">{data.title}</h5>
@@ -958,7 +932,7 @@ export function BudgetPlanPage() {
         </div>
       )}
 
-      {/* Edit Allocation Modal */}
+      {/* Edit Allocation Modal - opened from Budgeted Items card */}
       {editingAllocationIndex !== null && previewAllocations && (
         <div className="st-modal-overlay" onClick={closeEditAllocationModal}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
