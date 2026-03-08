@@ -537,20 +537,20 @@ export function BudgetPlanPage() {
                   <div key={source.id} className="st-card bp-compact-card">
                     <div className="bp-compact-row">
                       <div className="bp-compact-left">
-                        <span className="st-bank-fallback" style={{ backgroundColor: '#d97706', width: '28px', height: '28px', fontSize: '14px' }}>
+                        <span className="st-bank-fallback" style={{ backgroundColor: '#d97706', width: '24px', height: '24px', fontSize: '12px' }}>
                           💰
                         </span>
                         <div className="bp-compact-info">
                           <span className="bp-compact-title">{source.title}</span>
                           <span className="bp-compact-meta">
-                            <span className="bp-meta-owner">Owner: {source.owner.name || source.owner.email || 'Unknown'}</span>
+                            <span className="bp-meta-owner">{source.owner.name || source.owner.email || 'Unknown'}</span>
                           </span>
                         </div>
                       </div>
                       <div className="bp-compact-right">
                         <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
-                        <button className="btn btn-ghost btn-xs" onClick={() => deleteSource.mutate(source.id)} disabled={deleteSource.isPending}>
-                          Delete
+                        <button className="btn btn-ghost btn-icon" onClick={() => deleteSource.mutate(source.id)} disabled={deleteSource.isPending} title="Delete">
+                          ✕
                         </button>
                       </div>
                     </div>
@@ -590,7 +590,7 @@ export function BudgetPlanPage() {
                   <div key={item.id} className="st-card bp-compact-card">
                     <div className="bp-compact-row">
                       <div className="bp-compact-left">
-                        <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58', width: '28px', height: '28px', fontSize: '14px' }}>
+                        <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58', width: '24px', height: '24px', fontSize: '12px' }}>
                           📋
                         </span>
                         <div className="bp-compact-info">
@@ -605,8 +605,8 @@ export function BudgetPlanPage() {
                       </div>
                       <div className="bp-compact-right">
                         <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
-                        <button className="btn btn-ghost btn-xs" onClick={() => deleteItem.mutate(item.id)} disabled={deleteItem.isPending}>
-                          Delete
+                        <button className="btn btn-ghost btn-icon" onClick={() => deleteItem.mutate(item.id)} disabled={deleteItem.isPending} title="Delete">
+                          ✕
                         </button>
                       </div>
                     </div>
