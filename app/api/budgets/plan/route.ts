@@ -34,7 +34,6 @@ const ConfirmMonthlyBudgetSchema = z.object({
   month: z.number().int().min(1).max(12),
   allocations: z.array(AllocationItemSchema).min(1, "At least one allocation is required"),
   applyToSubAccounts: z.boolean().default(false),
-  persistForFutureMonths: z.boolean().default(true),
 });
 
 export async function GET(request: Request) {
@@ -256,13 +255,13 @@ export async function POST(request: Request) {
       }
 
       await requireWorkspaceAccess(body.workspaceId);
-      const { year, month, allocations, applyToSubAccounts, persistForFutureMonths } = parsed.data;
+      const { year, month, allocations, applyToSubAccounts } = parsed.data;
 
       const itemIds = [...new Set(allocations.map((alloc) => alloc.budgetItemId))];
       const sourceIds = [...new Set(allocations.map((alloc) => alloc.budgetSourceId))];
       const items = await prisma.budgetItem.findMany({
         where: { workspaceId: body.workspaceId, id: { in: itemIds }, isActive: true },
-        select: { id: true, isMonthly: true, destinationSubAccountId: true },
+        select: { id: true, destinationSubAccountId: true },
       });
       const itemById = new Map(items.map((item) => [item.id, item]));
 
@@ -272,44 +271,39 @@ export async function POST(request: Request) {
       });
       const sourceIdsSet = new Set(sources.map((source) => source.id));
 
-      const monthsToApply = persistForFutureMonths
-        ? Array.from({ length: 12 - month + 1 }, (_, index) => month + index)
-        : [month];
-
+      // Delete existing monthly budgets for this month
       await prisma.monthlyBudget.deleteMany({
-        where: { workspaceId: body.workspaceId, year, month: { in: monthsToApply } },
+        where: { workspaceId: body.workspaceId, year, month },
       });
 
+      // Create monthly budgets for the selected month only
       const createdBudgets = [];
-      for (const targetMonth of monthsToApply) {
-        for (const alloc of allocations) {
-          const budgetItem = itemById.get(alloc.budgetItemId);
-          if (!budgetItem) continue;
-          if (!sourceIdsSet.has(alloc.budgetSourceId)) continue;
-          if (targetMonth !== month && !budgetItem.isMonthly) continue;
-          if (alloc.allocatedCents <= 0) continue;
+      for (const alloc of allocations) {
+        const budgetItem = itemById.get(alloc.budgetItemId);
+        if (!budgetItem) continue;
+        if (!sourceIdsSet.has(alloc.budgetSourceId)) continue;
+        if (alloc.allocatedCents <= 0) continue;
 
-          const monthlyBudget = await prisma.monthlyBudget.create({
+        const monthlyBudget = await prisma.monthlyBudget.create({
+          data: {
+            workspaceId: body.workspaceId,
+            budgetItemId: alloc.budgetItemId,
+            budgetSourceId: alloc.budgetSourceId,
+            year,
+            month,
+            allocatedCents: alloc.allocatedCents,
+          },
+        });
+        createdBudgets.push(monthlyBudget);
+
+        // Apply to sub-accounts if requested
+        if (applyToSubAccounts && budgetItem.destinationSubAccountId) {
+          await prisma.budgetEnvelope.update({
+            where: { id: budgetItem.destinationSubAccountId },
             data: {
-              workspaceId: body.workspaceId,
-              budgetItemId: alloc.budgetItemId,
-              budgetSourceId: alloc.budgetSourceId,
-              year,
-              month: targetMonth,
-              allocatedCents: alloc.allocatedCents,
+              availableCents: { increment: alloc.allocatedCents },
             },
           });
-          createdBudgets.push(monthlyBudget);
-
-          // Only apply to sub-accounts for the explicitly confirmed month.
-          if (targetMonth === month && applyToSubAccounts && budgetItem.destinationSubAccountId) {
-            await prisma.budgetEnvelope.update({
-              where: { id: budgetItem.destinationSubAccountId },
-              data: {
-                availableCents: { increment: alloc.allocatedCents },
-              },
-            });
-          }
         }
       }
 

@@ -89,7 +89,6 @@ export function BudgetPlanPage() {
   // Preview state for editable allocation
   const [previewAllocations, setPreviewAllocations] = useState<AllocationPreview[] | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [persistForFutureMonths, setPersistForFutureMonths] = useState(true);
   const [editingAllocationIndex, setEditingAllocationIndex] = useState<number | null>(null);
   const [editingAllocationAmount, setEditingAllocationAmount] = useState("");
 
@@ -175,7 +174,6 @@ export function BudgetPlanPage() {
       month: number;
       allocations: AllocationPreview[];
       applyToSubAccounts: boolean;
-      persistForFutureMonths: boolean;
     }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
@@ -372,7 +370,6 @@ export function BudgetPlanPage() {
       month: selectedMonth,
       allocations: previewAllocations,
       applyToSubAccounts,
-      persistForFutureMonths,
     });
   };
 
@@ -436,32 +433,30 @@ export function BudgetPlanPage() {
           </div>
         </div>
 
-        {/* Month/Year Selection */}
-        {!isPreviewMode && (
-          <div className="bp-form" style={{ marginBottom: "20px", paddingBottom: "20px", borderBottom: "1px solid var(--border-subtle)" }}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="label">Month</label>
-                <select className="input" value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))}>
-                  {MONTHS.map((m, i) => (
-                    <option key={i + 1} value={i + 1}>{m}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="label">Year</label>
-                <input className="input" type="number" value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} min={2024} max={2030} />
-              </div>
+        {/* Month/Year Selection - Always visible */}
+        <div className="bp-form" style={{ marginBottom: "20px", paddingBottom: "20px", borderBottom: "1px solid var(--border-subtle)" }}>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="label">Month</label>
+              <select className="input" value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))}>
+                {MONTHS.map((m, i) => (
+                  <option key={i + 1} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="label">Year</label>
+              <input className="input" type="number" value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} min={2024} max={2030} />
             </div>
           </div>
-        )}
+        </div>
 
         {/* Preview Controls */}
         {isPreviewMode && (
           <div style={{ marginBottom: "20px", padding: "16px", background: "var(--warning-bg)", borderRadius: "var(--r-md)" }}>
             <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ flex: 1, fontSize: "14px" }}>
-                Review allocations below. Edit amounts as needed, then confirm to apply.
+                Review allocations below. Click Budgeted Items to edit amounts, then confirm to save for {MONTHS[selectedMonth - 1]} {selectedYear}.
               </span>
               <button className="btn btn-ghost" onClick={cancelPreview}>
                 Cancel
@@ -471,19 +466,11 @@ export function BudgetPlanPage() {
                 onClick={() => onConfirmMonthly(true)}
                 disabled={confirmMonthly.isPending}
               >
-                {confirmMonthly.isPending ? "Confirming..." : "Confirm & Add to Sub-Accounts"}
+                {confirmMonthly.isPending ? "Saving..." : "Confirm & Save"}
               </button>
             </div>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginTop: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
-              <input
-                type="checkbox"
-                checked={persistForFutureMonths}
-                onChange={(event) => setPersistForFutureMonths(event.target.checked)}
-              />
-              Persist monthly allocations for future months
-            </label>
             <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "8px" }}>
-              This will create the monthly budget and add the allocated amounts to the respective sub-accounts.
+              This will save the monthly budget to the database for {MONTHS[selectedMonth - 1]} {selectedYear} and add allocated amounts to sub-accounts.
             </p>
           </div>
         )}
