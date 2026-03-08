@@ -2,6 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type ProviderMap = Record<
@@ -95,7 +96,10 @@ export function SignInPanel() {
         </div>
 
         <p className="signin-footer">
-          By continuing, you agree to our Terms of Service and Privacy Policy
+          By continuing, you agree to our{" "}
+          <Link href="/terms-of-service" target="_blank" rel="noopener noreferrer">Terms of Service</Link>
+          {" "}and{" "}
+          <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer">Privacy Policy</Link>
         </p>
       </section>
     </main>

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -28,6 +29,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
     }
 
+    const existing = await prisma.creditCardTransaction.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+    }
+    await requireWorkspaceAccess(existing.workspaceId);
+
     const data: any = { ...parsed.data };
     if (data.transactionDate) {
       data.transactionDate = new Date(data.transactionDate);
@@ -44,6 +54,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     return NextResponse.json(transaction);
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Credit transaction update error:", error);
     return NextResponse.json({ error: "Failed to update transaction" }, { status: 500 });
   }
@@ -52,9 +65,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const existing = await prisma.creditCardTransaction.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+    }
+    await requireWorkspaceAccess(existing.workspaceId);
     await prisma.creditCardTransaction.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Credit transaction delete error:", error);
     return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });
   }

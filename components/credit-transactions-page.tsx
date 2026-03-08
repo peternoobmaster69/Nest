@@ -94,7 +94,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         transactions: CreditCardTransaction[];
         cardCounts: CardCount[];
       }>(
-        `/api/credit-transactions?workspaceId=dummy&cardId=${selectedCardId}&year=${selectedYear}&month=${selectedMonth + 1}`
+        `/api/credit-transactions?cardId=${selectedCardId}&year=${selectedYear}&month=${selectedMonth + 1}`
       ),
     enabled: initialCards.length > 0,
   });

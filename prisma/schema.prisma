@@ -23,6 +23,7 @@ model User {
   receivablesFrom Receivable[]      @relation("ReceivableFrom")
   receivablesTo   Receivable[]      @relation("ReceivableTo")
   notes           Note[]
+  gmailIntegrations GmailIntegration[]
 }
 
 model Account {
@@ -86,6 +87,8 @@ model Workspace {
   creditCardRewards    CreditCardReward[]
   pointConversions     PointConversion[]
   creditCardTransactions CreditCardTransaction[]
+  cardAlertStagings    CardAlertStaging[]
+  gmailIntegrations    GmailIntegration[]
 }
 
 model WorkspaceMember {
@@ -255,6 +258,7 @@ model CreditCardAccount {
   transactions           CreditCardTxnLink[]
   reward                 CreditCardReward?
   ccTransactions         CreditCardTransaction[]
+  alertStagings          CardAlertStaging[]
 
   @@unique([workspaceId, cardName])
   @@index([workspaceId, isActive])
@@ -487,9 +491,59 @@ model CreditCardTransaction {
   updatedAt         DateTime          @updatedAt
   workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   creditCard        CreditCardAccount @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  alertStagings     CardAlertStaging[]
 
   @@index([workspaceId])
   @@index([creditCardId])
   @@index([statementYear, statementMonth])
   @@index([transactionDate])
+}
+
+model CardAlertStaging {
+  id                  String                 @id @default(cuid())
+  workspaceId         String
+  source              String                 @default("EMAIL")
+  bankName            String?
+  transactionRef      String?
+  rawSubject          String?
+  rawBody             String                 @db.NVarChar(Max)
+  currency            String?
+  amountCents         Int?
+  transactionDate     DateTime?
+  merchant            String?
+  cardLast4           String?
+  parseStatus         String                 @default("PENDING")
+  failureReason       String?
+  creditCardId        String?
+  creditTransactionId String?                @unique
+  createdAt           DateTime               @default(now())
+  processedAt         DateTime?
+  workspace           Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creditCard          CreditCardAccount?     @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  creditTransaction   CreditCardTransaction? @relation(fields: [creditTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, parseStatus])
+  @@index([workspaceId, createdAt])
+}
+
+model GmailIntegration {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  userId         String
+  email          String
+  accessToken    String?   @db.NVarChar(Max)
+  refreshToken   String?   @db.NVarChar(Max)
+  tokenType      String?
+  scope          String?   @db.NVarChar(Max)
+  expiryDate     DateTime?
+  isActive       Boolean   @default(true)
+  lastSyncedAt   DateTime?
+  lastHistoryId  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId, isActive])
 }

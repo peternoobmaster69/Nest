@@ -1831,6 +1831,98 @@ body {
   line-height: 1.5;
 }
 
+.signin-footer a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.signin-footer a:hover {
+  color: var(--text-primary);
+}
+
+.cookie-overlay {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1200;
+  border: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, var(--bg-base) 8%);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow-lg);
+}
+
+.cookie-overlay-text {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.cookie-overlay-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--brand-500);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cookie-overlay-btn:hover {
+  color: var(--brand-600);
+}
+
+@media (min-width: 900px) {
+  .cookie-overlay {
+    left: 50%;
+    right: auto;
+    bottom: 18px;
+    transform: translateX(-50%);
+    width: min(860px, calc(100vw - 40px));
+  }
+}
+
+.legal-shell {
+  min-height: 100dvh;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: var(--bg-base);
+}
+
+.legal-card {
+  width: min(900px, 100%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 24px;
+  display: grid;
+  gap: 10px;
+}
+
+.legal-card h1 {
+  font-family: var(--font-display);
+  font-size: 28px;
+}
+
+.legal-card h2 {
+  margin-top: 10px;
+  font-size: 15px;
+}
+
+.legal-card p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 /* Mobile - Fill almost full screen and centered */
 @media (max-width: 480px) {
   .signin-shell {

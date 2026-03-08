@@ -1,3 +1,4 @@
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -17,17 +18,13 @@ const CreateTransactionSchema = z.object({
 
 export async function GET(request: Request) {
   try {
+    const { workspaceId } = await requireWorkspaceAccess();
     const { searchParams } = new URL(request.url);
-    const workspaceId = searchParams.get("workspaceId");
     const cardId = searchParams.get("cardId");
     const year = searchParams.get("year");
     const month = searchParams.get("month");
 
-    if (!workspaceId) {
-      return NextResponse.json({ error: "Workspace ID required" }, { status: 400 });
-    }
-
-    const where: any = { workspaceId };
+    const where: Record<string, unknown> = { workspaceId };
 
     if (cardId && cardId !== "all") {
       where.creditCardId = cardId;
@@ -53,6 +50,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ transactions, cardCounts });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Credit transactions fetch error:", error);
     return NextResponse.json({ error: "Failed to fetch transactions" }, { status: 500 });
   }
@@ -60,6 +60,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { workspaceId } = await requireWorkspaceAccess();
     const body = await request.json();
     const parsed = CreateTransactionSchema.safeParse(body);
 
@@ -86,15 +87,16 @@ export async function POST(request: Request) {
     // Verify credit card exists
     const card = await prisma.creditCardAccount.findUnique({
       where: { id: creditCardId },
+      select: { id: true, workspaceId: true },
     });
 
-    if (!card) {
+    if (!card || card.workspaceId !== workspaceId) {
       return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
     }
 
     const transaction = await prisma.creditCardTransaction.create({
       data: {
-        workspaceId: card.workspaceId,
+        workspaceId,
         creditCardId,
         transactionDate: new Date(transactionDate),
         paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
@@ -111,6 +113,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Credit transaction create error:", error);
     return NextResponse.json({ error: "Failed to create transaction" }, { status: 500 });
   }

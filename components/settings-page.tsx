@@ -2,10 +2,21 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 type Context = {
   workspaceId: string | null;
+};
+
+type GmailStatus = {
+  connected: boolean;
+  integration: {
+    id: string;
+    email: string;
+    scope: string | null;
+    lastSyncedAt: string | null;
+    createdAt: string;
+  } | null;
 };
 
 type BankAccount = {
@@ -42,6 +53,20 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
+  const [gmailMessage, setGmailMessage] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const status = url.searchParams.get("gmail");
+    if (!status) return;
+    if (status === "connected") setGmailMessage("Gmail connected successfully.");
+    else if (status === "denied") setGmailMessage("Gmail permission was denied.");
+    else if (status === "forbidden") setGmailMessage("Gmail callback failed authorization.");
+    else setGmailMessage("Gmail connection failed.");
+    url.searchParams.delete("gmail");
+    window.history.replaceState({}, "", url.toString());
+  }, []);
 
   // Add modal state
   const [name, setName] = useState("");
@@ -69,6 +94,49 @@ export function SettingsPage() {
     queryKey: ["bank-accounts", workspaceId],
     queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
+  });
+
+  const gmailStatus = useQuery({
+    queryKey: ["gmail-status"],
+    queryFn: () => fetchJson<GmailStatus>("/api/gmail/status"),
+  });
+
+  const connectGmail = useMutation({
+    mutationFn: () =>
+      fetchJson<{ url: string }>("/api/gmail/connect", {
+        method: "POST",
+      }),
+    onSuccess: (data) => {
+      window.location.href = data.url;
+    },
+    onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Failed to start Gmail connect."),
+  });
+
+  const syncGmail = useMutation({
+    mutationFn: () =>
+      fetchJson<{ scannedMessages: number; processed: number; duplicates: number; failed: number }>("/api/gmail/sync", {
+        method: "POST",
+      }),
+    onSuccess: (data) => {
+      setGmailMessage(
+        `Synced ${data.scannedMessages} emails: ${data.processed} processed, ${data.duplicates} duplicates, ${data.failed} failed.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+    },
+    onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Gmail sync failed."),
+  });
+
+  const disconnectGmail = useMutation({
+    mutationFn: () =>
+      fetchJson<{ ok: true }>("/api/gmail/disconnect", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      setGmailMessage("Gmail disconnected.");
+      queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+    },
+    onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Failed to disconnect Gmail."),
   });
 
   const createAccount = useMutation({
@@ -175,6 +243,42 @@ export function SettingsPage() {
 
   return (
     <div className="st-container">
+      <div className="card" style={{ marginBottom: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>Gmail Card Alerts</div>
+            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+              Authorize once, then pull card transaction alert emails automatically.
+            </div>
+          </div>
+          {gmailStatus.data?.connected ? (
+            <div style={{ display: "inline-flex", gap: "8px" }}>
+              <button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending}>
+                {syncGmail.isPending ? "Syncing..." : "Sync Inbox"}
+              </button>
+              <button className="btn btn-ghost btn-xs" onClick={() => disconnectGmail.mutate()} disabled={disconnectGmail.isPending}>
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-primary btn-xs" onClick={() => connectGmail.mutate()} disabled={connectGmail.isPending}>
+              {connectGmail.isPending ? "Redirecting..." : "Connect Gmail"}
+            </button>
+          )}
+        </div>
+        {gmailStatus.data?.connected && gmailStatus.data.integration ? (
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+            Connected: <strong>{gmailStatus.data.integration.email}</strong>
+            {gmailStatus.data.integration.lastSyncedAt
+              ? ` · Last sync: ${new Date(gmailStatus.data.integration.lastSyncedAt).toLocaleString()}`
+              : " · Never synced"}
+          </div>
+        ) : (
+          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Not connected.</div>
+        )}
+        {gmailMessage ? <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>{gmailMessage}</div> : null}
+      </div>
+
       {/* Header with Add Button */}
       <div className="st-header">
         <h2 className="st-title">Bank Accounts</h2>
