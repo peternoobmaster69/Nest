@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
 
 type AppContext = {
@@ -131,6 +131,23 @@ export function ReceivablesPage() {
     [deductionBudgets.data],
   );
 
+  useEffect(() => {
+    if (!formUseCrossWorkspaceDeduction) return;
+    if (formDeductBudgetId) return;
+    if (!formDeductAccountId) return;
+    const firstMatchingBudget = (deductionBudgets.data ?? []).find(
+      (budget) => budget.isActive && budget.accountId === formDeductAccountId,
+    );
+    if (firstMatchingBudget) {
+      setFormDeductBudgetId(firstMatchingBudget.id);
+    }
+  }, [
+    formUseCrossWorkspaceDeduction,
+    formDeductBudgetId,
+    formDeductAccountId,
+    deductionBudgets.data,
+  ]);
+
   const { isLoading, isError, refetch } = receivables;
 
   const createReceivable = useMutation({
@@ -152,6 +169,7 @@ export function ReceivablesPage() {
           transactionDate: payload.transactionDate,
           remarks: payload.remarks,
           accountId: payload.accountId,
+          budgetId: payload.budgetId,
           status: "OPEN",
         }),
       }),
@@ -182,6 +200,7 @@ export function ReceivablesPage() {
           remarks: payload.remarks,
           status: payload.status,
           accountId: payload.accountId,
+          budgetId: payload.budgetId,
         }),
       }),
     onSuccess: () => {
@@ -285,6 +304,7 @@ export function ReceivablesPage() {
     setFormUseCrossWorkspaceDeduction(false);
     setFormDeductWorkspaceId("");
     setFormDeductAccountId("");
+    setFormDeductBudgetId("");
   };
 
   const closeModal = () => {

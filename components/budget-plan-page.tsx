@@ -45,6 +45,21 @@ type AllocationPreview = {
   allocatedCents: number;
 };
 
+type GenerateMonthlyPayload = {
+  workspaceId: string;
+  action: "generateMonthly";
+  year: number;
+  month: number;
+};
+
+type GenerateMonthlyResponse = {
+  monthlyBudgets: Array<{
+    budgetItemId: string;
+    budgetSourceId: string;
+    allocatedCents: number;
+  }>;
+};
+
 type AppContext = {
   workspaceId: string | null;
   baseCurrency?: string | null;
@@ -321,16 +336,16 @@ export function BudgetPlanPage() {
     }
   };
 
-  const generateMonthly = useMutation({
-    mutationFn: (payload: {
-      workspaceId: string;
-      action: "generateMonthly";
-      year: number;
-      month: number;
-    }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+  const generateMonthly = useMutation<GenerateMonthlyResponse, Error, GenerateMonthlyPayload>({
+    mutationFn: (payload) =>
+      fetchJson<GenerateMonthlyResponse>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
     onSuccess: (data) => {
       // Convert the saved monthly budgets to preview format
-      const allocations: AllocationPreview[] = data.monthlyBudgets.map((mb: any) => ({
+      const allocations: AllocationPreview[] = data.monthlyBudgets.map((mb) => ({
         budgetItemId: mb.budgetItemId,
         budgetItemTitle: budgetItems.find(i => i.id === mb.budgetItemId)?.title || "Unknown",
         budgetSourceId: mb.budgetSourceId,
