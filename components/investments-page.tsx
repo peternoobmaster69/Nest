@@ -55,7 +55,8 @@ function dateInputFromIso(value: string | null | undefined) {
 export function InvestmentsPage() {
   const queryClient = useQueryClient();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRange>("1Y");
+  const [timeRange, setTimeRange] = useState<TimeRange>("ALL");
+  const [showAllAccounts, setShowAllAccounts] = useState(false);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
   const [accountError, setAccountError] = useState("");
   const [entryError, setEntryError] = useState("");
@@ -106,6 +107,22 @@ export function InvestmentsPage() {
     () => (accounts.data ?? []).find((a) => a.id === selectedAccountId) ?? null,
     [accounts.data, selectedAccountId],
   );
+
+  // Combined entries from all accounts for the "All Accounts" view
+  const allAccountsEntries = useMemo(() => {
+    const allEntries: InvestmentEntry[] = [];
+    for (const account of accounts.data ?? []) {
+      for (const entry of account.entries ?? []) {
+        allEntries.push({
+          ...entry,
+          // Tag entry with account info for display
+          accountName: account.displayName || account.productName,
+          accountId: account.id,
+        } as InvestmentEntry & { accountName: string; accountId: string });
+      }
+    }
+    return allEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [accounts.data]);
 
   const selectedEntries = useMemo(
     () =>
@@ -326,13 +343,45 @@ export function InvestmentsPage() {
     setEntryInvested(nextValue.toFixed(2));
   }, [entryModalMode, newFunds, latestSelectedEntry?.investedCents]);
 
+  // Aggregate all accounts data by date
+  const aggregatedAllAccountsData = useMemo(() => {
+    const entriesByDate = new Map<string, { invested: number; current: number }>();
+
+    for (const account of accounts.data ?? []) {
+      for (const entry of account.entries ?? []) {
+        const dateKey = entry.date.slice(0, 10); // YYYY-MM-DD
+        const existing = entriesByDate.get(dateKey);
+        if (existing) {
+          existing.invested += entry.investedCents;
+          existing.current += entry.currentValueCents;
+        } else {
+          entriesByDate.set(dateKey, {
+            invested: entry.investedCents,
+            current: entry.currentValueCents,
+          });
+        }
+      }
+    }
+
+    return Array.from(entriesByDate.entries())
+      .map(([date, values]) => ({
+        id: `all-${date}`,
+        date: new Date(date),
+        invested: values.invested,
+        current: values.current,
+      }))
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [accounts.data]);
+
   const chartRows = useMemo(() => {
-    const list = selectedEntries.map((entry) => ({
-      id: entry.id,
-      date: new Date(entry.date),
-      invested: entry.investedCents,
-      current: entry.currentValueCents,
-    }));
+    const list = showAllAccounts
+      ? aggregatedAllAccountsData
+      : selectedEntries.map((entry) => ({
+          id: entry.id,
+          date: new Date(entry.date),
+          invested: entry.investedCents,
+          current: entry.currentValueCents,
+        }));
     if (timeRange === "ALL") return list;
 
     const now = Date.now();
@@ -340,7 +389,7 @@ export function InvestmentsPage() {
     const threshold =
       timeRange === "90D" ? now - 90 * day : timeRange === "180D" ? now - 180 * day : now - 365 * day;
     return list.filter((row) => row.date.getTime() >= threshold);
-  }, [selectedEntries, timeRange]);
+  }, [selectedEntries, timeRange, showAllAccounts, aggregatedAllAccountsData]);
 
   const chart = useMemo(() => {
     const width = 1000;
@@ -382,34 +431,60 @@ export function InvestmentsPage() {
 
   return (
     <div className="inv-page">
-      <section className="card inv-topbar">
+      <section className="card inv-topbar" style={{ display: "flex", alignItems: "center" }}>
         {accountsLoading ? (
           <>
-            <SkeletonMiniCard />
-            <SkeletonMiniCard />
+            <div style={{ width: "40%" }}><SkeletonMiniCard /></div>
+            <div style={{ width: "40%" }}><SkeletonMiniCard /></div>
           </>
         ) : (
           <>
-            <div className="inv-top-stat">
+            <div className="inv-top-stat" style={{ width: "40%", textAlign: "left" }}>
               <div className="inv-title">Total Invested</div>
               <div className="inv-top-amount">{formatCents(totalInvestedAcrossAll)}</div>
             </div>
-            <div className="inv-top-stat">
+            <div className="inv-top-stat" style={{ width: "40%", textAlign: "right" }}>
               <div className="inv-title">Total Current</div>
               <div className="inv-top-amount">{formatCents(totalCurrentAcrossAll)}</div>
             </div>
           </>
         )}
-        <button
-          className="btn btn-primary btn-xs inv-add-btn"
-          type="button"
-          onClick={openCreateAccountModal}
-          disabled={!workspaceId}
-          aria-label="Add Investment Account"
-          title="Add Investment Account"
-        >
-          <span className="inv-add-btn-icon">+</span>
-        </button>
+        <div style={{ width: "20%", display: "flex", justifyContent: "flex-end" }}>
+          <button
+            className="btn btn-primary btn-xs inv-add-btn"
+            type="button"
+            onClick={openCreateAccountModal}
+            disabled={!workspaceId}
+            aria-label="Add Investment Account"
+            title="Add Investment Account"
+          >
+            <span className="inv-add-btn-icon">+</span>
+          </button>
+        </div>
+      </section>
+
+      {/* View Toggle */}
+      <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
+        <div style={{ fontSize: "13px", fontWeight: 600 }}>
+          {showAllAccounts ? "Viewing: All Accounts" : selectedAccount ? `Viewing: ${selectedAccount.displayName || selectedAccount.productName}` : "Select an account to view details"}
+        </div>
+        <div className="segmented">
+          <button
+            type="button"
+            className={`segmented-btn ${showAllAccounts ? "on" : ""}`}
+            onClick={() => setShowAllAccounts(true)}
+          >
+            All Accounts
+          </button>
+          <button
+            type="button"
+            className={`segmented-btn ${!showAllAccounts ? "on" : ""}`}
+            onClick={() => setShowAllAccounts(false)}
+            disabled={!selectedAccount}
+          >
+            Single Account
+          </button>
+        </div>
       </section>
 
       <section className="inv-account-grid">
@@ -464,7 +539,7 @@ export function InvestmentsPage() {
               >
                 ✎
               </button>
-              <button className="inv-account-select" type="button" onClick={() => setSelectedAccountId(account.id)}>
+              <button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
                 <div className="inv-account-head">
                   <strong>{account.displayName || account.productName}</strong>
                   <span>{account.productName} · {account.institutionName}</span>
@@ -490,25 +565,37 @@ export function InvestmentsPage() {
         })}
       </section>
 
-      {selectedAccount ? (
+      {/* Chart Section - Show for All Accounts or Selected Account */}
+      {(showAllAccounts || selectedAccount) ? (
         <>
           <section className="card inv-chart-card">
             <div className="inv-chart-head">
               <div>
-                <div className="inv-title">{selectedAccount.displayName || selectedAccount.productName}</div>
-                <div className="inv-subtitle">{selectedAccount.productName} · {selectedAccount.institutionName}</div>
+                {showAllAccounts ? (
+                  <>
+                    <div className="inv-title">All Investment Accounts</div>
+                    <div className="inv-subtitle">Combined portfolio performance</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="inv-title">{selectedAccount?.displayName || selectedAccount?.productName}</div>
+                    <div className="inv-subtitle">{selectedAccount?.productName} · {selectedAccount?.institutionName}</div>
+                  </>
+                )}
               </div>
-              <div className="inv-range">
-                {(["90D", "180D", "1Y", "ALL"] as TimeRange[]).map((range) => (
-                  <button
-                    key={range}
-                    type="button"
-                    className={`inv-range-btn ${timeRange === range ? "on" : ""}`}
-                    onClick={() => setTimeRange(range)}
-                  >
-                    {range}
-                  </button>
-                ))}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="inv-range">
+                  {(["90D", "180D", "1Y", "ALL"] as TimeRange[]).map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      className={`inv-range-btn ${timeRange === range ? "on" : ""}`}
+                      onClick={() => setTimeRange(range)}
+                    >
+                      {range}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             {chart.points.length ? (
@@ -556,39 +643,42 @@ export function InvestmentsPage() {
             )}
           </section>
 
-          <section className="card inv-history-card">
-            <div className="inv-history-head">
-              <div className="inv-title">History</div>
-              <button className="btn btn-primary btn-xs" type="button" onClick={openCreateEntryModal}>
-                + Add Entry
-              </button>
-            </div>
-            <div className="inv-history-list">
-              {selectedEntries.length ? (
-                selectedEntries
-                  .slice()
-                  .reverse()
-                  .map((entry) => (
-                    <div key={entry.id} className="inv-history-row">
-                      <div>
-                        <strong>{new Date(entry.date).toLocaleDateString()}</strong>
-                        <span>Invested: {formatCents(entry.investedCents)}</span>
-                        <span>Current: {formatCents(entry.currentValueCents)}</span>
+          {/* History section - only show for single account view */}
+          {!showAllAccounts && selectedAccount && (
+            <section className="card inv-history-card">
+              <div className="inv-history-head">
+                <div className="inv-title">History</div>
+                <button className="btn btn-primary btn-xs" type="button" onClick={openCreateEntryModal}>
+                  + Add Entry
+                </button>
+              </div>
+              <div className="inv-history-list">
+                {selectedEntries.length ? (
+                  selectedEntries
+                    .slice()
+                    .reverse()
+                    .map((entry) => (
+                      <div key={entry.id} className="inv-history-row">
+                        <div>
+                          <strong>{new Date(entry.date).toLocaleDateString()}</strong>
+                          <span>Invested: {formatCents(entry.investedCents)}</span>
+                          <span>Current: {formatCents(entry.currentValueCents)}</span>
+                        </div>
+                        <button className="btn btn-ghost btn-xs" type="button" onClick={() => openEditEntryModal(entry)}>
+                          Edit
+                        </button>
                       </div>
-                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => openEditEntryModal(entry)}>
-                        Edit
-                      </button>
-                    </div>
-                  ))
-              ) : (
-                <EmptyState
-                  icon="📋"
-                  title="No entries yet"
-                  description="Add your first entry to track invested amount and current value."
-                />
-              )}
-            </div>
-          </section>
+                    ))
+                ) : (
+                  <EmptyState
+                    icon="📋"
+                    title="No entries yet"
+                    description="Add your first entry to track invested amount and current value."
+                  />
+                )}
+              </div>
+            </section>
+          )}
         </>
       ) : !accountsLoading && !accountsError ? (
         <EmptyState
