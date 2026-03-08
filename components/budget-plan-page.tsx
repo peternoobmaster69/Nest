@@ -141,7 +141,7 @@ export function BudgetPlanPage() {
     }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeAddItemModal();
+      closeItemModal();
     },
   });
 
@@ -155,7 +155,7 @@ export function BudgetPlanPage() {
     }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeAddSourceModal();
+      closeSourceModal();
     },
   });
 
