@@ -523,7 +523,7 @@ export function BudgetPlanPage() {
           <div className="bp-two-col">
             {/* Budget Sources Column */}
             <div className="bp-col">
-              <div className="st-header">
+              <div className="st-header" style={{ marginBottom: '16px' }}>
                 <h2 className="st-title">Budget Sources</h2>
                 <button className="btn btn-primary" onClick={openAddSourceModal}>
                   + Add Source
@@ -534,31 +534,24 @@ export function BudgetPlanPage() {
                 {budgetData.isLoading && <SkeletonGrid count={2} type="card" />}
 
                 {!budgetData.isLoading && !budgetData.isError && budgetSources.map((source) => (
-                  <div key={source.id} className="st-card">
-                    <div className="st-card-header">
-                      <div className="st-card-bank">
-                        <span className="st-bank-fallback" style={{ backgroundColor: '#d97706' }}>
+                  <div key={source.id} className="st-card bp-compact-card">
+                    <div className="bp-compact-row">
+                      <div className="bp-compact-left">
+                        <span className="st-bank-fallback" style={{ backgroundColor: '#d97706', width: '28px', height: '28px', fontSize: '14px' }}>
                           💰
                         </span>
+                        <div className="bp-compact-info">
+                          <span className="bp-compact-title">{source.title}</span>
+                          <span className="bp-compact-meta">
+                            <span className="bp-meta-owner">Owner: {source.owner.name || source.owner.email || 'Unknown'}</span>
+                          </span>
+                        </div>
                       </div>
-                      <div className="st-card-actions">
+                      <div className="bp-compact-right">
+                        <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
                         <button className="btn btn-ghost btn-xs" onClick={() => deleteSource.mutate(source.id)} disabled={deleteSource.isPending}>
                           Delete
                         </button>
-                      </div>
-                    </div>
-
-                    <div className="st-card-body">
-                      <h3 className="st-card-name">{source.title}</h3>
-                      <p className="st-card-bankname">
-                        <span className="bp-badge owner">Owner: {source.owner.name || source.owner.email || 'Unknown'}</span>
-                      </p>
-                    </div>
-
-                    <div className="st-card-stats">
-                      <div className="st-stat">
-                        <span className="st-stat-label">Amount</span>
-                        <span className="st-stat-value">{formatCents(source.amountCents)}</span>
                       </div>
                     </div>
                   </div>
@@ -583,7 +576,7 @@ export function BudgetPlanPage() {
 
             {/* Budget Items Column */}
             <div className="bp-col">
-              <div className="st-header">
+              <div className="st-header" style={{ marginBottom: '16px' }}>
                 <h2 className="st-title">Budget Items</h2>
                 <button className="btn btn-primary" onClick={openAddItemModal}>
                   + Add Item
@@ -594,34 +587,27 @@ export function BudgetPlanPage() {
                 {budgetData.isLoading && <SkeletonGrid count={2} type="card" />}
 
                 {!budgetData.isLoading && !budgetData.isError && budgetItems.map((item) => (
-                  <div key={item.id} className="st-card">
-                    <div className="st-card-header">
-                      <div className="st-card-bank">
-                        <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58' }}>
+                  <div key={item.id} className="st-card bp-compact-card">
+                    <div className="bp-compact-row">
+                      <div className="bp-compact-left">
+                        <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58', width: '28px', height: '28px', fontSize: '14px' }}>
                           📋
                         </span>
+                        <div className="bp-compact-info">
+                          <span className="bp-compact-title">{item.title}</span>
+                          <span className="bp-compact-meta">
+                            {item.isMonthly && <span className="bp-badge monthly">Monthly</span>}
+                            {item.destinationSubAccount && (
+                              <span className="bp-badge destination">→ {item.destinationSubAccount.name}</span>
+                            )}
+                          </span>
+                        </div>
                       </div>
-                      <div className="st-card-actions">
+                      <div className="bp-compact-right">
+                        <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
                         <button className="btn btn-ghost btn-xs" onClick={() => deleteItem.mutate(item.id)} disabled={deleteItem.isPending}>
                           Delete
                         </button>
-                      </div>
-                    </div>
-
-                    <div className="st-card-body">
-                      <h3 className="st-card-name">{item.title}</h3>
-                      <p className="st-card-bankname">
-                        {item.isMonthly && <span className="bp-badge monthly">Monthly</span>}
-                        {item.destinationSubAccount && (
-                          <span className="bp-badge destination">→ {item.destinationSubAccount.name}</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="st-card-stats">
-                      <div className="st-stat">
-                        <span className="st-stat-label">Amount</span>
-                        <span className="st-stat-value">{formatCents(item.amountCents)}</span>
                       </div>
                     </div>
                   </div>

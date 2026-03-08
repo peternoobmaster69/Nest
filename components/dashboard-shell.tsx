@@ -176,6 +176,12 @@ const budgetEmojis: Record<string, string> = {
 const budgetIconOptions = [
   "💰", "🏠", "🛡️", "✈️", "🍔", "🚌", "🛍️", "💪", "💊", "🎬", "💡", "📚", "📈", "🚗", "📱", "🎯",
   "🧾", "🏦", "💳", "🧮", "👶", "🎓", "🐶", "🎁", "🛠️", "💼", "🏥", "🚴", "🍜", "☕",
+  // Family/Parents & Religious
+  "👴", "👵", "👪", "👨‍👩‍👧‍👦", "⛪",
+  // Home & Cleaning
+  "🧹", "🧽", "🧼", "🪣", "🧺", "🛋️", "🛏️", "🚿", "🚽", "🪟", "🪴",
+  // Globe/World
+  "🌍", "🗺️", "🧭",
 ];
 
 function getBudgetEmoji(name: string) {
@@ -975,8 +981,112 @@ export function DashboardShell({
             )}
           </div>
 
-          {/* Two Column Layout */}
-          <div className="grid-2">
+          {/* Budget Accounts Grid */}
+          <div className="card" style={{ marginTop: "14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <span aria-hidden="true">📁</span>
+                <span>Sub-Accounts</span>
+              </div>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                  {formatCents(totalBudgeted)} / {formatCents(filteredBankBalance)}
+                </span>
+                <button
+                  className="btn btn-primary btn-xs"
+                  type="button"
+                  onClick={() => {
+                    setCreateBudgetOpen(true);
+                    if (!budgetAccountId) {
+                      setBudgetAccountId(selectedBankFilterId !== "ALL" ? selectedBankFilterId : firstBankAccountId ?? "");
+                    }
+                  }}
+                  aria-label="Add sub-account"
+                  title="Add sub-account"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="account-cards-grid" style={{ marginBottom: "12px" }}>
+              {filteredBudgets.map((budget) => {
+                const hasMonthlyLimit = budget.targetCents > 0;
+                const outgoingCents = budget.monthlyOutgoingCents ?? 0;
+                const pct = hasMonthlyLimit ? Math.min((outgoingCents / budget.targetCents) * 100, 100) : 0;
+                const isOver = outgoingCents > budget.targetCents && budget.targetCents > 0;
+                const isNear = pct >= 80 && !isOver;
+
+                let badgeClass = "badge-ok";
+                let badgeText = "";
+                if (isOver) {
+                  badgeClass = "badge-err";
+                  badgeText = "Over!";
+                } else if (isNear) {
+                  badgeClass = "badge-warn";
+                  badgeText = "Near limit";
+                }
+
+                return (
+                  <div key={budget.id} className="budget-mini budget-mini-compact">
+                    <div className="bm-top">
+                      <div className="bm-title">
+                        <div className="bm-icon">{getBudgetIcon(budget.name, budget.icon)}</div>
+                        <div className="bm-name">{budget.name}</div>
+                      </div>
+                      <div className="bm-top-right">
+                        <button
+                          className="bm-edit-btn"
+                          onClick={() => startBudgetEdit(budget)}
+                          title="Edit account"
+                          aria-label={`Edit ${budget.name}`}
+                        >
+                          ✏
+                        </button>
+                        {badgeText ? (
+                          <span className={`badge ${badgeClass}`}>
+                            {isNear && <span className="badge-dot" />}
+                            {badgeText}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className={`bm-amount ${getAmountToneClass(hasMonthlyLimit ? outgoingCents : budget.availableCents)}`}>
+                      {hasMonthlyLimit ? formatCents(outgoingCents) : formatCents(budget.availableCents)}
+                    </div>
+                    {hasMonthlyLimit ? (
+                      <>
+                        <div className="bm-target">Monthly limit {formatCents(budget.targetCents)}</div>
+                        <div className="bm-target">Outgoing this month {formatCents(outgoingCents)}</div>
+                      </>
+                    ) : null}
+                    {hasMonthlyLimit && (
+                      <div className="prog-track">
+                        <div
+                          className={`prog-bar ${isNear ? "prog-bar-warn" : ""} ${isOver ? "prog-bar-err" : ""}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                    {hasMonthlyLimit ? (
+                      <div className="bm-foot">
+                        <span>{`${Math.round(pct)}% used`}</span>
+                        <span>
+                          {isOver
+                            ? `${formatCents(outgoingCents - budget.targetCents)} over`
+                            : `${formatCents(budget.targetCents - outgoingCents)} to go`}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+
+          {/* Two Column Layout - Moved to bottom */}
+          <div className="grid-2" style={{ marginTop: "14px" }}>
             {/* Spending Breakdown */}
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
@@ -1096,110 +1206,6 @@ export function DashboardShell({
                 )}
               </div>
             </div>
-          </div>
-
-          {/* Budget Accounts Grid */}
-          <div className="card" style={{ marginTop: "14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <div style={{ fontSize: "13px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <span aria-hidden="true">📁</span>
-                <span>Sub-Accounts</span>
-              </div>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "11px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                  {formatCents(totalBudgeted)} / {formatCents(filteredBankBalance)}
-                </span>
-                <button
-                  className="btn btn-primary btn-xs"
-                  type="button"
-                  onClick={() => {
-                    setCreateBudgetOpen(true);
-                    if (!budgetAccountId) {
-                      setBudgetAccountId(selectedBankFilterId !== "ALL" ? selectedBankFilterId : firstBankAccountId ?? "");
-                    }
-                  }}
-                  aria-label="Add sub-account"
-                  title="Add sub-account"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            <div className="account-cards-grid" style={{ marginBottom: "12px" }}>
-              {filteredBudgets.map((budget) => {
-                const hasMonthlyLimit = budget.targetCents > 0;
-                const outgoingCents = budget.monthlyOutgoingCents ?? 0;
-                const pct = hasMonthlyLimit ? Math.min((outgoingCents / budget.targetCents) * 100, 100) : 0;
-                const isOver = outgoingCents > budget.targetCents && budget.targetCents > 0;
-                const isNear = pct >= 80 && !isOver;
-
-                let badgeClass = "badge-ok";
-                let badgeText = "";
-                if (isOver) {
-                  badgeClass = "badge-err";
-                  badgeText = "Over!";
-                } else if (isNear) {
-                  badgeClass = "badge-warn";
-                  badgeText = "Near limit";
-                }
-
-                return (
-                  <div key={budget.id} className="budget-mini budget-mini-compact">
-                    <div className="bm-top">
-                      <div className="bm-title">
-                        <div className="bm-icon">{getBudgetIcon(budget.name, budget.icon)}</div>
-                        <div className="bm-name">{budget.name}</div>
-                      </div>
-                      <div className="bm-top-right">
-                        <button
-                          className="bm-edit-btn"
-                          onClick={() => startBudgetEdit(budget)}
-                          title="Edit account"
-                          aria-label={`Edit ${budget.name}`}
-                        >
-                          ✏
-                        </button>
-                        {badgeText ? (
-                          <span className={`badge ${badgeClass}`}>
-                            {isNear && <span className="badge-dot" />}
-                            {badgeText}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className={`bm-amount ${getAmountToneClass(hasMonthlyLimit ? outgoingCents : budget.availableCents)}`}>
-                      {hasMonthlyLimit ? formatCents(outgoingCents) : formatCents(budget.availableCents)}
-                    </div>
-                    {hasMonthlyLimit ? (
-                      <>
-                        <div className="bm-target">Monthly limit {formatCents(budget.targetCents)}</div>
-                        <div className="bm-target">Outgoing this month {formatCents(outgoingCents)}</div>
-                      </>
-                    ) : null}
-                    {hasMonthlyLimit && (
-                      <div className="prog-track">
-                        <div
-                          className={`prog-bar ${isNear ? "prog-bar-warn" : ""} ${isOver ? "prog-bar-err" : ""}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    )}
-                    {hasMonthlyLimit ? (
-                      <div className="bm-foot">
-                        <span>{`${Math.round(pct)}% used`}</span>
-                        <span>
-                          {isOver
-                            ? `${formatCents(outgoingCents - budget.targetCents)} over`
-                            : `${formatCents(budget.targetCents - outgoingCents)} to go`}
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-
           </div>
 
         </div>

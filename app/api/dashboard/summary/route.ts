@@ -9,7 +9,7 @@ export async function GET() {
 
     const budgets = await prisma.budgetEnvelope.findMany({
       where: { workspaceId },
-      orderBy: { updatedAt: "desc" },
+      orderBy: { name: "asc" },
     });
 
     const now = new Date();

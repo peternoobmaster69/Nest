@@ -5591,10 +5591,6 @@ body {
   min-width: 0;
 }
 
-.bp-col .st-grid {
-  grid-template-columns: 1fr;
-}
-
 .bp-col .st-card {
   margin-bottom: 12px;
   padding: 14px;
@@ -5622,4 +5618,99 @@ body {
 
 .bp-col .st-stat-label {
   font-size: 11px;
+}
+
+/* Budget Plan Compact Cards */
+.bp-compact-card {
+  padding: 12px 14px;
+}
+
+.bp-compact-card .st-bank-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+}
+
+.bp-compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bp-compact-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bp-compact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bp-compact-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bp-compact-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.bp-meta-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bp-meta-owner::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+/* Responsive grid for budget template - 1 on mobile, 2 on tablet+ */
+.bp-col .st-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .bp-col .st-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.bp-compact-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bp-compact-amount {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  white-space: nowrap;
 }
