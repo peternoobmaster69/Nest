@@ -1,10 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useMemo, useState } from "react";
 
 type AppContext = {
   workspaceId: string | null;
+  baseCurrency?: string | null;
 };
 
 type Receivable = {
@@ -15,10 +17,6 @@ type Receivable = {
   remarkTogether?: string | null;
   status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
 };
-
-function formatCents(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
-}
 
 function getAmountToneClass(valueCents: number) {
   if (valueCents < 0) return "negative";
@@ -57,6 +55,8 @@ export function ReceivablesPage() {
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId;
+  const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const formatCents = (value: number) => formatMoney(value, baseCurrency);
 
   const receivables = useQuery({
     queryKey: ["receivables", workspaceId],

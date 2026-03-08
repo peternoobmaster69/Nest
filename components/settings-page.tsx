@@ -1,11 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useState } from "react";
 
 type Context = {
   workspaceId: string | null;
+  baseCurrency?: string | null;
 };
 
 type GmailStatus = {
@@ -31,10 +33,6 @@ type BankAccount = {
   discrepancyCents: number;
 };
 
-function formatCents(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
-}
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -54,6 +52,7 @@ export function SettingsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [gmailMessage, setGmailMessage] = useState("");
+  const [currencyMessage, setCurrencyMessage] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -89,6 +88,7 @@ export function SettingsPage() {
   });
 
   const workspaceId = context.data?.workspaceId ?? null;
+  const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
 
   const accounts = useQuery({
     queryKey: ["bank-accounts", workspaceId],
@@ -137,6 +137,23 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
     },
     onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Failed to disconnect Gmail."),
+  });
+
+  const updateCurrency = useMutation({
+    mutationFn: (nextCurrency: string) =>
+      fetchJson<{ workspaceId: string; baseCurrency: string }>("/api/context", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          baseCurrency: nextCurrency,
+        }),
+      }),
+    onSuccess: (data) => {
+      setCurrencyMessage(`Currency updated to ${data.baseCurrency}.`);
+      queryClient.invalidateQueries({ queryKey: ["app-context"] });
+    },
+    onError: (error) => setCurrencyMessage(error instanceof Error ? error.message : "Failed to update currency."),
   });
 
   const createAccount = useMutation({
@@ -280,6 +297,31 @@ export function SettingsPage() {
         {gmailMessage ? <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>{gmailMessage}</div> : null}
       </div>
 
+      <div className="card" style={{ marginBottom: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>Currency Display</div>
+            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+              Set currency display across your workspace. Default is SGD.
+            </div>
+          </div>
+          <select
+            className="input"
+            style={{ maxWidth: "140px" }}
+            value={baseCurrency}
+            onChange={(event) => updateCurrency.mutate(event.target.value)}
+            disabled={!workspaceId || updateCurrency.isPending}
+          >
+            {SUPPORTED_CURRENCIES.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+        </div>
+        {currencyMessage ? <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{currencyMessage}</div> : null}
+      </div>
+
       {/* Header with Add Button */}
       <div className="st-header">
         <h2 className="st-title">Bank Accounts</h2>
@@ -336,12 +378,12 @@ export function SettingsPage() {
                 <div className="st-stat">
                   <span className="st-stat-label">Balance</span>
                   <span className={`st-stat-value ${hasDiscrepancy ? 'warning' : ''}`}>
-                    {formatCents(account.currentBalanceCents)}
+                    {formatMoney(account.currentBalanceCents, baseCurrency)}
                   </span>
                 </div>
                 <div className="st-stat">
                   <span className="st-stat-label">In Budgets</span>
-                  <span className="st-stat-value">{formatCents(account.linkedBudgetTotalCents)}</span>
+                  <span className="st-stat-value">{formatMoney(account.linkedBudgetTotalCents, baseCurrency)}</span>
                 </div>
               </div>
 
@@ -350,7 +392,7 @@ export function SettingsPage() {
                   <span className="st-discrepancy-icon">⚠️</span>
                   <span className="st-discrepancy-text">
                     Discrepancy: {account.discrepancyCents > 0 ? "+" : ""}
-                    {formatCents(account.discrepancyCents)}
+                    {formatMoney(account.discrepancyCents, baseCurrency)}
                   </span>
                 </div>
               )}

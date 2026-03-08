@@ -123,7 +123,7 @@ export async function POST(request: Request) {
         const workspace = await prisma.workspace.create({
           data: {
             name: "My Workspace",
-            baseCurrency: "USD",
+            baseCurrency: "SGD",
           },
         });
 

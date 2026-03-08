@@ -155,20 +155,23 @@ export function AppSidebar({
 
         <div className="sb-sec">Money</div>
         <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick}>
-          <span className="sb-ic">▣</span>Credit Cards
+          <span className="sb-ic">💳</span>Credit Cards
         </Link>
         <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
-          <span className="sb-ic">💳</span>Card Transactions
+          <span className="sb-ic">🧾</span>Card Transactions
         </Link>
         <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
           <span className="sb-ic">↩</span>Receivables
           {badgeCounts?.receivables ? <span className="sb-badge">{badgeCounts.receivables}</span> : null}
         </Link>
         <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick}>
-          <span className="sb-ic">≡</span>Transactions
+          <span className="sb-ic">📑</span>Transactions
         </Link>
         <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href="/rewards" onClick={handleNavClick}>
           <span className="sb-ic">◎</span>Rewards
+        </Link>
+        <Link className={`sb-item${currentPath === "/investments" ? " on" : ""}`} href="/investments" onClick={handleNavClick}>
+          <span className="sb-ic">📈</span>Investments
         </Link>
 
         <div className="sb-sec">Workspace</div>

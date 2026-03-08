@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
 import { AppSidebar } from "./app-sidebar";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 
@@ -38,6 +39,7 @@ type AppContext = {
   workspaceId: string | null;
   defaultAccountId: string | null;
   defaultUserId: string | null;
+  baseCurrency?: string | null;
   accounts: Array<{
     id: string;
     name: string;
@@ -89,18 +91,6 @@ type Toast = {
   kind: "success" | "error" | "info";
   message: string;
 };
-
-function formatCents(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
-}
-
-function formatCentsShort(value: number) {
-  const dollars = value / 100;
-  if (dollars >= 1000) {
-    return `$${(dollars / 1000).toFixed(1)}k`;
-  }
-  return `$${dollars.toFixed(dollars % 1 === 0 ? 0 : 2)}`;
-}
 
 function getAmountToneClass(valueCents: number) {
   if (valueCents < 0) return "negative";
@@ -253,6 +243,9 @@ export function DashboardShell({
   });
 
   const workspaceId = contextQuery.data?.workspaceId;
+  const baseCurrency = normalizeCurrency(contextQuery.data?.baseCurrency);
+  const formatCents = (value: number) => formatMoney(value, baseCurrency);
+  const formatCentsShort = (value: number) => formatMoneyShort(value, baseCurrency);
   const defaultUserId = contextQuery.data?.defaultUserId;
   const dashboardBankStorageKey = workspaceId ? `nest:selectedBank:${workspaceId}` : null;
 
@@ -819,11 +812,11 @@ export function DashboardShell({
                 <div className="hero-sub">Across {filteredBudgets.length} budget accounts</div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "10px", opacity: 0.55, marginBottom: "3px" }}>Available in bank</div>
-                <div className={getAmountToneClass(filteredBankBalance)} style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
+                <div className="hero-side-label">Available in bank</div>
+                <div className={`hero-side-amount ${getAmountToneClass(filteredBankBalance)}`}>
                   {isLoading ? "—" : formatCents(filteredBankBalance)}
                 </div>
-                <div className={getAmountToneClass(freeAmount)} style={{ fontSize: "10px", opacity: 0.55, marginTop: "2px" }}>
+                <div className={`hero-side-free ${getAmountToneClass(freeAmount)}`}>
                   {isLoading ? "—" : formatCents(freeAmount)} free
                 </div>
               </div>

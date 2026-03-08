@@ -1,11 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 
 type AppContext = {
   workspaceId: string | null;
+  baseCurrency?: string | null;
 };
 
 type Budget = {
@@ -34,10 +36,6 @@ type BankAccount = {
   bankName?: string | null;
   currentBalanceCents: number;
 };
-
-function formatCents(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
-}
 
 function getAmountToneClass(valueCents: number) {
   if (valueCents < 0) return "negative";
@@ -84,6 +82,8 @@ export function TransactionsPage() {
   });
 
   const workspaceId = context.data?.workspaceId;
+  const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const formatCents = (value: number) => formatMoney(value, baseCurrency);
   const txBankStorageKey = workspaceId ? `nest:selectedBank:${workspaceId}` : null;
 
   const budgets = useQuery({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useMemo, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 
@@ -35,6 +36,11 @@ type CardCount = {
   _count: { id: number };
 };
 
+type AppContext = {
+  workspaceId: string | null;
+  baseCurrency?: string | null;
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -42,13 +48,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function formatCurrency(cents: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
-}
 
 function getAmountToneClass(valueCents: number) {
   if (valueCents < 0) return "negative";
@@ -86,6 +85,13 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [formIsInstallment, setFormIsInstallment] = useState(false);
   const [formInstallmentNo, setFormInstallmentNo] = useState("");
   const [formTotalInstallments, setFormTotalInstallments] = useState("");
+
+  const context = useQuery({
+    queryKey: ["app-context"],
+    queryFn: () => fetchJson<AppContext>("/api/context"),
+  });
+  const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const formatCurrency = (cents: number) => formatMoney(cents, baseCurrency);
 
   const { data, isLoading } = useQuery({
     queryKey: ["credit-transactions", selectedCardId, selectedYear, selectedMonth],

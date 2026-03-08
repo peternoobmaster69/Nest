@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useState } from "react";
 
 type CreditCardReward = {
@@ -53,6 +54,11 @@ type AvailableCard = {
   last4Digit: string;
 };
 
+type AppContext = {
+  workspaceId: string | null;
+  baseCurrency?: string | null;
+};
+
 async function fetchRewards(): Promise<{
   creditCards: CreditCardReward[];
   frequentFlyers: FrequentFlyer[];
@@ -66,14 +72,6 @@ async function fetchRewards(): Promise<{
 
 function formatNumber(num: number): string {
   return new Intl.NumberFormat("en-US").format(num);
-}
-
-function formatCurrency(cents: number | null): string {
-  if (cents === null) return "$0.00";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
 }
 
 export function RewardsPage({
@@ -115,6 +113,20 @@ export function RewardsPage({
   const [editingConvDesc, setEditingConvDesc] = useState("");
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingCardPoints, setEditingCardPoints] = useState("");
+
+  const context = useQuery({
+    queryKey: ["app-context"],
+    queryFn: async () => {
+      const res = await fetch("/api/context");
+      if (!res.ok) throw new Error("Failed to fetch context");
+      return res.json() as Promise<AppContext>;
+    },
+  });
+  const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const formatCurrency = (cents: number | null): string => {
+    if (cents === null) return formatMoney(0, baseCurrency);
+    return formatMoney(cents, baseCurrency);
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["rewards"],

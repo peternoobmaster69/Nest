@@ -90,7 +90,7 @@ async function main() {
     workspace = await prisma.workspace.create({
       data: {
         name: "Nest Household",
-        baseCurrency: "USD",
+        baseCurrency: "SGD",
       },
     });
   }
