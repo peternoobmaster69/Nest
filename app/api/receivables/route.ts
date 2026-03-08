@@ -12,6 +12,7 @@ const CreateReceivableSchema = z.object({
   transactionDate: z.string().datetime().optional(),
   remarks: z.string().max(500).optional(),
   accountId: z.string().optional(),
+  budgetId: z.string().optional(),
   fromUserId: z.string().optional(),
   status: z.enum(["OPEN", "PARTIAL", "PAID", "VOID"]).default("OPEN"),
 });
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
         transactionDate: parsed.data.transactionDate ? new Date(parsed.data.transactionDate) : null,
         remarkTogether: parsed.data.remarks,
         accountId: parsed.data.accountId,
+        budgetId: parsed.data.budgetId,
         fromUserId: parsed.data.fromUserId,
         status: parsed.data.status,
       },

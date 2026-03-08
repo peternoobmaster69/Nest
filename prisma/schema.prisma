@@ -256,6 +256,7 @@ model BudgetEnvelope {
   incomingBudgetItems BudgetItem[]
   expenseTypes   ExpenseType[]
   transactions   Transaction[]
+  receivables    Receivable[]
 
   @@index([workspaceId, accountId])
 }
@@ -305,13 +306,15 @@ model MonthlyBudget {
   year           Int
   month          Int          // 1-12
   allocatedCents Int          @default(0)
+  isDraft        Boolean      @default(true)  // true until user confirms
+  confirmedAt    DateTime?    // set when user confirms
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   budgetItem     BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
   budgetSource   BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
 
-  @@unique([workspaceId, year, month, budgetItemId])
+  @@unique([workspaceId, year, month, budgetItemId, budgetSourceId])
   @@index([workspaceId, year, month])
 }
 
@@ -419,6 +422,7 @@ model Receivable {
   id               String           @id @default(cuid())
   workspaceId      String
   accountId        String?
+  budgetId         String?
   statementMonthId String?
   title            String
   amountCents      Int
@@ -434,6 +438,7 @@ model Receivable {
   updatedAt        DateTime         @updatedAt
   workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  budget           BudgetEnvelope?  @relation(fields: [budgetId], references: [id], onDelete: SetNull)
   statementMonth   Month?           @relation(fields: [statementMonthId], references: [id], onDelete: SetNull)
   fromUser         User?            @relation("ReceivableFrom", fields: [fromUserId], references: [id], onDelete: NoAction)
   toUser           User?            @relation("ReceivableTo", fields: [toUserId], references: [id], onDelete: NoAction)

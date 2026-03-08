@@ -13,6 +13,7 @@ const UpdateReceivableSchema = z.object({
   isFamily: z.boolean().optional(),
   isMom: z.boolean().optional(),
   accountId: z.string().nullable().optional(),
+  budgetId: z.string().nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -61,6 +62,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         isFamily: parsed.data.isFamily,
         isMom: parsed.data.isMom,
         accountId: parsed.data.accountId,
+        budgetId: parsed.data.budgetId,
       },
     });
     return NextResponse.json(updated);

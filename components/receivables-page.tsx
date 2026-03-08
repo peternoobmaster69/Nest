@@ -31,6 +31,7 @@ type Receivable = {
   remarkTogether?: string | null;
   status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
   accountId?: string | null;
+  budgetId?: string | null;
   account?: DeductionAccount | null;
 };
 
@@ -76,6 +77,7 @@ export function ReceivablesPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [sortBy, setSortBy] = useState<"amount" | "remarks" | "receivableDate" | "transactionDate">("receivableDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [hideClosed, setHideClosed] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -138,6 +140,7 @@ export function ReceivablesPage() {
       amountCents: number;
       remarks?: string;
       accountId?: string;
+      budgetId?: string;
     }) =>
       fetchJson("/api/receivables", {
         method: "POST",
@@ -167,6 +170,7 @@ export function ReceivablesPage() {
       remarks?: string;
       status: Receivable["status"];
       accountId?: string | null;
+      budgetId?: string | null;
     }) =>
       fetchJson(`/api/receivables/${payload.id}`, {
         method: "PATCH",
@@ -196,6 +200,17 @@ export function ReceivablesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+  });
+
+  const deleteReceivable = useMutation({
+    mutationFn: (id: string) =>
+      fetchJson(`/api/receivables/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
@@ -242,8 +257,12 @@ export function ReceivablesPage() {
   }, [receivables.data]);
 
   const monthFilteredReceivables = useMemo(
-    () => sortedReceivables.filter((r) => new Date(r.date).getMonth() + 1 === selectedMonth),
-    [sortedReceivables, selectedMonth],
+    () => sortedReceivables.filter((r) => {
+      const monthMatch = new Date(r.date).getMonth() + 1 === selectedMonth;
+      const statusMatch = !hideClosed || (r.status !== "PAID" && r.status !== "VOID");
+      return monthMatch && statusMatch;
+    }),
+    [sortedReceivables, selectedMonth, hideClosed],
   );
 
   const monthLabels = useMemo(
@@ -291,6 +310,7 @@ export function ReceivablesPage() {
     setFormUseCrossWorkspaceDeduction(Boolean(r.accountId));
     setFormDeductWorkspaceId(r.account?.workspaceId || "");
     setFormDeductAccountId(r.accountId || "");
+    setFormDeductBudgetId(r.budgetId || "");
     setIsModalOpen(true);
   };
 
@@ -299,6 +319,7 @@ export function ReceivablesPage() {
     if (!workspaceId || !formReceivableDate || !formAmount) return;
 
     const accountId = formUseCrossWorkspaceDeduction ? formDeductAccountId || undefined : undefined;
+    const budgetId = formUseCrossWorkspaceDeduction ? formDeductBudgetId || undefined : undefined;
     if (formUseCrossWorkspaceDeduction && !accountId) return;
 
     if (modalMode === "edit" && activeId) {
@@ -310,6 +331,7 @@ export function ReceivablesPage() {
         remarks: formRemarks.trim() || undefined,
         status: formStatus,
         accountId: formUseCrossWorkspaceDeduction ? accountId : null,
+        budgetId: formUseCrossWorkspaceDeduction ? budgetId : null,
       });
       return;
     }
@@ -320,6 +342,7 @@ export function ReceivablesPage() {
       amountCents: Math.round(Number(formAmount) * 100),
       remarks: formRemarks.trim() || undefined,
       accountId,
+      budgetId,
     });
   };
 
@@ -374,6 +397,14 @@ export function ReceivablesPage() {
             <option value="desc">Desc</option>
             <option value="asc">Asc</option>
           </select>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-secondary)", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={hideClosed}
+              onChange={(e) => setHideClosed(e.target.checked)}
+            />
+            Hide closed
+          </label>
           <button className="btn btn-primary recv-add-btn" type="button" onClick={openCreateModal} title="Add receivable" aria-label="Add receivable">
             Add Receivable
           </button>
@@ -436,14 +467,25 @@ export function ReceivablesPage() {
                 <button className="btn btn-ghost btn-xs" onClick={() => openEditModal(r)}>
                   Edit
                 </button>
+                <button
+                  className="btn btn-danger btn-xs"
+                  onClick={() => {
+                    if (confirm("Are you sure you want to delete this receivable?")) {
+                      deleteReceivable.mutate(r.id);
+                    }
+                  }}
+                  disabled={deleteReceivable.isPending}
+                >
+                  Delete
+                </button>
               </span>
             </div>
           ))}
           {!isLoading && !isError && monthFilteredReceivables.length === 0 && (
             <EmptyState
               icon="📥"
-              title="No receivables for this month"
-              description="Add a receivable to track money owed to you and expected payment dates."
+              title={hideClosed ? "No open receivables for this month" : "No receivables for this month"}
+              description={hideClosed ? "All receivables are closed. Uncheck 'Hide closed' to see them." : "Add a receivable to track money owed to you and expected payment dates."}
               action={
                 <button className="btn btn-primary" onClick={openCreateModal}>
                   + Add Receivable
@@ -579,9 +621,9 @@ export function ReceivablesPage() {
                     {modalMode === "edit" ? "Save" : "Add"}
                   </button>
                 </div>
-                {(createReceivable.isError || updateReceivable.isError || closeReceivable.isError) && (
+                {(createReceivable.isError || updateReceivable.isError || closeReceivable.isError || deleteReceivable.isError) && (
                   <div style={{ fontSize: "12px", color: "var(--danger)" }}>
-                    {((createReceivable.error || updateReceivable.error || closeReceivable.error) as Error)?.message || "Action failed"}
+                    {((createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error) as Error)?.message || "Action failed"}
                   </div>
                 )}
               </form>

@@ -248,6 +248,18 @@ export async function POST(request: Request) {
       });
     }
 
+    if (action === "cancelDraft") {
+      const { year, month } = body;
+      await requireWorkspaceAccess(body.workspaceId);
+
+      // Delete draft monthly budgets for this month
+      const deleted = await prisma.monthlyBudget.deleteMany({
+        where: { workspaceId: body.workspaceId, year, month, isDraft: true },
+      });
+
+      return NextResponse.json({ deleted: deleted.count });
+    }
+
     if (action === "confirmMonthly") {
       const parsed = ConfirmMonthlyBudgetSchema.safeParse(body);
       if (!parsed.success) {
@@ -271,30 +283,29 @@ export async function POST(request: Request) {
       });
       const sourceIdsSet = new Set(sources.map((source) => source.id));
 
-      // Delete existing monthly budgets for this month
-      await prisma.monthlyBudget.deleteMany({
-        where: { workspaceId: body.workspaceId, year, month },
-      });
-
-      // Create monthly budgets for the selected month only
-      const createdBudgets = [];
+      // Update draft budgets to confirmed
+      const confirmedBudgets = [];
       for (const alloc of allocations) {
         const budgetItem = itemById.get(alloc.budgetItemId);
         if (!budgetItem) continue;
         if (!sourceIdsSet.has(alloc.budgetSourceId)) continue;
-        if (alloc.allocatedCents <= 0) continue;
 
-        const monthlyBudget = await prisma.monthlyBudget.create({
-          data: {
+        // Update the draft record with new amount and mark as confirmed
+        const monthlyBudget = await prisma.monthlyBudget.updateMany({
+          where: {
             workspaceId: body.workspaceId,
             budgetItemId: alloc.budgetItemId,
             budgetSourceId: alloc.budgetSourceId,
             year,
             month,
+          },
+          data: {
             allocatedCents: alloc.allocatedCents,
+            isDraft: false,
+            confirmedAt: new Date(),
           },
         });
-        createdBudgets.push(monthlyBudget);
+        confirmedBudgets.push(monthlyBudget);
 
         // Apply to sub-accounts if requested
         if (applyToSubAccounts && budgetItem.destinationSubAccountId) {
@@ -307,9 +318,13 @@ export async function POST(request: Request) {
         }
       }
 
+      // Delete any remaining drafts for this month (in case some were removed)
+      await prisma.monthlyBudget.deleteMany({
+        where: { workspaceId: body.workspaceId, year, month, isDraft: true },
+      });
+
       return NextResponse.json({
-        created: createdBudgets.length,
-        monthlyBudgets: createdBudgets,
+        confirmed: confirmedBudgets.length,
         appliedToSubAccounts: applyToSubAccounts,
       });
     }
@@ -393,6 +408,14 @@ const UpdateBudgetSourceSchema = z.object({
   amountCents: z.number().int().min(0),
 });
 
+const UpdateAllocationSchema = z.object({
+  year: z.number().int(),
+  month: z.number().int().min(1).max(12),
+  budgetItemId: z.string(),
+  budgetSourceId: z.string(),
+  allocatedCents: z.number().int().min(0),
+});
+
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
@@ -448,6 +471,29 @@ export async function PATCH(request: Request) {
       });
 
       return NextResponse.json(updated);
+    }
+
+    if (action === "updateAllocation") {
+      const parsed = UpdateAllocationSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
+
+      await requireWorkspaceAccess(body.workspaceId);
+      const { year, month, budgetItemId, budgetSourceId, allocatedCents } = parsed.data;
+
+      await prisma.monthlyBudget.updateMany({
+        where: {
+          workspaceId: body.workspaceId,
+          year,
+          month,
+          budgetItemId,
+          budgetSourceId,
+        },
+        data: { allocatedCents },
+      });
+
+      return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

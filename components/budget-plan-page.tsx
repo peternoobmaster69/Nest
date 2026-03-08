@@ -321,44 +321,59 @@ export function BudgetPlanPage() {
     }
   };
 
+  const generateMonthly = useMutation({
+    mutationFn: (payload: {
+      workspaceId: string;
+      action: "generateMonthly";
+      year: number;
+      month: number;
+    }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: (data) => {
+      // Convert the saved monthly budgets to preview format
+      const allocations: AllocationPreview[] = data.monthlyBudgets.map((mb: any) => ({
+        budgetItemId: mb.budgetItemId,
+        budgetItemTitle: budgetItems.find(i => i.id === mb.budgetItemId)?.title || "Unknown",
+        budgetSourceId: mb.budgetSourceId,
+        budgetSourceTitle: budgetSources.find(s => s.id === mb.budgetSourceId)?.title || "Unknown",
+        allocatedCents: mb.allocatedCents,
+      }));
+      setPreviewAllocations(allocations);
+      setIsPreviewMode(true);
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    },
+  });
+
   const generatePreview = () => {
     if (!workspaceId || budgetItems.length === 0 || budgetSources.length === 0) return;
-
-    const totalSourceCents = budgetSources.reduce((sum, s) => sum + s.amountCents, 0);
-
-    const allocations: AllocationPreview[] = [];
-    for (const item of budgetItems) {
-      if (item.amountCents === 0) continue;
-      const activeSources = budgetSources.filter((source) => source.amountCents > 0);
-      let remaining = item.amountCents;
-
-      activeSources.forEach((source, index) => {
-        const isLast = index === activeSources.length - 1;
-        const sourceProportion = totalSourceCents > 0 ? source.amountCents / totalSourceCents : 0;
-        const allocatedCents = isLast ? remaining : Math.min(remaining, Math.round(item.amountCents * sourceProportion));
-
-        if (allocatedCents > 0) {
-          allocations.push({
-            budgetItemId: item.id,
-            budgetItemTitle: item.title,
-            budgetSourceId: source.id,
-            budgetSourceTitle: source.title,
-            allocatedCents,
-          });
-          remaining -= allocatedCents;
-        }
-      });
-    }
-
-    setPreviewAllocations(allocations);
-    setIsPreviewMode(true);
+    generateMonthly.mutate({
+      workspaceId,
+      action: "generateMonthly",
+      year: selectedYear,
+      month: selectedMonth,
+    });
   };
 
   const updateAllocation = (index: number, newCents: number) => {
-    if (!previewAllocations) return;
+    if (!previewAllocations || !workspaceId) return;
     const updated = [...previewAllocations];
     updated[index] = { ...updated[index], allocatedCents: Math.max(0, newCents) };
     setPreviewAllocations(updated);
+
+    // Update in database immediately
+    const alloc = updated[index];
+    fetch("/api/budgets/plan", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId,
+        action: "updateAllocation",
+        year: selectedYear,
+        month: selectedMonth,
+        budgetItemId: alloc.budgetItemId,
+        budgetSourceId: alloc.budgetSourceId,
+        allocatedCents: newCents,
+      }),
+    });
   };
 
   const onConfirmMonthly = (applyToSubAccounts: boolean) => {
@@ -374,6 +389,20 @@ export function BudgetPlanPage() {
   };
 
   const cancelPreview = () => {
+    if (!workspaceId) return;
+    // Delete draft budgets
+    fetchJson("/api/budgets/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId,
+        action: "cancelDraft",
+        year: selectedYear,
+        month: selectedMonth,
+      }),
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    });
     setIsPreviewMode(false);
     setPreviewAllocations(null);
   };
