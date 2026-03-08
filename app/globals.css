@@ -5716,13 +5716,13 @@ body {
   border-radius: var(--r-sm);
 }
 
-/* Responsive grid for budget template - 1 on mobile, 2 on tablet+ */
+/* Responsive grid for budget template - 1 on tablet and below, 2 on desktop */
 .bp-col .st-grid {
   grid-template-columns: 1fr;
   gap: 12px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .bp-col .st-grid {
     grid-template-columns: repeat(2, 1fr);
   }
