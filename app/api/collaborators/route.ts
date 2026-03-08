@@ -12,7 +12,11 @@ export async function GET(request: Request) {
 
     await requireWorkspaceAccess(workspaceId);
 
-    const [members, invites, auditLogs] = await Promise.all([
+    const [workspace, members, invites, auditLogs] = await Promise.all([
+      prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { id: true, name: true, isShared: true },
+      }),
       prisma.workspaceMember.findMany({
         where: { workspaceId },
         include: {
@@ -43,7 +47,7 @@ export async function GET(request: Request) {
       }),
     ]);
 
-    return NextResponse.json({ members, invites, auditLogs });
+    return NextResponse.json({ workspace, members, invites, auditLogs });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

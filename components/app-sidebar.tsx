@@ -41,7 +41,13 @@ export function AppSidebar({
     queryFn: async () => {
       const res = await fetch("/api/context");
       if (!res.ok) throw new Error("Failed to load context");
-      return res.json() as Promise<{ isCollaborative?: boolean }>;
+      return res.json() as Promise<{
+        isShared?: boolean;
+        isCollaborative?: boolean;
+        workspaceName?: string | null;
+        memberCount?: number;
+        pendingInviteCount?: number;
+      }>;
     },
   });
 
@@ -186,7 +192,7 @@ export function AppSidebar({
 
         <div className="sb-sec">Workspace</div>
         <Link className={`sb-item${currentPath === "/collaborators" ? " on" : ""}`} href="/collaborators" onClick={handleNavClick}>
-          <span className="sb-ic">👥</span>Collaborators
+          <span className="sb-ic">👥</span>Workspaces
         </Link>
         <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href="/settings" onClick={handleNavClick}>
           <span className="sb-ic">⚙</span>Settings
@@ -204,7 +210,10 @@ export function AppSidebar({
             <div className="avatar avatar-md avatar-green">{getInitials(userName)}</div>
             <div className="sb-user-meta">
               <span className="sb-user-name">{displayName}</span>
-              <span className="sb-user-sub">{context.data?.isCollaborative ? "Shared Workspace" : "Personal Workspace"}</span>
+              <span className="sb-user-sub">
+                {context.data?.isShared ? "👥" : "🔒"}{" "}
+                {context.data?.workspaceName || "Workspace"}
+              </span>
             </div>
             <span className={`sb-user-chevron${profileMenuOpen ? " open" : ""}`}>▾</span>
           </button>

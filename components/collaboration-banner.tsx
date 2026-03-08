@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 type AppContext = {
   workspaceId: string | null;
   workspaceName?: string | null;
+  isShared?: boolean;
   isCollaborative?: boolean;
 };
 
@@ -20,7 +21,7 @@ export function CollaborationBanner() {
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
 
-  if (!context.data?.workspaceId || !context.data?.isCollaborative) return null;
+  if (!context.data?.workspaceId || !context.data?.isShared) return null;
 
   return (
     <div className="collab-banner">

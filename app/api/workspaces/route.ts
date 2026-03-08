@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       data: {
         name: parsed.data.name.trim(),
         baseCurrency: "SGD",
+        isShared: false,
       },
     });
 

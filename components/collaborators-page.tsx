@@ -1,17 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useState } from "react";
-import { SkeletonBlock, SkeletonText, EmptyState } from "@/components/ui-skeleton";
+import { FormEvent, useEffect, useState } from "react";
+import { EmptyState, LoadingDots, SkeletonText } from "@/components/ui-skeleton";
 
 type AppContext = {
   workspaceId: string | null;
   workspaceName?: string | null;
-  isCollaborative?: boolean;
+  isShared?: boolean;
   workspaces?: Array<{ id: string; name: string }>;
 };
 
 type CollaboratorData = {
+  workspace: { id: string; name: string; isShared: boolean } | null;
   members: Array<{
     id: string;
     role: string;
@@ -36,12 +37,12 @@ type CollaboratorData = {
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
+    let message = `Request failed (${res.status})`;
     try {
       const payload = await res.json();
-      throw new Error(payload?.message || payload?.error || `Request failed (${res.status})`);
-    } catch {
-      throw new Error(`Request failed (${res.status})`);
-    }
+      message = payload?.message || payload?.error || message;
+    } catch {}
+    throw new Error(message);
   }
   return res.json();
 }
@@ -50,6 +51,9 @@ export function CollaboratorsPage() {
   const queryClient = useQueryClient();
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [workspaceNameInput, setWorkspaceNameInput] = useState("");
+  const [workspaceMode, setWorkspaceMode] = useState<"PRIVATE" | "SHARED">("PRIVATE");
+  const [switchingWorkspaceName, setSwitchingWorkspaceName] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   const context = useQuery({
@@ -64,6 +68,23 @@ export function CollaboratorsPage() {
     queryFn: () => fetchJson<CollaboratorData>(`/api/collaborators?workspaceId=${workspaceId}`),
   });
   const { isLoading: isCollabLoading, isError: isCollabError, refetch: refetchCollab } = collab;
+
+  const workspaceMeta = collab.data?.workspace
+    ? collab.data.workspace
+    : workspaceId
+      ? {
+          id: workspaceId,
+          name: context.data?.workspaceName || "",
+          isShared: Boolean(context.data?.isShared),
+        }
+      : null;
+  const isShared = workspaceMeta?.isShared ?? false;
+
+  useEffect(() => {
+    if (!workspaceMeta) return;
+    setWorkspaceNameInput(workspaceMeta.name);
+    setWorkspaceMode(workspaceMeta.isShared ? "SHARED" : "PRIVATE");
+  }, [workspaceMeta?.id, workspaceMeta?.name, workspaceMeta?.isShared]);
 
   const createWorkspace = useMutation({
     mutationFn: () =>
@@ -88,6 +109,11 @@ export function CollaboratorsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId: targetWorkspaceId }),
       }),
+    onMutate: (targetWorkspaceId) => {
+      const targetWorkspace = context.data?.workspaces?.find((workspace) => workspace.id === targetWorkspaceId);
+      setSwitchingWorkspaceName(targetWorkspace?.name ?? "workspace");
+      setMessage("");
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["app-context"] });
       await queryClient.invalidateQueries({ queryKey: ["collaborators"] });
@@ -98,6 +124,26 @@ export function CollaboratorsPage() {
       setMessage("Workspace switched.");
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to switch workspace."),
+    onSettled: () => setSwitchingWorkspaceName(null),
+  });
+  const isWorkspaceChanging = switchWorkspace.isPending || Boolean(switchingWorkspaceName);
+
+  const updateWorkspace = useMutation({
+    mutationFn: () =>
+      fetchJson(`/api/workspaces/${workspaceMeta?.id ?? workspaceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(workspaceNameInput.trim() ? { name: workspaceNameInput.trim() } : {}),
+          isShared: workspaceMode === "SHARED",
+        }),
+      }),
+    onSuccess: async () => {
+      setMessage("Workspace info updated.");
+      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
+      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to update workspace."),
   });
 
   const inviteMutation = useMutation({
@@ -105,12 +151,13 @@ export function CollaboratorsPage() {
       fetchJson("/api/collaborators/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, email: inviteEmail }),
+        body: JSON.stringify({ workspaceId: workspaceMeta?.id ?? workspaceId, email: inviteEmail }),
       }),
     onSuccess: async () => {
       setMessage("Invite sent.");
       setInviteEmail("");
       await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to invite collaborator."),
   });
@@ -123,6 +170,7 @@ export function CollaboratorsPage() {
     onSuccess: async () => {
       setMessage("Collaborator removed.");
       await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to remove collaborator."),
   });
@@ -133,16 +181,40 @@ export function CollaboratorsPage() {
     createWorkspace.mutate();
   };
 
+  const onUpdateWorkspace = (event: FormEvent) => {
+    event.preventDefault();
+    if (!workspaceMeta?.id) return;
+    updateWorkspace.mutate();
+  };
+
   const onInvite = (event: FormEvent) => {
     event.preventDefault();
-    if (!workspaceId || !inviteEmail.trim()) return;
+    if (!workspaceMeta?.id || !inviteEmail.trim()) return;
     inviteMutation.mutate();
   };
 
   return (
-    <div style={{ display: "grid", gap: "12px" }}>
+    <div style={{ display: "grid", gap: "12px", position: "relative" }}>
+      {isWorkspaceChanging ? (
+        <section
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "var(--surface-elevated)",
+            borderColor: "var(--brand-300)",
+          }}
+        >
+          <div className="page-loading-spinner" style={{ width: "16px", height: "16px", borderWidth: "2px" }} />
+          <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+            Switching to <strong>{switchingWorkspaceName || "workspace"}</strong>
+            <LoadingDots />
+          </span>
+        </section>
+      ) : null}
       <section className="card">
-        <div style={{ display: "grid", gap: "8px" }}>
+        <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
           <div style={{ fontSize: "13px", fontWeight: 700 }}>Workspace</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {(context.data?.workspaces ?? []).map((workspace) => (
@@ -155,7 +227,7 @@ export function CollaboratorsPage() {
                   color: workspace.id === workspaceId ? "var(--brand-600)" : undefined,
                 }}
                 onClick={() => switchWorkspace.mutate(workspace.id)}
-                disabled={switchWorkspace.isPending}
+                disabled={isWorkspaceChanging}
               >
                 {workspace.name}
               </button>
@@ -170,7 +242,7 @@ export function CollaboratorsPage() {
               onChange={(e) => setNewWorkspaceName(e.target.value)}
               style={{ maxWidth: "280px" }}
             />
-            <button className="btn btn-primary btn-xs" type="submit" disabled={createWorkspace.isPending}>
+            <button className="btn btn-primary btn-xs" type="submit" disabled={createWorkspace.isPending || isWorkspaceChanging}>
               {createWorkspace.isPending ? "Creating..." : "+ Add Workspace"}
             </button>
           </form>
@@ -178,38 +250,69 @@ export function CollaboratorsPage() {
       </section>
 
       <section className="card">
-        <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700 }}>Invite Collaborator</div>
-          <form onSubmit={onInvite} style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700 }}>Workspace Info</div>
+          <form onSubmit={onUpdateWorkspace} style={{ display: "grid", gap: "8px", maxWidth: "380px" }}>
             <input
               className="input"
-              type="email"
-              placeholder="name@email.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              style={{ maxWidth: "300px" }}
+              placeholder="Workspace name"
+              value={workspaceNameInput}
+              onChange={(e) => setWorkspaceNameInput(e.target.value)}
             />
-            <button className="btn btn-primary btn-xs" type="submit" disabled={!workspaceId || inviteMutation.isPending}>
-              {inviteMutation.isPending ? "Sending..." : "Invite"}
+            <select
+              className="input"
+              value={workspaceMode}
+              onChange={(e) => setWorkspaceMode(e.target.value === "SHARED" ? "SHARED" : "PRIVATE")}
+            >
+              <option value="PRIVATE">Private Workspace</option>
+              <option value="SHARED">Shared Workspace</option>
+            </select>
+            <button
+              className="btn btn-primary btn-xs"
+              type="submit"
+              disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
+            >
+              {updateWorkspace.isPending ? "Saving..." : "Save Workspace Info"}
             </button>
           </form>
-          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-            Invites are sent by email. Existing Nest users are added immediately; others are added after they sign in with the invited email.
-          </div>
         </div>
       </section>
 
-      <section className="card">
+      {isShared ? (
+        <section className="card">
+          <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
+            <div style={{ fontSize: "13px", fontWeight: 700 }}>Invite Collaborator</div>
+            <form onSubmit={onInvite} style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <input
+                className="input"
+                type="email"
+                placeholder="name@email.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                style={{ maxWidth: "300px" }}
+              />
+              <button
+                className="btn btn-primary btn-xs"
+                type="submit"
+                disabled={!workspaceMeta?.id || inviteMutation.isPending || isWorkspaceChanging}
+              >
+                {inviteMutation.isPending ? "Sending..." : "Invite"}
+              </button>
+            </form>
+            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+              Invites are sent by email. Existing Nest users are added immediately; others are added after they sign in with the invited email.
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="card" style={{ opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
         <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Collaborators</div>
         <div className="simple-list">
           {isCollabLoading && (
             <>
-              <div className="crud-row">
-                <SkeletonText lines={1} />
-              </div>
-              <div className="crud-row">
-                <SkeletonText lines={1} />
-              </div>
+              <div className="crud-row"><SkeletonText lines={1} /></div>
+              <div className="crud-row"><SkeletonText lines={1} /></div>
             </>
           )}
 
@@ -217,11 +320,7 @@ export function CollaboratorsPage() {
             <EmptyState
               icon="⚠️"
               title="Failed to load collaborators"
-              action={
-                <button className="btn btn-primary" onClick={() => refetchCollab()}>
-                  Retry
-                </button>
-              }
+              action={<button className="btn btn-primary" onClick={() => refetchCollab()}>Retry</button>}
             />
           )}
 
@@ -234,7 +333,7 @@ export function CollaboratorsPage() {
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => removeMember.mutate(member.id)}
-                    disabled={removeMember.isPending}
+                    disabled={removeMember.isPending || isWorkspaceChanging}
                   >
                     Remove
                   </button>
@@ -243,75 +342,59 @@ export function CollaboratorsPage() {
             </div>
           ))}
           {!isCollabLoading && !isCollabError && !(collab.data?.members?.length) && (
-            <EmptyState
-              icon="👥"
-              title="No collaborators yet"
-              description="Invite team members to collaborate on this workspace."
-            />
+            <EmptyState icon="👥" title="No collaborators yet" description="Invite team members to collaborate on this workspace." />
           )}
         </div>
       </section>
 
-      <section className="card">
-        <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Pending Invites</div>
-        <div className="simple-list">
-          {isCollabLoading && (
-            <>
-              <div className="crud-row">
-                <SkeletonText lines={1} />
+      {isShared ? (
+        <section className="card">
+          <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Pending Invites</div>
+          <div className="simple-list">
+            {isCollabLoading && <div className="crud-row"><SkeletonText lines={1} /></div>}
+            {!isCollabLoading && !isCollabError && (collab.data?.invites ?? []).map((invite) => (
+              <div key={invite.id} className="crud-row">
+                <span>{invite.invitedEmail}</span>
+                <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(invite.createdAt).toLocaleString()}</span>
               </div>
-            </>
-          )}
-          {!isCollabLoading && !isCollabError && (collab.data?.invites ?? []).map((invite) => (
-            <div key={invite.id} className="crud-row">
-              <span>{invite.invitedEmail}</span>
-              <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>
-                {new Date(invite.createdAt).toLocaleString()}
-              </span>
-            </div>
-          ))}
-          {!isCollabLoading && !isCollabError && !(collab.data?.invites?.length) && (
-            <EmptyState
-              icon="📧"
-              title="No pending invites"
-              description="Invitations you send will appear here until they are accepted."
-            />
-          )}
-        </div>
-      </section>
+            ))}
+            {!isCollabLoading && !isCollabError && !(collab.data?.invites?.length) && (
+              <EmptyState
+                icon="📧"
+                title="No pending invites"
+                description="Invitations you send will appear here until they are accepted."
+              />
+            )}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="card">
-        <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Audit Logs</div>
-        <div className="simple-list">
-          {isCollabLoading && (
-            <>
-              <div className="crud-row">
-                <SkeletonText lines={2} />
+      {isShared ? (
+        <section className="card">
+          <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Audit Logs</div>
+          <div className="simple-list">
+            {isCollabLoading && (
+              <>
+                <div className="crud-row"><SkeletonText lines={2} /></div>
+                <div className="crud-row"><SkeletonText lines={2} /></div>
+              </>
+            )}
+            {!isCollabLoading && !isCollabError && (collab.data?.auditLogs ?? []).map((log) => (
+              <div key={log.id} className="crud-row" style={{ alignItems: "flex-start", gap: "6px" }}>
+                <div style={{ display: "grid", gap: "1px" }}>
+                  <span>{log.details}</span>
+                  <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                    {log.actorUser?.name || log.actorUser?.email || "System"} · {new Date(log.createdAt).toLocaleString()}
+                  </span>
+                </div>
               </div>
-              <div className="crud-row">
-                <SkeletonText lines={2} />
-              </div>
-            </>
-          )}
-          {!isCollabLoading && !isCollabError && (collab.data?.auditLogs ?? []).map((log) => (
-            <div key={log.id} className="crud-row" style={{ alignItems: "flex-start", gap: "6px" }}>
-              <div style={{ display: "grid", gap: "1px" }}>
-                <span>{log.details}</span>
-                <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-                  {log.actorUser?.name || log.actorUser?.email || "System"} · {new Date(log.createdAt).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          ))}
-          {!isCollabLoading && !isCollabError && !(collab.data?.auditLogs?.length) && (
-            <EmptyState
-              icon="📋"
-              title="No audit logs yet"
-              description="Activity in this workspace will be recorded here."
-            />
-          )}
-        </div>
-      </section>
+            ))}
+            {!isCollabLoading && !isCollabError && !(collab.data?.auditLogs?.length) && (
+              <EmptyState icon="📋" title="No audit logs yet" description="Activity in this workspace will be recorded here." />
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {message ? (
         <section className="card" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>

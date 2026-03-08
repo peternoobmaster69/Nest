@@ -83,7 +83,7 @@ export async function GET() {
       null;
 
     // If active workspace is empty but user has another workspace with data, recover automatically.
-    if (selectedWorkspaceId && memberships.length > 1) {
+    if (!activeWorkspaceId && selectedWorkspaceId && memberships.length > 1) {
       const scoreWorkspace = async (workspaceId: string) => {
         const [budgetCount, txCount, receivableCount, cardCount, investmentCount] = await Promise.all([
           prisma.budgetEnvelope.count({ where: { workspaceId } }),
@@ -123,8 +123,11 @@ export async function GET() {
         defaultAccountId: null,
         defaultUserId: null,
         baseCurrency: "SGD",
+        isShared: false,
         isCollaborative: false,
         workspaceName: null,
+        memberCount: 0,
+        pendingInviteCount: 0,
         workspaces: [],
         accounts: [],
       });
@@ -151,20 +154,30 @@ export async function GET() {
         defaultAccountId: null,
         defaultUserId: null,
         baseCurrency: "SGD",
+        isShared: false,
         isCollaborative: false,
         workspaceName: null,
+        memberCount: 0,
+        pendingInviteCount: 0,
         workspaces: memberships.map((m) => ({ id: m.workspace.id, name: m.workspace.name })),
         accounts: [],
       });
     }
+
+    const pendingInviteCount = await prisma.workspaceInvite.count({
+      where: { workspaceId: workspace.id, status: "PENDING" },
+    });
 
     return NextResponse.json({
       workspaceId: workspace.id,
       defaultAccountId: null,
       defaultUserId: workspace.members[0]?.userId ?? null,
       baseCurrency: workspace.baseCurrency || "SGD",
-      isCollaborative: workspace.members.length > 1,
+      isShared: workspace.isShared,
+      isCollaborative: workspace.isShared && (workspace.members.length > 1 || pendingInviteCount > 0),
       workspaceName: workspace.name,
+      memberCount: workspace.members.length,
+      pendingInviteCount,
       workspaces: memberships.map((m) => ({ id: m.workspace.id, name: m.workspace.name })),
       accounts: workspace.financials.map((a) => ({
         id: a.id,
@@ -180,8 +193,11 @@ export async function GET() {
           defaultAccountId: null,
           defaultUserId: null,
           baseCurrency: "SGD",
+          isShared: false,
           isCollaborative: false,
           workspaceName: null,
+          memberCount: 0,
+          pendingInviteCount: 0,
           workspaces: [],
           accounts: [],
         });

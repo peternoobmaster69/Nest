@@ -70,6 +70,7 @@ model Workspace {
   id              String             @id @default(cuid())
   name            String
   baseCurrency    String             @default("SGD")
+  isShared        Boolean            @default(false)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   members         WorkspaceMember[]

@@ -17,6 +17,16 @@ export async function POST(request: Request) {
 
     const { workspaceId, userId } = await requireWorkspaceAccess(parsed.data.workspaceId);
     const email = parsed.data.email.trim().toLowerCase();
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { isShared: true },
+    });
+    if (!workspace) {
+      return NextResponse.json({ error: "Workspace not found." }, { status: 404 });
+    }
+    if (!workspace.isShared) {
+      return NextResponse.json({ error: "Workspace is private. Enable Shared mode to invite collaborators." }, { status: 400 });
+    }
 
     const targetUser = await prisma.user.findUnique({
       where: { email },
