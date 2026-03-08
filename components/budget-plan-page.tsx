@@ -67,6 +67,8 @@ export function BudgetPlanPage() {
   // Modal states
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
 
   // Form states for budget items
   const [itemTitle, setItemTitle] = useState("");
@@ -183,7 +185,39 @@ export function BudgetPlanPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["budget-plan"] }),
   });
 
+  const updateBudgetItem = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      workspaceId: string;
+      action: "updateItem";
+      title: string;
+      amountCents: number;
+      isMonthly: boolean;
+      destinationSubAccountId?: string;
+    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      closeItemModal();
+    },
+  });
+
+  const updateBudgetSource = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      workspaceId: string;
+      action: "updateSource";
+      title: string;
+      amountCents: number;
+      ownerId: string;
+    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      closeSourceModal();
+    },
+  });
+
   const openAddItemModal = () => {
+    setEditingItemId(null);
     setItemTitle("");
     setItemAmount("");
     setItemIsMonthly(true);
@@ -191,22 +225,42 @@ export function BudgetPlanPage() {
     setIsAddItemModalOpen(true);
   };
 
-  const closeAddItemModal = () => {
+  const openEditItemModal = (item: BudgetItem) => {
+    setEditingItemId(item.id);
+    setItemTitle(item.title);
+    setItemAmount((item.amountCents / 100).toFixed(2));
+    setItemIsMonthly(item.isMonthly);
+    setItemDestinationId(item.destinationSubAccountId || "");
+    setIsAddItemModalOpen(true);
+  };
+
+  const closeItemModal = () => {
     setIsAddItemModalOpen(false);
+    setEditingItemId(null);
     setItemTitle("");
     setItemAmount("");
     setItemDestinationId("");
   };
 
   const openAddSourceModal = () => {
+    setEditingSourceId(null);
     setSourceTitle("");
     setSourceAmount("");
     setSourceOwnerId("");
     setIsAddSourceModalOpen(true);
   };
 
-  const closeAddSourceModal = () => {
+  const openEditSourceModal = (source: BudgetSource) => {
+    setEditingSourceId(source.id);
+    setSourceTitle(source.title);
+    setSourceAmount((source.amountCents / 100).toFixed(2));
+    setSourceOwnerId(source.ownerId);
+    setIsAddSourceModalOpen(true);
+  };
+
+  const closeSourceModal = () => {
     setIsAddSourceModalOpen(false);
+    setEditingSourceId(null);
     setSourceTitle("");
     setSourceAmount("");
     setSourceOwnerId("");
@@ -215,26 +269,49 @@ export function BudgetPlanPage() {
   const onSubmitItem = (e: FormEvent) => {
     e.preventDefault();
     if (!workspaceId || !itemTitle || !itemAmount) return;
-    createBudgetItem.mutate({
-      workspaceId,
-      action: "createItem",
-      title: itemTitle,
-      amountCents: Math.round(parseFloat(itemAmount) * 100),
-      isMonthly: itemIsMonthly,
-      destinationSubAccountId: itemDestinationId || undefined,
-    });
+    if (editingItemId) {
+      updateBudgetItem.mutate({
+        id: editingItemId,
+        workspaceId,
+        action: "updateItem",
+        title: itemTitle,
+        amountCents: Math.round(parseFloat(itemAmount) * 100),
+        isMonthly: itemIsMonthly,
+        destinationSubAccountId: itemDestinationId || undefined,
+      });
+    } else {
+      createBudgetItem.mutate({
+        workspaceId,
+        action: "createItem",
+        title: itemTitle,
+        amountCents: Math.round(parseFloat(itemAmount) * 100),
+        isMonthly: itemIsMonthly,
+        destinationSubAccountId: itemDestinationId || undefined,
+      });
+    }
   };
 
   const onSubmitSource = (e: FormEvent) => {
     e.preventDefault();
     if (!workspaceId || !sourceTitle || !sourceAmount || !sourceOwnerId) return;
-    createBudgetSource.mutate({
-      workspaceId,
-      action: "createSource",
-      title: sourceTitle,
-      amountCents: Math.round(parseFloat(sourceAmount) * 100),
-      ownerId: sourceOwnerId,
-    });
+    if (editingSourceId) {
+      updateBudgetSource.mutate({
+        id: editingSourceId,
+        workspaceId,
+        action: "updateSource",
+        title: sourceTitle,
+        amountCents: Math.round(parseFloat(sourceAmount) * 100),
+        ownerId: sourceOwnerId,
+      });
+    } else {
+      createBudgetSource.mutate({
+        workspaceId,
+        action: "createSource",
+        title: sourceTitle,
+        amountCents: Math.round(parseFloat(sourceAmount) * 100),
+        ownerId: sourceOwnerId,
+      });
+    }
   };
 
   const generatePreview = () => {
@@ -534,7 +611,7 @@ export function BudgetPlanPage() {
                 {budgetData.isLoading && <SkeletonGrid count={2} type="card" />}
 
                 {!budgetData.isLoading && !budgetData.isError && budgetSources.map((source) => (
-                  <div key={source.id} className="st-card bp-compact-card">
+                  <div key={source.id} className="st-card bp-compact-card" onClick={() => openEditSourceModal(source)} style={{ cursor: 'pointer' }}>
                     <div className="bp-compact-row">
                       <div className="bp-compact-left">
                         <span className="st-bank-fallback" style={{ backgroundColor: '#d97706', width: '24px', height: '24px', fontSize: '12px' }}>
@@ -549,8 +626,8 @@ export function BudgetPlanPage() {
                       </div>
                       <div className="bp-compact-right">
                         <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
-                        <button className="btn btn-ghost btn-icon" onClick={() => deleteSource.mutate(source.id)} disabled={deleteSource.isPending} title="Delete">
-                          ✕
+                        <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditSourceModal(source); }} title="Edit">
+                          ✏️
                         </button>
                       </div>
                     </div>
@@ -587,7 +664,7 @@ export function BudgetPlanPage() {
                 {budgetData.isLoading && <SkeletonGrid count={2} type="card" />}
 
                 {!budgetData.isLoading && !budgetData.isError && budgetItems.map((item) => (
-                  <div key={item.id} className="st-card bp-compact-card">
+                  <div key={item.id} className="st-card bp-compact-card" onClick={() => openEditItemModal(item)} style={{ cursor: 'pointer' }}>
                     <div className="bp-compact-row">
                       <div className="bp-compact-left">
                         <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58', width: '24px', height: '24px', fontSize: '12px' }}>
@@ -605,8 +682,8 @@ export function BudgetPlanPage() {
                       </div>
                       <div className="bp-compact-right">
                         <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
-                        <button className="btn btn-ghost btn-icon" onClick={() => deleteItem.mutate(item.id)} disabled={deleteItem.isPending} title="Delete">
-                          ✕
+                        <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditItemModal(item); }} title="Edit">
+                          ✏️
                         </button>
                       </div>
                     </div>
@@ -633,13 +710,13 @@ export function BudgetPlanPage() {
         </>
       )}
 
-      {/* Add Budget Item Modal */}
+      {/* Budget Item Modal - Add/Edit */}
       {isAddItemModalOpen && (
-        <div className="st-modal-overlay" onClick={closeAddItemModal}>
+        <div className="st-modal-overlay" onClick={closeItemModal}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
-              <h3>Add Budget Item</h3>
-              <button className="st-close-btn" onClick={closeAddItemModal}>✕</button>
+              <h3>{editingItemId ? "Edit Budget Item" : "Add Budget Item"}</h3>
+              <button className="st-close-btn" onClick={closeItemModal}>✕</button>
             </div>
             <form className="st-modal-form" onSubmit={onSubmitItem}>
               <div className="st-form-grid">
@@ -681,17 +758,34 @@ export function BudgetPlanPage() {
                   </select>
                 </div>
               </div>
-              {createBudgetItem.isError && (
+              {(createBudgetItem.isError || updateBudgetItem.isError) && (
                 <div className="st-error">
-                  Failed to save: {(createBudgetItem.error as Error)?.message || "Unknown error"}
+                  Failed to save: {(createBudgetItem.error as Error)?.message || (updateBudgetItem.error as Error)?.message || "Unknown error"}
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeAddItemModal}>
+                {editingItemId && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => editingItemId && deleteItem.mutate(editingItemId)}
+                    disabled={deleteItem.isPending}
+                  >
+                    {deleteItem.isPending ? "Deleting..." : "Delete"}
+                  </button>
+                )}
+                <div style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost" onClick={closeItemModal}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={createBudgetItem.isPending}>
-                  {createBudgetItem.isPending ? "Adding..." : "Add Item"}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createBudgetItem.isPending || updateBudgetItem.isPending}
+                >
+                  {editingItemId
+                    ? (updateBudgetItem.isPending ? "Saving..." : "Save Changes")
+                    : (createBudgetItem.isPending ? "Adding..." : "Add Item")}
                 </button>
               </div>
             </form>
@@ -699,13 +793,13 @@ export function BudgetPlanPage() {
         </div>
       )}
 
-      {/* Add Budget Source Modal */}
+      {/* Budget Source Modal - Add/Edit */}
       {isAddSourceModalOpen && (
-        <div className="st-modal-overlay" onClick={closeAddSourceModal}>
+        <div className="st-modal-overlay" onClick={closeSourceModal}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
-              <h3>Add Budget Source</h3>
-              <button className="st-close-btn" onClick={closeAddSourceModal}>✕</button>
+              <h3>{editingSourceId ? "Edit Budget Source" : "Add Budget Source"}</h3>
+              <button className="st-close-btn" onClick={closeSourceModal}>✕</button>
             </div>
             <form className="st-modal-form" onSubmit={onSubmitSource}>
               <div className="st-form-grid">
@@ -745,17 +839,34 @@ export function BudgetPlanPage() {
                   </small>
                 </div>
               </div>
-              {createBudgetSource.isError && (
+              {(createBudgetSource.isError || updateBudgetSource.isError) && (
                 <div className="st-error">
-                  Failed to save: {(createBudgetSource.error as Error)?.message || "Unknown error"}
+                  Failed to save: {(createBudgetSource.error as Error)?.message || (updateBudgetSource.error as Error)?.message || "Unknown error"}
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeAddSourceModal}>
+                {editingSourceId && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => editingSourceId && deleteSource.mutate(editingSourceId)}
+                    disabled={deleteSource.isPending}
+                  >
+                    {deleteSource.isPending ? "Deleting..." : "Delete"}
+                  </button>
+                )}
+                <div style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost" onClick={closeSourceModal}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={createBudgetSource.isPending || !sourceOwnerId}>
-                  {createBudgetSource.isPending ? "Adding..." : "Add Source"}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createBudgetSource.isPending || updateBudgetSource.isPending || !sourceOwnerId}
+                >
+                  {editingSourceId
+                    ? (updateBudgetSource.isPending ? "Saving..." : "Save Changes")
+                    : (createBudgetSource.isPending ? "Adding..." : "Add Source")}
                 </button>
               </div>
             </form>

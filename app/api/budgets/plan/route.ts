@@ -366,3 +366,85 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Failed to delete budget", message }, { status: 500 });
   }
 }
+
+const UpdateBudgetItemSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1).max(200),
+  amountCents: z.number().int().min(0),
+  isMonthly: z.boolean().default(true),
+  destinationSubAccountId: z.string().optional().nullable(),
+});
+
+const UpdateBudgetSourceSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1).max(200),
+  ownerId: z.string().min(1, "Owner is required"),
+  amountCents: z.number().int().min(0),
+});
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { action } = body;
+
+    await requireSessionUserId();
+
+    if (action === "updateItem") {
+      const parsed = UpdateBudgetItemSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
+
+      const { id, title, amountCents, isMonthly, destinationSubAccountId } = parsed.data;
+
+      const existing = await prisma.budgetItem.findUnique({
+        where: { id },
+        select: { workspaceId: true },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: "Budget item not found" }, { status: 404 });
+      }
+      await requireWorkspaceAccess(existing.workspaceId);
+
+      const updated = await prisma.budgetItem.update({
+        where: { id },
+        data: { title, amountCents, isMonthly, destinationSubAccountId },
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    if (action === "updateSource") {
+      const parsed = UpdateBudgetSourceSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
+
+      const { id, title, ownerId, amountCents } = parsed.data;
+
+      const existing = await prisma.budgetSource.findUnique({
+        where: { id },
+        select: { workspaceId: true },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: "Budget source not found" }, { status: 404 });
+      }
+      await requireWorkspaceAccess(existing.workspaceId);
+
+      const updated = await prisma.budgetSource.update({
+        where: { id },
+        data: { title, ownerId, amountCents },
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to update budget", message }, { status: 500 });
+  }
+}

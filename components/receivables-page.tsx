@@ -40,6 +40,13 @@ type BankAccount = {
   isActive: boolean;
 };
 
+type DeductionBudget = {
+  id: string;
+  name: string;
+  accountId: string;
+  isActive: boolean;
+};
+
 function getAmountToneClass(valueCents: number) {
   if (valueCents < 0) return "negative";
   if (valueCents > 0) return "positive";
@@ -82,6 +89,7 @@ export function ReceivablesPage() {
   const [formUseCrossWorkspaceDeduction, setFormUseCrossWorkspaceDeduction] = useState(false);
   const [formDeductWorkspaceId, setFormDeductWorkspaceId] = useState("");
   const [formDeductAccountId, setFormDeductAccountId] = useState("");
+  const [formDeductBudgetId, setFormDeductBudgetId] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -104,6 +112,22 @@ export function ReceivablesPage() {
     queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${formDeductWorkspaceId}`),
     enabled: formUseCrossWorkspaceDeduction && Boolean(formDeductWorkspaceId),
   });
+
+  const deductionBudgets = useQuery({
+    queryKey: ["budgets", formDeductWorkspaceId],
+    queryFn: () => fetchJson<DeductionBudget[]>(`/api/budgets?workspaceId=${formDeductWorkspaceId}`),
+    enabled: formUseCrossWorkspaceDeduction && Boolean(formDeductWorkspaceId),
+  });
+
+  const deductionAccountNames = useMemo(
+    () => new Map((deductionAccounts.data ?? []).map((account) => [account.id, account.name])),
+    [deductionAccounts.data],
+  );
+
+  const deductionBudgetById = useMemo(
+    () => new Map((deductionBudgets.data ?? []).map((budget) => [budget.id, budget])),
+    [deductionBudgets.data],
+  );
 
   const { isLoading, isError, refetch } = receivables;
 
@@ -487,10 +511,11 @@ export function ReceivablesPage() {
                       <select
                         className="input"
                         value={formDeductWorkspaceId}
-                        onChange={(e) => {
-                          setFormDeductWorkspaceId(e.target.value);
-                          setFormDeductAccountId("");
-                        }}
+                      onChange={(e) => {
+                        setFormDeductWorkspaceId(e.target.value);
+                        setFormDeductAccountId("");
+                        setFormDeductBudgetId("");
+                      }}
                       >
                         <option value="">Select workspace</option>
                         {workspacesForDeduction.map((workspace) => (
@@ -504,16 +529,29 @@ export function ReceivablesPage() {
                       Deduction Sub Account
                       <select
                         className="input"
-                        value={formDeductAccountId}
-                        onChange={(e) => setFormDeductAccountId(e.target.value)}
-                        disabled={!formDeductWorkspaceId || deductionAccounts.isLoading}
+                        value={formDeductBudgetId}
+                        onChange={(e) => {
+                          const budgetId = e.target.value;
+                          setFormDeductBudgetId(budgetId);
+                          const selectedBudget = deductionBudgetById.get(budgetId);
+                          setFormDeductAccountId(selectedBudget?.accountId ?? "");
+                        }}
+                        disabled={
+                          !formDeductWorkspaceId ||
+                          deductionBudgets.isLoading ||
+                          deductionAccounts.isLoading ||
+                          (deductionBudgets.data ?? []).length === 0
+                        }
                       >
-                        <option value="">Select account</option>
-                        {(deductionAccounts.data ?? []).filter((a) => a.isActive).map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.name}
-                          </option>
-                        ))}
+                        <option value="">Select subaccount</option>
+                        {(deductionBudgets.data ?? [])
+                          .filter((budget) => budget.isActive)
+                          .map((budget) => (
+                            <option key={budget.id} value={budget.id}>
+                              {budget.name}
+                              {deductionAccountNames.get(budget.accountId) ? ` · ${deductionAccountNames.get(budget.accountId)}` : ""}
+                            </option>
+                          ))}
                       </select>
                     </label>
                   </>
