@@ -248,7 +248,8 @@ export function SettingsPage() {
           <div>
             <div style={{ fontSize: "13px", fontWeight: 600 }}>Gmail Card Alerts</div>
             <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-              Authorize once, then pull card transaction alert emails automatically.
+              Authorize once for read-only Gmail access. Nest only scans card transaction alert emails, extracts transaction details,
+              and auto-adds them to Credit Card Transactions for tracking. Nest does not send, delete, or modify your emails.
             </div>
           </div>
           {gmailStatus.data?.connected ? (
