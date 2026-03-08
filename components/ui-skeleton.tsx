@@ -159,6 +159,83 @@ export function SkeletonList({ count = 5, type = "transaction" }: { count?: numb
   );
 }
 
+export function SidebarSkeleton() {
+  return (
+    <>
+      <div className="sb-scroll sb-skeleton-scroll">
+        <div className="sb-sec">Overview</div>
+        <div className="sb-skeleton-item skeleton-block" />
+
+        <div className="sb-sec">Money</div>
+        <div className="sb-skeleton-item skeleton-block" />
+        <div className="sb-skeleton-item skeleton-block" />
+        <div className="sb-skeleton-item skeleton-block" />
+        <div className="sb-skeleton-item skeleton-block" />
+
+        <div className="sb-sec">Workspace</div>
+        <div className="sb-skeleton-item skeleton-block" />
+        <div className="sb-skeleton-item skeleton-block" />
+      </div>
+      <div className="sb-bot">
+        <div className="sb-skeleton-user">
+          <div className="sb-skeleton-avatar skeleton-block" />
+          <div className="sb-skeleton-meta">
+            <div className="sb-skeleton-line skeleton-block" />
+            <div className="sb-skeleton-line sb-skeleton-line-short skeleton-block" />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function AppBodySkeleton() {
+  return (
+    <div style={{ display: "grid", gap: "14px" }}>
+      <SkeletonHeroCard />
+      <div className="grid-4">
+        <SkeletonMiniCard />
+        <SkeletonMiniCard />
+        <SkeletonMiniCard />
+        <SkeletonMiniCard />
+      </div>
+      <div className="card">
+        <SkeletonList count={4} type="transaction" />
+      </div>
+    </div>
+  );
+}
+
+export function AppShellSkeleton({ title = "Loading" }: { title?: string }) {
+  return (
+    <div className="app-shell" aria-busy="true" aria-live="polite">
+      <aside className="sidebar">
+        <div className="sb-logo">
+          <div className="skeleton-block sb-skeleton-logo" />
+        </div>
+        <SidebarSkeleton />
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <div className="tb-left">
+            <div className="hamburger" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="tb-title">{title}</div>
+          </div>
+        </header>
+
+        <div className="body">
+          <AppBodySkeleton />
+        </div>
+      </main>
+    </div>
+  );
+}
+
 // Empty state component with icon and action
 export function EmptyState({
   icon,

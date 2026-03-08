@@ -6,6 +6,7 @@ import { z } from "zod";
 const UpdateWorkspaceSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   isShared: z.boolean().optional(),
+  sidebarMoneyPages: z.record(z.string(), z.boolean()).optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -30,13 +31,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Only workspace owner can update workspace settings." }, { status: 403 });
     }
 
+    const updateData: { name?: string; isShared?: boolean; sidebarMoneyPages?: string } = {};
+    if (parsed.data.name !== undefined) updateData.name = parsed.data.name.trim();
+    if (parsed.data.isShared !== undefined) updateData.isShared = parsed.data.isShared;
+    if (parsed.data.sidebarMoneyPages !== undefined) {
+      updateData.sidebarMoneyPages = JSON.stringify(parsed.data.sidebarMoneyPages);
+    }
+
     const updated = await prisma.workspace.update({
       where: { id },
-      data: {
-        name: parsed.data.name?.trim(),
-        isShared: parsed.data.isShared,
-      },
-      select: { id: true, name: true, isShared: true },
+      data: updateData,
+      select: { id: true, name: true, isShared: true, sidebarMoneyPages: true },
     });
 
     await prisma.workspaceAuditLog.create({

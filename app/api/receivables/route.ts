@@ -28,6 +28,18 @@ export async function GET(request: Request) {
 
     const receivables = await prisma.receivable.findMany({
       where: { workspaceId },
+      include: {
+        account: {
+          select: {
+            id: true,
+            name: true,
+            workspaceId: true,
+            workspace: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
       orderBy: { date: "desc" },
       take: 100,
     });
@@ -50,6 +62,17 @@ export async function POST(request: Request) {
     }
 
     await requireWorkspaceAccess(parsed.data.workspaceId);
+
+    if (parsed.data.accountId) {
+      const account = await prisma.financialAccount.findUnique({
+        where: { id: parsed.data.accountId },
+        select: { id: true, workspaceId: true, kind: true, isActive: true },
+      });
+      if (!account || account.kind !== "BANK" || !account.isActive) {
+        return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
+      }
+      await requireWorkspaceAccess(account.workspaceId);
+    }
 
     const receivableDate = parsed.data.receivableDate ?? parsed.data.date;
     if (!receivableDate) {

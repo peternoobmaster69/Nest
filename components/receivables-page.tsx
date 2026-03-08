@@ -7,7 +7,20 @@ import { SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skel
 
 type AppContext = {
   workspaceId: string | null;
+  defaultAccountId: string | null;
+  defaultBudgetId: string | null;
   baseCurrency?: string | null;
+  workspaces: Array<{ id: string; name: string }>;
+};
+
+type DeductionAccount = {
+  id: string;
+  name: string;
+  workspaceId: string;
+  workspace: {
+    id: string;
+    name: string;
+  };
 };
 
 type Receivable = {
@@ -17,6 +30,14 @@ type Receivable = {
   transactionDate?: string | null;
   remarkTogether?: string | null;
   status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
+  accountId?: string | null;
+  account?: DeductionAccount | null;
+};
+
+type BankAccount = {
+  id: string;
+  name: string;
+  isActive: boolean;
 };
 
 function getAmountToneClass(valueCents: number) {
@@ -31,7 +52,15 @@ function toIsoFromDateInput(value: string) {
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  if (!res.ok) {
+    try {
+      const payload = await res.json();
+      const detail = payload?.message || payload?.error || `Request failed (${res.status})`;
+      throw new Error(detail);
+    } catch {
+      throw new Error(`Request failed (${res.status})`);
+    }
+  }
   return res.json();
 }
 
@@ -50,6 +79,9 @@ export function ReceivablesPage() {
   const [formAmount, setFormAmount] = useState("");
   const [formRemarks, setFormRemarks] = useState("");
   const [formStatus, setFormStatus] = useState<Receivable["status"]>("OPEN");
+  const [formUseCrossWorkspaceDeduction, setFormUseCrossWorkspaceDeduction] = useState(false);
+  const [formDeductWorkspaceId, setFormDeductWorkspaceId] = useState("");
+  const [formDeductAccountId, setFormDeductAccountId] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -57,6 +89,8 @@ export function ReceivablesPage() {
   });
   const workspaceId = context.data?.workspaceId;
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const receivableDefaultAccountId = context.data?.defaultAccountId ?? null;
+  const receivableDefaultBudgetId = context.data?.defaultBudgetId ?? null;
   const formatCents = (value: number) => formatMoney(value, baseCurrency);
 
   const receivables = useQuery({
@@ -64,10 +98,23 @@ export function ReceivablesPage() {
     queryFn: () => fetchJson<Receivable[]>(`/api/receivables?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
+
+  const deductionAccounts = useQuery({
+    queryKey: ["bank-accounts", formDeductWorkspaceId],
+    queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${formDeductWorkspaceId}`),
+    enabled: formUseCrossWorkspaceDeduction && Boolean(formDeductWorkspaceId),
+  });
+
   const { isLoading, isError, refetch } = receivables;
 
   const createReceivable = useMutation({
-    mutationFn: (payload: { receivableDate: string; transactionDate?: string; amountCents: number; remarks?: string }) =>
+    mutationFn: (payload: {
+      receivableDate: string;
+      transactionDate?: string;
+      amountCents: number;
+      remarks?: string;
+      accountId?: string;
+    }) =>
       fetchJson("/api/receivables", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,6 +124,7 @@ export function ReceivablesPage() {
           receivableDate: payload.receivableDate,
           transactionDate: payload.transactionDate,
           remarks: payload.remarks,
+          accountId: payload.accountId,
           status: "OPEN",
         }),
       }),
@@ -94,6 +142,7 @@ export function ReceivablesPage() {
       amountCents: number;
       remarks?: string;
       status: Receivable["status"];
+      accountId?: string | null;
     }) =>
       fetchJson(`/api/receivables/${payload.id}`, {
         method: "PATCH",
@@ -104,11 +153,26 @@ export function ReceivablesPage() {
           amountCents: payload.amountCents,
           remarks: payload.remarks,
           status: payload.status,
+          accountId: payload.accountId,
         }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
       closeModal();
+    },
+  });
+
+  const closeReceivable = useMutation({
+    mutationFn: (payload: { id: string }) =>
+      fetchJson(`/api/receivables/${payload.id}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 
@@ -163,6 +227,11 @@ export function ReceivablesPage() {
     [],
   );
 
+  const workspacesForDeduction = useMemo(
+    () => (context.data?.workspaces ?? []).filter((w) => w.id !== workspaceId),
+    [context.data?.workspaces, workspaceId],
+  );
+
   const resetForm = () => {
     setFormReceivableDate(new Date().toISOString().slice(0, 10));
     setFormTransactionDate("");
@@ -170,6 +239,9 @@ export function ReceivablesPage() {
     setFormRemarks("");
     setFormStatus("OPEN");
     setActiveId(null);
+    setFormUseCrossWorkspaceDeduction(false);
+    setFormDeductWorkspaceId("");
+    setFormDeductAccountId("");
   };
 
   const closeModal = () => {
@@ -192,12 +264,18 @@ export function ReceivablesPage() {
     setFormAmount((r.amountCents / 100).toFixed(2));
     setFormRemarks(r.remarkTogether || "");
     setFormStatus(r.status);
+    setFormUseCrossWorkspaceDeduction(Boolean(r.accountId));
+    setFormDeductWorkspaceId(r.account?.workspaceId || "");
+    setFormDeductAccountId(r.accountId || "");
     setIsModalOpen(true);
   };
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!workspaceId || !formReceivableDate || !formAmount) return;
+
+    const accountId = formUseCrossWorkspaceDeduction ? formDeductAccountId || undefined : undefined;
+    if (formUseCrossWorkspaceDeduction && !accountId) return;
 
     if (modalMode === "edit" && activeId) {
       updateReceivable.mutate({
@@ -207,6 +285,7 @@ export function ReceivablesPage() {
         amountCents: Math.round(Number(formAmount || "0") * 100),
         remarks: formRemarks.trim() || undefined,
         status: formStatus,
+        accountId: formUseCrossWorkspaceDeduction ? accountId : null,
       });
       return;
     }
@@ -216,6 +295,7 @@ export function ReceivablesPage() {
       transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : undefined,
       amountCents: Math.round(Number(formAmount) * 100),
       remarks: formRemarks.trim() || undefined,
+      accountId,
     });
   };
 
@@ -230,6 +310,9 @@ export function ReceivablesPage() {
               {formatCents(totalReceivableCents)}
             </div>
           )}
+          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+            {pendingCount} open
+          </div>
         </div>
         <div className="recv-month-grid">
           {monthLabels.map((label, index) => {
@@ -305,12 +388,27 @@ export function ReceivablesPage() {
                 <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>
                   Receivable: {new Date(r.date).toLocaleDateString()} · Transaction:{" "}
                   {r.transactionDate ? new Date(r.transactionDate).toLocaleDateString() : "—"} · Status: {r.status}
+                  {r.account ? ` · Deduct from: ${r.account.workspace.name} / ${r.account.name}` : ""}
                 </span>
               </span>
               <span style={{ display: "inline-flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
                 <span className={getAmountToneClass(r.amountCents)} style={{ fontWeight: 700 }}>
                   {formatCents(r.amountCents)}
                 </span>
+                {r.status !== "PAID" && (
+                  <button
+                    className="btn btn-primary btn-xs"
+                    onClick={() => closeReceivable.mutate({ id: r.id })}
+                    disabled={closeReceivable.isPending || !receivableDefaultAccountId || !receivableDefaultBudgetId}
+                    title={
+                      receivableDefaultAccountId && receivableDefaultBudgetId
+                        ? "Close receivable"
+                        : "Configure default receivable account and subaccount in Settings"
+                    }
+                  >
+                    {closeReceivable.isPending ? "Closing..." : "Close"}
+                  </button>
+                )}
                 <button className="btn btn-ghost btn-xs" onClick={() => openEditModal(r)}>
                   Edit
                 </button>
@@ -367,6 +465,59 @@ export function ReceivablesPage() {
                   Remarks
                   <input className="input" placeholder="Remarks" value={formRemarks} onChange={(e) => setFormRemarks(e.target.value)} />
                 </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  <input
+                    type="checkbox"
+                    checked={formUseCrossWorkspaceDeduction}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFormUseCrossWorkspaceDeduction(checked);
+                      if (!checked) {
+                        setFormDeductWorkspaceId("");
+                        setFormDeductAccountId("");
+                      }
+                    }}
+                  />
+                  Deduct from another workspace
+                </label>
+                {formUseCrossWorkspaceDeduction && (
+                  <>
+                    <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                      Deduction Workspace
+                      <select
+                        className="input"
+                        value={formDeductWorkspaceId}
+                        onChange={(e) => {
+                          setFormDeductWorkspaceId(e.target.value);
+                          setFormDeductAccountId("");
+                        }}
+                      >
+                        <option value="">Select workspace</option>
+                        {workspacesForDeduction.map((workspace) => (
+                          <option key={workspace.id} value={workspace.id}>
+                            {workspace.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                      Deduction Sub Account
+                      <select
+                        className="input"
+                        value={formDeductAccountId}
+                        onChange={(e) => setFormDeductAccountId(e.target.value)}
+                        disabled={!formDeductWorkspaceId || deductionAccounts.isLoading}
+                      >
+                        <option value="">Select account</option>
+                        {(deductionAccounts.data ?? []).filter((a) => a.isActive).map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                )}
                 {modalMode === "edit" && (
                   <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                     Status
@@ -390,6 +541,11 @@ export function ReceivablesPage() {
                     {modalMode === "edit" ? "Save" : "Add"}
                   </button>
                 </div>
+                {(createReceivable.isError || updateReceivable.isError || closeReceivable.isError) && (
+                  <div style={{ fontSize: "12px", color: "var(--danger)" }}>
+                    {((createReceivable.error || updateReceivable.error || closeReceivable.error) as Error)?.message || "Action failed"}
+                  </div>
+                )}
               </form>
             </div>
           </div>

@@ -1,14 +1,34 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EmptyState, LoadingDots, SkeletonText } from "@/components/ui-skeleton";
+
+// Default visibility for Money section pages
+const DEFAULT_MONEY_PAGES = {
+  creditCards: true,
+  creditTransactions: true,
+  receivables: true,
+  transactions: true,
+  rewards: true,
+  investments: true,
+};
+
+const MONEY_PAGE_CONFIG = [
+  { key: "creditCards", label: "Credit Cards", icon: "💳" },
+  { key: "creditTransactions", label: "Card Transactions", icon: "🧾" },
+  { key: "receivables", label: "Receivables", icon: "↩" },
+  { key: "transactions", label: "Transactions", icon: "📑" },
+  { key: "rewards", label: "Rewards", icon: "◎" },
+  { key: "investments", label: "Investments", icon: "📈" },
+];
 
 type AppContext = {
   workspaceId: string | null;
   workspaceName?: string | null;
   isShared?: boolean;
   workspaces?: Array<{ id: string; name: string }>;
+  sidebarMoneyPages?: Record<string, boolean>;
 };
 
 type CollaboratorData = {
@@ -53,6 +73,7 @@ export function CollaboratorsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [workspaceNameInput, setWorkspaceNameInput] = useState("");
   const [workspaceMode, setWorkspaceMode] = useState<"PRIVATE" | "SHARED">("PRIVATE");
+  const [sidebarMoneyPages, setSidebarMoneyPages] = useState<Record<string, boolean>>(DEFAULT_MONEY_PAGES);
   const [switchingWorkspaceName, setSwitchingWorkspaceName] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
@@ -84,7 +105,9 @@ export function CollaboratorsPage() {
     if (!workspaceMeta) return;
     setWorkspaceNameInput(workspaceMeta.name);
     setWorkspaceMode(workspaceMeta.isShared ? "SHARED" : "PRIVATE");
-  }, [workspaceMeta?.id, workspaceMeta?.name, workspaceMeta?.isShared]);
+    // Initialize sidebarMoneyPages from context or defaults
+    setSidebarMoneyPages(context.data?.sidebarMoneyPages ?? DEFAULT_MONEY_PAGES);
+  }, [workspaceMeta?.id, workspaceMeta?.name, workspaceMeta?.isShared, context.data?.sidebarMoneyPages]);
 
   const createWorkspace = useMutation({
     mutationFn: () =>
@@ -130,21 +153,33 @@ export function CollaboratorsPage() {
 
   const updateWorkspace = useMutation({
     mutationFn: () =>
-      fetchJson<{ id: string; name: string; isShared: boolean }>(`/api/workspaces/${workspaceMeta?.id ?? workspaceId}`, {
+      fetchJson<{ id: string; name: string; isShared: boolean; sidebarMoneyPages?: string }>(`/api/workspaces/${workspaceMeta?.id ?? workspaceId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...(workspaceNameInput.trim() ? { name: workspaceNameInput.trim() } : {}),
           isShared: workspaceMode === "SHARED",
+          sidebarMoneyPages,
         }),
       }),
     onSuccess: async (updatedWorkspace) => {
+      // Parse sidebarMoneyPages from response
+      let parsedSidebarMoneyPages: Record<string, boolean> = sidebarMoneyPages;
+      if (updatedWorkspace.sidebarMoneyPages) {
+        try {
+          parsedSidebarMoneyPages = JSON.parse(updatedWorkspace.sidebarMoneyPages);
+        } catch {
+          // Keep current state if parsing fails
+        }
+      }
+
       queryClient.setQueryData<AppContext>(["app-context"], (existing) => {
         if (!existing) return existing;
         return {
           ...existing,
           workspaceName: existing.workspaceId === updatedWorkspace.id ? updatedWorkspace.name : existing.workspaceName,
           isShared: existing.workspaceId === updatedWorkspace.id ? updatedWorkspace.isShared : existing.isShared,
+          sidebarMoneyPages: parsedSidebarMoneyPages,
           workspaces: (existing.workspaces ?? []).map((workspace) =>
             workspace.id === updatedWorkspace.id ? { ...workspace, name: updatedWorkspace.name } : workspace,
           ),
@@ -300,6 +335,53 @@ export function CollaboratorsPage() {
               {updateWorkspace.isPending ? "Saving..." : "Save Workspace Info"}
             </button>
           </form>
+
+          {/* Sidebar Pages Configuration */}
+          <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border-subtle)" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "10px", color: "var(--text-secondary)" }}>
+              Sidebar Navigation — Money Pages
+            </div>
+            <div style={{ display: "grid", gap: "6px" }}>
+              {MONEY_PAGE_CONFIG.map((page) => (
+                <label
+                  key={page.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    transition: "background 150ms ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-subtle)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={sidebarMoneyPages[page.key] ?? true}
+                    onChange={(e) => {
+                      setSidebarMoneyPages((prev) => ({
+                        ...prev,
+                        [page.key]: e.target.checked,
+                      }));
+                    }}
+                    disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "14px", marginRight: "4px" }}>{page.icon}</span>
+                  <span style={{ fontSize: "13px", flex: 1 }}>{page.label}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "8px" }}>
+              Choose which pages appear in the Money section of the sidebar. Changes are saved automatically when you click &ldquo;Save Workspace Info&rdquo;.
+            </div>
+          </div>
         </div>
       </section>
 

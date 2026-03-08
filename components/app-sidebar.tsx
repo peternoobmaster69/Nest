@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "./theme-provider";
+import { SidebarSkeleton } from "./ui-skeleton";
 
 function getInitials(name: string) {
   return name
@@ -24,6 +25,8 @@ export function AppSidebar({
   badgeCounts,
   sidebarOpen,
   onSidebarChange,
+  contextData,
+  contextLoading,
 }: {
   userName: string;
   userEmail?: string;
@@ -35,6 +38,15 @@ export function AppSidebar({
   };
   sidebarOpen?: boolean;
   onSidebarChange?: (open: boolean) => void;
+  contextData?: {
+    isShared?: boolean;
+    isCollaborative?: boolean;
+    workspaceName?: string | null;
+    memberCount?: number;
+    pendingInviteCount?: number;
+    sidebarMoneyPages?: Record<string, boolean>;
+  };
+  contextLoading?: boolean;
 }) {
   const context = useQuery({
     queryKey: ["app-context"],
@@ -47,9 +59,24 @@ export function AppSidebar({
         workspaceName?: string | null;
         memberCount?: number;
         pendingInviteCount?: number;
+        sidebarMoneyPages?: Record<string, boolean>;
       }>;
     },
+    enabled: !contextData,
   });
+
+  const resolvedContext = contextData ?? context.data;
+  const isContextLoading = contextLoading || (!contextData && context.isLoading);
+
+  // Get sidebar visibility settings with defaults
+  const sidebarMoneyPages = resolvedContext?.sidebarMoneyPages ?? {
+    creditCards: true,
+    creditTransactions: true,
+    receivables: true,
+    transactions: true,
+    rewards: true,
+    investments: true,
+  };
 
   const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
   const isOpen = sidebarOpen ?? internalSidebarOpen;
@@ -163,6 +190,10 @@ export function AppSidebar({
           </button>
         </Link>
 
+        {isContextLoading ? (
+          <SidebarSkeleton />
+        ) : (
+          <>
       <div className="sb-scroll">
         <div className="sb-sec">Overview</div>
         <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href="/" onClick={handleNavClick}>
@@ -170,24 +201,39 @@ export function AppSidebar({
         </Link>
 
         <div className="sb-sec">Money</div>
-        <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick}>
-          <span className="sb-ic">💳</span>Credit Cards
-        </Link>
-        <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
-          <span className="sb-ic">🧾</span>Card Transactions
-        </Link>
-        <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
-          <span className="sb-ic">↩</span>Receivables
-          {badgeCounts?.receivables ? <span className="sb-badge">{badgeCounts.receivables}</span> : null}
-        </Link>
-        <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick}>
-          <span className="sb-ic">📑</span>Transactions
-        </Link>
-        <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href="/rewards" onClick={handleNavClick}>
-          <span className="sb-ic">◎</span>Rewards
-        </Link>
-        <Link className={`sb-item${currentPath === "/investments" ? " on" : ""}`} href="/investments" onClick={handleNavClick}>
-          <span className="sb-ic">📈</span>Investments
+        {sidebarMoneyPages.creditCards !== false && (
+          <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick}>
+            <span className="sb-ic">💳</span>Credit Cards
+          </Link>
+        )}
+        {sidebarMoneyPages.creditTransactions !== false && (
+          <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
+            <span className="sb-ic">🧾</span>Card Transactions
+          </Link>
+        )}
+        {sidebarMoneyPages.receivables !== false && (
+          <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
+            <span className="sb-ic">↩</span>Receivables
+            {badgeCounts?.receivables ? <span className="sb-badge">{badgeCounts.receivables}</span> : null}
+          </Link>
+        )}
+        {sidebarMoneyPages.transactions !== false && (
+          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick}>
+            <span className="sb-ic">📑</span>Transactions
+          </Link>
+        )}
+        {sidebarMoneyPages.rewards !== false && (
+          <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href="/rewards" onClick={handleNavClick}>
+            <span className="sb-ic">◎</span>Rewards
+          </Link>
+        )}
+        {sidebarMoneyPages.investments !== false && (
+          <Link className={`sb-item${currentPath === "/investments" ? " on" : ""}`} href="/investments" onClick={handleNavClick}>
+            <span className="sb-ic">📈</span>Investments
+          </Link>
+        )}
+        <Link className={`sb-item${currentPath === "/budgets/plan" ? " on" : ""}`} href="/budgets/plan" onClick={handleNavClick}>
+          <span className="sb-ic">📊</span>Budget Plan
         </Link>
 
         <div className="sb-sec">Workspace</div>
@@ -211,8 +257,8 @@ export function AppSidebar({
             <div className="sb-user-meta">
               <span className="sb-user-name">{displayName}</span>
               <span className="sb-user-sub">
-                {context.data?.isShared ? "👥" : "🔒"}{" "}
-                {context.data?.workspaceName || "Workspace"}
+                {resolvedContext?.isShared ? "👥" : "🔒"}{" "}
+                {resolvedContext?.workspaceName || "Workspace"}
               </span>
             </div>
             <span className={`sb-user-chevron${profileMenuOpen ? " open" : ""}`}>▾</span>
@@ -244,6 +290,8 @@ export function AppSidebar({
           )}
         </div>
       </div>
+          </>
+        )}
 
       {profileModalOpen && (
         <div className="profile-modal-overlay" onClick={() => setProfileModalOpen(false)}>

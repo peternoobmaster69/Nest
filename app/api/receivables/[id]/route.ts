@@ -12,6 +12,7 @@ const UpdateReceivableSchema = z.object({
   status: z.enum(["OPEN", "PARTIAL", "PAID", "VOID"]).optional(),
   isFamily: z.boolean().optional(),
   isMom: z.boolean().optional(),
+  accountId: z.string().nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -32,6 +33,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await requireWorkspaceAccess(existing.workspaceId);
 
+    if (parsed.data.accountId !== undefined && parsed.data.accountId !== null) {
+      const account = await prisma.financialAccount.findUnique({
+        where: { id: parsed.data.accountId },
+        select: { id: true, workspaceId: true, kind: true, isActive: true },
+      });
+      if (!account || account.kind !== "BANK" || !account.isActive) {
+        return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
+      }
+      await requireWorkspaceAccess(account.workspaceId);
+    }
+
     const updated = await prisma.receivable.update({
       where: { id },
       data: {
@@ -48,6 +60,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         status: parsed.data.status,
         isFamily: parsed.data.isFamily,
         isMom: parsed.data.isMom,
+        accountId: parsed.data.accountId,
       },
     });
     return NextResponse.json(updated);

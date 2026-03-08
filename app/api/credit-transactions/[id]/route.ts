@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -38,12 +39,37 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     await requireWorkspaceAccess(existing.workspaceId);
 
-    const data: any = { ...parsed.data };
-    if (data.transactionDate) {
-      data.transactionDate = new Date(data.transactionDate);
+    const updatePayload = parsed.data;
+    const data: Prisma.CreditCardTransactionUpdateInput = {};
+    if (updatePayload.transactionDate) {
+      data.transactionDate = new Date(updatePayload.transactionDate);
     }
-    if (data.paymentDueDate !== undefined) {
-      data.paymentDueDate = data.paymentDueDate ? new Date(data.paymentDueDate) : null;
+    if (updatePayload.paymentDueDate !== undefined) {
+      data.paymentDueDate = updatePayload.paymentDueDate ? new Date(updatePayload.paymentDueDate) : null;
+    }
+    if (updatePayload.statementMonth !== undefined) {
+      data.statementMonth = updatePayload.statementMonth;
+    }
+    if (updatePayload.statementYear !== undefined) {
+      data.statementYear = updatePayload.statementYear;
+    }
+    if (updatePayload.amountCents !== undefined) {
+      data.amountCents = updatePayload.amountCents;
+    }
+    if (updatePayload.subject !== undefined) {
+      data.subject = updatePayload.subject;
+    }
+    if (updatePayload.isInstallment !== undefined) {
+      data.isInstallment = updatePayload.isInstallment;
+    }
+    if (updatePayload.installmentNo !== undefined) {
+      data.installmentNo = updatePayload.installmentNo;
+    }
+    if (updatePayload.totalInstallments !== undefined) {
+      data.totalInstallments = updatePayload.totalInstallments;
+    }
+    if (updatePayload.isAllocated !== undefined) {
+      data.isAllocated = updatePayload.isAllocated;
     }
 
     const transaction = await prisma.creditCardTransaction.update({

@@ -373,6 +373,9 @@ export function InvestmentsPage() {
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [accounts.data]);
 
+  // eslint-disable-next-line react-hooks/purity
+  const currentTimestamp = Date.now();
+
   const chartRows = useMemo(() => {
     const list = showAllAccounts
       ? aggregatedAllAccountsData
@@ -384,12 +387,12 @@ export function InvestmentsPage() {
         }));
     if (timeRange === "ALL") return list;
 
-    const now = Date.now();
+    const now = currentTimestamp;
     const day = 24 * 60 * 60 * 1000;
     const threshold =
       timeRange === "90D" ? now - 90 * day : timeRange === "180D" ? now - 180 * day : now - 365 * day;
     return list.filter((row) => row.date.getTime() >= threshold);
-  }, [selectedEntries, timeRange, showAllAccounts, aggregatedAllAccountsData]);
+  }, [selectedEntries, timeRange, showAllAccounts, aggregatedAllAccountsData, currentTimestamp]);
 
   const chart = useMemo(() => {
     const width = 1000;

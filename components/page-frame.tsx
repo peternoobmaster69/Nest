@@ -1,8 +1,25 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ReactNode } from "react";
 import { AppSidebar } from "./app-sidebar";
+import { AppBodySkeleton } from "./ui-skeleton";
+
+type AppContext = {
+  isShared?: boolean;
+  isCollaborative?: boolean;
+  workspaceName?: string | null;
+  memberCount?: number;
+  pendingInviteCount?: number;
+  sidebarMoneyPages?: Record<string, boolean>;
+};
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+}
 
 export function PageFrame({
   title,
@@ -21,6 +38,11 @@ export function PageFrame({
   children: ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const contextQuery = useQuery({
+    queryKey: ["app-context"],
+    queryFn: () => fetchJson<AppContext>("/api/context"),
+  });
+  const isContextLoading = contextQuery.isLoading && !contextQuery.data;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -43,6 +65,8 @@ export function PageFrame({
         badgeCounts={badgeCounts}
         sidebarOpen={sidebarOpen}
         onSidebarChange={setSidebarOpen}
+        contextData={contextQuery.data}
+        contextLoading={isContextLoading}
       />
 
       <main className="main">
@@ -57,7 +81,7 @@ export function PageFrame({
           </div>
         </header>
 
-        <div className="body">{children}</div>
+        <div className="body">{isContextLoading ? <AppBodySkeleton /> : children}</div>
       </main>
     </div>
   );

@@ -8,6 +8,8 @@ import { SkeletonBankCard, SkeletonGrid, EmptyState, PageLoadingState } from "@/
 
 type Context = {
   workspaceId: string | null;
+  defaultAccountId: string | null;
+  defaultBudgetId: string | null;
   baseCurrency?: string | null;
 };
 
@@ -34,6 +36,13 @@ type BankAccount = {
   discrepancyCents: number;
 };
 
+type Budget = {
+  id: string;
+  accountId: string;
+  name: string;
+  isActive: boolean;
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -54,6 +63,7 @@ export function SettingsPage() {
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [gmailMessage, setGmailMessage] = useState("");
   const [currencyMessage, setCurrencyMessage] = useState("");
+  const [receivableAccountMessage, setReceivableAccountMessage] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -90,6 +100,8 @@ export function SettingsPage() {
 
   const workspaceId = context.data?.workspaceId ?? null;
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const defaultReceivableAccountId = context.data?.defaultAccountId ?? null;
+  const defaultReceivableBudgetId = context.data?.defaultBudgetId ?? null;
 
   const accounts = useQuery({
     queryKey: ["bank-accounts", workspaceId],
@@ -100,6 +112,12 @@ export function SettingsPage() {
   const gmailStatus = useQuery({
     queryKey: ["gmail-status"],
     queryFn: () => fetchJson<GmailStatus>("/api/gmail/status"),
+  });
+
+  const budgets = useQuery({
+    queryKey: ["budgets", workspaceId],
+    queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${workspaceId}`),
+    enabled: Boolean(workspaceId),
   });
 
   const connectGmail = useMutation({
@@ -155,6 +173,25 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["app-context"] });
     },
     onError: (error) => setCurrencyMessage(error instanceof Error ? error.message : "Failed to update currency."),
+  });
+
+  const updateReceivableDefaults = useMutation({
+    mutationFn: (payload: { accountId?: string | null; budgetId?: string | null }) =>
+      fetchJson<{ defaultAccountId: string | null }>("/api/context", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          receivableDefaultAccountId: payload.accountId,
+          receivableDefaultBudgetId: payload.budgetId,
+        }),
+      }),
+    onSuccess: () => {
+      setReceivableAccountMessage("Default receivable account updated.");
+      queryClient.invalidateQueries({ queryKey: ["app-context"] });
+    },
+    onError: (error) =>
+      setReceivableAccountMessage(error instanceof Error ? error.message : "Failed to update default receivable account."),
   });
 
   const createAccount = useMutation({
@@ -321,6 +358,66 @@ export function SettingsPage() {
           </select>
         </div>
         {currencyMessage ? <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{currencyMessage}</div> : null}
+      </div>
+
+      <div className="card" style={{ marginBottom: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivable Default Account</div>
+            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+              Closed receivables are credited into this account automatically.
+            </div>
+          </div>
+          <select
+            className="input"
+            style={{ maxWidth: "260px" }}
+            value={defaultReceivableAccountId ?? ""}
+            onChange={(event) =>
+              updateReceivableDefaults.mutate({
+                accountId: event.target.value || null,
+                budgetId: null,
+              })
+            }
+            disabled={!workspaceId || accounts.isLoading || updateReceivableDefaults.isPending}
+          >
+            <option value="">Not configured</option>
+            {(accounts.data ?? []).filter((a) => a.isActive).map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "10px" }}>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivable Default Subaccount</div>
+            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+              Closed receivables are posted into this subaccount under the default account.
+            </div>
+          </div>
+          <select
+            className="input"
+            style={{ maxWidth: "260px" }}
+            value={defaultReceivableBudgetId ?? ""}
+            onChange={(event) =>
+              updateReceivableDefaults.mutate({
+                accountId: undefined,
+                budgetId: event.target.value || null,
+              })
+            }
+            disabled={!workspaceId || !defaultReceivableAccountId || budgets.isLoading || updateReceivableDefaults.isPending}
+          >
+            <option value="">Not configured</option>
+            {(budgets.data ?? [])
+              .filter((b) => b.isActive && b.accountId === defaultReceivableAccountId)
+              .map((budget) => (
+                <option key={budget.id} value={budget.id}>
+                  {budget.name}
+                </option>
+              ))}
+          </select>
+        </div>
+        {receivableAccountMessage ? <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{receivableAccountMessage}</div> : null}
       </div>
 
       {/* Header with Add Button */}

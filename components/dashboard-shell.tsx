@@ -41,6 +41,12 @@ type AppContext = {
   defaultAccountId: string | null;
   defaultUserId: string | null;
   baseCurrency?: string | null;
+  isShared?: boolean;
+  isCollaborative?: boolean;
+  workspaceName?: string | null;
+  memberCount?: number;
+  pendingInviteCount?: number;
+  sidebarMoneyPages?: Record<string, boolean>;
   accounts: Array<{
     id: string;
     name: string;
@@ -248,12 +254,15 @@ export function DashboardShell({
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
 
+  const workspaceId = contextQuery.data?.workspaceId;
+  const isContextLoading = contextQuery.isLoading && !contextQuery.data;
+
   const { data, isLoading } = useQuery({
-    queryKey: ["dashboard-summary"],
+    queryKey: ["dashboard-summary", workspaceId],
     queryFn: getSummary,
+    enabled: Boolean(workspaceId),
   });
 
-  const workspaceId = contextQuery.data?.workspaceId;
   const baseCurrency = normalizeCurrency(contextQuery.data?.baseCurrency);
   const formatCents = (value: number) => formatMoney(value, baseCurrency);
   const formatCentsShort = (value: number) => formatMoneyShort(value, baseCurrency);
@@ -293,7 +302,7 @@ export function DashboardShell({
   const refreshAll = useMemo(
     () => () =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-summary", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] }),
@@ -763,6 +772,8 @@ export function DashboardShell({
         }}
         sidebarOpen={sidebarOpen}
         onSidebarChange={setSidebarOpen}
+        contextData={contextQuery.data}
+        contextLoading={isContextLoading}
       />
 
       <main className="main">

@@ -128,7 +128,13 @@ function decodeBase64Url(input: string) {
   return Buffer.from(padded, "base64").toString("utf8");
 }
 
-function extractTextPart(payload: any): string {
+type GmailPayload = {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: GmailPayload[];
+};
+
+function extractTextPart(payload: GmailPayload | null): string {
   if (!payload) return "";
   if (payload.mimeType === "text/plain" && payload.body?.data) {
     return decodeBase64Url(payload.body.data);
@@ -169,4 +175,3 @@ export async function fetchGmailMessage(accessToken: string, messageId: string) 
   const body = extractTextPart(data.payload) || data.snippet || "";
   return { subject, body };
 }
-

@@ -9,6 +9,8 @@ const UpdateContextSchema = z.object({
   workspaceId: z.string().min(1).optional(),
   activeWorkspaceId: z.string().min(1).optional(),
   baseCurrency: z.enum(["SGD", "USD", "EUR", "GBP", "AUD", "JPY"]).optional(),
+  receivableDefaultAccountId: z.string().min(1).nullable().optional(),
+  receivableDefaultBudgetId: z.string().min(1).nullable().optional(),
 });
 
 export async function GET() {
@@ -74,7 +76,7 @@ export async function GET() {
       where: { userId },
       include: {
         workspace: {
-          select: { id: true, name: true, baseCurrency: true },
+          select: { id: true, name: true, baseCurrency: true, receivableDefaultAccountId: true, receivableDefaultBudgetId: true, sidebarMoneyPages: true },
         },
       },
       orderBy: { createdAt: "asc" },
@@ -128,6 +130,7 @@ export async function GET() {
       return NextResponse.json({
         workspaceId: null,
         defaultAccountId: null,
+        defaultBudgetId: null,
         defaultUserId: null,
         baseCurrency: "SGD",
         isShared: false,
@@ -155,10 +158,21 @@ export async function GET() {
       },
     });
 
+    // Parse sidebarMoneyPages from JSON string
+    let sidebarMoneyPages: Record<string, boolean> | null = null;
+    if (workspace?.sidebarMoneyPages) {
+      try {
+        sidebarMoneyPages = JSON.parse(workspace.sidebarMoneyPages);
+      } catch {
+        sidebarMoneyPages = null;
+      }
+    }
+
     if (!workspace) {
       return NextResponse.json({
         workspaceId: null,
         defaultAccountId: null,
+        defaultBudgetId: null,
         defaultUserId: null,
         baseCurrency: "SGD",
         isShared: false,
@@ -177,7 +191,8 @@ export async function GET() {
 
     return NextResponse.json({
       workspaceId: workspace.id,
-      defaultAccountId: null,
+      defaultAccountId: workspace.receivableDefaultAccountId,
+      defaultBudgetId: workspace.receivableDefaultBudgetId,
       defaultUserId: workspace.members[0]?.userId ?? null,
       baseCurrency: workspace.baseCurrency || "SGD",
       isShared: workspace.isShared,
@@ -185,6 +200,14 @@ export async function GET() {
       workspaceName: workspace.name,
       memberCount: workspace.members.length,
       pendingInviteCount,
+      sidebarMoneyPages: sidebarMoneyPages ?? {
+        creditCards: true,
+        creditTransactions: true,
+        receivables: true,
+        transactions: true,
+        rewards: true,
+        investments: true,
+      },
       workspaces: memberships.map((m) => ({ id: m.workspace.id, name: m.workspace.name })),
       accounts: workspace.financials.map((a) => ({
         id: a.id,
@@ -198,6 +221,7 @@ export async function GET() {
         return NextResponse.json({
           workspaceId: null,
           defaultAccountId: null,
+          defaultBudgetId: null,
           defaultUserId: null,
           baseCurrency: "SGD",
           isShared: false,
@@ -234,19 +258,96 @@ export async function PATCH(request: Request) {
       });
     }
 
-    let updated: { id: string; baseCurrency: string } | null = null;
-    if (parsed.data.workspaceId && parsed.data.baseCurrency) {
+    let updated: {
+      id: string;
+      baseCurrency: string;
+      receivableDefaultAccountId: string | null;
+      receivableDefaultBudgetId: string | null;
+    } | null = null;
+    if (
+      parsed.data.workspaceId &&
+      (
+        parsed.data.baseCurrency !== undefined ||
+        parsed.data.receivableDefaultAccountId !== undefined ||
+        parsed.data.receivableDefaultBudgetId !== undefined
+      )
+    ) {
       await requireWorkspaceAccess(parsed.data.workspaceId);
+      const existingWorkspace = await prisma.workspace.findUnique({
+        where: { id: parsed.data.workspaceId },
+        select: { receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
+      });
+      if (!existingWorkspace) {
+        return NextResponse.json({ error: "Workspace not found." }, { status: 404 });
+      }
+
+      if (parsed.data.receivableDefaultAccountId) {
+        const account = await prisma.financialAccount.findFirst({
+          where: {
+            id: parsed.data.receivableDefaultAccountId,
+            workspaceId: parsed.data.workspaceId,
+            kind: "BANK",
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        if (!account) {
+          return NextResponse.json({ error: "Invalid default receivable account." }, { status: 400 });
+        }
+      }
+
+      const nextAccountId =
+        parsed.data.receivableDefaultAccountId === undefined
+          ? existingWorkspace.receivableDefaultAccountId
+          : parsed.data.receivableDefaultAccountId;
+
+      if (parsed.data.receivableDefaultBudgetId) {
+        const budget = await prisma.budgetEnvelope.findFirst({
+          where: {
+            id: parsed.data.receivableDefaultBudgetId,
+            workspaceId: parsed.data.workspaceId,
+            isActive: true,
+          },
+          select: { id: true, accountId: true },
+        });
+        if (!budget) {
+          return NextResponse.json({ error: "Invalid default receivable subaccount." }, { status: 400 });
+        }
+        if (!nextAccountId || budget.accountId !== nextAccountId) {
+          return NextResponse.json(
+            { error: "Default receivable subaccount must belong to the selected default account." },
+            { status: 400 },
+          );
+        }
+      }
+
+      let nextBudgetId =
+        parsed.data.receivableDefaultBudgetId === undefined
+          ? existingWorkspace.receivableDefaultBudgetId
+          : parsed.data.receivableDefaultBudgetId;
+      if (parsed.data.receivableDefaultAccountId !== undefined && parsed.data.receivableDefaultBudgetId === undefined) {
+        nextBudgetId = null;
+      }
+
       updated = await prisma.workspace.update({
         where: { id: parsed.data.workspaceId },
-        data: { baseCurrency: parsed.data.baseCurrency },
-        select: { id: true, baseCurrency: true },
+        data: {
+          baseCurrency: parsed.data.baseCurrency,
+          receivableDefaultAccountId:
+            parsed.data.receivableDefaultAccountId === undefined
+              ? undefined
+              : parsed.data.receivableDefaultAccountId,
+          receivableDefaultBudgetId: nextBudgetId,
+        },
+        select: { id: true, baseCurrency: true, receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
       });
     }
 
     return NextResponse.json({
       workspaceId: updated?.id ?? parsed.data.workspaceId ?? parsed.data.activeWorkspaceId ?? null,
       baseCurrency: updated?.baseCurrency ?? null,
+      defaultAccountId: updated?.receivableDefaultAccountId ?? null,
+      defaultBudgetId: updated?.receivableDefaultBudgetId ?? null,
       activeWorkspaceId: parsed.data.activeWorkspaceId ?? null,
     });
   } catch (error) {

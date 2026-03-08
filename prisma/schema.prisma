@@ -3,9 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider     = "sqlserver"
-  url          = env("DATABASE_URL")
-  relationMode = "prisma"
+  provider          = "sqlserver"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  relationMode      = "prisma"
 }
 
 model User {
@@ -28,6 +29,7 @@ model User {
   sentWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteSender")
   receivedWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteReceiver")
   workspaceAuditLogs WorkspaceAuditLog[]
+  budgetSources   BudgetSource[]
 }
 
 model Account {
@@ -70,9 +72,14 @@ model Workspace {
   id              String             @id @default(cuid())
   name            String
   baseCurrency    String             @default("SGD")
+  receivableDefaultAccountId String?
+  receivableDefaultBudgetId  String?
   isShared        Boolean            @default(false)
+  sidebarMoneyPages String?          // Stores visibility settings for Money section pages in sidebar (JSON string)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+  receivableDefaultAccount FinancialAccount? @relation("WorkspaceReceivableDefaultAccount", fields: [receivableDefaultAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  receivableDefaultBudget BudgetEnvelope? @relation("WorkspaceReceivableDefaultBudget", fields: [receivableDefaultBudgetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   members         WorkspaceMember[]
   months          Month[]
   accountTypes    AccountType[]
@@ -97,6 +104,9 @@ model Workspace {
   investmentAccounts   InvestmentAccount[]
   invites             WorkspaceInvite[]
   auditLogs           WorkspaceAuditLog[]
+  budgetItems         BudgetItem[]
+  budgetSources       BudgetSource[]
+  monthlyBudgets      MonthlyBudget[]
 }
 
 model WorkspaceInvite {
@@ -197,7 +207,7 @@ model AccountType {
   color       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   accounts    FinancialAccount[]
 
   @@unique([workspaceId, label])
@@ -217,8 +227,9 @@ model FinancialAccount {
   isSynced      Boolean      @default(false)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  accountType   AccountType? @relation(fields: [accountTypeId], references: [id], onDelete: SetNull)
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  accountType   AccountType? @relation(fields: [accountTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  receivableDefaultForWorkspaces Workspace[] @relation("WorkspaceReceivableDefaultAccount")
   transactions  Transaction[]
   budgets       BudgetEnvelope[]
   receivables   Receivable[]
@@ -241,10 +252,67 @@ model BudgetEnvelope {
   workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account        FinancialAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   createdBy      User              @relation("BudgetCreatedBy", fields: [createdById], references: [id], onDelete: NoAction)
+  receivableDefaultForWorkspaces Workspace[] @relation("WorkspaceReceivableDefaultBudget")
+  incomingBudgetItems BudgetItem[]
   expenseTypes   ExpenseType[]
   transactions   Transaction[]
 
   @@index([workspaceId, accountId])
+}
+
+// Budget Items for funding sub-accounts
+model BudgetItem {
+  id                     String         @id @default(cuid())
+  workspaceId            String
+  title                  String
+  amountCents            Int            @default(0)
+  isMonthly              Boolean        @default(true)
+  destinationSubAccountId String?
+  sortOrder              Int            @default(0)
+  isActive               Boolean        @default(true)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  workspace              Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  destinationSubAccount    BudgetEnvelope? @relation(fields: [destinationSubAccountId], references: [id], onDelete: SetNull)
+  monthlyBudgets         MonthlyBudget[]
+
+  @@index([workspaceId])
+}
+
+// Budget Sources (funding sources)
+model BudgetSource {
+  id          String          @id @default(cuid())
+  workspaceId String
+  title       String
+  ownerId     String          // Links to User (workspace member) who owns this source
+  amountCents Int             @default(0)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  monthlyBudgets MonthlyBudget[]
+
+  @@index([workspaceId])
+}
+
+// Monthly generated budget entries
+model MonthlyBudget {
+  id             String       @id @default(cuid())
+  workspaceId    String
+  budgetItemId   String
+  budgetSourceId String
+  year           Int
+  month          Int          // 1-12
+  allocatedCents Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  budgetItem     BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+  budgetSource   BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, year, month, budgetItemId])
+  @@index([workspaceId, year, month])
 }
 
 model ExpenseType {
