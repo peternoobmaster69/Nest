@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
 import { AppSidebar } from "./app-sidebar";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
+import { SkeletonCard, SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
 
 type DashboardSummary = {
   totalBalanceCents: number;
@@ -84,6 +85,16 @@ type BankAccountSummary = {
   currentBalanceCents: number;
   linkedBudgetTotalCents: number;
   discrepancyCents: number;
+};
+
+type InvestmentAccountSummary = {
+  id: string;
+  entries: Array<{
+    id: string;
+    date: string;
+    investedCents: number;
+    currentValueCents: number;
+  }>;
 };
 
 type Toast = {
@@ -270,6 +281,11 @@ export function DashboardShell({
   const bankAccountsQuery = useQuery({
     queryKey: ["bank-accounts", workspaceId],
     queryFn: () => fetchJson<BankAccountSummary[]>(`/api/accounts?workspaceId=${workspaceId}`),
+    enabled: Boolean(workspaceId),
+  });
+  const investmentsQuery = useQuery({
+    queryKey: ["investments", workspaceId],
+    queryFn: () => fetchJson<InvestmentAccountSummary[]>(`/api/investments?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
   const firstBankAccountId = bankAccountsQuery.data?.[0]?.id;
@@ -687,6 +703,18 @@ export function DashboardShell({
 
   const pendingReceivables = receivablesQuery.data?.filter((r) => r.status === "OPEN") || [];
   const pendingAmount = pendingReceivables.reduce((sum, r) => sum + r.amountCents, 0);
+  const investmentTotals = useMemo(() => {
+    let invested = 0;
+    let current = 0;
+    for (const account of investmentsQuery.data ?? []) {
+      const latest = [...(account.entries ?? [])]
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .at(-1);
+      invested += latest?.investedCents ?? 0;
+      current += latest?.currentValueCents ?? 0;
+    }
+    return { invested, current };
+  }, [investmentsQuery.data]);
 
   useEffect(() => {
     if (!dashboardBankStorageKey || typeof window === "undefined") return;
@@ -754,18 +782,27 @@ export function DashboardShell({
           <div className="card" style={{ marginBottom: "14px" }}>
             <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Bank Accounts</div>
             <div className="account-cards-grid">
-              <div
-                className="budget-mini budget-mini-compact"
-                onClick={() => setSelectedBankFilterId("ALL")}
-                style={{
-                  borderColor: selectedBankFilterId === "ALL" ? "var(--brand-500)" : undefined,
-                  boxShadow: selectedBankFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
-                }}
-              >
-                <div className="bm-name">All banks</div>
-                <div className={`bm-amount ${getAmountToneClass(summary.totalBalanceCents)}`}>{formatCents(summary.totalBalanceCents)}</div>
-              </div>
-              {bankAccountsQuery.data?.map((bank) => (
+              {bankAccountsQuery.isLoading && (
+                <>
+                  <SkeletonMiniCard />
+                  <SkeletonMiniCard />
+                  <SkeletonMiniCard />
+                </>
+              )}
+              {!bankAccountsQuery.isLoading && (
+                <>
+                  <div
+                    className="budget-mini budget-mini-compact"
+                    onClick={() => setSelectedBankFilterId("ALL")}
+                    style={{
+                      borderColor: selectedBankFilterId === "ALL" ? "var(--brand-500)" : undefined,
+                      boxShadow: selectedBankFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
+                    }}
+                  >
+                    <div className="bm-name">All banks</div>
+                    <div className={`bm-amount ${getAmountToneClass(summary.totalBalanceCents)}`}>{formatCents(summary.totalBalanceCents)}</div>
+                  </div>
+                  {bankAccountsQuery.data?.map((bank) => (
                 <div
                   key={bank.id}
                   className="budget-mini budget-mini-compact"
@@ -800,26 +837,36 @@ export function DashboardShell({
                   <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
                 </div>
               ))}
+                </>
+              )}
             </div>
           </div>
 
           {/* Hero Card */}
           <div className="hero-card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "relative", zIndex: 2 }}>
-              <div>
-                <div className="hero-label">Total Allocated</div>
-                <div className={`hero-amount ${getAmountToneClass(totalBudgeted)}`}>{isLoading ? "Loading..." : formatCents(totalBudgeted)}</div>
-                <div className="hero-sub">Across {filteredBudgets.length} budget accounts</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="hero-side-label">Available in bank</div>
-                <div className={`hero-side-amount ${getAmountToneClass(filteredBankBalance)}`}>
-                  {isLoading ? "—" : formatCents(filteredBankBalance)}
+              {isLoading ? (
+                <div style={{ width: "100%" }}>
+                  <SkeletonMiniCard />
                 </div>
-                <div className={`hero-side-free ${getAmountToneClass(freeAmount)}`}>
-                  {isLoading ? "—" : formatCents(freeAmount)} free
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div>
+                    <div className="hero-label">Total Allocated</div>
+                    <div className={`hero-amount ${getAmountToneClass(totalBudgeted)}`}>{formatCents(totalBudgeted)}</div>
+                    <div className="hero-sub">Across {filteredBudgets.length} budget accounts</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="hero-side-label">Available in bank</div>
+                    <div className={`hero-side-amount ${getAmountToneClass(filteredBankBalance)}`}>
+                      {formatCents(filteredBankBalance)}
+                    </div>
+                    <div className={`hero-side-free ${getAmountToneClass(freeAmount)}`}>
+                      {formatCents(freeAmount)} free
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {filteredBudgets.length > 0 && (
@@ -871,39 +918,50 @@ export function DashboardShell({
 
           {/* Stat Cards */}
           <div className="grid-4" style={{ marginBottom: "14px" }}>
-            <div className="stat-card">
-              <div className="stat-label">Spent this month</div>
-              <div className="stat-value">
-                {formatCentsShort(spentThisMonth)}
-              </div>
-              <div className="stat-sub">
-                <span className="positive">&nbsp;</span>
-              </div>
-            </div>
+            {isLoading ? (
+              <>
+                <SkeletonMiniCard />
+                <SkeletonMiniCard />
+                <SkeletonMiniCard />
+                <SkeletonMiniCard />
+              </>
+            ) : (
+              <>
+                <div className="stat-card">
+                  <div className="stat-label">Spent this month</div>
+                  <div className="stat-value">
+                    {formatCentsShort(spentThisMonth)}
+                  </div>
+                  <div className="stat-sub">
+                    <span className="positive">&nbsp;</span>
+                  </div>
+                </div>
 
-            <div className="stat-card">
-              <div className="stat-label">CC balance due</div>
-              <div className="stat-value">$0</div>
-              <div className="stat-sub">
-                No cards <span className="warning">linked</span>
-              </div>
-            </div>
+                <div className="stat-card">
+                  <div className="stat-label">Investments</div>
+                  <div className="stat-value">{formatCentsShort(investmentTotals.current)}</div>
+                  <div className="stat-sub">
+                    Invested <span className="positive">{formatCentsShort(investmentTotals.invested)}</span>
+                  </div>
+                </div>
 
-            <div className="stat-card">
-              <div className="stat-label">Receivables</div>
-              <div className="stat-value">{formatCentsShort(pendingAmount)}</div>
-              <div className="stat-sub">
-                <span className="positive">{pendingReceivables.length} pending</span>
-              </div>
-            </div>
+                <div className="stat-card">
+                  <div className="stat-label">Receivables</div>
+                  <div className="stat-value">{formatCentsShort(pendingAmount)}</div>
+                  <div className="stat-sub">
+                    <span className="positive">{pendingReceivables.length} pending</span>
+                  </div>
+                </div>
 
-            <div className="stat-card">
-              <div className="stat-label">Sub-accounts</div>
-              <div className="stat-value">{filteredBudgets.length}</div>
-              <div className="stat-sub">
-                <span className="positive">Active</span>
-              </div>
-            </div>
+                <div className="stat-card">
+                  <div className="stat-label">Sub-accounts</div>
+                  <div className="stat-value">{filteredBudgets.length}</div>
+                  <div className="stat-sub">
+                    <span className="positive">Active</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Two Column Layout */}
@@ -969,7 +1027,14 @@ export function DashboardShell({
                       </div>
                     );
                   })}
-                  {!filteredBudgets.length && <p style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>No budgets yet.</p>}
+                  {budgetsQuery.isLoading && <SkeletonList count={3} type="transaction" />}
+                  {!budgetsQuery.isLoading && !filteredBudgets.length && (
+                    <EmptyState
+                      icon="📁"
+                      title="No sub-accounts yet"
+                      description="Create your first sub-account to start tracking spending."
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -1010,8 +1075,13 @@ export function DashboardShell({
                     </div>
                   </div>
                 ))}
-                {!filteredTransactions.length && (
-                  <p style={{ color: "var(--text-tertiary)", fontSize: "13px", padding: "20px 0" }}>No transactions yet.</p>
+                {transactionsQuery.isLoading && <SkeletonList count={4} type="transaction" />}
+                {!transactionsQuery.isLoading && !filteredTransactions.length && (
+                  <EmptyState
+                    icon="📑"
+                    title="No transactions yet"
+                    description="Add your first transaction to start tracking your spending."
+                  />
                 )}
               </div>
             </div>

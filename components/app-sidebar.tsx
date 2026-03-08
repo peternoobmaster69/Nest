@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "./theme-provider";
 
@@ -35,6 +36,15 @@ export function AppSidebar({
   sidebarOpen?: boolean;
   onSidebarChange?: (open: boolean) => void;
 }) {
+  const context = useQuery({
+    queryKey: ["app-context"],
+    queryFn: async () => {
+      const res = await fetch("/api/context");
+      if (!res.ok) throw new Error("Failed to load context");
+      return res.json() as Promise<{ isCollaborative?: boolean }>;
+    },
+  });
+
   const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
   const isOpen = sidebarOpen ?? internalSidebarOpen;
   const setIsOpen = onSidebarChange ?? setInternalSidebarOpen;
@@ -194,7 +204,7 @@ export function AppSidebar({
             <div className="avatar avatar-md avatar-green">{getInitials(userName)}</div>
             <div className="sb-user-meta">
               <span className="sb-user-name">{displayName}</span>
-              <span className="sb-user-sub">Personal</span>
+              <span className="sb-user-sub">{context.data?.isCollaborative ? "Shared Workspace" : "Personal Workspace"}</span>
             </div>
             <span className={`sb-user-chevron${profileMenuOpen ? " open" : ""}`}>▾</span>
           </button>

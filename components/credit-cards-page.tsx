@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useState } from "react";
+import { SkeletonCreditCard, EmptyState } from "@/components/ui-skeleton";
 
 type AppContext = {
   workspaceId: string | null;
@@ -359,7 +360,25 @@ export function CreditCardsPage() {
 
       {/* Cards Grid - Apple Wallet Style */}
       <div className="cc-grid">
-        {cards.data?.map((card, index) => {
+        {cards.isLoading && (
+          <>
+            <SkeletonCreditCard />
+            <SkeletonCreditCard />
+            <SkeletonCreditCard />
+          </>
+        )}
+
+        {cards.isError && (
+          <div className="cc-empty">
+            <div className="cc-empty-icon">⚠️</div>
+            <p>Failed to load cards</p>
+            <button className="btn btn-primary" onClick={() => cards.refetch()}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!cards.isLoading && !cards.isError && cards.data?.map((card, index) => {
           const isFlipped = flippedCardId === card.id;
           const gradient = getCardGradient(card.bankName, card.themeKey);
           const bankInitials = getBankInitials(card.bankName);
@@ -481,19 +500,27 @@ export function CreditCardsPage() {
           );
         })}
 
-        {/* Add Card Placeholder */}
-        <button className="cc-add-card" onClick={openModal}>
-          <div className="cc-add-icon-large">+</div>
-          <span>Add New Card</span>
-        </button>
+        {/* Add Card Placeholder - only show when loaded and has cards */}
+        {!cards.isLoading && !cards.isError && cards.data && cards.data.length > 0 && (
+          <button className="cc-add-card" onClick={openModal}>
+            <div className="cc-add-icon-large">+</div>
+            <span>Add New Card</span>
+          </button>
+        )}
 
-        {!cards.data?.length && (
-          <div className="cc-empty">
-            <div className="cc-empty-icon">💳</div>
-            <p>No credit cards yet</p>
-            <button className="btn btn-primary" onClick={openModal}>
-              Add your first card
-            </button>
+        {/* Empty State */}
+        {!cards.isLoading && !cards.isError && cards.data?.length === 0 && (
+          <div className="cc-grid-empty">
+            <EmptyState
+              icon="💳"
+              title="No credit cards yet"
+              description="Add your first credit card to track rewards, monitor spending, and manage payment due dates."
+              action={
+                <button className="btn btn-primary" onClick={openModal}>
+                  + Add Your First Card
+                </button>
+              }
+            />
           </div>
         )}
       </div>

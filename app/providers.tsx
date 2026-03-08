@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionProvider } from "next-auth/react";
 import { ReactNode, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
+import { CollaborationBanner } from "@/components/collaboration-banner";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -24,6 +25,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           {children}
+          <CollaborationBanner />
           <CookieConsentBanner />
         </QueryClientProvider>
       </ThemeProvider>

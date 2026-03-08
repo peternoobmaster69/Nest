@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
+import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots } from "@/components/ui-skeleton";
 
 type AppContext = {
   workspaceId: string | null;
@@ -269,18 +270,29 @@ export function TransactionsPage() {
       <section className="card">
         <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Bank Accounts</div>
         <div className="account-cards-grid">
-          <div
-            className="budget-mini budget-mini-compact"
-            onClick={() => setSelectedBankId("")}
-            style={{
-              borderColor: !selectedBankId ? "var(--brand-500)" : undefined,
-              boxShadow: !selectedBankId ? "var(--shadow-sm)" : undefined,
-            }}
-          >
-            <div className="bm-name">All banks</div>
-            <div className={`bm-amount ${getAmountToneClass(totalBankBalanceCents)}`}>{formatCents(totalBankBalanceCents)}</div>
-          </div>
-          {(bankAccounts.data ?? []).map((bank) => (
+          {bankAccounts.isLoading && (
+            <>
+              <SkeletonMiniCard />
+              <SkeletonMiniCard />
+              <SkeletonMiniCard />
+              <SkeletonMiniCard />
+            </>
+          )}
+
+          {!bankAccounts.isLoading && (
+            <>
+              <div
+                className="budget-mini budget-mini-compact"
+                onClick={() => setSelectedBankId("")}
+                style={{
+                  borderColor: !selectedBankId ? "var(--brand-500)" : undefined,
+                  boxShadow: !selectedBankId ? "var(--shadow-sm)" : undefined,
+                }}
+              >
+                <div className="bm-name">All banks</div>
+                <div className={`bm-amount ${getAmountToneClass(totalBankBalanceCents)}`}>{formatCents(totalBankBalanceCents)}</div>
+              </div>
+              {(bankAccounts.data ?? []).map((bank) => (
             <div
               key={bank.id}
               className="budget-mini budget-mini-compact"
@@ -315,6 +327,8 @@ export function TransactionsPage() {
               <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
             </div>
           ))}
+            </>
+          )}
         </div>
       </section>
 
@@ -391,7 +405,19 @@ export function TransactionsPage() {
       <section className="card">
         <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Recent Transactions</div>
         <div className="simple-list">
-          {filteredTransactions.map((tx) =>
+          {transactions.isLoading && <SkeletonList count={5} type="transaction" />}
+
+          {transactions.isError && (
+            <div className="empty-state" style={{ padding: "40px 20px" }}>
+              <div className="empty-state-icon">⚠️</div>
+              <h3 className="empty-state-title">Failed to load transactions</h3>
+              <button className="btn btn-primary" onClick={() => transactions.refetch()}>
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) =>
             editingTxId === tx.id ? (
               <div key={tx.id} className="crud-row">
                 <div className="crud-edit" style={{ gridTemplateColumns: "1fr 120px 120px auto auto" }}>
@@ -451,7 +477,18 @@ export function TransactionsPage() {
               </div>
             ),
           )}
-          {!filteredTransactions.length && <p className="muted">No transactions yet.</p>}
+          {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
+            <EmptyState
+              icon="📑"
+              title="No transactions yet"
+              description={selectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
+              action={
+                <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+                  + Add Transaction
+                </button>
+              }
+            />
+          )}
         </div>
       </section>
 

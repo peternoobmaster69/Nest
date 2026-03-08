@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
 
 type AppContext = {
   workspaceId: string | null;
@@ -89,6 +90,7 @@ export function InvestmentsPage() {
     enabled: Boolean(workspaceId),
     queryFn: () => fetchJson<InvestmentAccount[]>(`/api/investments?workspaceId=${workspaceId}`),
   });
+  const { isLoading: accountsLoading, isError: accountsError, refetch } = accounts;
 
   useEffect(() => {
     if (!accounts.data?.length) {
@@ -114,6 +116,26 @@ export function InvestmentsPage() {
   );
 
   const latestSelectedEntry = selectedEntries[selectedEntries.length - 1] ?? null;
+  const totalInvestedAcrossAll = useMemo(() => {
+    let total = 0;
+    for (const account of accounts.data ?? []) {
+      const latest = [...(account.entries ?? [])]
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .at(-1);
+      total += latest?.investedCents ?? 0;
+    }
+    return total;
+  }, [accounts.data]);
+  const totalCurrentAcrossAll = useMemo(() => {
+    let total = 0;
+    for (const account of accounts.data ?? []) {
+      const latest = [...(account.entries ?? [])]
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .at(-1);
+      total += latest?.currentValueCents ?? 0;
+    }
+    return total;
+  }, [accounts.data]);
 
   const createAccount = useMutation({
     mutationFn: () =>
@@ -361,22 +383,87 @@ export function InvestmentsPage() {
   return (
     <div className="inv-page">
       <section className="card inv-topbar">
-        <div>
-          <div className="inv-title">Investment Accounts</div>
-          <div className="inv-subtitle">Track invested amount and current valuation over time.</div>
-        </div>
-        <button className="btn btn-primary" type="button" onClick={openCreateAccountModal} disabled={!workspaceId}>
-          + Add Investment Account
+        {accountsLoading ? (
+          <>
+            <SkeletonMiniCard />
+            <SkeletonMiniCard />
+          </>
+        ) : (
+          <>
+            <div className="inv-top-stat">
+              <div className="inv-title">Total Invested</div>
+              <div className="inv-top-amount">{formatCents(totalInvestedAcrossAll)}</div>
+            </div>
+            <div className="inv-top-stat">
+              <div className="inv-title">Total Current</div>
+              <div className="inv-top-amount">{formatCents(totalCurrentAcrossAll)}</div>
+            </div>
+          </>
+        )}
+        <button
+          className="btn btn-primary btn-xs inv-add-btn"
+          type="button"
+          onClick={openCreateAccountModal}
+          disabled={!workspaceId}
+          aria-label="Add Investment Account"
+          title="Add Investment Account"
+        >
+          <span className="inv-add-btn-icon">+</span>
         </button>
       </section>
 
       <section className="inv-account-grid">
-        {(accounts.data ?? []).map((account) => {
+        {accountsLoading && (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        )}
+
+        {accountsError && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <EmptyState
+              icon="⚠️"
+              title="Failed to load investments"
+              action={
+                <button className="btn btn-primary" onClick={() => refetch()}>
+                  Retry
+                </button>
+              }
+            />
+          </div>
+        )}
+
+        {!accountsLoading && !accountsError && (accounts.data ?? []).length === 0 && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <EmptyState
+              icon="📈"
+              title="No investment accounts yet"
+              description="Add your first investment account to start tracking your portfolio performance."
+              action={
+                <button className="btn btn-primary" onClick={openCreateAccountModal}>
+                  + Add Investment Account
+                </button>
+              }
+            />
+          </div>
+        )}
+
+        {!accountsLoading && (accounts.data ?? []).map((account) => {
           const entries = [...account.entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
           const latest = entries[entries.length - 1] ?? null;
           const selected = account.id === selectedAccountId;
           return (
             <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""}`}>
+              <button
+                className="inv-edit-icon"
+                type="button"
+                onClick={() => openEditAccountModal(account)}
+                aria-label="Edit investment account"
+                title="Edit"
+              >
+                ✎
+              </button>
               <button className="inv-account-select" type="button" onClick={() => setSelectedAccountId(account.id)}>
                 <div className="inv-account-head">
                   <strong>{account.displayName || account.productName}</strong>
@@ -394,20 +481,6 @@ export function InvestmentsPage() {
                 </div>
               </button>
               <div className="inv-account-actions">
-                <button className="btn btn-ghost btn-xs" type="button" onClick={() => openEditAccountModal(account)}>
-                  Edit
-                </button>
-                <button
-                  className="btn btn-ghost btn-xs"
-                  type="button"
-                  onClick={() => {
-                    if (confirm(`Delete investment account "${account.displayName || account.productName}"?`)) {
-                      deleteAccount.mutate(account.id);
-                    }
-                  }}
-                >
-                  Delete
-                </button>
                 <button className="btn btn-primary btn-xs" type="button" onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(); }}>
                   + Add Update
                 </button>
@@ -475,7 +548,11 @@ export function InvestmentsPage() {
                 ) : null}
               </div>
             ) : (
-              <div className="inv-empty">No data points yet. Add your first fund/value update.</div>
+              <EmptyState
+                icon="📊"
+                title="No data points yet"
+                description="Add your first fund/value update to start tracking performance over time."
+              />
             )}
           </section>
 
@@ -504,23 +581,31 @@ export function InvestmentsPage() {
                     </div>
                   ))
               ) : (
-                <div className="inv-empty">No entries yet.</div>
+                <EmptyState
+                  icon="📋"
+                  title="No entries yet"
+                  description="Add your first entry to track invested amount and current value."
+                />
               )}
             </div>
           </section>
         </>
-      ) : (
-        <section className="card inv-empty">No investment accounts yet. Add one to start tracking.</section>
-      )}
+      ) : !accountsLoading && !accountsError ? (
+        <EmptyState
+          icon="📈"
+          title="Select an investment account"
+          description="Choose an account from above to view its performance chart and history."
+        />
+      ) : null}
 
       {accountModalOpen ? (
         <div className="profile-modal-overlay" onClick={closeAccountModal}>
-          <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
               <button className="profile-modal-close" onClick={closeAccountModal}>✕</button>
             </div>
-            <form className="profile-modal-body" onSubmit={(event: FormEvent) => {
+            <form className="profile-modal-body inv-modal-body" onSubmit={(event: FormEvent) => {
               event.preventDefault();
               if (!workspaceId) {
                 setAccountError("Workspace is not ready. Please wait and try again.");
@@ -552,7 +637,7 @@ export function InvestmentsPage() {
                 <span>Divested Date (Optional)</span>
                 <input className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
               </div>
-              <div className="profile-actions">
+              <div className="profile-actions inv-modal-actions">
                 {accountModalMode === "edit" && editingAccountId ? (
                   <button
                     type="button"
@@ -563,7 +648,7 @@ export function InvestmentsPage() {
                     {deleteAccount.isPending ? "Deleting..." : "Delete"}
                   </button>
                 ) : <span />}
-                <div style={{ display: "inline-flex", gap: "8px" }}>
+                <div className="inv-modal-primary-actions">
                   <button type="button" className="btn btn-ghost btn-xs" onClick={closeAccountModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary btn-xs" disabled={createAccount.isPending || updateAccount.isPending}>
                     {accountModalMode === "edit" ? (updateAccount.isPending ? "Saving..." : "Save") : (createAccount.isPending ? "Adding..." : "Add")}
@@ -578,12 +663,12 @@ export function InvestmentsPage() {
 
       {entryModalOpen ? (
         <div className="profile-modal-overlay" onClick={closeEntryModal}>
-          <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
               <button className="profile-modal-close" onClick={closeEntryModal}>✕</button>
             </div>
-            <form className="profile-modal-body" onSubmit={(event: FormEvent) => {
+            <form className="profile-modal-body inv-modal-body" onSubmit={(event: FormEvent) => {
               event.preventDefault();
               if (entryModalMode === "edit" && editingEntryId) {
                 updateEntry.mutate(editingEntryId);
@@ -613,7 +698,7 @@ export function InvestmentsPage() {
                 <span>Current Value</span>
                 <input className="input" type="number" step="0.01" value={entryCurrentValue} onChange={(e) => setEntryCurrentValue(e.target.value)} required />
               </div>
-              <div className="profile-actions">
+              <div className="profile-actions inv-modal-actions">
                 {entryModalMode === "edit" && editingEntryId ? (
                   <button
                     type="button"
@@ -624,7 +709,7 @@ export function InvestmentsPage() {
                     {deleteEntry.isPending ? "Deleting..." : "Delete"}
                   </button>
                 ) : <span />}
-                <div style={{ display: "inline-flex", gap: "8px" }}>
+                <div className="inv-modal-primary-actions">
                   <button type="button" className="btn btn-ghost btn-xs" onClick={closeEntryModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary btn-xs" disabled={createEntry.isPending || updateEntry.isPending}>
                     {entryModalMode === "edit" ? (updateEntry.isPending ? "Saving..." : "Save") : (createEntry.isPending ? "Adding..." : "Add")}

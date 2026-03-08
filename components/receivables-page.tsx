@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useMemo, useState } from "react";
+import { SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
 
 type AppContext = {
   workspaceId: string | null;
@@ -63,6 +64,7 @@ export function ReceivablesPage() {
     queryFn: () => fetchJson<Receivable[]>(`/api/receivables?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
+  const { isLoading, isError, refetch } = receivables;
 
   const createReceivable = useMutation({
     mutationFn: (payload: { receivableDate: string; transactionDate?: string; amountCents: number; remarks?: string }) =>
@@ -229,9 +231,13 @@ export function ReceivablesPage() {
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
           <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivables ({pendingCount} open)</div>
-          <div className={getAmountToneClass(totalReceivableCents)} style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
-            {formatCents(totalReceivableCents)}
-          </div>
+          {isLoading ? (
+            <SkeletonMiniCard />
+          ) : (
+            <div className={getAmountToneClass(totalReceivableCents)} style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+              {formatCents(totalReceivableCents)}
+            </div>
+          )}
         </div>
         <div className="recv-month-grid">
           {monthLabels.map((label, index) => {
@@ -271,7 +277,21 @@ export function ReceivablesPage() {
           </select>
         </div>
         <div className="simple-list">
-          {monthFilteredReceivables.map((r) => (
+          {isLoading && <SkeletonList count={4} type="transaction" />}
+
+          {isError && (
+            <EmptyState
+              icon="⚠️"
+              title="Failed to load receivables"
+              action={
+                <button className="btn btn-primary" onClick={() => refetch()}>
+                  Retry
+                </button>
+              }
+            />
+          )}
+
+          {!isLoading && !isError && monthFilteredReceivables.map((r) => (
             <div key={r.id} className="crud-row">
               <span style={{ display: "grid", gap: "4px", minWidth: 0 }}>
                 <span
@@ -302,7 +322,18 @@ export function ReceivablesPage() {
               </span>
             </div>
           ))}
-          {!monthFilteredReceivables.length && <p className="muted">No receivables for this month.</p>}
+          {!isLoading && !isError && monthFilteredReceivables.length === 0 && (
+            <EmptyState
+              icon="📥"
+              title="No receivables for this month"
+              description="Add a receivable to track money owed to you and expected payment dates."
+              action={
+                <button className="btn btn-primary" onClick={openCreateModal}>
+                  + Add Receivable
+                </button>
+              }
+            />
+          )}
         </div>
       </section>
 

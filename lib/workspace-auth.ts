@@ -41,6 +41,26 @@ export async function requireWorkspaceAccess(requestedWorkspaceId?: string | nul
     return { userId, workspaceId: requestedWorkspaceId };
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { activeWorkspaceId: true },
+  });
+
+  if (user?.activeWorkspaceId) {
+    const activeMembership = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: user.activeWorkspaceId,
+          userId,
+        },
+      },
+      select: { workspaceId: true },
+    });
+    if (activeMembership) {
+      return { userId, workspaceId: activeMembership.workspaceId };
+    }
+  }
+
   const firstMembership = await prisma.workspaceMember.findFirst({
     where: { userId },
     orderBy: { createdAt: "asc" },

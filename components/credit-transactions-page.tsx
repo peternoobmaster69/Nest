@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useMemo, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
+import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
 
 type CreditCard = {
   id: string;
@@ -93,7 +94,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
   const formatCurrency = (cents: number) => formatMoney(cents, baseCurrency);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["credit-transactions", selectedCardId, selectedYear, selectedMonth],
     queryFn: () =>
       fetchJson<{
@@ -299,7 +300,31 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             </tr>
           </thead>
           <tbody>
-            {filteredTransactions.map((tx) => {
+            {isLoading && (
+              <>
+                <SkeletonTableRow cols={6} />
+                <SkeletonTableRow cols={6} />
+                <SkeletonTableRow cols={6} />
+                <SkeletonTableRow cols={6} />
+                <SkeletonTableRow cols={6} />
+              </>
+            )}
+
+            {isError && (
+              <tr>
+                <td colSpan={6}>
+                  <div className="empty-state" style={{ padding: "40px 20px" }}>
+                    <div className="empty-state-icon">⚠️</div>
+                    <h3 className="empty-state-title">Failed to load transactions</h3>
+                    <button className="btn btn-primary" onClick={() => refetch()}>
+                      Retry
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+
+            {!isLoading && !isError && filteredTransactions.map((tx) => {
               const daysUntil = tx.paymentDueDate ? getDaysUntil(tx.paymentDueDate) : null;
               const isOverdue = daysUntil !== null && daysUntil < 0;
               const isUrgent = daysUntil !== null && daysUntil >= 0 && daysUntil <= 3;
@@ -353,10 +378,19 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </tr>
               );
             })}
-            {filteredTransactions.length === 0 && (
+            {!isLoading && !isError && filteredTransactions.length === 0 && (
               <tr>
-                <td colSpan={6} className="cct-empty">
-                  No transactions found. Add your first credit card transaction.
+                <td colSpan={6}>
+                  <EmptyState
+                    icon="🧾"
+                    title="No transactions yet"
+                    description="Add your first credit card transaction to start tracking your spending and payment due dates."
+                    action={
+                      <button className="btn btn-primary" onClick={openModal}>
+                        + Add Transaction
+                      </button>
+                    }
+                  />
                 </td>
               </tr>
             )}

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useState } from "react";
+import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
 
 type CreditCardReward = {
   id: string;
@@ -128,7 +129,7 @@ export function RewardsPage({
     return formatMoney(cents, baseCurrency);
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["rewards"],
     queryFn: fetchRewards,
     initialData: {
@@ -318,28 +319,56 @@ export function RewardsPage({
     <div>
       {/* Summary Stats */}
       <section className="stat-card" style={{ marginBottom: "20px", display: "grid", gap: "12px" }}>
-        <div>
-          <div className="stat-label">Total Miles</div>
-          <div className="stat-value">{formatNumber(totalCombinedMiles)}</div>
-          <div className="stat-sub">Combined miles across cards and frequent flyer programs</div>
-        </div>
-        <div className="grid-2" style={{ gap: "10px" }}>
-          <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
-            <div className="stat-label">Miles Across Credit Cards</div>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
-              {formatNumber(totalCreditCardMiles)}
+        {isLoading ? (
+          <>
+            <div style={{ display: "grid", gap: "8px" }}>
+              <SkeletonMiniCard />
             </div>
-            <div className="stat-sub">Across {data?.creditCards.length || 0} cards</div>
-          </div>
-          <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
-            <div className="stat-label">Frequent Flyer Miles</div>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
-              {formatNumber(totalMiles)}
+            <div className="grid-2" style={{ gap: "10px" }}>
+              <SkeletonMiniCard />
+              <SkeletonMiniCard />
             </div>
-            <div className="stat-sub">Across {data?.frequentFlyers.length || 0} programs</div>
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <div className="stat-label">Total Miles</div>
+              <div className="stat-value">{formatNumber(totalCombinedMiles)}</div>
+              <div className="stat-sub">Combined miles across cards and frequent flyer programs</div>
+            </div>
+            <div className="grid-2" style={{ gap: "10px" }}>
+              <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
+                <div className="stat-label">Miles Across Credit Cards</div>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
+                  {formatNumber(totalCreditCardMiles)}
+                </div>
+                <div className="stat-sub">Across {data?.creditCards.length || 0} cards</div>
+              </div>
+              <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
+                <div className="stat-label">Frequent Flyer Miles</div>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
+                  {formatNumber(totalMiles)}
+                </div>
+                <div className="stat-sub">Across {data?.frequentFlyers.length || 0} programs</div>
+              </div>
+            </div>
+          </>
+        )}
       </section>
+
+      {isError && (
+        <div className="card" style={{ marginBottom: "20px" }}>
+          <EmptyState
+            icon="⚠️"
+            title="Failed to load rewards"
+            action={
+              <button className="btn btn-primary" onClick={() => refetch()}>
+                Retry
+              </button>
+            }
+          />
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="segmented" style={{ marginBottom: "20px" }}>
@@ -367,7 +396,20 @@ export function RewardsPage({
       {activeTab === "credit-cards" && (
         <div>
           <div className="rewards-cc-grid" style={{ marginBottom: "20px" }}>
-            {data?.creditCards.map((card) => (
+            {isLoading && (
+              <>
+                <SkeletonCard />
+                <SkeletonCard />
+              </>
+            )}
+            {!isLoading && !isError && data?.creditCards.length === 0 && (
+              <EmptyState
+                icon="💳"
+                title="No credit card rewards"
+                description="Add your first credit card to start tracking rewards points and their conversion to miles."
+              />
+            )}
+            {!isLoading && data?.creditCards.map((card) => (
               <div key={card.id} className="card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
@@ -522,7 +564,22 @@ export function RewardsPage({
       {activeTab === "frequent-flyers" && (
         <div>
           <div className="grid-2" style={{ marginBottom: "20px" }}>
-            {data?.frequentFlyers.map((ff) => (
+            {isLoading && (
+              <>
+                <SkeletonCard />
+                <SkeletonCard />
+              </>
+            )}
+            {!isLoading && !isError && data?.frequentFlyers.length === 0 && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <EmptyState
+                  icon="✈️"
+                  title="No frequent flyer programs"
+                  description="Add your first frequent flyer program to track miles and set redemption goals."
+                />
+              </div>
+            )}
+            {!isLoading && data?.frequentFlyers.map((ff) => (
               <div key={ff.id} className="card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
@@ -620,7 +677,13 @@ export function RewardsPage({
       {activeTab === "conversions" && (
         <div>
           <div style={{ marginBottom: "20px" }}>
-            {data?.conversions.map((conv) => (
+            {isLoading && (
+              <>
+                <SkeletonCard />
+                <SkeletonCard />
+              </>
+            )}
+            {!isLoading && !isError && data?.conversions.map((conv) => (
               <div key={conv.id} className="card" style={{ marginBottom: "8px" }}>
                 {editingConversionId === conv.id ? (
                   <div className="crud-edit" style={{ gridTemplateColumns: "140px 140px 1fr auto auto" }}>
@@ -696,10 +759,12 @@ export function RewardsPage({
                 )}
               </div>
             ))}
-            {!data?.conversions.length && (
-              <div className="card" style={{ textAlign: "center", color: "var(--text-tertiary)" }}>
-                No conversions yet. Add a conversion rate between credit card points and miles.
-              </div>
+            {!isLoading && !isError && !data?.conversions.length && (
+              <EmptyState
+                icon="🔄"
+                title="No conversions yet"
+                description="Add a conversion rate between credit card points and frequent flyer miles."
+              />
             )}
           </div>
 

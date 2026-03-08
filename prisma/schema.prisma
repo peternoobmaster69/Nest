@@ -14,6 +14,7 @@ model User {
   emailVerified   DateTime?
   name            String?
   image           String?
+  activeWorkspaceId String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   accounts        Account[]
@@ -24,6 +25,9 @@ model User {
   receivablesTo   Receivable[]      @relation("ReceivableTo")
   notes           Note[]
   gmailIntegrations GmailIntegration[]
+  sentWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteSender")
+  receivedWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteReceiver")
+  workspaceAuditLogs WorkspaceAuditLog[]
 }
 
 model Account {
@@ -90,6 +94,38 @@ model Workspace {
   cardAlertStagings    CardAlertStaging[]
   gmailIntegrations    GmailIntegration[]
   investmentAccounts   InvestmentAccount[]
+  invites             WorkspaceInvite[]
+  auditLogs           WorkspaceAuditLog[]
+}
+
+model WorkspaceInvite {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  invitedEmail  String
+  invitedById   String
+  invitedUserId String?
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  respondedAt   DateTime?
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy     User      @relation("WorkspaceInviteSender", fields: [invitedById], references: [id], onDelete: NoAction)
+  invitedUser   User?     @relation("WorkspaceInviteReceiver", fields: [invitedUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([invitedEmail, status])
+}
+
+model WorkspaceAuditLog {
+  id          String    @id @default(cuid())
+  workspaceId String
+  actorUserId String?
+  action      String
+  details     String
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorUser   User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
 }
 
 model InvestmentAccount {

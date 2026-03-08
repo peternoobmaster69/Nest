@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useState } from "react";
+import { SkeletonBankCard, SkeletonGrid, EmptyState, PageLoadingState } from "@/components/ui-skeleton";
 
 type Context = {
   workspaceId: string | null;
@@ -332,7 +333,21 @@ export function SettingsPage() {
 
       {/* Accounts Grid */}
       <div className="st-grid">
-        {accounts.data?.map((account) => {
+        {accounts.isLoading && (
+          <SkeletonGrid count={4} type="bank" />
+        )}
+
+        {accounts.isError && (
+          <div className="st-empty">
+            <div className="st-empty-icon">⚠️</div>
+            <p>Failed to load accounts</p>
+            <button className="btn btn-primary" onClick={() => accounts.refetch()}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!accounts.isLoading && !accounts.isError && accounts.data?.map((account) => {
           const bank = getSingaporeBankByName(account.bankName);
           const logo = getBankLogoUrl(bank);
           const hasDiscrepancy = account.discrepancyCents !== 0;
@@ -404,20 +419,28 @@ export function SettingsPage() {
           );
         })}
 
-        {/* Add New Card Placeholder */}
-        <button className="st-add-card" onClick={openAddModal}>
-          <div className="st-add-icon">+</div>
-          <span>Add Bank Account</span>
-          <p className="st-add-hint">Connect a new bank to track your finances</p>
-        </button>
+        {/* Add New Card Placeholder - only show when data loaded and has accounts */}
+        {!accounts.isLoading && !accounts.isError && accounts.data && accounts.data.length > 0 && (
+          <button className="st-add-card" onClick={openAddModal}>
+            <div className="st-add-icon">+</div>
+            <span>Add Bank Account</span>
+            <p className="st-add-hint">Connect a new bank to track your finances</p>
+          </button>
+        )}
 
-        {!accounts.data?.length && (
-          <div className="st-empty">
-            <div className="st-empty-icon">🏦</div>
-            <p>No bank accounts yet</p>
-            <button className="btn btn-primary" onClick={openAddModal}>
-              Add your first account
-            </button>
+        {/* Empty State */}
+        {!accounts.isLoading && !accounts.isError && accounts.data?.length === 0 && (
+          <div className="st-grid-empty">
+            <EmptyState
+              icon="🏦"
+              title="No bank accounts yet"
+              description="Connect your first bank account to start tracking your finances and managing budgets."
+              action={
+                <button className="btn btn-primary" onClick={openAddModal}>
+                  + Add Your First Account
+                </button>
+              }
+            />
           </div>
         )}
       </div>
