@@ -3,8 +3,8 @@ import { Providers } from "@/app/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nest — Smart Budgeting",
-  description: "Nest helps you budget, track cards, and migrate legacy finance data safely.",
+  title: "Nest Personal Finance Companion",
+  description: "Nest Personal Finance Companion helps you budget, track cards, and manage personal finances.",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",

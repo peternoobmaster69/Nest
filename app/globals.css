@@ -1889,6 +1889,71 @@ body {
   }
 }
 
+.home-public {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--brand-500) 10%, transparent), transparent 45%),
+    var(--bg-base);
+}
+
+.home-public-card {
+  width: min(760px, 100%);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 14px;
+}
+
+.home-public-logo {
+  border-radius: 12px;
+}
+
+.home-public-card h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 5vw, 40px);
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.home-public-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.home-public-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.home-public-cta a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: 14px;
+}
+
+.home-public-signin {
+  text-decoration: none !important;
+  background: var(--brand-500);
+  color: white !important;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.home-public-signin:hover {
+  background: var(--brand-600);
+}
+
 .legal-shell {
   min-height: 100dvh;
   padding: 24px;
