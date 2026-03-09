@@ -1,48 +1,12 @@
-import { prisma } from "../lib/prisma";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
 const DEFAULT_URL = "https://peter-htet.outsystemscloud.com/FM/rest/KFMiles/GetKFMiles";
-const LEGACY_SYSTEM = "LEGACY_KFMILES_V1";
 
 function toDate(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
-}
-
-async function upsertLinkedRecord({
-  sourceTable,
-  sourceId,
-  targetModel,
-  create,
-  update,
-}) {
-  const link = await prisma.legacyRecordLink.findUnique({
-    where: {
-      system_sourceTable_sourceId: {
-        system: LEGACY_SYSTEM,
-        sourceTable,
-        sourceId,
-      },
-    },
-    select: { id: true, targetId: true },
-  });
-
-  if (link) {
-    await update(link.targetId);
-    return link.targetId;
-  }
-
-  const targetId = await create();
-  await prisma.legacyRecordLink.create({
-    data: {
-      system: LEGACY_SYSTEM,
-      sourceTable,
-      sourceId,
-      targetModel,
-      targetId,
-    },
-  });
-  return targetId;
 }
 
 async function main() {
@@ -60,153 +24,108 @@ async function main() {
     throw new Error(`Workspace not found: ${workspaceId}`);
   }
 
-  const res = await fetch(apiUrl);
+  console.log(`Import start: workspace=${workspaceId}, api=${apiUrl}`);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+  const res = await fetch(apiUrl, { signal: controller.signal }).finally(() => {
+    clearTimeout(timeoutId);
+  });
   if (!res.ok) {
     throw new Error(`Failed to fetch legacy API (${res.status})`);
   }
-
   const payload = await res.json();
+  console.log("Fetched legacy payload");
+
   const legacyMiles = Array.isArray(payload?.KFMiles) ? payload.KFMiles : [];
   const legacyRedemptions = Array.isArray(payload?.KFMilesRed) ? payload.KFMilesRed : [];
   const legacyDetails = Array.isArray(payload?.KFMilesRedDet) ? payload.KFMilesRedDet : [];
+  console.log(
+    `Parsed payload: miles=${legacyMiles.length}, redemptions=${legacyRedemptions.length}, details=${legacyDetails.length}`,
+  );
 
-  let milesUpserts = 0;
-  let redemptionUpserts = 0;
-  let detailUpserts = 0;
-  let detailSkipped = 0;
+  // Clear existing workspace data before import to avoid duplicates.
+  const workspaceRedemptionIds = (
+    await prisma.mileRedemption.findMany({
+      where: { workspaceId },
+      select: { id: true },
+    })
+  ).map((row) => row.id);
 
+  const workspaceMilesIds = (
+    await prisma.mileProgram.findMany({
+      where: { workspaceId },
+      select: { id: true },
+    })
+  ).map((row) => row.id);
+
+  if (workspaceRedemptionIds.length > 0) {
+    console.log(`Clearing existing redemptions: ${workspaceRedemptionIds.length}`);
+    await prisma.mileRedemptionDetail.deleteMany({
+      where: { redemptionId: { in: workspaceRedemptionIds } },
+    });
+    await prisma.mileRedemption.deleteMany({
+      where: { id: { in: workspaceRedemptionIds } },
+    });
+  }
+
+  if (workspaceMilesIds.length > 0) {
+    console.log(`Clearing existing miles programs: ${workspaceMilesIds.length}`);
+    await prisma.mileRedemptionDetail.deleteMany({
+      where: { milesFileId: { in: workspaceMilesIds } },
+    });
+    await prisma.mileProgram.deleteMany({
+      where: { id: { in: workspaceMilesIds } },
+    });
+  }
+
+  const milesIdMap = new Map();
+  console.log("Importing mile programs...");
   for (const row of legacyMiles) {
-    const sourceId = String(row.Id);
-    await upsertLinkedRecord({
-      sourceTable: "KFMiles",
-      sourceId,
-      targetModel: "MileProgram",
-      create: async () => {
-        const created = await prisma.mileProgram.create({
-          data: {
-            workspaceId,
-            date: toDate(row.Date) ?? new Date(),
-            miles: Number(row.Miles ?? 0),
-            balanceMiles: Number(row.BalanceMiles ?? row.Miles ?? 0),
-            expiryDate: toDate(row.ExpiryDate),
-            title: row.Title ?? null,
-            firstRedeemedDate: toDate(row.FirstRedeemedDate),
-          },
-          select: { id: true },
-        });
-        return created.id;
+    const created = await prisma.mileProgram.create({
+      data: {
+        workspaceId,
+        date: toDate(row.Date) ?? new Date(),
+        miles: Number(row.Miles ?? 0),
+        balanceMiles: Number(row.BalanceMiles ?? row.Miles ?? 0),
+        expiryDate: toDate(row.ExpiryDate),
+        title: row.Title ?? null,
+        firstRedeemedDate: toDate(row.FirstRedeemedDate),
       },
-      update: async (targetId) => {
-        await prisma.mileProgram.update({
-          where: { id: targetId },
-          data: {
-            workspaceId,
-            date: toDate(row.Date) ?? new Date(),
-            miles: Number(row.Miles ?? 0),
-            balanceMiles: Number(row.BalanceMiles ?? row.Miles ?? 0),
-            expiryDate: toDate(row.ExpiryDate),
-            title: row.Title ?? null,
-            firstRedeemedDate: toDate(row.FirstRedeemedDate),
-          },
-        });
-      },
+      select: { id: true },
     });
-    milesUpserts += 1;
+    milesIdMap.set(String(row.Id), created.id);
   }
 
+  const redemptionIdMap = new Map();
+  console.log("Importing redemptions...");
   for (const row of legacyRedemptions) {
-    const sourceId = String(row.Id);
-    await upsertLinkedRecord({
-      sourceTable: "KFMilesRedemption",
-      sourceId,
-      targetModel: "MileRedemption",
-      create: async () => {
-        const created = await prisma.mileRedemption.create({
-          data: {
-            workspaceId,
-            redemptionTitle: row.RemeptionTitle ?? "Legacy Redemption",
-            totalMilesRedeemed: Number(row.TotalMilesRedeemed ?? 0),
-            dateTime: toDate(row.DateTime) ?? new Date(),
-          },
-          select: { id: true },
-        });
-        return created.id;
+    const created = await prisma.mileRedemption.create({
+      data: {
+        workspaceId,
+        redemptionTitle: row.RemeptionTitle ?? "Legacy Redemption",
+        totalMilesRedeemed: Number(row.TotalMilesRedeemed ?? 0),
+        dateTime: toDate(row.DateTime) ?? new Date(),
       },
-      update: async (targetId) => {
-        await prisma.mileRedemption.update({
-          where: { id: targetId },
-          data: {
-            workspaceId,
-            redemptionTitle: row.RemeptionTitle ?? "Legacy Redemption",
-            totalMilesRedeemed: Number(row.TotalMilesRedeemed ?? 0),
-            dateTime: toDate(row.DateTime) ?? new Date(),
-          },
-        });
-      },
+      select: { id: true },
     });
-    redemptionUpserts += 1;
+    redemptionIdMap.set(String(row.Id), created.id);
   }
 
+  console.log("Importing redemption details...");
   for (const row of legacyDetails) {
-    const sourceId = String(row.Id);
-    const redemptionSourceId = String(row.KFMilesRedemptionId);
-    const milesSourceId = String(row.KFMilesId);
+    const redemptionId = redemptionIdMap.get(String(row.KFMilesRedemptionId));
+    const milesFileId = milesIdMap.get(String(row.KFMilesId));
+    if (!redemptionId || !milesFileId) continue;
 
-    const [redemptionLink, milesLink] = await Promise.all([
-      prisma.legacyRecordLink.findUnique({
-        where: {
-          system_sourceTable_sourceId: {
-            system: LEGACY_SYSTEM,
-            sourceTable: "KFMilesRedemption",
-            sourceId: redemptionSourceId,
-          },
-        },
-        select: { targetId: true },
-      }),
-      prisma.legacyRecordLink.findUnique({
-        where: {
-          system_sourceTable_sourceId: {
-            system: LEGACY_SYSTEM,
-            sourceTable: "KFMiles",
-            sourceId: milesSourceId,
-          },
-        },
-        select: { targetId: true },
-      }),
-    ]);
-
-    if (!redemptionLink?.targetId || !milesLink?.targetId) {
-      detailSkipped += 1;
-      continue;
-    }
-
-    await upsertLinkedRecord({
-      sourceTable: "KFMilesRedemptionDetail",
-      sourceId,
-      targetModel: "MileRedemptionDetail",
-      create: async () => {
-        const created = await prisma.mileRedemptionDetail.create({
-          data: {
-            redemptionId: redemptionLink.targetId,
-            milesFileId: milesLink.targetId,
-            milesRedeemed: Number(row.MilesRedeemed ?? 0),
-          },
-          select: { id: true },
-        });
-        return created.id;
-      },
-      update: async (targetId) => {
-        await prisma.mileRedemptionDetail.update({
-          where: { id: targetId },
-          data: {
-            redemptionId: redemptionLink.targetId,
-            milesFileId: milesLink.targetId,
-            milesRedeemed: Number(row.MilesRedeemed ?? 0),
-          },
-        });
+    await prisma.mileRedemptionDetail.create({
+      data: {
+        redemptionId,
+        milesFileId,
+        milesRedeemed: Number(row.MilesRedeemed ?? 0),
       },
     });
-    detailUpserts += 1;
   }
 
   console.log(
@@ -214,10 +133,9 @@ async function main() {
       {
         workspaceId,
         workspaceName: workspace.name,
-        milesUpserts,
-        redemptionUpserts,
-        detailUpserts,
-        detailSkipped,
+        importedMiles: legacyMiles.length,
+        importedRedemptions: legacyRedemptions.length,
+        importedRedemptionDetails: legacyDetails.length,
       },
       null,
       2,

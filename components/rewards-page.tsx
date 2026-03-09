@@ -27,6 +27,7 @@ type FrequentFlyer = {
   targetMiles: number | null;
   expiryWarning: number;
   notes: string | null;
+  isActive: boolean;
 };
 
 type PointConversion = {
@@ -97,11 +98,6 @@ export function RewardsPage({
   const [newCardConvMiles, setNewCardConvMiles] = useState("4000");
   const [newCardConvDesc, setNewCardConvDesc] = useState("");
 
-  const [newFFProgram, setNewFFProgram] = useState("");
-  const [newFFAirline, setNewFFAirline] = useState("");
-  const [newFFNumber, setNewFFNumber] = useState("");
-  const [newFFMiles, setNewFFMiles] = useState("");
-  const [newFFTarget, setNewFFTarget] = useState("");
 
   const [convCardId, setConvCardId] = useState("");
   const [convFFId, setConvFFId] = useState("");
@@ -114,6 +110,17 @@ export function RewardsPage({
   const [editingConvDesc, setEditingConvDesc] = useState("");
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingCardPoints, setEditingCardPoints] = useState("");
+
+  // Frequent Flyer modal state
+  const [isFFModalOpen, setIsFFModalOpen] = useState(false);
+  const [editingFFId, setEditingFFId] = useState<string | null>(null);
+  const [ffFormProgram, setFFFormProgram] = useState("");
+  const [ffFormAirline, setFFFormAirline] = useState("");
+  const [ffFormNumber, setFFFormNumber] = useState("");
+  const [ffFormMiles, setFFFormMiles] = useState("");
+  const [ffFormTarget, setFFFormTarget] = useState("");
+  const [ffFormExpiry, setFFFormExpiry] = useState("6");
+  const [ffFormNotes, setFFFormNotes] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -186,6 +193,8 @@ export function RewardsPage({
       accountNumber?: string;
       currentMiles: number;
       targetMiles?: number;
+      expiryWarning?: number;
+      notes?: string;
     }) =>
       fetch("/api/rewards/frequent-flyer", {
         method: "POST",
@@ -194,11 +203,29 @@ export function RewardsPage({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rewards"] });
-      setNewFFProgram("");
-      setNewFFAirline("");
-      setNewFFNumber("");
-      setNewFFMiles("");
-      setNewFFTarget("");
+      closeFFModal();
+    },
+  });
+
+  const updateFrequentFlyer = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      programName: string;
+      airlineName: string;
+      accountNumber?: string;
+      currentMiles: number;
+      targetMiles?: number;
+      expiryWarning?: number;
+      notes?: string;
+    }) =>
+      fetch("/api/rewards/frequent-flyer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      closeFFModal();
     },
   });
 
@@ -269,18 +296,6 @@ export function RewardsPage({
     });
   };
 
-  const onCreateFrequentFlyer = (e: FormEvent) => {
-    e.preventDefault();
-    if (!newFFProgram || !newFFAirline) return;
-    createFrequentFlyer.mutate({
-      programName: newFFProgram,
-      airlineName: newFFAirline,
-      accountNumber: newFFNumber || undefined,
-      currentMiles: parseInt(newFFMiles) || 0,
-      targetMiles: newFFTarget ? parseInt(newFFTarget) : undefined,
-    });
-  };
-
   const onCreateConversion = (e: FormEvent) => {
     e.preventDefault();
     if (!convCardId || !convFFId || !convPoints || !convMiles) return;
@@ -298,6 +313,60 @@ export function RewardsPage({
     setEditingConvPoints(String(conversion.fromPoints));
     setEditingConvMiles(String(conversion.toMiles));
     setEditingConvDesc(conversion.description || "");
+  };
+
+  // Frequent Flyer modal helpers
+  const resetFFForm = () => {
+    setFFFormProgram("");
+    setFFFormAirline("");
+    setFFFormNumber("");
+    setFFFormMiles("");
+    setFFFormTarget("");
+    setFFFormExpiry("6");
+    setFFFormNotes("");
+  };
+
+  const closeFFModal = () => {
+    setIsFFModalOpen(false);
+    setEditingFFId(null);
+    resetFFForm();
+  };
+
+  const openAddFFModal = () => {
+    setEditingFFId(null);
+    resetFFForm();
+    setIsFFModalOpen(true);
+  };
+
+  const openEditFFModal = (ff: FrequentFlyer) => {
+    setEditingFFId(ff.id);
+    setFFFormProgram(ff.programName);
+    setFFFormAirline(ff.airlineName);
+    setFFFormNumber(ff.accountNumber || "");
+    setFFFormMiles(String(ff.currentMiles));
+    setFFFormTarget(ff.targetMiles ? String(ff.targetMiles) : "");
+    setFFFormExpiry(String(ff.expiryWarning));
+    setFFFormNotes(ff.notes || "");
+    setIsFFModalOpen(true);
+  };
+
+  const onSubmitFF = (e: FormEvent) => {
+    e.preventDefault();
+    if (!ffFormProgram || !ffFormAirline) return;
+    const payload = {
+      programName: ffFormProgram,
+      airlineName: ffFormAirline,
+      accountNumber: ffFormNumber || undefined,
+      currentMiles: parseInt(ffFormMiles) || 0,
+      targetMiles: ffFormTarget ? parseInt(ffFormTarget) : undefined,
+      expiryWarning: parseInt(ffFormExpiry) || 6,
+      notes: ffFormNotes || undefined,
+    };
+    if (editingFFId) {
+      updateFrequentFlyer.mutate({ id: editingFFId, ...payload });
+    } else {
+      createFrequentFlyer.mutate(payload);
+    }
   };
 
   const totalMiles = data?.frequentFlyers.reduce((sum, f) => sum + f.currentMiles, 0) || 0;
@@ -589,12 +658,20 @@ export function RewardsPage({
                       {ff.accountNumber && ` • ${ff.accountNumber}`}
                     </div>
                   </div>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => deleteFrequentFlyer.mutate(ff.id)}
-                  >
-                    Remove
-                  </button>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      onClick={() => openEditFFModal(ff)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      onClick={() => deleteFrequentFlyer.mutate(ff.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
                 <div style={{ marginTop: "12px" }}>
                   <div style={{ fontSize: "24px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
@@ -619,57 +696,11 @@ export function RewardsPage({
             ))}
           </div>
 
-          <form className="card" onSubmit={onCreateFrequentFlyer}>
-            <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>
-              Add Frequent Flyer Program
-            </div>
-            <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "1fr 1fr" }}>
-              <input
-                type="text"
-                className="input"
-                placeholder="Program name (e.g., KrisFlyer)"
-                value={newFFProgram}
-                onChange={(e) => setNewFFProgram(e.target.value)}
-                required
-              />
-              <input
-                type="text"
-                className="input"
-                placeholder="Airline name (e.g., Singapore Airlines)"
-                value={newFFAirline}
-                onChange={(e) => setNewFFAirline(e.target.value)}
-                required
-              />
-              <input
-                type="text"
-                className="input"
-                placeholder="Account number (optional)"
-                value={newFFNumber}
-                onChange={(e) => setNewFFNumber(e.target.value)}
-              />
-              <input
-                type="number"
-                className="input"
-                placeholder="Current miles"
-                value={newFFMiles}
-                onChange={(e) => setNewFFMiles(e.target.value)}
-              />
-              <input
-                type="number"
-                className="input"
-                placeholder="Target miles (optional)"
-                value={newFFTarget}
-                onChange={(e) => setNewFFTarget(e.target.value)}
-              />
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={createFrequentFlyer.isPending}
-              >
-                Add Program
-              </button>
-            </div>
-          </form>
+          <div className="card" style={{ textAlign: "center" }}>
+            <button className="btn btn-primary" onClick={openAddFFModal}>
+              + Add Frequent Flyer Program
+            </button>
+          </div>
         </div>
       )}
 
@@ -838,6 +869,122 @@ export function RewardsPage({
               Add at least one credit card reward and one frequent flyer program to create conversions.
             </div>
           )}
+        </div>
+      )}
+
+      {/* Frequent Flyer Modal */}
+      {isFFModalOpen && (
+        <div className="st-modal-overlay" onClick={closeFFModal}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>{editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}</h3>
+              <button className="st-close-btn" onClick={closeFFModal}>
+                ✕
+              </button>
+            </div>
+            <form className="st-modal-form" onSubmit={onSubmitFF}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label">Program Name</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g., KrisFlyer"
+                    value={ffFormProgram}
+                    onChange={(e) => setFFFormProgram(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Airline Name</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g., Singapore Airlines"
+                    value={ffFormAirline}
+                    onChange={(e) => setFFFormAirline(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Account Number</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Optional"
+                    value={ffFormNumber}
+                    onChange={(e) => setFFFormNumber(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Current Miles</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={ffFormMiles}
+                    onChange={(e) => setFFFormMiles(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Target Miles</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    placeholder="Optional"
+                    value={ffFormTarget}
+                    onChange={(e) => setFFFormTarget(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Expiry Warning (months)</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={ffFormExpiry}
+                    onChange={(e) => setFFFormExpiry(e.target.value)}
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Notes</label>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    placeholder="Optional notes..."
+                    value={ffFormNotes}
+                    onChange={(e) => setFFFormNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+              {(createFrequentFlyer.isError || updateFrequentFlyer.isError) && (
+                <div className="st-error">
+                  {((createFrequentFlyer.error || updateFrequentFlyer.error) as Error)?.message || "Failed to save"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeFFModal}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createFrequentFlyer.isPending || updateFrequentFlyer.isPending}
+                >
+                  {editingFFId
+                    ? updateFrequentFlyer.isPending
+                      ? "Saving..."
+                      : "Save Changes"
+                    : createFrequentFlyer.isPending
+                      ? "Adding..."
+                      : "Add Program"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

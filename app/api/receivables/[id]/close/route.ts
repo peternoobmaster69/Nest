@@ -43,6 +43,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { id: receivable.workspaceId },
       select: { id: true, name: true },
     });
+    if (!targetWorkspace) {
+      return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+    }
 
     // Require a subaccount to be selected on the receivable
     if (!receivable.budgetId) {
