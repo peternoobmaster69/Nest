@@ -25,6 +25,7 @@ type Transaction = {
   accountId: string;
   budgetId?: string | null;
   subject: string;
+  details?: string | null;
   amountCents: number;
   direction: "DEBIT" | "CREDIT";
   kind: string;
@@ -74,6 +75,7 @@ export function TransactionsPage() {
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
   const [editSubject, setEditSubject] = useState("");
+  const [editDetails, setEditDetails] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("DEDUCT");
 
@@ -173,12 +175,13 @@ export function TransactionsPage() {
   });
 
   const updateTx = useMutation({
-    mutationFn: (payload: { id: string; subject: string; amountCents: number; operation: "DEDUCT" | "ADD" }) =>
+    mutationFn: (payload: { id: string; subject: string; details?: string | null; amountCents: number; operation: "DEDUCT" | "ADD" }) =>
       fetchJson(`/api/transactions/${payload.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subject: payload.subject,
+          details: payload.details ?? null,
           amountCents: payload.amountCents,
           direction: payload.operation === "ADD" ? "CREDIT" : "DEBIT",
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
@@ -189,6 +192,7 @@ export function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
       setEditingTxId(null);
       setEditSubject("");
+      setEditDetails("");
       setEditAmount("");
       setEditOperation("DEDUCT");
     },
@@ -261,8 +265,29 @@ export function TransactionsPage() {
   const beginEdit = (tx: Transaction) => {
     setEditingTxId(tx.id);
     setEditSubject(tx.subject);
+    setEditDetails(tx.details || "");
     setEditAmount((tx.amountCents / 100).toFixed(2));
     setEditOperation(tx.direction === "CREDIT" ? "ADD" : "DEDUCT");
+  };
+
+  const closeEditModal = () => {
+    setEditingTxId(null);
+    setEditSubject("");
+    setEditDetails("");
+    setEditAmount("");
+    setEditOperation("DEDUCT");
+  };
+
+  const onSubmitEdit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingTxId || !editSubject || !editAmount) return;
+    updateTx.mutate({
+      id: editingTxId,
+      subject: editSubject,
+      details: editDetails || null,
+      amountCents: Math.round(Number(editAmount) * 100),
+      operation: editOperation,
+    });
   };
 
   return (
@@ -413,66 +438,27 @@ export function TransactionsPage() {
             </div>
           )}
 
-          {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) =>
-            editingTxId === tx.id ? (
-              <div key={tx.id} className="crud-row">
-                <div className="crud-edit" style={{ gridTemplateColumns: "1fr 120px 120px auto auto" }}>
-                  <input className="input" value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
-                  <input
-                    className="input"
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    value={editAmount}
-                    onChange={(e) => setEditAmount(e.target.value)}
-                  />
-                  <select
-                    className="input"
-                    value={editOperation}
-                    onChange={(e) => setEditOperation(e.target.value as "DEDUCT" | "ADD")}
-                    style={{ color: editOperation === "DEDUCT" ? "var(--amount-negative)" : "var(--amount-positive)" }}
-                  >
-                    <option value="DEDUCT">Deduct</option>
-                    <option value="ADD">Add</option>
-                  </select>
-                  <button
-                    className="btn btn-secondary btn-xs"
-                    onClick={() =>
-                      updateTx.mutate({
-                        id: tx.id,
-                        subject: editSubject,
-                        amountCents: Math.round(Number(editAmount) * 100),
-                        operation: editOperation,
-                      })
-                    }
-                    disabled={updateTx.isPending}
-                  >
-                    Save
-                  </button>
-                  <button className="btn btn-ghost btn-xs" onClick={() => setEditingTxId(null)}>
-                    Cancel
-                  </button>
-                </div>
+          {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) => (
+            <div key={tx.id} className="crud-row">
+              <div style={{ display: "grid", gap: "3px" }}>
+                <span className={getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}>
+                  {tx.subject} {formatCents(tx.amountCents)}
+                </span>
+                <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(tx.date).toLocaleString()}</span>
+                {tx.details ? (
+                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{tx.details}</span>
+                ) : null}
               </div>
-            ) : (
-              <div key={tx.id} className="crud-row">
-                <div style={{ display: "grid", gap: "3px" }}>
-                  <span className={getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}>
-                    {tx.subject} {formatCents(tx.amountCents)}
-                  </span>
-                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(tx.date).toLocaleString()}</span>
-                </div>
-                <div className="crud-actions">
-                  <button className="btn btn-ghost btn-xs" onClick={() => beginEdit(tx)}>
-                    Edit
-                  </button>
-                  <button className="btn btn-ghost btn-xs" onClick={() => deleteTx.mutate(tx.id)} disabled={deleteTx.isPending}>
-                    Delete
-                  </button>
-                </div>
+              <div className="crud-actions">
+                <button className="btn btn-ghost btn-xs" onClick={() => beginEdit(tx)}>
+                  Edit
+                </button>
+                <button className="btn btn-ghost btn-xs" onClick={() => deleteTx.mutate(tx.id)} disabled={deleteTx.isPending}>
+                  Delete
+                </button>
               </div>
-            ),
-          )}
+            </div>
+          ))}
           {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
             <EmptyState
               icon="📑"
@@ -555,6 +541,55 @@ export function TransactionsPage() {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {editingTxId && (
+        <div className="profile-modal-overlay" onClick={closeEditModal}>
+          <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>Edit Transaction</h3>
+              <button className="profile-modal-close" onClick={closeEditModal}>
+                Close
+              </button>
+            </div>
+            <form className="profile-modal-body" style={{ display: "grid", gap: "12px" }} onSubmit={onSubmitEdit}>
+              <input className="input" placeholder="Subject" value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
+              <textarea
+                className="input"
+                rows={3}
+                placeholder="Details"
+                value={editDetails}
+                onChange={(e) => setEditDetails(e.target.value)}
+              />
+              <input
+                className="input"
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="Amount"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+              />
+              <select
+                className="input"
+                value={editOperation}
+                onChange={(e) => setEditOperation(e.target.value as "DEDUCT" | "ADD")}
+                style={{ color: editOperation === "DEDUCT" ? "var(--amount-negative)" : "var(--amount-positive)" }}
+              >
+                <option value="DEDUCT">Deduct</option>
+                <option value="ADD">Add</option>
+              </select>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                <button className="btn btn-ghost" type="button" onClick={closeEditModal}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" type="submit" disabled={updateTx.isPending}>
+                  {updateTx.isPending ? <LoadingDots /> : "Save"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

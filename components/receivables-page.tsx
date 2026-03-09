@@ -55,7 +55,24 @@ function getAmountToneClass(valueCents: number) {
 }
 
 function toIsoFromDateInput(value: string) {
-  return new Date(`${value}T00:00:00`).toISOString();
+  return new Date(`${value}T00:00:00.000Z`).toISOString();
+}
+
+function toDateInputFromIso(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function todayDateInputValue() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -87,7 +104,7 @@ export function ReceivablesPage() {
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const [formReceivableDate, setFormReceivableDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formReceivableDate, setFormReceivableDate] = useState(todayDateInputValue);
   const [formTransactionDate, setFormTransactionDate] = useState("");
   const [formAmount, setFormAmount] = useState("");
   const [formRemarks, setFormRemarks] = useState("");
@@ -303,7 +320,7 @@ export function ReceivablesPage() {
   );
 
   const resetForm = () => {
-    setFormReceivableDate(new Date().toISOString().slice(0, 10));
+    setFormReceivableDate(todayDateInputValue());
     setFormTransactionDate("");
     setFormAmount("");
     setFormRemarks("");
@@ -330,8 +347,8 @@ export function ReceivablesPage() {
   const openEditModal = (r: Receivable) => {
     setModalMode("edit");
     setActiveId(r.id);
-    setFormReceivableDate(new Date(r.date).toISOString().slice(0, 10));
-    setFormTransactionDate(r.transactionDate ? new Date(r.transactionDate).toISOString().slice(0, 10) : "");
+    setFormReceivableDate(toDateInputFromIso(r.date));
+    setFormTransactionDate(r.transactionDate ? toDateInputFromIso(r.transactionDate) : "");
     setFormAmount((r.amountCents / 100).toFixed(2));
     setFormRemarks(r.remarkTogether || "");
     setFormStatus(r.status);

@@ -46,34 +46,56 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Receivable is already closed." }, { status: 400 });
     }
 
-    // Require a subaccount to be selected on the receivable
-    if (!receivable.budgetId) {
+    const workspaceDefaults = await prisma.workspace.findUnique({
+      where: { id: receivable.workspaceId },
+      select: {
+        id: true,
+        name: true,
+        receivableDefaultAccountId: true,
+        receivableDefaultBudgetId: true,
+      },
+    });
+    if (!workspaceDefaults?.receivableDefaultAccountId || !workspaceDefaults.receivableDefaultBudgetId) {
       return NextResponse.json(
-        { error: "Please select a subaccount for this receivable before closing." },
+        { error: "Configure default receivable account and subaccount in Settings before closing." },
         { status: 400 },
       );
     }
 
-    // Use the user-selected subaccount
-    // Note: For cross-workspace deductions, the budget may belong to a different workspace
-    const selectedBudget = await prisma.budgetEnvelope.findFirst({
+    const targetAccount = await prisma.financialAccount.findFirst({
       where: {
-        id: receivable.budgetId,
+        id: workspaceDefaults.receivableDefaultAccountId,
+        workspaceId: workspaceDefaults.id,
+        kind: "BANK",
+        isActive: true,
+      },
+      select: { id: true, name: true, workspaceId: true },
+    });
+    if (!targetAccount) {
+      return NextResponse.json(
+        { error: "Default receivable account is invalid. Update Settings." },
+        { status: 400 },
+      );
+    }
+
+    const targetBudget = await prisma.budgetEnvelope.findFirst({
+      where: {
+        id: workspaceDefaults.receivableDefaultBudgetId,
+        workspaceId: workspaceDefaults.id,
+        accountId: targetAccount.id,
         isActive: true,
       },
       select: { id: true, accountId: true, workspaceId: true },
     });
-    if (!selectedBudget) {
+    if (!targetBudget) {
       return NextResponse.json(
-        { error: "Selected subaccount is no longer available. Please update the receivable." },
+        { error: "Default receivable subaccount is invalid. Update Settings." },
         { status: 400 },
       );
     }
-    const targetBudgetId = selectedBudget.id;
-    const targetAccountId = selectedBudget.accountId;
-    const targetWorkspaceId = selectedBudget.workspaceId;
+    const targetWorkspaceId = targetBudget.workspaceId;
 
-    // Get destination workspace name (for the source transaction description)
+    // Destination workspace for receivable close-in posting
     const destinationWorkspace = await prisma.workspace.findUnique({
       where: { id: targetWorkspaceId },
       select: { id: true, name: true },
@@ -82,39 +104,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Destination workspace not found" }, { status: 404 });
     }
 
-    const targetAccount = await prisma.financialAccount.findFirst({
-      where: {
-        id: targetAccountId,
-        workspaceId: targetWorkspaceId,
-        kind: "BANK",
-        isActive: true,
-      },
-      select: { id: true, name: true, workspaceId: true },
-    });
-    if (!targetAccount) {
-      return NextResponse.json(
-        { error: "Target account is invalid. Update the receivable subaccount or Settings." },
-        { status: 400 },
-      );
-    }
-
-    const targetBudget = await prisma.budgetEnvelope.findFirst({
-      where: {
-        id: targetBudgetId,
-        workspaceId: targetWorkspaceId,
-        accountId: targetAccount.id,
-        isActive: true,
-      },
-      select: { id: true },
-    });
-    if (!targetBudget) {
-      return NextResponse.json(
-        { error: "Target subaccount is invalid. Update the receivable subaccount or Settings." },
-        { status: 400 },
-      );
-    }
-
     let sourceAccount: { id: string; name: string; workspaceId: string } | null = null;
+    let sourceBudget: { id: string } | null = null;
     if (receivable.accountId) {
       const account = await prisma.financialAccount.findFirst({
         where: { id: receivable.accountId, kind: "BANK", isActive: true },
@@ -125,6 +116,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       await requireWorkspaceAccess(account.workspaceId);
       sourceAccount = account;
+
+      if (!receivable.budgetId) {
+        return NextResponse.json(
+          { error: "Selected deduction subaccount is invalid." },
+          { status: 400 },
+        );
+      }
+      const budget = await prisma.budgetEnvelope.findFirst({
+        where: {
+          id: receivable.budgetId,
+          workspaceId: account.workspaceId,
+          accountId: account.id,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!budget) {
+        return NextResponse.json(
+          { error: "Selected deduction subaccount is invalid." },
+          { status: 400 },
+        );
+      }
+      sourceBudget = budget;
     }
 
     const closeDate = parsed.data.closeDate ? new Date(parsed.data.closeDate) : new Date();
@@ -137,12 +151,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           workspaceId: targetWorkspaceId,
           accountId: targetAccount.id,
           kind: "RECEIVABLE_PAYMENT",
-          direction: "DEBIT",
+          direction: "CREDIT",
           budgetId: targetBudget.id,
           date: closeDate,
           amountCents: receivable.amountCents,
-          subject: `Receivable closed: ${note}`,
-          details: sourceAccount ? `Funded from ${sourceAccount.name}` : "Receivable settled",
+          subject: note,
+          details: sourceAccount ? `Receivable closed • funded from ${sourceAccount.name}` : "Receivable closed",
           externalRef,
           isSynced: false,
           isFromFamily: false,
@@ -152,19 +166,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       let sourceTxId: string | null = null;
       const shouldCreateSourceDeduction =
         sourceAccount &&
-        (sourceAccount.workspaceId !== targetAccount.workspaceId || sourceAccount.id !== targetAccount.id);
+        sourceBudget &&
+        (sourceAccount.workspaceId !== targetAccount.workspaceId ||
+          sourceAccount.id !== targetAccount.id ||
+          sourceBudget.id !== targetBudget.id);
 
-      if (shouldCreateSourceDeduction && sourceAccount) {
+      if (shouldCreateSourceDeduction && sourceAccount && sourceBudget) {
         const sourceTx = await db.transaction.create({
           data: {
             workspaceId: sourceAccount.workspaceId,
             accountId: sourceAccount.id,
             kind: "TRANSFER",
             direction: "DEBIT",
+            budgetId: sourceBudget.id,
             date: closeDate,
             amountCents: receivable.amountCents,
-            subject: `Receivable transfer out: ${note}`,
-            details: `To workspace "${destinationWorkspace.name}" receivable account`,
+            subject: note,
+            details: `Receivable transfer out • to workspace "${destinationWorkspace.name}" receivable account`,
             externalRef,
             isSynced: false,
             isFromFamily: false,
@@ -182,12 +200,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
 
       await recalculateBudgetAvailableCents(db, targetWorkspaceId, targetBudget.id);
+      if (sourceAccount && sourceBudget) {
+        await recalculateBudgetAvailableCents(db, sourceAccount.workspaceId, sourceBudget.id);
+      }
 
       return {
         receivable: updatedReceivable,
         incomeTransactionId: incomeTx.id,
         sourceTransactionId: sourceTxId,
       };
+    }, {
+      maxWait: 10_000,
+      timeout: 20_000,
     });
 
     return NextResponse.json(result);
