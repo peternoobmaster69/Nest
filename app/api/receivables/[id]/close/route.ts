@@ -41,43 +41,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const targetWorkspace = await prisma.workspace.findUnique({
       where: { id: receivable.workspaceId },
-      select: { id: true, name: true, receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
+      select: { id: true, name: true },
     });
 
-    // Determine target account and budget
-    // If receivable has budgetId (user selected a subaccount), use that budget and its account
-    // Otherwise fall back to workspace defaults
-    let targetAccountId: string;
-    let targetBudgetId: string;
-
-    if (receivable.budgetId) {
-      // User selected a specific subaccount on the receivable
-      const selectedBudget = await prisma.budgetEnvelope.findFirst({
-        where: {
-          id: receivable.budgetId,
-          workspaceId: receivable.workspaceId,
-          isActive: true,
-        },
-        select: { id: true, accountId: true },
-      });
-      if (!selectedBudget) {
-        return NextResponse.json(
-          { error: "Selected subaccount is no longer available. Please update the receivable." },
-          { status: 400 },
-        );
-      }
-      targetBudgetId = selectedBudget.id;
-      targetAccountId = selectedBudget.accountId;
-    } else if (targetWorkspace?.receivableDefaultAccountId && targetWorkspace?.receivableDefaultBudgetId) {
-      // Fall back to workspace defaults
-      targetAccountId = targetWorkspace.receivableDefaultAccountId;
-      targetBudgetId = targetWorkspace.receivableDefaultBudgetId;
-    } else {
+    // Require a subaccount to be selected on the receivable
+    if (!receivable.budgetId) {
       return NextResponse.json(
-        { error: "No subaccount selected and default receivable account/subaccount is not set. Configure it in Settings first." },
+        { error: "Please select a subaccount for this receivable before closing." },
         { status: 400 },
       );
     }
+
+    // Use the user-selected subaccount
+    const selectedBudget = await prisma.budgetEnvelope.findFirst({
+      where: {
+        id: receivable.budgetId,
+        workspaceId: receivable.workspaceId,
+        isActive: true,
+      },
+      select: { id: true, accountId: true },
+    });
+    if (!selectedBudget) {
+      return NextResponse.json(
+        { error: "Selected subaccount is no longer available. Please update the receivable." },
+        { status: 400 },
+      );
+    }
+    const targetBudgetId = selectedBudget.id;
+    const targetAccountId = selectedBudget.accountId;
 
     const targetAccount = await prisma.financialAccount.findFirst({
       where: {
