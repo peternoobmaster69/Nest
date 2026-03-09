@@ -11,9 +11,16 @@ const CloseReceivableSchema = z.object({
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const parsed = CloseReceivableSchema.safeParse(await request.json().catch(() => ({})));
+    let body = {};
+    try {
+      body = await request.json();
+    } catch {
+      // Empty body is fine
+    }
+    const parsed = CloseReceivableSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      const issues = parsed.error.issues.map((i) => i.message).join(", ");
+      return NextResponse.json({ error: `Invalid input: ${issues}` }, { status: 400 });
     }
 
     const receivable = await prisma.receivable.findUnique({
