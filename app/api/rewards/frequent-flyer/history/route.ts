@@ -61,9 +61,24 @@ async function ensureFrequentFlyer(workspaceId: string, frequentFlyerId: string)
   return frequentFlyer;
 }
 
-async function syncCurrentMiles(tx: Prisma.TransactionClient, frequentFlyerId: string) {
+function startOfTodayUtc() {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return today;
+}
+
+async function syncCurrentMiles(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  frequentFlyerId: string,
+) {
+  const today = startOfTodayUtc();
   const aggregate = await tx.mileProgram.aggregate({
-    where: { frequentFlyerId },
+    where: {
+      workspaceId,
+      frequentFlyerId,
+      OR: [{ expiryDate: null }, { expiryDate: { gte: today } }],
+    },
     _sum: { balanceMiles: true },
   });
   await tx.frequentFlyerAccount.update({
@@ -134,7 +149,7 @@ async function createRedemptionWithAutoAllocation(params: {
     });
   }
 
-  await syncCurrentMiles(tx, frequentFlyerId);
+  await syncCurrentMiles(tx, workspaceId, frequentFlyerId);
 }
 
 export async function GET(request: Request) {
@@ -148,7 +163,8 @@ export async function GET(request: Request) {
 
     await ensureFrequentFlyer(workspaceId, frequentFlyerId);
 
-    const [milePrograms, redemptions, totals] = await Promise.all([
+    const today = startOfTodayUtc();
+    const [milePrograms, redemptions, earnedTotals, availableTotals] = await Promise.all([
       prisma.mileProgram.findMany({
         where: { workspaceId, frequentFlyerId },
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],
@@ -168,7 +184,15 @@ export async function GET(request: Request) {
       }),
       prisma.mileProgram.aggregate({
         where: { workspaceId, frequentFlyerId },
-        _sum: { miles: true, balanceMiles: true },
+        _sum: { miles: true },
+      }),
+      prisma.mileProgram.aggregate({
+        where: {
+          workspaceId,
+          frequentFlyerId,
+          OR: [{ expiryDate: null }, { expiryDate: { gte: today } }],
+        },
+        _sum: { balanceMiles: true },
       }),
     ]);
 
@@ -178,8 +202,8 @@ export async function GET(request: Request) {
       milePrograms,
       redemptions,
       totals: {
-        earned: totals._sum.miles ?? 0,
-        available: totals._sum.balanceMiles ?? 0,
+        earned: earnedTotals._sum.miles ?? 0,
+        available: availableTotals._sum.balanceMiles ?? 0,
         redeemed,
       },
     });
@@ -217,7 +241,7 @@ export async function POST(request: Request) {
             firstRedeemedDate: toDate(payload.firstRedeemedDate),
           },
         });
-        await syncCurrentMiles(tx, payload.frequentFlyerId);
+        await syncCurrentMiles(tx, workspaceId, payload.frequentFlyerId);
         return;
       }
 
@@ -286,7 +310,7 @@ export async function PATCH(request: Request) {
               payload.firstRedeemedDate === undefined ? undefined : toDate(payload.firstRedeemedDate),
           },
         });
-        await syncCurrentMiles(tx, payload.frequentFlyerId);
+        await syncCurrentMiles(tx, workspaceId, payload.frequentFlyerId);
         return;
       }
 
@@ -354,7 +378,7 @@ export async function DELETE(request: Request) {
           throw new Error("Cannot delete an earn transaction that has redemption allocations");
         }
         await tx.mileProgram.delete({ where: { id } });
-        await syncCurrentMiles(tx, frequentFlyerId);
+        await syncCurrentMiles(tx, workspaceId, frequentFlyerId);
         return;
       }
 
@@ -377,7 +401,7 @@ export async function DELETE(request: Request) {
         });
       }
       await tx.mileRedemption.delete({ where: { id } });
-      await syncCurrentMiles(tx, frequentFlyerId);
+      await syncCurrentMiles(tx, workspaceId, frequentFlyerId);
     });
 
     return NextResponse.json({ success: true });

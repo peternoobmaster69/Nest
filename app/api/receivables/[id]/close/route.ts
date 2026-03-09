@@ -46,14 +46,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Receivable is already closed." }, { status: 400 });
     }
 
-    const targetWorkspace = await prisma.workspace.findUnique({
-      where: { id: receivable.workspaceId },
-      select: { id: true, name: true },
-    });
-    if (!targetWorkspace) {
-      return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-    }
-
     // Require a subaccount to be selected on the receivable
     if (!receivable.budgetId) {
       return NextResponse.json(
@@ -63,13 +55,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // Use the user-selected subaccount
+    // Note: For cross-workspace deductions, the budget may belong to a different workspace
     const selectedBudget = await prisma.budgetEnvelope.findFirst({
       where: {
         id: receivable.budgetId,
-        workspaceId: receivable.workspaceId,
         isActive: true,
       },
-      select: { id: true, accountId: true },
+      select: { id: true, accountId: true, workspaceId: true },
     });
     if (!selectedBudget) {
       return NextResponse.json(
@@ -79,11 +71,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     const targetBudgetId = selectedBudget.id;
     const targetAccountId = selectedBudget.accountId;
+    const targetWorkspaceId = selectedBudget.workspaceId;
+
+    // Get destination workspace name (for the source transaction description)
+    const destinationWorkspace = await prisma.workspace.findUnique({
+      where: { id: targetWorkspaceId },
+      select: { id: true, name: true },
+    });
+    if (!destinationWorkspace) {
+      return NextResponse.json({ error: "Destination workspace not found" }, { status: 404 });
+    }
 
     const targetAccount = await prisma.financialAccount.findFirst({
       where: {
         id: targetAccountId,
-        workspaceId: receivable.workspaceId,
+        workspaceId: targetWorkspaceId,
         kind: "BANK",
         isActive: true,
       },
@@ -99,7 +101,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const targetBudget = await prisma.budgetEnvelope.findFirst({
       where: {
         id: targetBudgetId,
-        workspaceId: receivable.workspaceId,
+        workspaceId: targetWorkspaceId,
         accountId: targetAccount.id,
         isActive: true,
       },
@@ -132,7 +134,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const result = await prisma.$transaction(async (db) => {
       const incomeTx = await db.transaction.create({
         data: {
-          workspaceId: targetWorkspace.id,
+          workspaceId: targetWorkspaceId,
           accountId: targetAccount.id,
           kind: "RECEIVABLE_PAYMENT",
           direction: "CREDIT",
@@ -162,7 +164,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             date: closeDate,
             amountCents: receivable.amountCents,
             subject: `Receivable transfer out: ${note}`,
-            details: `To workspace "${targetWorkspace.name}" default receivable account`,
+            details: `To workspace "${destinationWorkspace.name}" receivable account`,
             externalRef,
             isSynced: false,
             isFromFamily: false,
@@ -179,7 +181,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       });
 
-      await recalculateBudgetAvailableCents(db, targetWorkspace.id, targetBudget.id);
+      await recalculateBudgetAvailableCents(db, targetWorkspaceId, targetBudget.id);
 
       return {
         receivable: updatedReceivable,
