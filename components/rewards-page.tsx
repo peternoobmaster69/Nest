@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
 
 type CreditCardReward = {
@@ -116,6 +116,19 @@ function toDateInputValue(value: string): string {
   return value.slice(0, 10);
 }
 
+const EARN_PAGE_SIZE = 8;
+const REDEMPTION_PAGE_SIZE = 6;
+
+function isExpiredAtToday(dateValue: string | null): boolean {
+  if (!dateValue) return false;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  return date < today;
+}
+
 export function RewardsPage({
   initialCreditCards,
   initialFrequentFlyers,
@@ -174,6 +187,8 @@ export function RewardsPage({
   const [editingEarnMiles, setEditingEarnMiles] = useState("");
   const [editingEarnTitle, setEditingEarnTitle] = useState("");
   const [editingEarnExpiryDate, setEditingEarnExpiryDate] = useState("");
+  const [earnPage, setEarnPage] = useState(1);
+  const [redemptionPage, setRedemptionPage] = useState(1);
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -215,6 +230,11 @@ export function RewardsPage({
     },
     enabled: !!openHistoryFFId,
   });
+
+  useEffect(() => {
+    setEarnPage(1);
+    setRedemptionPage(1);
+  }, [openHistoryFFId]);
 
   const createCardReward = useMutation({
     mutationFn: (payload: {
@@ -591,6 +611,28 @@ export function RewardsPage({
     }, 0) || 0;
   const totalCombinedMiles = totalCreditCardMiles + totalMiles;
   const selectedHistoryFrequentFlyer = data?.frequentFlyers.find((ff) => ff.id === openHistoryFFId) ?? null;
+  const earnEntries = historyQuery.data?.milePrograms ?? [];
+  const redemptionEntries = historyQuery.data?.redemptions ?? [];
+  const earnTotalPages = Math.max(1, Math.ceil(earnEntries.length / EARN_PAGE_SIZE));
+  const redemptionTotalPages = Math.max(1, Math.ceil(redemptionEntries.length / REDEMPTION_PAGE_SIZE));
+  const safeEarnPage = Math.min(earnPage, earnTotalPages);
+  const safeRedemptionPage = Math.min(redemptionPage, redemptionTotalPages);
+  const pagedEarnEntries = earnEntries.slice(
+    (safeEarnPage - 1) * EARN_PAGE_SIZE,
+    safeEarnPage * EARN_PAGE_SIZE,
+  );
+  const pagedRedemptionEntries = redemptionEntries.slice(
+    (safeRedemptionPage - 1) * REDEMPTION_PAGE_SIZE,
+    safeRedemptionPage * REDEMPTION_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    if (earnPage > earnTotalPages) setEarnPage(earnTotalPages);
+  }, [earnPage, earnTotalPages]);
+
+  useEffect(() => {
+    if (redemptionPage > redemptionTotalPages) setRedemptionPage(redemptionTotalPages);
+  }, [redemptionPage, redemptionTotalPages]);
 
   return (
     <div>
@@ -836,7 +878,9 @@ export function RewardsPage({
           )}
         </div>
       )}
-
+      <button className="btn btn-primary" style={{ marginBottom: "10px"}} onClick={openAddFFModal}>
+              + Add Frequent Flyer Program
+      </button>
       {/* Frequent Flyer Tab */}
       {activeTab === "frequent-flyers" && (
         <div>
@@ -908,12 +952,6 @@ export function RewardsPage({
                 )}
               </div>
             ))}
-          </div>
-
-          <div className="card" style={{ textAlign: "center" }}>
-            <button className="btn btn-primary" onClick={openAddFFModal}>
-              + Add Frequent Flyer Program
-            </button>
           </div>
 
           {openHistoryFFId && selectedHistoryFrequentFlyer && (
@@ -1031,11 +1069,34 @@ export function RewardsPage({
                   </div>
 
                   <div style={{ display: "grid", gap: "8px" }}>
-                    <div style={{ fontSize: "13px", fontWeight: 600 }}>Earn Transactions</div>
-                    {!historyQuery.data.milePrograms.length && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>Earn Transactions</div>
+                      {earnEntries.length > EARN_PAGE_SIZE && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => setEarnPage((p) => Math.max(1, p - 1))}
+                            disabled={safeEarnPage <= 1}
+                          >
+                            Prev
+                          </button>
+                          <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                            {safeEarnPage}/{earnTotalPages}
+                          </div>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => setEarnPage((p) => Math.min(earnTotalPages, p + 1))}
+                            disabled={safeEarnPage >= earnTotalPages}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {!earnEntries.length && (
                       <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>No earn transactions yet.</div>
                     )}
-                    {historyQuery.data.milePrograms.map((entry) => (
+                    {pagedEarnEntries.map((entry) => (
                       <div key={entry.id} className="card-sm" style={{ display: "grid", gap: "8px" }}>
                         {editingEarnId === entry.id ? (
                           <div className="crud-edit" style={{ gridTemplateColumns: "140px 140px 1fr 140px auto auto" }}>
@@ -1089,8 +1150,15 @@ export function RewardsPage({
                               <div style={{ fontSize: "12px", fontWeight: 600 }}>
                                 {entry.title || "Miles credit"} • {toDateInputValue(entry.date)}
                               </div>
+                              <div style={{ fontSize: "18px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--brand-500)" }}>
+                                {formatNumber(entry.miles)} miles earned
+                              </div>
                               <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-                                {formatNumber(entry.miles)} earned • {formatNumber(entry.balanceMiles)} available
+                                {(() => {
+                                  const expired = isExpiredAtToday(entry.expiryDate);
+                                  const availableMiles = expired ? 0 : entry.balanceMiles;
+                                  return `${formatNumber(availableMiles)} available`;
+                                })()}
                                 {entry.expiryDate ? ` • expires ${toDateInputValue(entry.expiryDate)}` : ""}
                               </div>
                             </div>
@@ -1110,19 +1178,47 @@ export function RewardsPage({
                         )}
                       </div>
                     ))}
+                    {earnEntries.length > EARN_PAGE_SIZE && (
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textAlign: "right" }}>
+                        Showing {(safeEarnPage - 1) * EARN_PAGE_SIZE + 1}-{Math.min(safeEarnPage * EARN_PAGE_SIZE, earnEntries.length)} of {earnEntries.length}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: "grid", gap: "8px" }}>
-                    <div style={{ fontSize: "13px", fontWeight: 600 }}>Redemption Transactions</div>
-                    {!historyQuery.data.redemptions.length && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>Redemption Transactions</div>
+                      {redemptionEntries.length > REDEMPTION_PAGE_SIZE && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => setRedemptionPage((p) => Math.max(1, p - 1))}
+                            disabled={safeRedemptionPage <= 1}
+                          >
+                            Prev
+                          </button>
+                          <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                            {safeRedemptionPage}/{redemptionTotalPages}
+                          </div>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => setRedemptionPage((p) => Math.min(redemptionTotalPages, p + 1))}
+                            disabled={safeRedemptionPage >= redemptionTotalPages}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {!redemptionEntries.length && (
                       <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>No redemption transactions yet.</div>
                     )}
-                    {historyQuery.data.redemptions.map((entry) => (
+                    {pagedRedemptionEntries.map((entry) => (
                       <div key={entry.id} className="card-sm" style={{ display: "grid", gap: "4px" }}>
                         <div style={{ fontSize: "12px", fontWeight: 600 }}>
                           {entry.redemptionTitle} • {toDateInputValue(entry.dateTime)}
                         </div>
-                        <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                        <div style={{ fontSize: "18px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--brand-500)" }}>
                           {formatNumber(entry.totalMilesRedeemed)} miles redeemed
                         </div>
                         <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
@@ -1130,6 +1226,11 @@ export function RewardsPage({
                         </div>
                       </div>
                     ))}
+                    {redemptionEntries.length > REDEMPTION_PAGE_SIZE && (
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textAlign: "right" }}>
+                        Showing {(safeRedemptionPage - 1) * REDEMPTION_PAGE_SIZE + 1}-{Math.min(safeRedemptionPage * REDEMPTION_PAGE_SIZE, redemptionEntries.length)} of {redemptionEntries.length}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
