@@ -527,10 +527,15 @@ export function InvestmentsPage() {
           </div>
         )}
 
-        {!accountsLoading && (accounts.data ?? []).map((account) => {
+        {!accountsLoading && [...(accounts.data ?? [])]
+          .sort((a, b) => (a.displayName || a.productName).localeCompare(b.displayName || b.productName))
+          .map((account) => {
           const entries = [...account.entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
           const latest = entries[entries.length - 1] ?? null;
           const selected = account.id === selectedAccountId;
+          const investedCents = latest?.investedCents ?? 0;
+          const currentCents = latest?.currentValueCents ?? 0;
+          const currentValueClass = currentCents >= investedCents ? "positive" : "negative";
           return (
             <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""}`}>
               <button
@@ -550,11 +555,11 @@ export function InvestmentsPage() {
                 <div className="inv-account-amounts">
                   <div>
                     <small>Invested</small>
-                    <p>{formatCents(latest?.investedCents ?? 0)}</p>
+                    <p className="positive">{formatCents(investedCents)}</p>
                   </div>
                   <div>
                     <small>Current</small>
-                    <p>{formatCents(latest?.currentValueCents ?? 0)}</p>
+                    <p className={currentValueClass}>{formatCents(currentCents)}</p>
                   </div>
                 </div>
               </button>
