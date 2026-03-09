@@ -137,7 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           workspaceId: targetWorkspaceId,
           accountId: targetAccount.id,
           kind: "RECEIVABLE_PAYMENT",
-          direction: "CREDIT",
+          direction: "DEBIT",
           budgetId: targetBudget.id,
           date: closeDate,
           amountCents: receivable.amountCents,

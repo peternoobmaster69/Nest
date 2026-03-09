@@ -154,6 +154,13 @@ export function InvestmentsPage() {
     return total;
   }, [accounts.data]);
 
+  // Calculate gain/loss and return
+  const totalGainCents = totalCurrentAcrossAll - totalInvestedAcrossAll;
+  const returnPercentage = totalInvestedAcrossAll > 0
+    ? (totalGainCents / totalInvestedAcrossAll) * 100
+    : 0;
+  const isProfit = totalGainCents >= 0;
+
   const createAccount = useMutation({
     mutationFn: () =>
       fetchJson<InvestmentAccount>("/api/investments", {
@@ -434,36 +441,82 @@ export function InvestmentsPage() {
 
   return (
     <div className="inv-page">
-      <section className="card inv-topbar" style={{ display: "flex", alignItems: "center" }}>
+      {/* Modern Fintech-Style Dashboard Header */}
+      <section className="card" style={{ padding: "24px" }}>
         {accountsLoading ? (
-          <>
-            <div style={{ width: "40%" }}><SkeletonMiniCard /></div>
-            <div style={{ width: "40%" }}><SkeletonMiniCard /></div>
-          </>
+          <div style={{ display: "flex", gap: "32px" }}>
+            <div style={{ flex: 1 }}><SkeletonMiniCard /></div>
+            <div style={{ flex: 1 }}><SkeletonMiniCard /></div>
+            <div style={{ flex: 1 }}><SkeletonMiniCard /></div>
+          </div>
         ) : (
-          <>
-            <div className="inv-top-stat" style={{ width: "40%", textAlign: "left" }}>
-              <div className="inv-title">Total Invested</div>
-              <div className="inv-top-amount">{formatCents(totalInvestedAcrossAll)}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
+            {/* Total Portfolio Value - Primary */}
+            <div style={{ flex: "1 1 200px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                Total Portfolio Value
+              </div>
+              <div style={{ fontSize: "32px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>
+                {formatCents(totalCurrentAcrossAll)}
+              </div>
             </div>
-            <div className="inv-top-stat" style={{ width: "40%", textAlign: "right" }}>
-              <div className="inv-title">Total Current</div>
-              <div className="inv-top-amount">{formatCents(totalCurrentAcrossAll)}</div>
+
+            {/* Divider */}
+            <div style={{ width: "1px", height: "50px", background: "var(--border-subtle)", flexShrink: 0 }} />
+
+            {/* Invested Amount */}
+            <div style={{ flex: "0 1 150px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+                Total Invested
+              </div>
+              <div style={{ fontSize: "18px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                {formatCents(totalInvestedAcrossAll)}
+              </div>
             </div>
-          </>
+
+            {/* Gain/Loss */}
+            <div style={{ flex: "0 1 150px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+                {isProfit ? "Gain" : "Loss"}
+              </div>
+              <div style={{ fontSize: "18px", fontWeight: 700, color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)" }}>
+                {isProfit ? "+" : "-"}{formatCents(Math.abs(totalGainCents))}
+              </div>
+            </div>
+
+            {/* Return Percentage */}
+            <div style={{ flex: "0 1 150px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+                Return
+              </div>
+              <div style={{
+                fontSize: "18px",
+                fontWeight: 700,
+                color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px"
+              }}>
+                <span>{isProfit ? "▲" : "▼"}</span>
+                <span>{Math.abs(returnPercentage).toFixed(2)}%</span>
+              </div>
+            </div>
+
+            {/* Add Button */}
+            <div style={{ marginLeft: "auto" }}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={openCreateAccountModal}
+                disabled={!workspaceId}
+                aria-label="Add Investment Account"
+                title="Add Investment Account"
+              >
+                + Add Account
+              </button>
+            </div>
+          </div>
         )}
-        <div style={{ width: "20%", display: "flex", justifyContent: "flex-end" }}>
-          <button
-            className="btn btn-primary btn-xs inv-add-btn"
-            type="button"
-            onClick={openCreateAccountModal}
-            disabled={!workspaceId}
-            aria-label="Add Investment Account"
-            title="Add Investment Account"
-          >
-            <span className="inv-add-btn-icon">+</span>
-          </button>
-        </div>
       </section>
 
       {/* View Toggle */}
