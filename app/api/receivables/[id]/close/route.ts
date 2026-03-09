@@ -22,6 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         id: true,
         workspaceId: true,
         accountId: true,
+        budgetId: true,
         amountCents: true,
         status: true,
         title: true,
@@ -42,17 +43,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { id: receivable.workspaceId },
       select: { id: true, name: true, receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
     });
-    if (!targetWorkspace?.receivableDefaultAccountId || !targetWorkspace.receivableDefaultBudgetId) {
+
+    // Determine target account and budget
+    // If receivable has budgetId (user selected a subaccount), use that budget and its account
+    // Otherwise fall back to workspace defaults
+    let targetAccountId: string;
+    let targetBudgetId: string;
+
+    if (receivable.budgetId) {
+      // User selected a specific subaccount on the receivable
+      const selectedBudget = await prisma.budgetEnvelope.findFirst({
+        where: {
+          id: receivable.budgetId,
+          workspaceId: receivable.workspaceId,
+          isActive: true,
+        },
+        select: { id: true, accountId: true },
+      });
+      if (!selectedBudget) {
+        return NextResponse.json(
+          { error: "Selected subaccount is no longer available. Please update the receivable." },
+          { status: 400 },
+        );
+      }
+      targetBudgetId = selectedBudget.id;
+      targetAccountId = selectedBudget.accountId;
+    } else if (targetWorkspace?.receivableDefaultAccountId && targetWorkspace?.receivableDefaultBudgetId) {
+      // Fall back to workspace defaults
+      targetAccountId = targetWorkspace.receivableDefaultAccountId;
+      targetBudgetId = targetWorkspace.receivableDefaultBudgetId;
+    } else {
       return NextResponse.json(
-        { error: "Default receivable account/subaccount is not set. Configure it in Settings first." },
+        { error: "No subaccount selected and default receivable account/subaccount is not set. Configure it in Settings first." },
         { status: 400 },
       );
     }
 
     const targetAccount = await prisma.financialAccount.findFirst({
       where: {
-        id: targetWorkspace.receivableDefaultAccountId,
-        workspaceId: targetWorkspace.id,
+        id: targetAccountId,
+        workspaceId: receivable.workspaceId,
         kind: "BANK",
         isActive: true,
       },
@@ -60,15 +90,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     if (!targetAccount) {
       return NextResponse.json(
-        { error: "Configured default receivable account is invalid. Update it in Settings." },
+        { error: "Target account is invalid. Update the receivable subaccount or Settings." },
         { status: 400 },
       );
     }
 
     const targetBudget = await prisma.budgetEnvelope.findFirst({
       where: {
-        id: targetWorkspace.receivableDefaultBudgetId,
-        workspaceId: targetWorkspace.id,
+        id: targetBudgetId,
+        workspaceId: receivable.workspaceId,
         accountId: targetAccount.id,
         isActive: true,
       },
@@ -76,7 +106,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     if (!targetBudget) {
       return NextResponse.json(
-        { error: "Configured default receivable subaccount is invalid. Update it in Settings." },
+        { error: "Target subaccount is invalid. Update the receivable subaccount or Settings." },
         { status: 400 },
       );
     }
