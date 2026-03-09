@@ -9,6 +9,24 @@ function toDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+async function runWithConcurrency(items, limit, worker, onProgress) {
+  let nextIndex = 0;
+  let completed = 0;
+
+  async function runner() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      await worker(items[index], index);
+      completed += 1;
+      if (onProgress) onProgress(completed, items.length);
+    }
+  }
+
+  const size = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: size }, () => runner()));
+}
+
 async function main() {
   const workspaceId = process.argv[2];
   const apiUrl = process.argv[3] || DEFAULT_URL;
@@ -82,21 +100,30 @@ async function main() {
 
   const milesIdMap = new Map();
   console.log("Importing mile programs...");
-  for (const row of legacyMiles) {
-    const created = await prisma.mileProgram.create({
-      data: {
-        workspaceId,
-        date: toDate(row.Date) ?? new Date(),
-        miles: Number(row.Miles ?? 0),
-        balanceMiles: Number(row.BalanceMiles ?? row.Miles ?? 0),
-        expiryDate: toDate(row.ExpiryDate),
-        title: row.Title ?? null,
-        firstRedeemedDate: toDate(row.FirstRedeemedDate),
-      },
-      select: { id: true },
-    });
-    milesIdMap.set(String(row.Id), created.id);
-  }
+  await runWithConcurrency(
+    legacyMiles,
+    12,
+    async (row) => {
+      const created = await prisma.mileProgram.create({
+        data: {
+          workspaceId,
+          date: toDate(row.Date) ?? new Date(),
+          miles: Number(row.Miles ?? 0),
+          balanceMiles: Number(row.BalanceMiles ?? row.Miles ?? 0),
+          expiryDate: toDate(row.ExpiryDate),
+          title: row.Title ?? null,
+          firstRedeemedDate: toDate(row.FirstRedeemedDate),
+        },
+        select: { id: true },
+      });
+      milesIdMap.set(String(row.Id), created.id);
+    },
+    (done, total) => {
+      if (done % 25 === 0 || done === total) {
+        console.log(`Mile programs imported: ${done}/${total}`);
+      }
+    },
+  );
 
   const redemptionIdMap = new Map();
   console.log("Importing redemptions...");
@@ -114,19 +141,28 @@ async function main() {
   }
 
   console.log("Importing redemption details...");
-  for (const row of legacyDetails) {
-    const redemptionId = redemptionIdMap.get(String(row.KFMilesRedemptionId));
-    const milesFileId = milesIdMap.get(String(row.KFMilesId));
-    if (!redemptionId || !milesFileId) continue;
+  await runWithConcurrency(
+    legacyDetails,
+    12,
+    async (row) => {
+      const redemptionId = redemptionIdMap.get(String(row.KFMilesRedemptionId));
+      const milesFileId = milesIdMap.get(String(row.KFMilesId));
+      if (!redemptionId || !milesFileId) return;
 
-    await prisma.mileRedemptionDetail.create({
-      data: {
-        redemptionId,
-        milesFileId,
-        milesRedeemed: Number(row.MilesRedeemed ?? 0),
-      },
-    });
-  }
+      await prisma.mileRedemptionDetail.create({
+        data: {
+          redemptionId,
+          milesFileId,
+          milesRedeemed: Number(row.MilesRedeemed ?? 0),
+        },
+      });
+    },
+    (done, total) => {
+      if (done % 20 === 0 || done === total) {
+        console.log(`Redemption details imported: ${done}/${total}`);
+      }
+    },
+  );
 
   console.log(
     JSON.stringify(

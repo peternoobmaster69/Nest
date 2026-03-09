@@ -78,6 +78,7 @@ export function ReceivablesPage() {
   const [sortBy, setSortBy] = useState<"amount" | "remarks" | "receivableDate" | "transactionDate">("receivableDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [hideClosed, setHideClosed] = useState(true);
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -217,9 +218,13 @@ export function ReceivablesPage() {
         body: JSON.stringify({}),
       }),
     onSuccess: () => {
+      setCloseError(null);
       queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+    onError: (error) => {
+      setCloseError((error as Error)?.message || "Failed to close receivable");
     },
   });
 
@@ -392,7 +397,10 @@ export function ReceivablesPage() {
               <button
                 key={label}
                 className={`recv-month-chip ${stateClass} ${isActive ? "is-active" : ""}`}
-                onClick={() => setSelectedMonth(month)}
+                onClick={() => {
+                  setSelectedMonth(month);
+                  setCloseError(null);
+                }}
                 type="button"
               >
                 <span className="recv-month-chip-label">{label}</span>
@@ -401,6 +409,17 @@ export function ReceivablesPage() {
             );
           })}
         </div>
+        {closeError && (
+          <div style={{ marginBottom: "12px", padding: "12px 16px", background: "var(--danger-bg, #fee2e2)", border: "1px solid var(--danger, #ef4444)", borderRadius: "var(--r-md, 8px)", color: "var(--danger, #dc2626)", fontSize: "13px" }}>
+            <strong>Cannot close receivable:</strong> {closeError}
+            <button
+              onClick={() => setCloseError(null)}
+              style={{ marginLeft: "12px", background: "none", border: "none", cursor: "pointer", fontSize: "16px", color: "inherit" }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <div className="recv-toolbar">
           <select
             className="input"

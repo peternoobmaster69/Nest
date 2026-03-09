@@ -507,6 +507,7 @@ model Note {
 model MileProgram {
   id                String           @id @default(cuid())
   workspaceId       String
+  frequentFlyerId   String?
   date              DateTime
   miles             Int
   balanceMiles      Int
@@ -515,18 +516,25 @@ model MileProgram {
   firstRedeemedDate DateTime?
   createdAt         DateTime         @default(now())
   workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  frequentFlyer     FrequentFlyerAccount? @relation("FrequentFlyerMilePrograms", fields: [frequentFlyerId], references: [id], onDelete: SetNull)
   redemptionDetails MileRedemptionDetail[]
+
+  @@index([workspaceId, frequentFlyerId, date])
 }
 
 model MileRedemption {
   id                String                @id @default(cuid())
   workspaceId       String
+  frequentFlyerId   String?
   redemptionTitle   String
   totalMilesRedeemed Int
   dateTime          DateTime
   createdAt         DateTime              @default(now())
   workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  frequentFlyer     FrequentFlyerAccount? @relation("FrequentFlyerMileRedemptions", fields: [frequentFlyerId], references: [id], onDelete: SetNull)
   details           MileRedemptionDetail[]
+
+  @@index([workspaceId, frequentFlyerId, dateTime])
 }
 
 model MileRedemptionDetail {
@@ -572,6 +580,8 @@ model FrequentFlyerAccount {
   updatedAt       DateTime @updatedAt
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversions     PointConversion[]
+  milePrograms    MileProgram[]   @relation("FrequentFlyerMilePrograms")
+  mileRedemptions MileRedemption[] @relation("FrequentFlyerMileRedemptions")
 
   @@unique([workspaceId, programName])
   @@index([workspaceId, isActive])

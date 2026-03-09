@@ -30,6 +30,42 @@ type FrequentFlyer = {
   isActive: boolean;
 };
 
+type MileProgramHistory = {
+  id: string;
+  date: string;
+  miles: number;
+  balanceMiles: number;
+  title: string | null;
+  expiryDate: string | null;
+  firstRedeemedDate: string | null;
+};
+
+type MileRedemptionHistory = {
+  id: string;
+  redemptionTitle: string;
+  totalMilesRedeemed: number;
+  dateTime: string;
+  details: Array<{
+    id: string;
+    milesRedeemed: number;
+    milesFile: {
+      id: string;
+      title: string | null;
+      date: string;
+    };
+  }>;
+};
+
+type FrequentFlyerHistoryResponse = {
+  milePrograms: MileProgramHistory[];
+  redemptions: MileRedemptionHistory[];
+  totals: {
+    earned: number;
+    available: number;
+    redeemed: number;
+  };
+};
+
 type PointConversion = {
   id: string;
   creditCardRewardId: string | null;
@@ -74,6 +110,10 @@ async function fetchRewards(): Promise<{
 
 function formatNumber(num: number): string {
   return new Intl.NumberFormat("en-US").format(num);
+}
+
+function toDateInputValue(value: string): string {
+  return value.slice(0, 10);
 }
 
 export function RewardsPage({
@@ -121,6 +161,19 @@ export function RewardsPage({
   const [ffFormTarget, setFFFormTarget] = useState("");
   const [ffFormExpiry, setFFFormExpiry] = useState("6");
   const [ffFormNotes, setFFFormNotes] = useState("");
+  const [openHistoryFFId, setOpenHistoryFFId] = useState<string | null>(null);
+  const [earnDate, setEarnDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [earnMiles, setEarnMiles] = useState("");
+  const [earnTitle, setEarnTitle] = useState("");
+  const [earnExpiryDate, setEarnExpiryDate] = useState("");
+  const [redeemDate, setRedeemDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [redeemTitle, setRedeemTitle] = useState("");
+  const [redeemMiles, setRedeemMiles] = useState("");
+  const [editingEarnId, setEditingEarnId] = useState<string | null>(null);
+  const [editingEarnDate, setEditingEarnDate] = useState("");
+  const [editingEarnMiles, setEditingEarnMiles] = useState("");
+  const [editingEarnTitle, setEditingEarnTitle] = useState("");
+  const [editingEarnExpiryDate, setEditingEarnExpiryDate] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -145,6 +198,22 @@ export function RewardsPage({
       conversions: initialConversions,
       cardsWithoutRewards: availableCards,
     },
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ["rewards", "frequent-flyer-history", openHistoryFFId],
+    queryFn: async (): Promise<FrequentFlyerHistoryResponse> => {
+      if (!openHistoryFFId) {
+        throw new Error("Frequent flyer is required");
+      }
+      const res = await fetch(`/api/rewards/frequent-flyer/history?frequentFlyerId=${openHistoryFFId}`);
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error || "Failed to load history");
+      }
+      return (await res.json()) as FrequentFlyerHistoryResponse;
+    },
+    enabled: !!openHistoryFFId,
   });
 
   const createCardReward = useMutation({
@@ -283,6 +352,111 @@ export function RewardsPage({
     },
   });
 
+  const refreshRewardsAndHistory = () => {
+    queryClient.invalidateQueries({ queryKey: ["rewards"] });
+    if (openHistoryFFId) {
+      queryClient.invalidateQueries({
+        queryKey: ["rewards", "frequent-flyer-history", openHistoryFFId],
+      });
+    }
+  };
+
+  const createEarnTransaction = useMutation({
+    mutationFn: async (payload: {
+      frequentFlyerId: string;
+      date: string;
+      miles: number;
+      title?: string;
+      expiryDate?: string;
+    }) => {
+      const res = await fetch("/api/rewards/frequent-flyer/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "earn",
+          frequentFlyerId: payload.frequentFlyerId,
+          date: new Date(`${payload.date}T00:00:00.000Z`).toISOString(),
+          miles: payload.miles,
+          title: payload.title,
+          expiryDate: payload.expiryDate ? new Date(`${payload.expiryDate}T00:00:00.000Z`).toISOString() : null,
+        }),
+      });
+      if (!res.ok) {
+        const errorPayload = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errorPayload?.error || "Failed to add earn transaction");
+      }
+    },
+    onSuccess: () => {
+      setEarnMiles("");
+      setEarnTitle("");
+      setEarnExpiryDate("");
+      refreshRewardsAndHistory();
+    },
+  });
+
+  const updateEarnTransaction = useMutation({
+    mutationFn: async (payload: {
+      frequentFlyerId: string;
+      id: string;
+      date: string;
+      miles: number;
+      title?: string;
+      expiryDate?: string;
+    }) => {
+      const res = await fetch("/api/rewards/frequent-flyer/history", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "earn",
+          frequentFlyerId: payload.frequentFlyerId,
+          id: payload.id,
+          date: new Date(`${payload.date}T00:00:00.000Z`).toISOString(),
+          miles: payload.miles,
+          title: payload.title,
+          expiryDate: payload.expiryDate ? new Date(`${payload.expiryDate}T00:00:00.000Z`).toISOString() : null,
+        }),
+      });
+      if (!res.ok) {
+        const errorPayload = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errorPayload?.error || "Failed to update earn transaction");
+      }
+    },
+    onSuccess: () => {
+      setEditingEarnId(null);
+      refreshRewardsAndHistory();
+    },
+  });
+
+  const createRedeemTransaction = useMutation({
+    mutationFn: async (payload: {
+      frequentFlyerId: string;
+      date: string;
+      redemptionTitle: string;
+      milesToRedeem: number;
+    }) => {
+      const res = await fetch("/api/rewards/frequent-flyer/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "redeem",
+          frequentFlyerId: payload.frequentFlyerId,
+          dateTime: new Date(`${payload.date}T00:00:00.000Z`).toISOString(),
+          redemptionTitle: payload.redemptionTitle,
+          milesToRedeem: payload.milesToRedeem,
+        }),
+      });
+      if (!res.ok) {
+        const errorPayload = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errorPayload?.error || "Failed to redeem miles");
+      }
+    },
+    onSuccess: () => {
+      setRedeemMiles("");
+      setRedeemTitle("");
+      refreshRewardsAndHistory();
+    },
+  });
+
   const onCreateCardReward = (e: FormEvent) => {
     e.preventDefault();
     if (!newCardId || !newCardPoints) return;
@@ -369,6 +543,39 @@ export function RewardsPage({
     }
   };
 
+  const onAddEarnTransaction = (e: FormEvent) => {
+    e.preventDefault();
+    if (!openHistoryFFId || !earnMiles || !earnDate) return;
+    createEarnTransaction.mutate({
+      frequentFlyerId: openHistoryFFId,
+      date: earnDate,
+      miles: parseInt(earnMiles, 10),
+      title: earnTitle || undefined,
+      expiryDate: earnExpiryDate || undefined,
+    });
+  };
+
+  const onRedeemMiles = (e: FormEvent) => {
+    e.preventDefault();
+    if (!openHistoryFFId || !redeemMiles || !redeemDate || !redeemTitle) return;
+    createRedeemTransaction.mutate({
+      frequentFlyerId: openHistoryFFId,
+      date: redeemDate,
+      redemptionTitle: redeemTitle,
+      milesToRedeem: parseInt(redeemMiles, 10),
+    });
+  };
+
+  const openHistoryForFrequentFlyer = (frequentFlyerId: string) => {
+    if (openHistoryFFId === frequentFlyerId) {
+      setOpenHistoryFFId(null);
+      setEditingEarnId(null);
+      return;
+    }
+    setOpenHistoryFFId(frequentFlyerId);
+    setEditingEarnId(null);
+  };
+
   const totalMiles = data?.frequentFlyers.reduce((sum, f) => sum + f.currentMiles, 0) || 0;
   const conversionByRewardId = new Map<string, PointConversion>();
   for (const conversion of data?.conversions ?? []) {
@@ -383,6 +590,7 @@ export function RewardsPage({
       return sum + Math.floor(card.currentPoints * conversion.conversionRate);
     }, 0) || 0;
   const totalCombinedMiles = totalCreditCardMiles + totalMiles;
+  const selectedHistoryFrequentFlyer = data?.frequentFlyers.find((ff) => ff.id === openHistoryFFId) ?? null;
 
   return (
     <div>
@@ -661,6 +869,12 @@ export function RewardsPage({
                   <div style={{ display: "flex", gap: "6px" }}>
                     <button
                       className="btn btn-ghost btn-xs"
+                      onClick={() => openHistoryForFrequentFlyer(ff.id)}
+                    >
+                      {openHistoryFFId === ff.id ? "Hide History" : "History"}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-xs"
                       onClick={() => openEditFFModal(ff)}
                     >
                       Edit
@@ -701,6 +915,226 @@ export function RewardsPage({
               + Add Frequent Flyer Program
             </button>
           </div>
+
+          {openHistoryFFId && selectedHistoryFrequentFlyer && (
+            <section className="card" style={{ marginTop: "20px", display: "grid", gap: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: 700 }}>Reward Points Transaction History</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                    {selectedHistoryFrequentFlyer.programName}
+                    {selectedHistoryFrequentFlyer.accountNumber ? ` • ${selectedHistoryFrequentFlyer.accountNumber}` : ""}
+                  </div>
+                </div>
+                <button className="btn btn-ghost btn-xs" onClick={() => setOpenHistoryFFId(null)}>
+                  Close
+                </button>
+              </div>
+
+              {historyQuery.isLoading && (
+                <div className="grid-2">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
+              )}
+
+              {historyQuery.isError && (
+                <div style={{ fontSize: "12px", color: "var(--error-500)" }}>
+                  {(historyQuery.error as Error).message || "Failed to load transaction history"}
+                </div>
+              )}
+
+              {historyQuery.data && (
+                <>
+                  <div className="grid-3" style={{ gap: "10px" }}>
+                    <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
+                      <div className="stat-label">Total Earned</div>
+                      <div style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+                        {formatNumber(historyQuery.data.totals.earned)}
+                      </div>
+                    </div>
+                    <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
+                      <div className="stat-label">Total Redeemed</div>
+                      <div style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+                        {formatNumber(historyQuery.data.totals.redeemed)}
+                      </div>
+                    </div>
+                    <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
+                      <div className="stat-label">Available Miles</div>
+                      <div style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+                        {formatNumber(historyQuery.data.totals.available)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid-2" style={{ gap: "12px" }}>
+                    <form className="card-sm" onSubmit={onAddEarnTransaction} style={{ display: "grid", gap: "8px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>Add Earn Transaction</div>
+                      <input className="input" type="date" value={earnDate} onChange={(e) => setEarnDate(e.target.value)} required />
+                      <input
+                        className="input"
+                        type="number"
+                        min="1"
+                        placeholder="Miles earned"
+                        value={earnMiles}
+                        onChange={(e) => setEarnMiles(e.target.value)}
+                        required
+                      />
+                      <input
+                        className="input"
+                        type="text"
+                        placeholder="Title (optional)"
+                        value={earnTitle}
+                        onChange={(e) => setEarnTitle(e.target.value)}
+                      />
+                      <input
+                        className="input"
+                        type="date"
+                        value={earnExpiryDate}
+                        onChange={(e) => setEarnExpiryDate(e.target.value)}
+                      />
+                      <button type="submit" className="btn btn-primary" disabled={createEarnTransaction.isPending}>
+                        {createEarnTransaction.isPending ? "Saving..." : "Add Earn"}
+                      </button>
+                    </form>
+
+                    <form className="card-sm" onSubmit={onRedeemMiles} style={{ display: "grid", gap: "8px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>Redeem Miles (Auto Allocation)</div>
+                      <input
+                        className="input"
+                        type="date"
+                        value={redeemDate}
+                        onChange={(e) => setRedeemDate(e.target.value)}
+                        required
+                      />
+                      <input
+                        className="input"
+                        type="text"
+                        placeholder="Redemption title"
+                        value={redeemTitle}
+                        onChange={(e) => setRedeemTitle(e.target.value)}
+                        required
+                      />
+                      <input
+                        className="input"
+                        type="number"
+                        min="1"
+                        placeholder="Miles to redeem"
+                        value={redeemMiles}
+                        onChange={(e) => setRedeemMiles(e.target.value)}
+                        required
+                      />
+                      <button type="submit" className="btn btn-primary" disabled={createRedeemTransaction.isPending}>
+                        {createRedeemTransaction.isPending ? "Redeeming..." : "Redeem"}
+                      </button>
+                    </form>
+                  </div>
+
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600 }}>Earn Transactions</div>
+                    {!historyQuery.data.milePrograms.length && (
+                      <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>No earn transactions yet.</div>
+                    )}
+                    {historyQuery.data.milePrograms.map((entry) => (
+                      <div key={entry.id} className="card-sm" style={{ display: "grid", gap: "8px" }}>
+                        {editingEarnId === entry.id ? (
+                          <div className="crud-edit" style={{ gridTemplateColumns: "140px 140px 1fr 140px auto auto" }}>
+                            <input
+                              className="input"
+                              type="date"
+                              value={editingEarnDate}
+                              onChange={(e) => setEditingEarnDate(e.target.value)}
+                            />
+                            <input
+                              className="input"
+                              type="number"
+                              min="1"
+                              value={editingEarnMiles}
+                              onChange={(e) => setEditingEarnMiles(e.target.value)}
+                            />
+                            <input
+                              className="input"
+                              type="text"
+                              value={editingEarnTitle}
+                              onChange={(e) => setEditingEarnTitle(e.target.value)}
+                            />
+                            <input
+                              className="input"
+                              type="date"
+                              value={editingEarnExpiryDate}
+                              onChange={(e) => setEditingEarnExpiryDate(e.target.value)}
+                            />
+                            <button
+                              className="btn btn-secondary btn-xs"
+                              onClick={() =>
+                                updateEarnTransaction.mutate({
+                                  frequentFlyerId: selectedHistoryFrequentFlyer.id,
+                                  id: entry.id,
+                                  date: editingEarnDate,
+                                  miles: parseInt(editingEarnMiles || "0", 10),
+                                  title: editingEarnTitle || undefined,
+                                  expiryDate: editingEarnExpiryDate || undefined,
+                                })
+                              }
+                            >
+                              Save
+                            </button>
+                            <button className="btn btn-ghost btn-xs" onClick={() => setEditingEarnId(null)}>
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                            <div>
+                              <div style={{ fontSize: "12px", fontWeight: 600 }}>
+                                {entry.title || "Miles credit"} • {toDateInputValue(entry.date)}
+                              </div>
+                              <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                                {formatNumber(entry.miles)} earned • {formatNumber(entry.balanceMiles)} available
+                                {entry.expiryDate ? ` • expires ${toDateInputValue(entry.expiryDate)}` : ""}
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn-ghost btn-xs"
+                              onClick={() => {
+                                setEditingEarnId(entry.id);
+                                setEditingEarnDate(toDateInputValue(entry.date));
+                                setEditingEarnMiles(String(entry.miles));
+                                setEditingEarnTitle(entry.title || "");
+                                setEditingEarnExpiryDate(entry.expiryDate ? toDateInputValue(entry.expiryDate) : "");
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600 }}>Redemption Transactions</div>
+                    {!historyQuery.data.redemptions.length && (
+                      <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>No redemption transactions yet.</div>
+                    )}
+                    {historyQuery.data.redemptions.map((entry) => (
+                      <div key={entry.id} className="card-sm" style={{ display: "grid", gap: "4px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: 600 }}>
+                          {entry.redemptionTitle} • {toDateInputValue(entry.dateTime)}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                          {formatNumber(entry.totalMilesRedeemed)} miles redeemed
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                          {entry.details.map((detail) => `${detail.milesFile.title || "Miles credit"}: ${formatNumber(detail.milesRedeemed)}`).join(" • ")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
         </div>
       )}
 
