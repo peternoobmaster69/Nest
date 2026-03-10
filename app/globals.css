@@ -1671,23 +1671,13 @@ body {
    SCROLLBAR STYLING
    ============================================================ */
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+* {
+  -ms-overflow-style: none; /* IE and old Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-subtle);
-  border-radius: var(--r-sm);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-default);
-  border-radius: var(--r-sm);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 /* ============================================================
@@ -4267,8 +4257,15 @@ body {
 
 .recv-month-chip.is-active {
   box-shadow: var(--shadow-sm);
-  border-color: var(--brand-500);
-  background: color-mix(in srgb, var(--brand-500) 8%, var(--bg-elevated));
+  border-width: 2px;
+}
+
+.recv-month-chip.is-active .recv-month-chip-label {
+  font-weight: 700;
+}
+
+.recv-month-chip.is-active .recv-month-chip-count {
+  font-weight: 800;
 }
 
 @media (max-width: 720px) {
@@ -5593,19 +5590,24 @@ body {
 
 .bp-col .st-card {
   margin-bottom: 12px;
-  padding: 14px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
 }
 
 .bp-col .st-card-header {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .bp-col .st-card-body {
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .bp-col .st-card-stats {
-  padding-top: 10px;
+  padding-top: 4px;
+  border-top: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
 }
 
 .bp-col .st-card-name {
@@ -5617,12 +5619,57 @@ body {
 }
 
 .bp-col .st-stat-label {
-  font-size: 11px;
+  display: none;
 }
 
 /* Budget Plan Compact Cards */
 .bp-compact-card {
-  padding: 10px 12px;
+  padding: 8px 10px;
+}
+
+.bp-two-line-card {
+  padding: 8px 10px;
+}
+
+.bp-two-line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bp-two-line-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.bp-two-line-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bp-two-line-amount {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+}
+
+.bp-two-line-card .btn-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 12px;
+  border-radius: var(--r-sm);
 }
 
 .bp-compact-card .st-bank-fallback {

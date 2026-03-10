@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots } from "@/components/ui-skeleton";
 
@@ -64,6 +65,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function TransactionsPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [amount, setAmount] = useState("");
@@ -72,6 +74,7 @@ export function TransactionsPage() {
   const [selectedBankId, setSelectedBankId] = useState("");
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [activeBudgetFilterId, setActiveBudgetFilterId] = useState<string>("ALL");
+  const [urlFilterHydrated, setUrlFilterHydrated] = useState(false);
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
   const [editSubject, setEditSubject] = useState("");
@@ -136,8 +139,46 @@ export function TransactionsPage() {
   }, [txBankStorageKey, selectedBankId, bankFilterHydrated]);
 
   useEffect(() => {
-    setActiveBudgetFilterId("ALL");
-  }, [selectedBankId]);
+    if (activeBudgetFilterId === "ALL") return;
+    const activeBudget = budgets.data?.find((b) => b.id === activeBudgetFilterId);
+    if (!activeBudget) {
+      setActiveBudgetFilterId("ALL");
+      return;
+    }
+    if (selectedBankId && activeBudget.accountId !== selectedBankId) {
+      setActiveBudgetFilterId("ALL");
+    }
+  }, [activeBudgetFilterId, selectedBankId, budgets.data]);
+
+  useEffect(() => {
+    if (urlFilterHydrated) return;
+    if (!bankAccounts.data || !budgets.data) return;
+
+    const requestedAccountId = searchParams.get("accountId");
+    const requestedBudgetId = searchParams.get("budgetId");
+
+    if (!requestedAccountId && !requestedBudgetId) {
+      setUrlFilterHydrated(true);
+      return;
+    }
+
+    const validAccountId =
+      requestedAccountId && bankAccounts.data.some((bank) => bank.id === requestedAccountId) ? requestedAccountId : "";
+    const validBudget = requestedBudgetId ? budgets.data.find((b) => b.id === requestedBudgetId) : undefined;
+    const targetAccountId = validAccountId || validBudget?.accountId || "";
+
+    if (targetAccountId) {
+      setSelectedBankId(targetAccountId);
+    }
+
+    if (validBudget && (!targetAccountId || validBudget.accountId === targetAccountId)) {
+      setActiveBudgetFilterId(validBudget.id);
+    } else {
+      setActiveBudgetFilterId("ALL");
+    }
+
+    setUrlFilterHydrated(true);
+  }, [urlFilterHydrated, bankAccounts.data, budgets.data, searchParams]);
 
   const createTx = useMutation({
     mutationFn: (payload: {
@@ -241,22 +282,6 @@ export function TransactionsPage() {
     return all.filter((tx) => (selectedBankId ? tx.accountId === selectedBankId : true));
   }, [transactions.data, selectedBankId]);
 
-  const totalFilteredCents = useMemo(
-    () =>
-      bankScopedTransactions.reduce(
-        (sum, tx) => sum + (tx.direction === "CREDIT" ? tx.amountCents : -tx.amountCents),
-        0,
-      ),
-    [bankScopedTransactions],
-  );
-  const totalIncomingCents = useMemo(
-    () => bankScopedTransactions.filter((tx) => tx.direction === "CREDIT").reduce((sum, tx) => sum + tx.amountCents, 0),
-    [bankScopedTransactions],
-  );
-  const totalOutgoingCents = useMemo(
-    () => bankScopedTransactions.filter((tx) => tx.direction === "DEBIT").reduce((sum, tx) => sum + tx.amountCents, 0),
-    [bankScopedTransactions],
-  );
   const totalBankBalanceCents = useMemo(
     () => (bankAccounts.data ?? []).reduce((sum, b) => sum + b.currentBalanceCents, 0),
     [bankAccounts.data],
@@ -359,22 +384,6 @@ export function TransactionsPage() {
           ))}
             </>
           )}
-        </div>
-      </section>
-
-      <section className="hero-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "relative", zIndex: 2 }}>
-          <div>
-            <div className="hero-label">Total Transactions</div>
-            <div className={`hero-amount ${getAmountToneClass(totalFilteredCents)}`}>{formatCents(totalFilteredCents)}</div>
-            <div className="hero-sub">
-              {selectedBankId ? bankAccounts.data?.find((b) => b.id === selectedBankId)?.name || "Selected bank" : "All banks"}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="positive" style={{ fontSize: "11px", marginBottom: "4px" }}>In {formatCents(totalIncomingCents)}</div>
-            <div className="negative" style={{ fontSize: "11px" }}>Out {formatCents(totalOutgoingCents)}</div>
-          </div>
         </div>
       </section>
 

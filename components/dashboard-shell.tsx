@@ -687,6 +687,13 @@ export function DashboardShell({
       (transactionsQuery.data ?? []).filter((t) => selectedBankFilterId === "ALL" || t.accountId === selectedBankFilterId),
     [transactionsQuery.data, selectedBankFilterId],
   );
+  const goToTransactionsForSubAccount = (budgetId: string, accountId: string) => {
+    const params = new URLSearchParams({
+      budgetId,
+      accountId,
+    });
+    router.push(`/transactions?${params.toString()}`);
+  };
   const budgetNameById = useMemo(
     () => new Map((budgetsQuery.data ?? []).map((b) => [b.id, b.name])),
     [budgetsQuery.data],
@@ -1028,7 +1035,20 @@ export function DashboardShell({
                 }
 
                 return (
-                  <div key={budget.id} className="budget-mini budget-mini-compact">
+                  <div
+                    key={budget.id}
+                    className="budget-mini budget-mini-compact"
+                    onClick={() => goToTransactionsForSubAccount(budget.id, budget.accountId)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        goToTransactionsForSubAccount(budget.id, budget.accountId);
+                      }
+                    }}
+                    title={`Open transactions for ${budget.name}`}
+                  >
                     <div className="bm-top">
                       <div className="bm-title">
                         <div className="bm-icon">{getBudgetIcon(budget.name, budget.icon)}</div>
@@ -1037,7 +1057,10 @@ export function DashboardShell({
                       <div className="bm-top-right">
                         <button
                           className="bm-edit-btn"
-                          onClick={() => startBudgetEdit(budget)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            startBudgetEdit(budget);
+                          }}
                           title="Edit account"
                           aria-label={`Edit ${budget.name}`}
                         >
@@ -1141,7 +1164,20 @@ export function DashboardShell({
                     const colors = ["#3AADA6", "#8CC832", "#F0926A", "#D97706", "var(--border-default)"];
                     const pct = budget.targetCents > 0 ? Math.round((budget.availableCents / budget.targetCents) * 100) : 0;
                     return (
-                      <div className="legend" key={budget.id}>
+                      <div
+                        className="legend"
+                        key={budget.id}
+                        onClick={() => goToTransactionsForSubAccount(budget.id, budget.accountId)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            goToTransactionsForSubAccount(budget.id, budget.accountId);
+                          }
+                        }}
+                        title={`Open transactions for ${budget.name}`}
+                      >
                         <div className="legend-dot" style={{ background: colors[i % colors.length] }} />
                         <div className="legend-name">{budget.name}</div>
                         <div className="legend-value">{formatCents(budget.availableCents)}</div>
@@ -1164,7 +1200,9 @@ export function DashboardShell({
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                 <div style={{ fontSize: "13px", fontWeight: 600 }}>Recent transactions</div>
-                <button className="btn btn-ghost btn-xs">View all →</button>
+                <button className="btn btn-ghost btn-xs" onClick={() => router.push("/transactions")}>
+                  View all →
+                </button>
               </div>
 
               <div>

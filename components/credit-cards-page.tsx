@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { SkeletonCreditCard, EmptyState } from "@/components/ui-skeleton";
 
 type AppContext = {
@@ -159,6 +159,17 @@ export function CreditCardsPage() {
     queryFn: () => fetchJson<CreditCard[]>(`/api/credit-cards?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
+  const sortedCards = useMemo(() => {
+    const list = [...(cards.data ?? [])];
+    list.sort((a, b) => {
+      const bankA = (a.bankName || "ZZZ").toLowerCase();
+      const bankB = (b.bankName || "ZZZ").toLowerCase();
+      const byBank = bankA.localeCompare(bankB);
+      if (byBank !== 0) return byBank;
+      return a.cardName.localeCompare(b.cardName);
+    });
+    return list;
+  }, [cards.data]);
 
   const createCard = useMutation({
     mutationFn: () =>
@@ -378,7 +389,7 @@ export function CreditCardsPage() {
           </div>
         )}
 
-        {!cards.isLoading && !cards.isError && cards.data?.map((card, index) => {
+        {!cards.isLoading && !cards.isError && sortedCards.map((card, index) => {
           const isFlipped = flippedCardId === card.id;
           const gradient = getCardGradient(card.bankName, card.themeKey);
           const bankInitials = getBankInitials(card.bankName);
@@ -387,7 +398,7 @@ export function CreditCardsPage() {
             <div
               key={card.id}
               className={`cc-card-wrapper ${isFlipped ? "flipped" : ""}`}
-              style={{ zIndex: cards.data.length - index }}
+              style={{ zIndex: sortedCards.length - index }}
             >
               {/* Front of Card */}
               <div className="cc-card-front" style={{ background: gradient }}>
@@ -501,7 +512,7 @@ export function CreditCardsPage() {
         })}
 
         {/* Add Card Placeholder - only show when loaded and has cards */}
-        {!cards.isLoading && !cards.isError && cards.data && cards.data.length > 0 && (
+        {!cards.isLoading && !cards.isError && sortedCards.length > 0 && (
           <button className="cc-add-card" onClick={openModal}>
             <div className="cc-add-icon-large">+</div>
             <span>Add New Card</span>
@@ -509,7 +520,7 @@ export function CreditCardsPage() {
         )}
 
         {/* Empty State */}
-        {!cards.isLoading && !cards.isError && cards.data?.length === 0 && (
+        {!cards.isLoading && !cards.isError && sortedCards.length === 0 && (
           <div className="cc-grid-empty">
             <EmptyState
               icon="💳"

@@ -70,6 +70,17 @@ function getDaysUntil(dateStr: string): number {
 
 export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
   const queryClient = useQueryClient();
+  const sortedCards = useMemo(() => {
+    const list = [...initialCards];
+    list.sort((a, b) => {
+      const bankA = (a.bankName || "ZZZ").toLowerCase();
+      const bankB = (b.bankName || "ZZZ").toLowerCase();
+      const byBank = bankA.localeCompare(bankB);
+      if (byBank !== 0) return byBank;
+      return a.cardName.localeCompare(b.cardName);
+    });
+    return list;
+  }, [initialCards]);
   const [selectedCardId, setSelectedCardId] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -103,7 +114,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       }>(
         `/api/credit-transactions?cardId=${selectedCardId}&year=${selectedYear}&month=${selectedMonth + 1}`
       ),
-    enabled: initialCards.length > 0,
+    enabled: sortedCards.length > 0,
   });
 
   const transactions = data?.transactions || [];
@@ -160,7 +171,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   });
 
   const openModal = () => {
-    setFormCardId(initialCards[0]?.id || "");
+    setFormCardId(sortedCards[0]?.id || "");
     setFormDate(new Date().toISOString().split("T")[0]);
     setFormPaymentDue("");
     setFormSubject("");
@@ -209,7 +220,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <span className="cct-card-chip-name">All Cards</span>
           {transactions.length > 0 && <span className="cct-card-chip-badge">{transactions.length}</span>}
         </button>
-        {initialCards.map((card) => {
+        {sortedCards.map((card) => {
           const bank = getSingaporeBankByName(card.bankName);
           const logo = getBankLogoUrl(bank);
           const count = getCardCount(card.id);
@@ -413,7 +424,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 <div className="form-group cct-span-2">
                   <label className="label">Credit Card</label>
                   <select className="input" value={formCardId} onChange={(e) => setFormCardId(e.target.value)} required>
-                    {initialCards.map((card) => (
+                    {sortedCards.map((card) => (
                       <option key={card.id} value={card.id}>
                         {card.cardName} ••{card.last4Digit}
                       </option>

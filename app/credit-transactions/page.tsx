@@ -12,7 +12,7 @@ export default async function CreditTransactionsRoute() {
   const creditCards = await prisma.creditCardAccount.findMany({
     where: { workspaceId, isActive: true },
     select: { id: true, cardName: true, bankName: true, last4Digit: true },
-    orderBy: { cardName: "asc" },
+    orderBy: [{ bankName: "asc" }, { cardName: "asc" }],
   });
 
   return (

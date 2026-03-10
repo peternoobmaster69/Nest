@@ -106,6 +106,9 @@ export function BudgetPlanPage() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [editingAllocationIndex, setEditingAllocationIndex] = useState<number | null>(null);
   const [editingAllocationAmount, setEditingAllocationAmount] = useState("");
+  const [quickEditTarget, setQuickEditTarget] = useState<{ type: "item" | "source"; id: string } | null>(null);
+  const [quickEditDescription, setQuickEditDescription] = useState("");
+  const [quickEditAmount, setQuickEditAmount] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -133,6 +136,7 @@ export function BudgetPlanPage() {
   const monthlyBudgets = budgetData.data?.monthlyBudgets || [];
   const members: WorkspaceMember[] = budgetData.data?.members || [];
   const subAccounts = budgetData.data?.subAccounts || [];
+  const isTemplateReady = budgetItems.length > 0 && budgetSources.length > 0;
 
   // Template counts for display
   const templateCounts = useMemo(() => ({
@@ -151,6 +155,20 @@ export function BudgetPlanPage() {
     () => budgetSources.reduce((sum, source) => sum + source.amountCents, 0),
     [budgetSources],
   );
+  const totalBudgetedCents = useMemo(() => {
+    if (isPreviewMode && previewAllocations) {
+      return previewAllocations.reduce((sum, a) => sum + a.allocatedCents, 0);
+    }
+
+    const allocatedItemIds = new Set(monthlyBudgets.map((mb) => mb.budgetItemId));
+    if (allocatedItemIds.size === 0) {
+      return monthlyBudgets.reduce((sum, mb) => sum + mb.allocatedCents, 0);
+    }
+
+    return budgetItems
+      .filter((item) => allocatedItemIds.has(item.id))
+      .reduce((sum, item) => sum + item.amountCents, 0);
+  }, [isPreviewMode, previewAllocations, monthlyBudgets, budgetItems]);
 
   const createBudgetItem = useMutation({
     mutationFn: (payload: {
@@ -235,6 +253,36 @@ export function BudgetPlanPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
       closeSourceModal();
+    },
+  });
+  const quickUpdateBudgetItem = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      workspaceId: string;
+      action: "updateItem";
+      title: string;
+      amountCents: number;
+      isMonthly: boolean;
+      destinationSubAccountId?: string;
+    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      closeQuickEditModal();
+    },
+  });
+
+  const quickUpdateBudgetSource = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      workspaceId: string;
+      action: "updateSource";
+      title: string;
+      amountCents: number;
+      ownerId: string;
+    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      closeQuickEditModal();
     },
   });
 
@@ -441,6 +489,61 @@ export function BudgetPlanPage() {
     closeEditAllocationModal();
   };
 
+  const openQuickEditItemModal = (itemId: string) => {
+    const item = budgetItems.find((entry) => entry.id === itemId);
+    if (!item) return;
+    setQuickEditTarget({ type: "item", id: item.id });
+    setQuickEditDescription(item.title);
+    setQuickEditAmount((item.amountCents / 100).toFixed(2));
+  };
+
+  const openQuickEditSourceModal = (sourceId: string) => {
+    const source = budgetSources.find((entry) => entry.id === sourceId);
+    if (!source) return;
+    setQuickEditTarget({ type: "source", id: source.id });
+    setQuickEditDescription(source.title);
+    setQuickEditAmount((source.amountCents / 100).toFixed(2));
+  };
+
+  const closeQuickEditModal = () => {
+    setQuickEditTarget(null);
+    setQuickEditDescription("");
+    setQuickEditAmount("");
+  };
+
+  const saveQuickEdit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!workspaceId || !quickEditTarget || !quickEditDescription || !quickEditAmount) return;
+    const amountCents = Math.round(parseFloat(quickEditAmount) * 100);
+    if (Number.isNaN(amountCents) || amountCents < 0) return;
+
+    if (quickEditTarget.type === "item") {
+      const item = budgetItems.find((entry) => entry.id === quickEditTarget.id);
+      if (!item) return;
+      quickUpdateBudgetItem.mutate({
+        id: item.id,
+        workspaceId,
+        action: "updateItem",
+        title: quickEditDescription,
+        amountCents,
+        isMonthly: item.isMonthly,
+        destinationSubAccountId: item.destinationSubAccountId || undefined,
+      });
+      return;
+    }
+
+    const source = budgetSources.find((entry) => entry.id === quickEditTarget.id);
+    if (!source) return;
+    quickUpdateBudgetSource.mutate({
+      id: source.id,
+      workspaceId,
+      action: "updateSource",
+      title: quickEditDescription,
+      amountCents,
+      ownerId: source.ownerId,
+    });
+  };
+
   const displayAllocations = isPreviewMode && previewAllocations
     ? previewAllocations
     : monthlyBudgets.map(mb => ({
@@ -524,7 +627,7 @@ export function BudgetPlanPage() {
           <div className="bp-stat-grid" style={{ marginBottom: "24px" }}>
             <div className="bp-stat">
               <div className="bp-stat-label">Total Budgeted</div>
-              <div className="bp-stat-value">{formatCents(displayAllocations.reduce((sum, a) => sum + a.allocatedCents, 0))}</div>
+              <div className="bp-stat-value">{formatCents(totalBudgetedCents)}</div>
             </div>
             <div className="bp-stat">
               <div className="bp-stat-label">Total Sources</div>
@@ -544,11 +647,11 @@ export function BudgetPlanPage() {
             <button
               className="btn btn-primary"
               onClick={generatePreview}
-              disabled={budgetItems.length === 0 || budgetSources.length === 0}
+              disabled={budgetData.isLoading || !isTemplateReady}
             >
-              Generate from Template
+              {budgetData.isLoading ? "Loading template..." : "Generate from Template"}
             </button>
-            {(budgetItems.length === 0 || budgetSources.length === 0) && (
+            {!budgetData.isLoading && !isTemplateReady && (
               <p className="bp-hint">Add budget items and sources to the template first.</p>
             )}
           </div>
@@ -576,22 +679,30 @@ export function BudgetPlanPage() {
                     }
                   });
                   return Array.from(sourceTotals.entries()).map(([id, data]) => (
-                    <div key={id} className="st-card">
-                      <div className="st-card-header">
-                        <div className="st-card-bank">
-                          <span className="st-bank-fallback" style={{ backgroundColor: '#d97706' }}>
+                    <div key={id} className="st-card bp-two-line-card">
+                      <div className="bp-two-line-head">
+                        <div className="bp-two-line-title-wrap">
+                          <span className="st-bank-fallback" style={{ backgroundColor: "#d97706", width: "24px", height: "24px", fontSize: "12px" }}>
                             💰
                           </span>
+                          <h5 className="bp-two-line-title">{data.title}</h5>
                         </div>
+                        <button
+                          className="btn btn-ghost btn-icon"
+                          type="button"
+                          onClick={() => openQuickEditSourceModal(id)}
+                          title={`Edit ${data.title}`}
+                          aria-label={`Edit ${data.title}`}
+                        >
+                          ✏️
+                        </button>
                       </div>
-                      <div className="st-card-body">
-                        <h5 className="st-card-name">{data.title}</h5>
-                      </div>
-                      <div className="st-card-stats">
-                        <div className="st-stat">
-                          <span className="st-stat-label">Contribution</span>
-                          <span className="st-stat-value">{formatCents(data.total)}</span>
-                        </div>
+                      <div className="bp-two-line-amount">
+                        {formatCents(
+                          isPreviewMode
+                            ? data.total
+                            : budgetSources.find((source) => source.id === id)?.amountCents ?? data.total,
+                        )}
                       </div>
                     </div>
                   ));
@@ -620,7 +731,7 @@ export function BudgetPlanPage() {
                   return Array.from(itemTotals.entries()).map(([id, data]) => (
                     <div
                       key={id}
-                      className={`st-card ${isPreviewMode ? 'bp-editable-card' : ''}`}
+                      className={`st-card bp-two-line-card ${isPreviewMode ? 'bp-editable-card' : ''}`}
                       onClick={isPreviewMode ? () => {
                         // Find first allocation index for this item in previewAllocations
                         if (previewAllocations && data.allocations.length > 0) {
@@ -633,24 +744,34 @@ export function BudgetPlanPage() {
                       } : undefined}
                       style={isPreviewMode ? { cursor: 'pointer' } : undefined}
                     >
-                      <div className="st-card-header">
-                        <div className="st-card-bank">
-                          <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58' }}>
+                      <div className="bp-two-line-head">
+                        <div className="bp-two-line-title-wrap">
+                          <span className="st-bank-fallback" style={{ backgroundColor: "#1a8f58", width: "24px", height: "24px", fontSize: "12px" }}>
                             📋
                           </span>
+                          <h5 className="bp-two-line-title">{data.title}</h5>
                         </div>
+                        {!isPreviewMode && (
+                          <button
+                            className="btn btn-ghost btn-icon"
+                            type="button"
+                            onClick={() => openQuickEditItemModal(id)}
+                            title={`Edit ${data.title}`}
+                            aria-label={`Edit ${data.title}`}
+                          >
+                            ✏️
+                          </button>
+                        )}
                         {isPreviewMode && (
                           <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', opacity: 0.5 }}>✏️</span>
                         )}
                       </div>
-                      <div className="st-card-body">
-                        <h5 className="st-card-name">{data.title}</h5>
-                      </div>
-                      <div className="st-card-stats">
-                        <div className="st-stat">
-                          <span className="st-stat-label">Allocated</span>
-                          <span className="st-stat-value">{formatCents(data.total)}</span>
-                        </div>
+                      <div className="bp-two-line-amount">
+                        {formatCents(
+                          isPreviewMode
+                            ? data.total
+                            : budgetItems.find((item) => item.id === id)?.amountCents ?? data.total,
+                        )}
                       </div>
                     </div>
                   ));
@@ -701,25 +822,18 @@ export function BudgetPlanPage() {
 
                 {!budgetData.isLoading && !budgetData.isError && budgetSources.map((source) => (
                   <div key={source.id} className="st-card bp-compact-card" onClick={() => openEditSourceModal(source)} style={{ cursor: 'pointer' }}>
-                    <div className="bp-compact-row">
-                      <div className="bp-compact-left">
+                    <div className="bp-two-line-head">
+                      <div className="bp-two-line-title-wrap">
                         <span className="st-bank-fallback" style={{ backgroundColor: '#d97706', width: '24px', height: '24px', fontSize: '12px' }}>
                           💰
                         </span>
-                        <div className="bp-compact-info">
-                          <span className="bp-compact-title">{source.title}</span>
-                          <span className="bp-compact-meta">
-                            <span className="bp-meta-owner">{source.owner.name || source.owner.email || 'Unknown'}</span>
-                          </span>
-                        </div>
+                        <h5 className="bp-two-line-title">{source.title}</h5>
                       </div>
-                      <div className="bp-compact-right">
-                        <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
-                        <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditSourceModal(source); }} title="Edit">
-                          ✏️
-                        </button>
-                      </div>
+                      <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditSourceModal(source); }} title="Edit">
+                        ✏️
+                      </button>
                     </div>
+                    <div className="bp-two-line-amount">{formatCents(source.amountCents)}</div>
                   </div>
                 ))}
 
@@ -754,28 +868,18 @@ export function BudgetPlanPage() {
 
                 {!budgetData.isLoading && !budgetData.isError && budgetItems.map((item) => (
                   <div key={item.id} className="st-card bp-compact-card" onClick={() => openEditItemModal(item)} style={{ cursor: 'pointer' }}>
-                    <div className="bp-compact-row">
-                      <div className="bp-compact-left">
+                    <div className="bp-two-line-head">
+                      <div className="bp-two-line-title-wrap">
                         <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58', width: '24px', height: '24px', fontSize: '12px' }}>
                           📋
                         </span>
-                        <div className="bp-compact-info">
-                          <span className="bp-compact-title">{item.title}</span>
-                          <span className="bp-compact-meta">
-                            {item.isMonthly && <span className="bp-badge monthly">Monthly</span>}
-                            {item.destinationSubAccount && (
-                              <span className="bp-badge destination">→ {item.destinationSubAccount.name}</span>
-                            )}
-                          </span>
-                        </div>
+                        <h5 className="bp-two-line-title">{item.title}</h5>
                       </div>
-                      <div className="bp-compact-right">
-                        <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
-                        <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditItemModal(item); }} title="Edit">
-                          ✏️
-                        </button>
-                      </div>
+                      <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditItemModal(item); }} title="Edit">
+                        ✏️
+                      </button>
                     </div>
+                    <div className="bp-two-line-amount">{formatCents(item.amountCents)}</div>
                   </div>
                 ))}
 
@@ -1005,6 +1109,60 @@ export function BudgetPlanPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Edit Modal - opened from Source Breakdown and Budgeted Items cards */}
+      {quickEditTarget && (
+        <div className="st-modal-overlay" onClick={closeQuickEditModal}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>{quickEditTarget.type === "item" ? "Edit Budgeted Item" : "Edit Source"}</h3>
+              <button className="st-close-btn" onClick={closeQuickEditModal}>✕</button>
+            </div>
+            <form className="st-modal-form" onSubmit={saveQuickEdit}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label">Description</label>
+                  <input
+                    className="input"
+                    value={quickEditDescription}
+                    onChange={(e) => setQuickEditDescription(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Amount</label>
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={quickEditAmount}
+                    onChange={(e) => setQuickEditAmount(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              {(quickUpdateBudgetItem.isError || quickUpdateBudgetSource.isError) && (
+                <div className="st-error">
+                  Failed to save: {(quickUpdateBudgetItem.error as Error)?.message || (quickUpdateBudgetSource.error as Error)?.message || "Unknown error"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeQuickEditModal}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={quickUpdateBudgetItem.isPending || quickUpdateBudgetSource.isPending}
+                >
+                  {quickUpdateBudgetItem.isPending || quickUpdateBudgetSource.isPending ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
