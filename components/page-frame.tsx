@@ -7,6 +7,7 @@ import { AppSidebar } from "./app-sidebar";
 import { AppBodySkeleton } from "./ui-skeleton";
 
 type AppContext = {
+  workspaceId?: string | null;
   isShared?: boolean;
   isCollaborative?: boolean;
   workspaceName?: string | null;

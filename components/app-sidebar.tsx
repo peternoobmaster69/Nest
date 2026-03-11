@@ -47,6 +47,7 @@ export function AppSidebar({
   sidebarOpen?: boolean;
   onSidebarChange?: (open: boolean) => void;
   contextData?: {
+    workspaceId?: string | null;
     isShared?: boolean;
     isCollaborative?: boolean;
     workspaceName?: string | null;
@@ -62,6 +63,7 @@ export function AppSidebar({
       const res = await fetch("/api/context");
       if (!res.ok) throw new Error("Failed to load context");
       return res.json() as Promise<{
+        workspaceId?: string | null;
         isShared?: boolean;
         isCollaborative?: boolean;
         workspaceName?: string | null;
@@ -194,9 +196,11 @@ export function AppSidebar({
   };
 
   const switchWorkspace = async (workspaceId: string) => {
-    if (workspaceId === resolvedContext?.workspaceName) return;
+    if (workspaceId === resolvedContext?.workspaceId) return;
+    const nextWorkspace = workspacesQuery.data?.find((workspace) => workspace.id === workspaceId) ?? null;
     setSwitchingWorkspaceId(workspaceId);
     setIsTransitioning(true);
+    setProfileMenuOpen(false);
     try {
       const res = await fetch("/api/workspaces/switch", {
         method: "POST",
@@ -204,17 +208,39 @@ export function AppSidebar({
         body: JSON.stringify({ workspaceId }),
       });
       if (!res.ok) throw new Error("Failed to switch workspace");
-      // Invalidate all queries to refresh data
-      await queryClient.invalidateQueries();
-      // Close menu and navigate to dashboard
-      setProfileMenuOpen(false);
+
+      queryClient.setQueryData(["app-context"], (existing: {
+        workspaceId?: string | null;
+        workspaceName?: string | null;
+      } | undefined) =>
+        existing
+          ? {
+              ...existing,
+              workspaceId,
+              workspaceName: nextWorkspace?.name ?? existing.workspaceName,
+            }
+          : existing,
+      );
+
+      queryClient.removeQueries({ queryKey: ["credit-transactions"] });
+      queryClient.removeQueries({ queryKey: ["rewards"] });
+
+      void queryClient.invalidateQueries({ queryKey: ["app-context"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      void queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      void queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+      void queryClient.invalidateQueries({ queryKey: ["investments"] });
+      void queryClient.invalidateQueries({ queryKey: ["credit-cards"] });
+      void queryClient.invalidateQueries({ queryKey: ["collaborators"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+
       router.push("/");
-      router.refresh();
-      // Hide transition overlay after navigation completes
       setTimeout(() => {
         setIsTransitioning(false);
         setSwitchingWorkspaceId(null);
-      }, 800);
+      }, 180);
     } catch {
       setSwitchingWorkspaceId(null);
       setIsTransitioning(false);
@@ -343,7 +369,7 @@ export function AppSidebar({
                 </div>
               ) : (
                 workspacesQuery.data?.map((ws) => {
-                  const isCurrent = ws.name === resolvedContext?.workspaceName;
+                  const isCurrent = ws.id === resolvedContext?.workspaceId;
                   const isSwitching = switchingWorkspaceId === ws.id;
                   return (
                     <button

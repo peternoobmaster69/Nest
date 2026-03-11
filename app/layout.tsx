@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
@@ -10,6 +10,21 @@ export const metadata: Metadata = {
     shortcut: "/icon.svg",
     apple: "/icon.svg",
   },
+  appleWebApp: {
+    capable: true,
+    title: "Nest",
+    statusBarStyle: "default",
+  },
+  applicationName: "Nest",
+  manifest: "/manifest.webmanifest",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#f5f2ed",
 };
 
 export default function RootLayout({
