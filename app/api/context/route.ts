@@ -13,21 +13,69 @@ const UpdateContextSchema = z.object({
   receivableDefaultBudgetId: z.string().min(1).nullable().optional(),
 });
 
+const DEFAULT_SIDEBAR_MONEY_PAGES = {
+  creditCards: true,
+  creditTransactions: true,
+  receivables: true,
+  transactions: true,
+  rewards: true,
+  investments: true,
+};
+
+type WorkspaceSummary = {
+  id: string;
+  name: string;
+};
+
+function emptyContextResponse(workspaces: WorkspaceSummary[] = []) {
+  return {
+    workspaceId: null,
+    defaultAccountId: null,
+    defaultBudgetId: null,
+    defaultUserId: null,
+    baseCurrency: "SGD",
+    isShared: false,
+    isCollaborative: false,
+    workspaceName: null,
+    memberCount: 0,
+    pendingInviteCount: 0,
+    workspaces,
+    accounts: [],
+    sidebarMoneyPages: DEFAULT_SIDEBAR_MONEY_PAGES,
+  };
+}
+
+function parseSidebarMoneyPages(value: string | null | undefined) {
+  if (!value) return DEFAULT_SIDEBAR_MONEY_PAGES;
+  try {
+    return JSON.parse(value) as Record<string, boolean>;
+  } catch {
+    return DEFAULT_SIDEBAR_MONEY_PAGES;
+  }
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.toLowerCase();
-    let userId = session?.user?.id ?? null;
-    if (!userId && email) {
-      const user = await prisma.user.findUnique({
-        where: { email },
-        select: { id: true },
-      });
-      userId = user?.id ?? null;
-    }
-    if (!userId) {
+    const userLookup =
+      session?.user?.id
+        ? await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { id: true, activeWorkspaceId: true },
+          })
+        : email
+          ? await prisma.user.findUnique({
+              where: { email },
+              select: { id: true, activeWorkspaceId: true },
+            })
+          : null;
+
+    if (!userLookup?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const userId = userLookup.id;
 
     if (email) {
       const pending = await prisma.workspaceInvite.findMany({
@@ -35,40 +83,43 @@ export async function GET() {
         select: { id: true, workspaceId: true, invitedById: true },
       });
 
-      for (const invite of pending) {
-        await prisma.workspaceMember.upsert({
-          where: {
-            workspaceId_userId: {
-              workspaceId: invite.workspaceId,
-              userId,
+      if (pending.length) {
+        const respondedAt = new Date();
+        await prisma.$transaction([
+          ...pending.map((invite) =>
+            prisma.workspaceMember.upsert({
+              where: {
+                workspaceId_userId: {
+                  workspaceId: invite.workspaceId,
+                  userId,
+                },
+              },
+              update: {},
+              create: {
+                workspaceId: invite.workspaceId,
+                userId,
+                role: "MEMBER",
+                invitedBy: invite.invitedById,
+              },
+            }),
+          ),
+          prisma.workspaceInvite.updateMany({
+            where: { id: { in: pending.map((invite) => invite.id) } },
+            data: {
+              status: "ACCEPTED",
+              invitedUserId: userId,
+              respondedAt,
             },
-          },
-          update: {},
-          create: {
-            workspaceId: invite.workspaceId,
-            userId,
-            role: "MEMBER",
-            invitedBy: invite.invitedById,
-          },
-        });
-
-        await prisma.workspaceInvite.update({
-          where: { id: invite.id },
-          data: {
-            status: "ACCEPTED",
-            invitedUserId: userId,
-            respondedAt: new Date(),
-          },
-        });
-
-        await prisma.workspaceAuditLog.create({
-          data: {
-            workspaceId: invite.workspaceId,
-            actorUserId: userId,
-            action: "INVITE_ACCEPTED",
-            details: `${email} joined workspace via email invite.`,
-          },
-        });
+          }),
+          prisma.workspaceAuditLog.createMany({
+            data: pending.map((invite) => ({
+              workspaceId: invite.workspaceId,
+              actorUserId: userId,
+              action: "INVITE_ACCEPTED",
+              details: `${email} joined workspace via email invite.`,
+            })),
+          }),
+        ]);
       }
     }
 
@@ -76,118 +127,108 @@ export async function GET() {
       where: { userId },
       include: {
         workspace: {
-          select: { id: true, name: true, baseCurrency: true, receivableDefaultAccountId: true, receivableDefaultBudgetId: true, sidebarMoneyPages: true },
+          select: {
+            id: true,
+            name: true,
+            baseCurrency: true,
+            receivableDefaultAccountId: true,
+            receivableDefaultBudgetId: true,
+            sidebarMoneyPages: true,
+            _count: {
+              select: {
+                budgetEnvelopes: true,
+                transactions: true,
+                receivables: true,
+                creditCards: true,
+                investmentAccounts: true,
+              },
+            },
+          },
         },
       },
       orderBy: { createdAt: "asc" },
     });
 
-    const activeWorkspaceId = (await prisma.user.findUnique({
-      where: { id: userId },
-      select: { activeWorkspaceId: true },
-    }))?.activeWorkspaceId;
+    const activeWorkspaceId = userLookup.activeWorkspaceId;
+    const workspaceSummaries = memberships.map((membership) => ({
+      id: membership.workspace.id,
+      name: membership.workspace.name,
+    }));
+    const membershipWorkspaceIds = new Set(memberships.map((membership) => membership.workspaceId));
     let selectedWorkspaceId =
-      (activeWorkspaceId && memberships.some((m) => m.workspaceId === activeWorkspaceId) ? activeWorkspaceId : null) ||
+      (activeWorkspaceId && membershipWorkspaceIds.has(activeWorkspaceId) ? activeWorkspaceId : null) ||
       memberships[0]?.workspaceId ||
       null;
 
-    // If active workspace is empty but user has another workspace with data, recover automatically.
     if (!activeWorkspaceId && selectedWorkspaceId && memberships.length > 1) {
-      const scoreWorkspace = async (workspaceId: string) => {
-        const [budgetCount, txCount, receivableCount, cardCount, investmentCount] = await Promise.all([
-          prisma.budgetEnvelope.count({ where: { workspaceId } }),
-          prisma.transaction.count({ where: { workspaceId } }),
-          prisma.receivable.count({ where: { workspaceId } }),
-          prisma.creditCardAccount.count({ where: { workspaceId } }),
-          prisma.investmentAccount.count({ where: { workspaceId } }),
-        ]);
-        return budgetCount + txCount + receivableCount + cardCount + investmentCount;
-      };
+      const scores = memberships.map((membership) => ({
+        workspaceId: membership.workspaceId,
+        score:
+          membership.workspace._count.budgetEnvelopes +
+          membership.workspace._count.transactions +
+          membership.workspace._count.receivables +
+          membership.workspace._count.creditCards +
+          membership.workspace._count.investmentAccounts,
+      }));
+      const best = scores.reduce((currentBest, candidate) => (
+        candidate.score > currentBest.score ? candidate : currentBest
+      ));
 
-      const selectedScore = await scoreWorkspace(selectedWorkspaceId);
-      if (selectedScore === 0) {
-        let bestWorkspaceId = selectedWorkspaceId;
-        let bestScore = selectedScore;
-        for (const membership of memberships) {
-          if (membership.workspaceId === selectedWorkspaceId) continue;
-          const score = await scoreWorkspace(membership.workspaceId);
-          if (score > bestScore) {
-            bestScore = score;
-            bestWorkspaceId = membership.workspaceId;
-          }
-        }
-        if (bestWorkspaceId !== selectedWorkspaceId) {
-          selectedWorkspaceId = bestWorkspaceId;
-          await prisma.user.update({
-            where: { id: userId },
-            data: { activeWorkspaceId: bestWorkspaceId },
-          });
-        }
+      if (best.score > 0 && best.workspaceId !== selectedWorkspaceId) {
+        selectedWorkspaceId = best.workspaceId;
+        await prisma.user.update({
+          where: { id: userId },
+          data: { activeWorkspaceId: best.workspaceId },
+        });
       }
     }
 
     if (!selectedWorkspaceId) {
-      return NextResponse.json({
-        workspaceId: null,
-        defaultAccountId: null,
-        defaultBudgetId: null,
-        defaultUserId: null,
-        baseCurrency: "SGD",
-        isShared: false,
-        isCollaborative: false,
-        workspaceName: null,
-        memberCount: 0,
-        pendingInviteCount: 0,
-        workspaces: [],
-        accounts: [],
-      });
+      return NextResponse.json(emptyContextResponse());
     }
 
-    const { workspaceId } = await requireWorkspaceAccess(selectedWorkspaceId);
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      include: {
-        financials: {
-          where: { isActive: true },
-          orderBy: { createdAt: "asc" },
-        },
-        members: {
-          take: 1,
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
-
-    // Parse sidebarMoneyPages from JSON string
-    let sidebarMoneyPages: Record<string, boolean> | null = null;
-    if (workspace?.sidebarMoneyPages) {
-      try {
-        sidebarMoneyPages = JSON.parse(workspace.sidebarMoneyPages);
-      } catch {
-        sidebarMoneyPages = null;
-      }
+    if (!membershipWorkspaceIds.has(selectedWorkspaceId)) {
+      return NextResponse.json(emptyContextResponse(workspaceSummaries));
     }
+
+    const [workspace, pendingInviteCount] = await Promise.all([
+      prisma.workspace.findUnique({
+        where: { id: selectedWorkspaceId },
+        select: {
+          id: true,
+          name: true,
+          baseCurrency: true,
+          receivableDefaultAccountId: true,
+          receivableDefaultBudgetId: true,
+          isShared: true,
+          sidebarMoneyPages: true,
+          financials: {
+            where: { isActive: true },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              name: true,
+              kind: true,
+            },
+          },
+          members: {
+            take: 1,
+            orderBy: { createdAt: "asc" },
+            select: { userId: true },
+          },
+          _count: {
+            select: { members: true },
+          },
+        },
+      }),
+      prisma.workspaceInvite.count({
+        where: { workspaceId: selectedWorkspaceId, status: "PENDING" },
+      }),
+    ]);
 
     if (!workspace) {
-      return NextResponse.json({
-        workspaceId: null,
-        defaultAccountId: null,
-        defaultBudgetId: null,
-        defaultUserId: null,
-        baseCurrency: "SGD",
-        isShared: false,
-        isCollaborative: false,
-        workspaceName: null,
-        memberCount: 0,
-        pendingInviteCount: 0,
-        workspaces: memberships.map((m) => ({ id: m.workspace.id, name: m.workspace.name })),
-        accounts: [],
-      });
+      return NextResponse.json(emptyContextResponse(workspaceSummaries));
     }
-
-    const pendingInviteCount = await prisma.workspaceInvite.count({
-      where: { workspaceId: workspace.id, status: "PENDING" },
-    });
 
     return NextResponse.json({
       workspaceId: workspace.id,
@@ -196,19 +237,12 @@ export async function GET() {
       defaultUserId: workspace.members[0]?.userId ?? null,
       baseCurrency: workspace.baseCurrency || "SGD",
       isShared: workspace.isShared,
-      isCollaborative: workspace.isShared && (workspace.members.length > 1 || pendingInviteCount > 0),
+      isCollaborative: workspace.isShared && (workspace._count.members > 1 || pendingInviteCount > 0),
       workspaceName: workspace.name,
-      memberCount: workspace.members.length,
+      memberCount: workspace._count.members,
       pendingInviteCount,
-      sidebarMoneyPages: sidebarMoneyPages ?? {
-        creditCards: true,
-        creditTransactions: true,
-        receivables: true,
-        transactions: true,
-        rewards: true,
-        investments: true,
-      },
-      workspaces: memberships.map((m) => ({ id: m.workspace.id, name: m.workspace.name })),
+      sidebarMoneyPages: parseSidebarMoneyPages(workspace.sidebarMoneyPages),
+      workspaces: workspaceSummaries,
       accounts: workspace.financials.map((a) => ({
         id: a.id,
         name: a.name,
@@ -218,20 +252,7 @@ export async function GET() {
   } catch (error) {
     if (error instanceof ApiAuthError) {
       if (error.status === 404) {
-        return NextResponse.json({
-          workspaceId: null,
-          defaultAccountId: null,
-          defaultBudgetId: null,
-          defaultUserId: null,
-          baseCurrency: "SGD",
-          isShared: false,
-          isCollaborative: false,
-          workspaceName: null,
-          memberCount: 0,
-          pendingInviteCount: 0,
-          workspaces: [],
-          accounts: [],
-        });
+        return NextResponse.json(emptyContextResponse());
       }
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
