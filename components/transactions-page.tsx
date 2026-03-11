@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
   workspaceId: string | null;
@@ -331,6 +332,11 @@ export function TransactionsPage() {
     setIsCreateModalOpen(true);
   };
 
+  const confirmDeleteTx = (transactionId: string) => {
+    if (!confirmDestructiveAction("Delete this transaction?")) return;
+    deleteTx.mutate(transactionId);
+  };
+
   return (
     <div style={{ display: "grid", gap: "14px" }}>
       <section className="card">
@@ -478,7 +484,7 @@ export function TransactionsPage() {
                 <button className="btn btn-ghost btn-xs" onClick={() => beginEdit(tx)}>
                   Edit
                 </button>
-                <button className="btn btn-ghost btn-xs" onClick={() => deleteTx.mutate(tx.id)} disabled={deleteTx.isPending}>
+                <button className="btn btn-ghost btn-xs" onClick={() => confirmDeleteTx(tx.id)} disabled={deleteTx.isPending}>
                   Delete
                 </button>
               </div>

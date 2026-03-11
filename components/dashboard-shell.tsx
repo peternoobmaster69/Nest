@@ -7,6 +7,7 @@ import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency
 import { AppSidebar } from "./app-sidebar";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonCard, SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type DashboardSummary = {
   totalBalanceCents: number;
@@ -669,6 +670,13 @@ export function DashboardShell({
     setEditingReceivableId(null);
     setEditingReceivableTitle("");
     setEditingReceivableAmount("");
+  };
+
+  const confirmDeleteBudget = (budgetId: string) => {
+    if (!confirmDestructiveAction("Delete this sub-account?")) return;
+    deleteBudget.mutate(budgetId);
+    setEditingBudgetId(null);
+    setEditingBudgetIcon("");
   };
 
   const summary = data ?? {
@@ -1346,9 +1354,7 @@ export function DashboardShell({
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => {
-                      if (editingBudgetId) deleteBudget.mutate(editingBudgetId);
-                      setEditingBudgetId(null);
-                      setEditingBudgetIcon("");
+                      if (editingBudgetId) confirmDeleteBudget(editingBudgetId);
                     }}
                     disabled={deleteBudget.isPending}
                   >

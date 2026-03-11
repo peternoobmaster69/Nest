@@ -6,6 +6,7 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type CreditCard = {
   id: string;
@@ -403,6 +404,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     return cardCounts.find((c) => c.creditCardId === cardId)?._count.id || 0;
   };
 
+  const confirmDeleteTransaction = (transactionId: string) => {
+    if (!confirmDestructiveAction("Delete this credit card transaction?")) return;
+    deleteTransaction.mutate(transactionId);
+  };
+
   return (
     <div className="cct-container">
       {/* Card Selector Bar */}
@@ -615,7 +621,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     )}
                     <button
                       className="btn btn-ghost btn-xs"
-                      onClick={() => deleteTransaction.mutate(tx.id)}
+                      onClick={() => confirmDeleteTransaction(tx.id)}
                       disabled={deleteTransaction.isPending}
                     >
                       Delete

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EmptyState, LoadingDots, SkeletonText } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 // Default visibility for Money section pages
 const DEFAULT_MONEY_PAGES = {
@@ -248,6 +249,11 @@ export function CollaboratorsPage() {
     inviteMutation.mutate();
   };
 
+  const confirmRemoveMember = (memberId: string) => {
+    if (!confirmDestructiveAction("Remove this collaborator from the workspace?")) return;
+    removeMember.mutate(memberId);
+  };
+
   return (
     <div style={{ display: "grid", gap: "12px", position: "relative" }}>
       {isWorkspaceChanging ? (
@@ -439,7 +445,7 @@ export function CollaboratorsPage() {
                 {member.role !== "OWNER" ? (
                   <button
                     className="btn btn-ghost btn-xs"
-                    onClick={() => removeMember.mutate(member.id)}
+                    onClick={() => confirmRemoveMember(member.id)}
                     disabled={removeMember.isPending || isWorkspaceChanging}
                   >
                     Remove

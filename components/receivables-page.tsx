@@ -5,6 +5,7 @@ import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
   workspaceId: string | null;
@@ -546,7 +547,7 @@ export function ReceivablesPage() {
                 <button
                   className="btn btn-danger btn-xs"
                   onClick={() => {
-                    if (confirm("Are you sure you want to delete this receivable?")) {
+                    if (confirmDestructiveAction("Delete this receivable?")) {
                       deleteReceivable.mutate(r.id);
                     }
                   }}

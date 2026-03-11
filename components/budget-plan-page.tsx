@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useMemo, useState } from "react";
 import { EmptyState, SkeletonCard, SkeletonGrid } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type BudgetItem = {
   id: string;
@@ -505,6 +506,16 @@ export function BudgetPlanPage() {
     setQuickEditAmount((source.amountCents / 100).toFixed(2));
   };
 
+  const confirmDeleteItem = (itemId: string) => {
+    if (!confirmDestructiveAction("Delete this budget item?")) return;
+    deleteItem.mutate(itemId);
+  };
+
+  const confirmDeleteSource = (sourceId: string) => {
+    if (!confirmDestructiveAction("Delete this budget source?")) return;
+    deleteSource.mutate(sourceId);
+  };
+
   const closeQuickEditModal = () => {
     setQuickEditTarget(null);
     setQuickEditDescription("");
@@ -961,7 +972,7 @@ export function BudgetPlanPage() {
                   <button
                     type="button"
                     className="btn btn-danger"
-                    onClick={() => editingItemId && deleteItem.mutate(editingItemId)}
+                    onClick={() => editingItemId && confirmDeleteItem(editingItemId)}
                     disabled={deleteItem.isPending}
                   >
                     {deleteItem.isPending ? "Deleting..." : "Delete"}
@@ -1042,7 +1053,7 @@ export function BudgetPlanPage() {
                   <button
                     type="button"
                     className="btn btn-danger"
-                    onClick={() => editingSourceId && deleteSource.mutate(editingSourceId)}
+                    onClick={() => editingSourceId && confirmDeleteSource(editingSourceId)}
                     disabled={deleteSource.isPending}
                   >
                     {deleteSource.isPending ? "Deleting..." : "Delete"}

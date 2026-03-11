@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonCreditCard, EmptyState } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
   workspaceId: string | null;
@@ -28,6 +29,11 @@ type CreditCard = {
 type RevealedCard = {
   id: string;
   maskedNumber: string;
+  fullCardNumber: string | null;
+  securityCode: string | null;
+};
+
+type RevealedCardCache = {
   fullCardNumber: string | null;
   securityCode: string | null;
 };
@@ -124,6 +130,14 @@ function getBankInitials(bankName: string | null): string {
     .toUpperCase();
 }
 
+function normalizeCardNumber(value: string | null | undefined) {
+  return (value || "").replace(/\D/g, "");
+}
+
+function normalizeSecurityCode(value: string | null | undefined) {
+  return (value || "").replace(/\D/g, "");
+}
+
 export function CreditCardsPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -134,6 +148,8 @@ export function CreditCardsPage() {
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [formError, setFormError] = useState("");
   const [requireCardNumberInput, setRequireCardNumberInput] = useState(false);
+  const [revealedCards, setRevealedCards] = useState<Record<string, RevealedCardCache>>({});
+  const [revealingField, setRevealingField] = useState<{ cardId: string; field: "number" | "cvv" } | null>(null);
 
   // Form state
   const [cardName, setCardName] = useState("");
@@ -147,6 +163,18 @@ export function CreditCardsPage() {
   const [statementDay, setStatementDay] = useState("25");
   const [paymentDueDay, setPaymentDueDay] = useState("10");
   const [notes, setNotes] = useState("");
+  const [isStackExpanded, setIsStackExpanded] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobileView(window.matchMedia("(max-width: 768px)").matches);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -170,6 +198,13 @@ export function CreditCardsPage() {
     });
     return list;
   }, [cards.data]);
+
+  // Set first card as selected by default when cards load
+  useEffect(() => {
+    if (sortedCards.length > 0 && !selectedCardId) {
+      setSelectedCardId(sortedCards[0].id);
+    }
+  }, [sortedCards, selectedCardId]);
 
   const createCard = useMutation({
     mutationFn: () =>
@@ -226,9 +261,7 @@ export function CreditCardsPage() {
   });
 
   const copyFullCard = useMutation({
-    mutationFn: async (id: string) => {
-      const revealed = await fetchJson<RevealedCard>(`/api/credit-cards/${id}`);
-      const digits = (revealed.fullCardNumber || "").replace(/\D/g, "");
+    mutationFn: async (digits: string) => {
       if (digits.length !== 16) {
         throw new Error("Card number is unavailable or not 16 digits.");
       }
@@ -249,9 +282,7 @@ export function CreditCardsPage() {
   });
 
   const copyCvv = useMutation({
-    mutationFn: async (id: string) => {
-      const revealed = await fetchJson<RevealedCard>(`/api/credit-cards/${id}`);
-      const cvv = (revealed.securityCode || "").replace(/\D/g, "");
+    mutationFn: async (cvv: string) => {
       if (cvv.length < 3 || cvv.length > 4) {
         throw new Error("CVV unavailable.");
       }
@@ -312,10 +343,17 @@ export function CreditCardsPage() {
 
     try {
       const revealed = await fetchJson<RevealedCard>(`/api/credit-cards/${card.id}`);
-      const normalizedNumber = (revealed.fullCardNumber || "").replace(/\D/g, "").slice(0, 16);
+      setRevealedCards((prev) => ({
+        ...prev,
+        [card.id]: {
+          fullCardNumber: revealed.fullCardNumber,
+          securityCode: revealed.securityCode,
+        },
+      }));
+      const normalizedNumber = normalizeCardNumber(revealed.fullCardNumber).slice(0, 16);
       setCardNumber(normalizedNumber);
       setRequireCardNumberInput(normalizedNumber.length !== 16);
-      setSecurityCode((revealed.securityCode || "").replace(/\D/g, "").slice(0, 4));
+      setSecurityCode(normalizeSecurityCode(revealed.securityCode).slice(0, 4));
     } catch {
       // Keep editable fields prefilled even if secure fields cannot be decrypted.
       setRequireCardNumberInput(true);
@@ -344,6 +382,63 @@ export function CreditCardsPage() {
     setFlippedCardId(flippedCardId === cardId ? null : cardId);
   };
 
+  const handleCardTap = (cardId: string, isCollapsed: boolean) => {
+    if (isCollapsed) {
+      setSelectedCardId(cardId);
+      return;
+    }
+    toggleCardFlip(cardId);
+  };
+
+  const confirmDeleteCard = (cardId: string) => {
+    if (!confirmDestructiveAction("Delete this credit card?")) return;
+    deleteCard.mutate(cardId, {
+      onSuccess: () => {
+        closeModal();
+      },
+    });
+  };
+
+  const revealCardDetails = async (cardId: string, field: "number" | "cvv") => {
+    setRevealingField({ cardId, field });
+    try {
+      const revealed = await fetchJson<RevealedCard>(`/api/credit-cards/${cardId}`);
+      setRevealedCards((prev) => ({
+        ...prev,
+        [cardId]: {
+          fullCardNumber: revealed.fullCardNumber,
+          securityCode: revealed.securityCode,
+        },
+      }));
+    } catch (error) {
+      setCopyMessageKind("error");
+      setCopyMessage(error instanceof Error ? error.message : "Unable to reveal card details");
+      setTimeout(() => setCopyMessage(""), 1800);
+    } finally {
+      setRevealingField((current) =>
+        current?.cardId === cardId && current.field === field ? null : current
+      );
+    }
+  };
+
+  const handleCopyNumber = (cardId: string) => {
+    const digits = normalizeCardNumber(revealedCards[cardId]?.fullCardNumber);
+    if (digits.length === 16) {
+      copyFullCard.mutate(digits);
+      return;
+    }
+    void revealCardDetails(cardId, "number");
+  };
+
+  const handleCopyCvv = (cardId: string) => {
+    const cvv = normalizeSecurityCode(revealedCards[cardId]?.securityCode);
+    if (cvv.length >= 3 && cvv.length <= 4) {
+      copyCvv.mutate(cvv);
+      return;
+    }
+    void revealCardDetails(cardId, "cvv");
+  };
+
   return (
     <div className="cc-container">
       {/* Header with Add Button */}
@@ -369,8 +464,8 @@ export function CreditCardsPage() {
         </div>
       )}
 
-      {/* Cards Grid - Apple Wallet Style */}
-      <div className="cc-grid">
+      {/* Cards Grid - Apple Wallet Style (mobile only) */}
+      <div className={`cc-grid${isMobileView && sortedCards.length > 1 && !isStackExpanded ? " cc-grid-stacked" : ""}`}>
         {cards.isLoading && (
           <>
             <SkeletonCreditCard />
@@ -393,12 +488,32 @@ export function CreditCardsPage() {
           const isFlipped = flippedCardId === card.id;
           const gradient = getCardGradient(card.bankName, card.themeKey);
           const bankInitials = getBankInitials(card.bankName);
+          const revealedNumber = normalizeCardNumber(revealedCards[card.id]?.fullCardNumber);
+          const revealedCvv = normalizeSecurityCode(revealedCards[card.id]?.securityCode);
+          const isRevealingNumber = revealingField?.cardId === card.id && revealingField.field === "number";
+          const isRevealingCvv = revealingField?.cardId === card.id && revealingField.field === "cvv";
+          const headerCardNumber =
+            revealedNumber.length === 16
+              ? revealedNumber.replace(/(\d{4})(?=\d)/g, "$1 ").trim()
+              : card.maskedNumber;
+          const headerCvv =
+            revealedNumber.length === 16 && revealedCvv.length >= 3 && revealedCvv.length <= 4
+              ? revealedCvv
+              : card.hasSecurityCode
+                ? "•••"
+                : "—";
+
+          // Wallet collapse logic: only selected card is expanded
+          const useWalletView = isMobileView && sortedCards.length > 1 && !isStackExpanded;
+          const isSelected = selectedCardId === card.id;
+          const isCollapsed = useWalletView && !isSelected;
 
           return (
             <div
               key={card.id}
-              className={`cc-card-wrapper ${isFlipped ? "flipped" : ""}`}
-              style={{ zIndex: sortedCards.length - index }}
+              onClick={() => handleCardTap(card.id, isCollapsed)}
+              className={`cc-card-wrapper ${isFlipped ? "flipped" : ""}${useWalletView ? " cc-wallet-view" : ""}${isCollapsed ? " cc-card-collapsed" : ""}${isSelected ? " cc-card-selected" : ""}`}
+              style={{ zIndex: isSelected ? 100 : sortedCards.length - index }}
             >
               {/* Front of Card */}
               <div className="cc-card-front" style={{ background: gradient }}>
@@ -420,6 +535,7 @@ export function CreditCardsPage() {
                       );
                     })()}
                   </div>
+                  {isCollapsed && <div className="cc-card-name">{card.cardName}</div>}
                 </div>
 
                 <div className="cc-card-number">{card.maskedNumber}</div>
@@ -432,53 +548,41 @@ export function CreditCardsPage() {
                       : "••/••"}
                   </div>
                 </div>
-
-                <button className="cc-info-btn" onClick={() => toggleCardFlip(card.id)}>
-                  ⓘ
-                </button>
               </div>
 
               {/* Back of Card */}
               <div className="cc-card-back">
                 <div className="cc-back-header">
-                  <span className="cc-back-title">Card Details</span>
-                  <button className="cc-close-btn" onClick={() => toggleCardFlip(card.id)}>
-                    ✕
-                  </button>
-                </div>
-
-                <div className="cc-details">
-                  <div className="cc-detail-row">
-                    <span className="cc-detail-label">Card</span>
-                    <span className="cc-detail-value">{card.cardName}</span>
-                  </div>
-                  <div className="cc-detail-row">
-                    <span className="cc-detail-label">Bank</span>
-                    <span className="cc-detail-value">{card.bankName || "Unknown"}</span>
-                  </div>
-                  <div className="cc-detail-row">
-                    <span className="cc-detail-label">Number</span>
-                    <span className="cc-detail-value mono">{card.maskedNumber}</span>
-                  </div>
-                  <div className="cc-detail-row">
-                    <span className="cc-detail-label">Expiry</span>
-                    <span className="cc-detail-value">
+                  <div className="cc-back-header-meta">
+                    <span className="cc-back-number mono">{headerCardNumber}</span>
+                    <span className="cc-back-expiry mono">
                       {card.expiryMonth && card.expiryYear
                         ? `${String(card.expiryMonth).padStart(2, "0")}/${card.expiryYear}`
                         : "—"}
                     </span>
+                    <span className="cc-back-cvv mono">
+                      {headerCvv}
+                    </span>
                   </div>
-                  <div className="cc-detail-row">
+                </div>
+
+                <div className="cc-details">
+                  <div className="cc-detail-column cc-detail-column-left">
                     <span className="cc-detail-label">Statement Day</span>
-                    <span className="cc-detail-value">{card.statementDay}</span>
+                    <span className="cc-detail-value cc-detail-value-icon" title="Statement day">
+                      <span aria-hidden="true" className="cc-detail-icon">🗓</span>
+                      <span>{card.statementDay}</span>
+                    </span>
                   </div>
-                  <div className="cc-detail-row">
+                  <div className="cc-detail-column">
                     <span className="cc-detail-label">Payment Due</span>
-                    <span className="cc-detail-value">{card.paymentDueDay}</span>
+                    <span className="cc-detail-value cc-detail-value-icon" title="Payment due day">
+                      <span aria-hidden="true" className="cc-detail-icon">⏰</span>
+                      <span>{card.paymentDueDay}</span>
+                    </span>
                   </div>
                   {card.notes && (
-                    <div className="cc-detail-row">
-                      <span className="cc-detail-label">Notes</span>
+                    <div className="cc-detail-row cc-detail-row-wide">
                       <span className="cc-detail-value">{card.notes}</span>
                     </div>
                   )}
@@ -487,21 +591,46 @@ export function CreditCardsPage() {
                 <div className="cc-back-actions">
                   <button
                     className="btn btn-ghost btn-xs"
-                    onClick={() => copyFullCard.mutate(card.id)}
-                    disabled={copyFullCard.isPending || !card.hasCardNumber}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleCopyNumber(card.id);
+                    }}
+                    disabled={copyFullCard.isPending || isRevealingNumber || !card.hasCardNumber}
                   >
-                    {copyFullCard.isPending ? "Decrypting..." : card.hasCardNumber ? "Copy Number" : "No Number Saved"}
+                    {isRevealingNumber
+                      ? "Revealing..."
+                      : copyFullCard.isPending
+                        ? "Copying..."
+                        : !card.hasCardNumber
+                          ? "No Number Saved"
+                          : revealedNumber.length === 16
+                            ? "Copy Number"
+                            : "Reveal Number"}
                   </button>
                   <button
                     className="btn btn-ghost btn-xs"
-                    onClick={() => copyCvv.mutate(card.id)}
-                    disabled={copyCvv.isPending || !card.hasSecurityCode}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleCopyCvv(card.id);
+                    }}
+                    disabled={copyCvv.isPending || isRevealingCvv || !card.hasSecurityCode}
                   >
-                    {copyCvv.isPending ? "Decrypting..." : card.hasSecurityCode ? "Copy CVV" : "No CVV Saved"}
+                    {isRevealingCvv
+                      ? "Revealing..."
+                      : copyCvv.isPending
+                        ? "Copying..."
+                        : !card.hasSecurityCode
+                          ? "No CVV Saved"
+                          : revealedCvv.length >= 3 && revealedCvv.length <= 4
+                            ? "Copy CVV"
+                            : "Reveal CVV"}
                   </button>
                   <button
                     className="btn btn-ghost btn-xs"
-                    onClick={() => openEditModal(card)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openEditModal(card);
+                    }}
                   >
                     Edit
                   </button>
@@ -510,6 +639,17 @@ export function CreditCardsPage() {
             </div>
           );
         })}
+
+        {/* Show All / Collapse Button - Mobile Only */}
+        {!cards.isLoading && !cards.isError && isMobileView && sortedCards.length > 1 && (
+          <button
+            className="cc-show-all-btn"
+            onClick={() => setIsStackExpanded(!isStackExpanded)}
+          >
+            <span className="cc-show-all-icon">{isStackExpanded ? "▲" : "▼"}</span>
+            <span>{isStackExpanded ? "Show Wallet" : "Show All Cards"}</span>
+          </button>
+        )}
 
         {/* Add Card Placeholder - only show when loaded and has cards */}
         {!cards.isLoading && !cards.isError && sortedCards.length > 0 && (
@@ -745,13 +885,7 @@ export function CreditCardsPage() {
                     className="btn btn-ghost cc-delete"
                     style={{ marginRight: "auto" }}
                     disabled={deleteCard.isPending}
-                    onClick={() =>
-                      deleteCard.mutate(editingCardId, {
-                        onSuccess: () => {
-                          closeModal();
-                        },
-                      })
-                    }
+                    onClick={() => confirmDeleteCard(editingCardId)}
                   >
                     {deleteCard.isPending ? "Deleting..." : "Delete Card"}
                   </button>

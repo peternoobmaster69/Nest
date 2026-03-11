@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
   workspaceId: string | null;
@@ -56,6 +57,35 @@ function isWithinLastDay(value: string) {
   const timestamp = new Date(value).getTime();
   if (Number.isNaN(timestamp)) return false;
   return Date.now() - timestamp < 24 * 60 * 60 * 1000;
+}
+
+function formatInceptionBadge(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = String(date.getFullYear());
+  return `Since ${year}`;
+}
+
+function buildSmoothPath(points: Array<{ x: number; y: number }>) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const controlX = current.x + (next.x - current.x) / 2;
+    path += ` C ${controlX} ${current.y}, ${controlX} ${next.y}, ${next.x} ${next.y}`;
+  }
+  return path;
+}
+
+function buildAreaPath(points: Array<{ x: number; y: number }>, baselineY: number) {
+  if (!points.length) return "";
+  const linePath = buildSmoothPath(points);
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${linePath} L ${last.x} ${baselineY} L ${first.x} ${baselineY} Z`;
 }
 
 export function InvestmentsPage() {
@@ -366,6 +396,16 @@ export function InvestmentsPage() {
     setEditingEntryId(null);
   };
 
+  const confirmDeleteAccount = (accountId: string) => {
+    if (!confirmDestructiveAction("Delete this investment account and its history?")) return;
+    deleteAccount.mutate(accountId);
+  };
+
+  const confirmDeleteEntry = (entryId: string) => {
+    if (!confirmDestructiveAction("Delete this investment entry?")) return;
+    deleteEntry.mutate(entryId);
+  };
+
   useEffect(() => {
     if (entryModalMode !== "create") return;
     const base = (latestEntryAccountEntry?.investedCents ?? 0) / 100;
@@ -435,16 +475,23 @@ export function InvestmentsPage() {
       return {
         width,
         height,
+        baselineY: height - pad,
         investedPath: "",
         currentPath: "",
+        currentAreaPath: "",
+        currentTone: "gain" as "gain" | "loss",
+        gridLines: [] as Array<{ id: string; y: number; value: number }>,
         points: [] as Array<{ id: string; x: number; yInvested: number; yCurrent: number; label: string; invested: number; current: number }>,
       };
     }
 
     const minTime = chartRows[0].date.getTime();
     const maxTime = chartRows[chartRows.length - 1].date.getTime();
-    const low = Math.min(...chartRows.map((r) => Math.min(r.invested, r.current)));
-    const high = Math.max(...chartRows.map((r) => Math.max(r.invested, r.current)));
+    const rawLow = Math.min(...chartRows.map((r) => Math.min(r.invested, r.current)));
+    const rawHigh = Math.max(...chartRows.map((r) => Math.max(r.invested, r.current)));
+    const padding = Math.max((rawHigh - rawLow) * 0.14, rawHigh * 0.06, 1000);
+    const low = Math.max(0, rawLow - padding);
+    const high = rawHigh + padding;
     const spanTime = Math.max(1, maxTime - minTime);
     const spanY = Math.max(1, high - low);
 
@@ -456,9 +503,20 @@ export function InvestmentsPage() {
       return { id: row.id, x, yInvested, yCurrent, label, invested: row.invested, current: row.current };
     });
 
-    const investedPath = points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yInvested}`).join(" ");
-    const currentPath = points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yCurrent}`).join(" ");
-    return { width, height, investedPath, currentPath, points };
+    const investedPath = buildSmoothPath(points.map((point) => ({ x: point.x, y: point.yInvested })));
+    const currentPath = buildSmoothPath(points.map((point) => ({ x: point.x, y: point.yCurrent })));
+    const baselineY = height - pad;
+    const currentAreaPath = buildAreaPath(points.map((point) => ({ x: point.x, y: point.yCurrent })), baselineY);
+    const latestPoint = points[points.length - 1];
+    const currentTone = latestPoint.current >= latestPoint.invested ? "gain" : "loss";
+    const gridLines = Array.from({ length: 4 }, (_, index) => {
+      const ratio = index / 3;
+      const value = high - ratio * spanY;
+      const y = pad + ratio * plotH;
+      return { id: `grid-${index}`, y, value };
+    });
+
+    return { width, height, low, high, baselineY, investedPath, currentPath, currentAreaPath, currentTone, gridLines, points };
   }, [chartRows]);
 
   const hoveredPoint = chart.points.find((point) => point.id === hoveredPointId) ?? null;
@@ -614,6 +672,7 @@ export function InvestmentsPage() {
           const investedCents = latest?.investedCents ?? 0;
           const currentCents = latest?.currentValueCents ?? 0;
           const currentValueClass = currentCents >= investedCents ? "positive" : "negative";
+          const inceptionBadge = formatInceptionBadge(account.inceptionDate);
           return (
             <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""}`}>
               <button
@@ -658,6 +717,7 @@ export function InvestmentsPage() {
                 </div>
               </button>
               <div className="inv-account-actions">
+                {inceptionBadge ? <span className="inv-inception-chip">{inceptionBadge}</span> : null}
                 <button className="btn btn-primary btn-xs" type="button" onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}>
                   + Add Update
                 </button>
@@ -703,8 +763,31 @@ export function InvestmentsPage() {
             {chart.points.length ? (
               <div className="inv-chart-wrap">
                 <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="inv-chart" role="img" aria-label="Investment time series chart">
+                  <defs>
+                    <linearGradient id="invCurrentGainFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="var(--amount-positive)" stopOpacity="0.22" />
+                      <stop offset="100%" stopColor="var(--amount-positive)" stopOpacity="0" />
+                    </linearGradient>
+                    <linearGradient id="invCurrentLossFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="var(--amount-negative)" stopOpacity="0.22" />
+                      <stop offset="100%" stopColor="var(--amount-negative)" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {chart.gridLines.map((line) => (
+                    <g key={line.id}>
+                      <line x1={36} x2={chart.width - 36} y1={line.y} y2={line.y} className="inv-grid-line" />
+                      <text x={10} y={line.y + 4} className="inv-grid-label">
+                        {formatCents(Math.round(line.value))}
+                      </text>
+                    </g>
+                  ))}
+                  <path
+                    d={chart.currentAreaPath}
+                    className={`inv-area ${chart.currentTone}`}
+                    fill={chart.currentTone === "gain" ? "url(#invCurrentGainFill)" : "url(#invCurrentLossFill)"}
+                  />
                   <path d={chart.investedPath} className="inv-line invested" />
-                  <path d={chart.currentPath} className="inv-line current" />
+                  <path d={chart.currentPath} className={`inv-line current ${chart.currentTone}`} />
                   {chart.points.map((point) => (
                     <g key={point.id}>
                       <circle
@@ -718,7 +801,7 @@ export function InvestmentsPage() {
                         cx={point.x}
                         cy={point.yCurrent}
                         r={hoveredPointId === point.id ? 4 : 3}
-                        className="inv-dot current"
+                        className={`inv-dot current ${chart.currentTone}`}
                         onMouseEnter={() => setHoveredPointId(point.id)}
                       />
                     </g>
@@ -726,7 +809,7 @@ export function InvestmentsPage() {
                 </svg>
                 <div className="inv-chart-legend">
                   <span><i className="inv-legend-dot invested" /> Invested Amount</span>
-                  <span><i className="inv-legend-dot current" /> Current Value</span>
+                  <span><i className={`inv-legend-dot current ${chart.currentTone}`} /> Current Value</span>
                 </div>
                 {hoveredPoint ? (
                   <div className="inv-tooltip">
@@ -834,7 +917,7 @@ export function InvestmentsPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-xs"
-                    onClick={() => deleteAccount.mutate(editingAccountId)}
+                    onClick={() => confirmDeleteAccount(editingAccountId)}
                     disabled={deleteAccount.isPending}
                   >
                     {deleteAccount.isPending ? "Deleting..." : "Delete"}
@@ -895,7 +978,7 @@ export function InvestmentsPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-xs"
-                    onClick={() => deleteEntry.mutate(editingEntryId)}
+                    onClick={() => confirmDeleteEntry(editingEntryId)}
                     disabled={deleteEntry.isPending}
                   >
                     {deleteEntry.isPending ? "Deleting..." : "Delete"}

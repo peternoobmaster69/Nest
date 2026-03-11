@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { FormEvent, useEffect, useState } from "react";
 import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type CreditCardReward = {
   id: string;
@@ -581,6 +582,21 @@ export function RewardsPage({
     setEditingEarnId(null);
   };
 
+  const confirmDeleteCardReward = (id: string) => {
+    if (!confirmDestructiveAction("Delete this credit card rewards record?")) return;
+    deleteCardReward.mutate(id);
+  };
+
+  const confirmDeleteFrequentFlyer = (id: string) => {
+    if (!confirmDestructiveAction("Delete this frequent flyer account?")) return;
+    deleteFrequentFlyer.mutate(id);
+  };
+
+  const confirmDeleteConversion = (id: string) => {
+    if (!confirmDestructiveAction("Delete this conversion rate?")) return;
+    deleteConversion.mutate(id);
+  };
+
   const totalMiles = data?.frequentFlyers.reduce((sum, f) => sum + f.currentMiles, 0) || 0;
   const conversionByRewardId = new Map<string, PointConversion>();
   for (const conversion of data?.conversions ?? []) {
@@ -726,7 +742,7 @@ export function RewardsPage({
                   </div>
                   <button
                     className="btn btn-ghost btn-xs"
-                    onClick={() => deleteCardReward.mutate(card.id)}
+                    onClick={() => confirmDeleteCardReward(card.id)}
                   >
                     Remove
                   </button>
@@ -910,7 +926,7 @@ export function RewardsPage({
                     </button>
                     <button
                       className="btn btn-ghost btn-xs"
-                      onClick={() => deleteFrequentFlyer.mutate(ff.id)}
+                      onClick={() => confirmDeleteFrequentFlyer(ff.id)}
                     >
                       Remove
                     </button>
@@ -1261,7 +1277,7 @@ export function RewardsPage({
                         </button>
                         <button
                           className="btn btn-ghost btn-xs"
-                          onClick={() => deleteConversion.mutate(conv.id)}
+                          onClick={() => confirmDeleteConversion(conv.id)}
                         >
                           Delete
                         </button>
