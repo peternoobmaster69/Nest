@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
 
@@ -25,10 +26,12 @@ type DeductionAccount = {
 
 type Receivable = {
   id: string;
+  title: string;
   amountCents: number;
   date: string;
   transactionDate?: string | null;
   remarkTogether?: string | null;
+  notes?: string | null;
   status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
   accountId?: string | null;
   budgetId?: string | null;
@@ -95,7 +98,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 export function ReceivablesPage() {
   const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth() + 1);
-  const [sortBy, setSortBy] = useState<"amount" | "remarks" | "receivableDate" | "transactionDate">("receivableDate");
+  const [sortBy, setSortBy] = useState<"amount" | "title" | "receivableDate" | "transactionDate">("receivableDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [hideClosed, setHideClosed] = useState(true);
   const [closeError, setCloseError] = useState<string | null>(null);
@@ -107,7 +110,8 @@ export function ReceivablesPage() {
   const [formReceivableDate, setFormReceivableDate] = useState(todayDateInputValue);
   const [formTransactionDate, setFormTransactionDate] = useState("");
   const [formAmount, setFormAmount] = useState("");
-  const [formRemarks, setFormRemarks] = useState("");
+  const [formTitle, setFormTitle] = useState("");
+  const [formNotes, setFormNotes] = useState("");
   const [formStatus, setFormStatus] = useState<Receivable["status"]>("OPEN");
   const [formUseCrossWorkspaceDeduction, setFormUseCrossWorkspaceDeduction] = useState(false);
   const [formDeductWorkspaceId, setFormDeductWorkspaceId] = useState("");
@@ -173,10 +177,11 @@ export function ReceivablesPage() {
 
   const createReceivable = useMutation({
     mutationFn: (payload: {
+      title: string;
       receivableDate: string;
       transactionDate?: string;
       amountCents: number;
-      remarks?: string;
+      notes?: string;
       accountId?: string;
       budgetId?: string;
     }) =>
@@ -186,9 +191,10 @@ export function ReceivablesPage() {
         body: JSON.stringify({
           workspaceId,
           amountCents: payload.amountCents,
+          title: payload.title,
           receivableDate: payload.receivableDate,
           transactionDate: payload.transactionDate,
-          remarks: payload.remarks,
+          notes: payload.notes,
           accountId: payload.accountId,
           budgetId: payload.budgetId,
           status: "OPEN",
@@ -206,7 +212,8 @@ export function ReceivablesPage() {
       receivableDate: string;
       transactionDate?: string | null;
       amountCents: number;
-      remarks?: string;
+      title: string;
+      notes?: string | null;
       status: Receivable["status"];
       accountId?: string | null;
       budgetId?: string | null;
@@ -218,7 +225,8 @@ export function ReceivablesPage() {
           date: payload.receivableDate,
           transactionDate: payload.transactionDate,
           amountCents: payload.amountCents,
-          remarks: payload.remarks,
+          title: payload.title,
+          notes: payload.notes,
           status: payload.status,
           accountId: payload.accountId,
           budgetId: payload.budgetId,
@@ -284,8 +292,8 @@ export function ReceivablesPage() {
         const tb = b.transactionDate ? new Date(b.transactionDate).getTime() : Number.NEGATIVE_INFINITY;
         return (ta - tb) * dir;
       }
-      const aa = (a.remarkTogether || "").toLowerCase();
-      const bb = (b.remarkTogether || "").toLowerCase();
+      const aa = (a.title || "").toLowerCase();
+      const bb = (b.title || "").toLowerCase();
       return aa.localeCompare(bb) * dir;
     });
     return list;
@@ -323,7 +331,8 @@ export function ReceivablesPage() {
     setFormReceivableDate(todayDateInputValue());
     setFormTransactionDate("");
     setFormAmount("");
-    setFormRemarks("");
+    setFormTitle("");
+    setFormNotes("");
     setFormStatus("OPEN");
     setActiveId(null);
     setFormUseCrossWorkspaceDeduction(false);
@@ -350,7 +359,8 @@ export function ReceivablesPage() {
     setFormReceivableDate(toDateInputFromIso(r.date));
     setFormTransactionDate(r.transactionDate ? toDateInputFromIso(r.transactionDate) : "");
     setFormAmount((r.amountCents / 100).toFixed(2));
-    setFormRemarks(r.remarkTogether || "");
+    setFormTitle(r.title || "");
+    setFormNotes(r.notes || "");
     setFormStatus(r.status);
     setFormUseCrossWorkspaceDeduction(Boolean(r.accountId));
     setFormDeductWorkspaceId(r.account?.workspaceId || "");
@@ -373,7 +383,8 @@ export function ReceivablesPage() {
         receivableDate: toIsoFromDateInput(formReceivableDate),
         transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : null,
         amountCents: Math.round(Number(formAmount || "0") * 100),
-        remarks: formRemarks.trim() || undefined,
+        title: formTitle.trim() || "Receivable",
+        notes: formNotes.trim() || null,
         status: formStatus,
         accountId: formUseCrossWorkspaceDeduction ? accountId : null,
         budgetId: formUseCrossWorkspaceDeduction ? budgetId : null,
@@ -382,10 +393,11 @@ export function ReceivablesPage() {
     }
 
     createReceivable.mutate({
+      title: formTitle.trim() || "Receivable",
       receivableDate: toIsoFromDateInput(formReceivableDate),
       transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : undefined,
       amountCents: Math.round(Number(formAmount) * 100),
-      remarks: formRemarks.trim() || undefined,
+      notes: formNotes.trim() || undefined,
       accountId,
       budgetId,
     });
@@ -445,10 +457,10 @@ export function ReceivablesPage() {
             className="input"
             style={{ maxWidth: "190px" }}
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as "amount" | "remarks" | "receivableDate" | "transactionDate")}
+            onChange={(e) => setSortBy(e.target.value as "amount" | "title" | "receivableDate" | "transactionDate")}
           >
             <option value="amount">Sort: Amount</option>
-            <option value="remarks">Sort: Remarks</option>
+            <option value="title">Sort: Title</option>
             <option value="receivableDate">Sort: Receivable Date</option>
             <option value="transactionDate">Sort: Transaction Date</option>
           </select>
@@ -497,13 +509,18 @@ export function ReceivablesPage() {
                     textOverflow: "ellipsis",
                   }}
                 >
-                  {r.remarkTogether || "No remarks"}
+                  {r.title || "Untitled"}
                 </span>
                 <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>
                   Receivable: {new Date(r.date).toLocaleDateString()} · Transaction:{" "}
                   {r.transactionDate ? new Date(r.transactionDate).toLocaleDateString() : "—"} · Status: {r.status}
                   {r.account ? ` · Deduct from: ${r.account.workspace.name} / ${r.account.name}` : ""}
                 </span>
+                {r.notes ? (
+                  <span style={{ color: "var(--text-secondary)", fontSize: "11px", whiteSpace: "pre-wrap" }}>
+                    {r.notes}
+                  </span>
+                ) : null}
               </span>
               <span style={{ display: "inline-flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
                 <span className={getAmountToneClass(r.amountCents)} style={{ fontWeight: 700 }}>
@@ -557,15 +574,19 @@ export function ReceivablesPage() {
 
       {isModalOpen && (
         <div className="profile-modal-overlay" onClick={closeModal}>
-          <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="profile-modal recv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>
               <button className="profile-modal-close" onClick={closeModal}>
                 Close
               </button>
             </div>
-            <div className="profile-modal-body" style={{ display: "grid", gap: "12px" }}>
-              <form style={{ display: "grid", gap: "10px" }} onSubmit={onSubmit}>
+            <div className="profile-modal-body recv-modal-body">
+              <form className="recv-modal-form" onSubmit={onSubmit}>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Title
+                  <input className="input" placeholder="Title" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} />
+                </label>
                 <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                   Receivable Date
                   <input className="input" type="date" value={formReceivableDate} onChange={(e) => setFormReceivableDate(e.target.value)} />
@@ -586,11 +607,16 @@ export function ReceivablesPage() {
                     onChange={(e) => setFormAmount(e.target.value)}
                   />
                 </label>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Remarks
-                  <input className="input" placeholder="Remarks" value={formRemarks} onChange={(e) => setFormRemarks(e.target.value)} />
-                </label>
-                <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                <MarkdownEditor
+                  className="modal-grid-span-2"
+                  label="Notes"
+                  value={formNotes}
+                  onChange={setFormNotes}
+                  placeholder="Write notes in Markdown"
+                  rows={12}
+                  minHeight={280}
+                />
+                <label className="modal-grid-span-2" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                   <input
                     type="checkbox"
                     checked={formUseCrossWorkspaceDeduction}
@@ -668,7 +694,7 @@ export function ReceivablesPage() {
                     </select>
                   </label>
                 )}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "6px" }}>
+                <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "6px" }}>
                   <button className="btn btn-ghost" type="button" onClick={closeModal}>
                     Cancel
                   </button>
@@ -681,7 +707,7 @@ export function ReceivablesPage() {
                   </button>
                 </div>
                 {(createReceivable.isError || updateReceivable.isError || closeReceivable.isError || deleteReceivable.isError) && (
-                  <div style={{ fontSize: "12px", color: "var(--danger)" }}>
+                  <div className="modal-grid-span-2" style={{ fontSize: "12px", color: "var(--danger)" }}>
                     {((createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error) as Error)?.message || "Action failed"}
                   </div>
                 )}

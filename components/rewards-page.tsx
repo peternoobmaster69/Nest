@@ -28,6 +28,10 @@ type FrequentFlyer = {
   expiryWarning: number;
   notes: string | null;
   isActive: boolean;
+  expirySummary: Array<{
+    month: string;
+    amount: number;
+  }>;
 };
 
 type MileProgramHistory = {
@@ -167,6 +171,8 @@ export function RewardsPage({
   // Frequent Flyer modal state
   const [isFFModalOpen, setIsFFModalOpen] = useState(false);
   const [editingFFId, setEditingFFId] = useState<string | null>(null);
+  const [isAddEarnModalOpen, setIsAddEarnModalOpen] = useState(false);
+  const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
   const [ffFormProgram, setFFFormProgram] = useState("");
   const [ffFormAirline, setFFFormAirline] = useState("");
   const [ffFormNumber, setFFFormNumber] = useState("");
@@ -410,6 +416,7 @@ export function RewardsPage({
       setEarnMiles("");
       setEarnTitle("");
       setEarnExpiryDate("");
+      setIsAddEarnModalOpen(false);
       refreshRewardsAndHistory();
     },
   });
@@ -473,6 +480,7 @@ export function RewardsPage({
     onSuccess: () => {
       setRedeemMiles("");
       setRedeemTitle("");
+      setIsRedeemModalOpen(false);
       refreshRewardsAndHistory();
     },
   });
@@ -561,29 +569,6 @@ export function RewardsPage({
     } else {
       createFrequentFlyer.mutate(payload);
     }
-  };
-
-  const onAddEarnTransaction = (e: FormEvent) => {
-    e.preventDefault();
-    if (!openHistoryFFId || !earnMiles || !earnDate) return;
-    createEarnTransaction.mutate({
-      frequentFlyerId: openHistoryFFId,
-      date: earnDate,
-      miles: parseInt(earnMiles, 10),
-      title: earnTitle || undefined,
-      expiryDate: earnExpiryDate || undefined,
-    });
-  };
-
-  const onRedeemMiles = (e: FormEvent) => {
-    e.preventDefault();
-    if (!openHistoryFFId || !redeemMiles || !redeemDate || !redeemTitle) return;
-    createRedeemTransaction.mutate({
-      frequentFlyerId: openHistoryFFId,
-      date: redeemDate,
-      redemptionTitle: redeemTitle,
-      milesToRedeem: parseInt(redeemMiles, 10),
-    });
   };
 
   const openHistoryForFrequentFlyer = (frequentFlyerId: string) => {
@@ -940,6 +925,15 @@ export function RewardsPage({
                     {ff.targetMiles && ` / ${formatNumber(ff.targetMiles)} goal`}
                   </div>
                 </div>
+                {ff.expirySummary.length > 0 && (
+                  <div style={{ marginTop: "8px", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px" }}>
+                    {ff.expirySummary.map((entry) => (
+                      <div key={`${ff.id}-${entry.month}`} style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                        {entry.month}: {formatNumber(entry.amount)}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {ff.targetMiles && (
                   <div className="prog-track" style={{ marginTop: "8px" }}>
                     <div
@@ -964,9 +958,27 @@ export function RewardsPage({
                     {selectedHistoryFrequentFlyer.accountNumber ? ` • ${selectedHistoryFrequentFlyer.accountNumber}` : ""}
                   </div>
                 </div>
-                <button className="btn btn-ghost btn-xs" onClick={() => setOpenHistoryFFId(null)}>
-                  Close
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <button
+                    className="btn btn-ghost btn-icon"
+                    onClick={() => setIsAddEarnModalOpen(true)}
+                    title="Add Earn Transaction"
+                    style={{ width: "28px", height: "28px", fontSize: "14px" }}
+                  >
+                    ➕
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-icon"
+                    onClick={() => setIsRedeemModalOpen(true)}
+                    title="Redeem Miles"
+                    style={{ width: "28px", height: "28px", fontSize: "14px" }}
+                  >
+                    ✈️
+                  </button>
+                  <button className="btn btn-ghost btn-xs" onClick={() => setOpenHistoryFFId(null)}>
+                    Close
+                  </button>
+                </div>
               </div>
 
               {historyQuery.isLoading && (
@@ -1003,69 +1015,6 @@ export function RewardsPage({
                         {formatNumber(historyQuery.data.totals.available)}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="grid-2" style={{ gap: "12px" }}>
-                    <form className="card-sm" onSubmit={onAddEarnTransaction} style={{ display: "grid", gap: "8px" }}>
-                      <div style={{ fontSize: "13px", fontWeight: 600 }}>Add Earn Transaction</div>
-                      <input className="input" type="date" value={earnDate} onChange={(e) => setEarnDate(e.target.value)} required />
-                      <input
-                        className="input"
-                        type="number"
-                        min="1"
-                        placeholder="Miles earned"
-                        value={earnMiles}
-                        onChange={(e) => setEarnMiles(e.target.value)}
-                        required
-                      />
-                      <input
-                        className="input"
-                        type="text"
-                        placeholder="Title (optional)"
-                        value={earnTitle}
-                        onChange={(e) => setEarnTitle(e.target.value)}
-                      />
-                      <input
-                        className="input"
-                        type="date"
-                        value={earnExpiryDate}
-                        onChange={(e) => setEarnExpiryDate(e.target.value)}
-                      />
-                      <button type="submit" className="btn btn-primary" disabled={createEarnTransaction.isPending}>
-                        {createEarnTransaction.isPending ? "Saving..." : "Add Earn"}
-                      </button>
-                    </form>
-
-                    <form className="card-sm" onSubmit={onRedeemMiles} style={{ display: "grid", gap: "8px" }}>
-                      <div style={{ fontSize: "13px", fontWeight: 600 }}>Redeem Miles (Auto Allocation)</div>
-                      <input
-                        className="input"
-                        type="date"
-                        value={redeemDate}
-                        onChange={(e) => setRedeemDate(e.target.value)}
-                        required
-                      />
-                      <input
-                        className="input"
-                        type="text"
-                        placeholder="Redemption title"
-                        value={redeemTitle}
-                        onChange={(e) => setRedeemTitle(e.target.value)}
-                        required
-                      />
-                      <input
-                        className="input"
-                        type="number"
-                        min="1"
-                        placeholder="Miles to redeem"
-                        value={redeemMiles}
-                        onChange={(e) => setRedeemMiles(e.target.value)}
-                        required
-                      />
-                      <button type="submit" className="btn btn-primary" disabled={createRedeemTransaction.isPending}>
-                        {createRedeemTransaction.isPending ? "Redeeming..." : "Redeem"}
-                      </button>
-                    </form>
                   </div>
 
                   <div style={{ display: "grid", gap: "8px" }}>
@@ -1220,9 +1169,6 @@ export function RewardsPage({
                         </div>
                         <div style={{ fontSize: "18px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--brand-500)" }}>
                           {formatNumber(entry.totalMilesRedeemed)} miles redeemed
-                        </div>
-                        <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-                          {entry.details.map((detail) => `${detail.milesFile.title || "Miles credit"}: ${formatNumber(detail.milesRedeemed)}`).join(" • ")}
                         </div>
                       </div>
                     ))}
@@ -1516,6 +1462,175 @@ export function RewardsPage({
                     : createFrequentFlyer.isPending
                       ? "Adding..."
                       : "Add Program"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Earn Transaction Modal */}
+      {isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
+        <div className="st-modal-overlay" onClick={() => setIsAddEarnModalOpen(false)}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Add Earn Transaction</h3>
+              <button className="st-close-btn" onClick={() => setIsAddEarnModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <form
+              className="st-modal-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!openHistoryFFId || !earnMiles || !earnDate) return;
+                createEarnTransaction.mutate({
+                  frequentFlyerId: openHistoryFFId,
+                  date: earnDate,
+                  miles: parseInt(earnMiles, 10),
+                  title: earnTitle || undefined,
+                  expiryDate: earnExpiryDate || undefined,
+                });
+              }}
+            >
+              <div className="st-form-grid">
+                <div className="form-group">
+                  <label className="label">Date</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={earnDate}
+                    onChange={(e) => setEarnDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Miles Earned</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={earnMiles}
+                    onChange={(e) => setEarnMiles(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Title (optional)</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g., Flight credit, Bonus miles"
+                    value={earnTitle}
+                    onChange={(e) => setEarnTitle(e.target.value)}
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Expiry Date (optional)</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={earnExpiryDate}
+                    onChange={(e) => setEarnExpiryDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              {createEarnTransaction.isError && (
+                <div className="st-error">
+                  {(createEarnTransaction.error as Error)?.message || "Failed to add transaction"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setIsAddEarnModalOpen(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createEarnTransaction.isPending}
+                >
+                  {createEarnTransaction.isPending ? "Saving..." : "Add Transaction"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Redeem Miles Modal */}
+      {isRedeemModalOpen && selectedHistoryFrequentFlyer && (
+        <div className="st-modal-overlay" onClick={() => setIsRedeemModalOpen(false)}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Redeem Miles</h3>
+              <button className="st-close-btn" onClick={() => setIsRedeemModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <form
+              className="st-modal-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!openHistoryFFId || !redeemMiles || !redeemDate || !redeemTitle) return;
+                createRedeemTransaction.mutate({
+                  frequentFlyerId: openHistoryFFId,
+                  date: redeemDate,
+                  redemptionTitle: redeemTitle,
+                  milesToRedeem: parseInt(redeemMiles, 10),
+                });
+              }}
+            >
+              <div className="st-form-grid">
+                <div className="form-group">
+                  <label className="label">Date</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={redeemDate}
+                    onChange={(e) => setRedeemDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Miles to Redeem</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={redeemMiles}
+                    onChange={(e) => setRedeemMiles(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Redemption Title</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g., Flight award, Upgrade"
+                    value={redeemTitle}
+                    onChange={(e) => setRedeemTitle(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              {createRedeemTransaction.isError && (
+                <div className="st-error">
+                  {(createRedeemTransaction.error as Error)?.message || "Failed to redeem miles"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setIsRedeemModalOpen(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createRedeemTransaction.isPending}
+                >
+                  {createRedeemTransaction.isPending ? "Redeeming..." : "Redeem Miles"}
                 </button>
               </div>
             </form>

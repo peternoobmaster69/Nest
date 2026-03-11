@@ -18,7 +18,10 @@ export async function POST(request: Request) {
     }
 
     const accessToken = await ensureActiveGmailAccessToken(integration.id, origin);
-    const ids = await listGmailMessageIds(accessToken, `subject:"Card Transaction Alert" newer_than:30d`);
+    const ids = await listGmailMessageIds(
+      accessToken,
+      `newer_than:30d (subject:"Card Transaction Alert" OR from:unialerts@uobgroup.com OR subject:"Your transaction has been reversed" OR from:noreply@notify.ocbc.com OR from:alerts@citibank.com.sg OR subject:"Citi Alerts - Credit Card/Ready Credit Transaction")`,
+    );
 
     let processed = 0;
     let duplicates = 0;
@@ -63,4 +66,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to sync Gmail", message }, { status: 500 });
   }
 }
-

@@ -52,6 +52,12 @@ function dateInputFromIso(value: string | null | undefined) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function isWithinLastDay(value: string) {
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  return Date.now() - timestamp < 24 * 60 * 60 * 1000;
+}
+
 export function InvestmentsPage() {
   const queryClient = useQueryClient();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -73,6 +79,7 @@ export function InvestmentsPage() {
   const [entryModalMode, setEntryModalMode] = useState<"create" | "edit">("create");
   const [entryModalOpen, setEntryModalOpen] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [entryAccountId, setEntryAccountId] = useState<string | null>(null);
   const [entryDate, setEntryDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [newFunds, setNewFunds] = useState("0");
   const [entryInvested, setEntryInvested] = useState("0");
@@ -133,6 +140,17 @@ export function InvestmentsPage() {
   );
 
   const latestSelectedEntry = selectedEntries[selectedEntries.length - 1] ?? null;
+  const entryAccount = useMemo(
+    () => (accounts.data ?? []).find((a) => a.id === entryAccountId) ?? null,
+    [accounts.data, entryAccountId],
+  );
+  const latestEntryAccountEntry = useMemo(() => {
+    const entries = [...(entryAccount?.entries ?? [])].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
+    return entries[entries.length - 1] ?? null;
+  }, [entryAccount?.entries]);
+
   const totalInvestedAcrossAll = useMemo(() => {
     let total = 0;
     for (const account of accounts.data ?? []) {
@@ -313,21 +331,26 @@ export function InvestmentsPage() {
     setEditingAccountId(null);
   };
 
-  const openCreateEntryModal = () => {
-    if (!selectedAccount) return;
-    const lastInvested = latestSelectedEntry?.investedCents ?? 0;
+  const openCreateEntryModal = (account: InvestmentAccount) => {
+    const accountEntries = [...account.entries].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
+    const latestAccountEntry = accountEntries[accountEntries.length - 1] ?? null;
+    const lastInvested = latestAccountEntry?.investedCents ?? 0;
     setEntryModalMode("create");
+    setEntryAccountId(account.id);
     setEditingEntryId(null);
     setEntryDate(new Date().toISOString().slice(0, 10));
     setNewFunds("0");
     setEntryInvested((lastInvested / 100).toFixed(2));
-    setEntryCurrentValue(((latestSelectedEntry?.currentValueCents ?? lastInvested) / 100).toFixed(2));
+    setEntryCurrentValue(((latestAccountEntry?.currentValueCents ?? lastInvested) / 100).toFixed(2));
     setEntryModalOpen(true);
     setEntryError("");
   };
 
   const openEditEntryModal = (entry: InvestmentEntry) => {
     setEntryModalMode("edit");
+    setEntryAccountId(selectedAccountId);
     setEditingEntryId(entry.id);
     setEntryDate(dateInputFromIso(entry.date));
     setNewFunds("0");
@@ -339,16 +362,17 @@ export function InvestmentsPage() {
 
   const closeEntryModal = () => {
     setEntryModalOpen(false);
+    setEntryAccountId(null);
     setEditingEntryId(null);
   };
 
   useEffect(() => {
     if (entryModalMode !== "create") return;
-    const base = (latestSelectedEntry?.investedCents ?? 0) / 100;
+    const base = (latestEntryAccountEntry?.investedCents ?? 0) / 100;
     const delta = Number(newFunds || "0");
     const nextValue = Number.isFinite(delta) ? base + delta : base;
     setEntryInvested(nextValue.toFixed(2));
-  }, [entryModalMode, newFunds, latestSelectedEntry?.investedCents]);
+  }, [entryModalMode, newFunds, latestEntryAccountEntry?.investedCents]);
 
   // Aggregate all accounts data by date
   const aggregatedAllAccountsData = useMemo(() => {
@@ -585,6 +609,7 @@ export function InvestmentsPage() {
           .map((account) => {
           const entries = [...account.entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
           const latest = entries[entries.length - 1] ?? null;
+          const recentlyUpdated = account.entries.some((entry) => isWithinLastDay(entry.createdAt));
           const selected = account.id === selectedAccountId;
           const investedCents = latest?.investedCents ?? 0;
           const currentCents = latest?.currentValueCents ?? 0;
@@ -602,7 +627,23 @@ export function InvestmentsPage() {
               </button>
               <button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
                 <div className="inv-account-head">
-                  <strong>{account.displayName || account.productName}</strong>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                    <strong>{account.displayName || account.productName}</strong>
+                    {recentlyUpdated ? (
+                      <span
+                        aria-label="Recently updated"
+                        title="Updated in the last 24 hours"
+                        style={{
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "999px",
+                          background: "var(--success)",
+                          boxShadow: "0 0 0 2px var(--success-bg)",
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : null}
+                  </div>
                   <span>{account.productName} · {account.institutionName}</span>
                 </div>
                 <div className="inv-account-amounts">
@@ -617,7 +658,7 @@ export function InvestmentsPage() {
                 </div>
               </button>
               <div className="inv-account-actions">
-                <button className="btn btn-primary btn-xs" type="button" onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(); }}>
+                <button className="btn btn-primary btn-xs" type="button" onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}>
                   + Add Update
                 </button>
               </div>
@@ -709,7 +750,7 @@ export function InvestmentsPage() {
             <section className="card inv-history-card">
               <div className="inv-history-head">
                 <div className="inv-title">History</div>
-                <button className="btn btn-primary btn-xs" type="button" onClick={openCreateEntryModal}>
+                <button className="btn btn-primary btn-xs" type="button" onClick={() => selectedAccount && openCreateEntryModal(selectedAccount)}>
                   + Add Entry
                 </button>
               </div>
@@ -825,8 +866,8 @@ export function InvestmentsPage() {
                 updateEntry.mutate(editingEntryId);
                 return;
               }
-              if (selectedAccountId) {
-                createEntry.mutate(selectedAccountId);
+              if (entryAccountId) {
+                createEntry.mutate(entryAccountId);
               } else {
                 setEntryError("Please select an investment account first.");
               }

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
@@ -27,6 +28,7 @@ type Transaction = {
   budgetId?: string | null;
   subject: string;
   details?: string | null;
+  notes?: string | null;
   amountCents: number;
   direction: "DEBIT" | "CREDIT";
   kind: string;
@@ -68,6 +70,7 @@ export function TransactionsPage() {
   const searchParams = useSearchParams();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [subject, setSubject] = useState("");
+  const [notes, setNotes] = useState("");
   const [amount, setAmount] = useState("");
   const [budgetId, setBudgetId] = useState("");
   const [operation, setOperation] = useState<"DEDUCT" | "ADD">("DEDUCT");
@@ -78,7 +81,7 @@ export function TransactionsPage() {
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
   const [editSubject, setEditSubject] = useState("");
-  const [editDetails, setEditDetails] = useState("");
+  const [editNotes, setEditNotes] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("DEDUCT");
 
@@ -183,6 +186,7 @@ export function TransactionsPage() {
   const createTx = useMutation({
     mutationFn: (payload: {
       subject: string;
+      notes?: string;
       amountCents: number;
       accountId: string;
       operation: "DEDUCT" | "ADD";
@@ -196,6 +200,7 @@ export function TransactionsPage() {
           workspaceId,
           accountId: payload.accountId,
           subject: payload.subject,
+          notes: payload.notes,
           amountCents: payload.amountCents,
           direction: payload.operation === "ADD" ? "CREDIT" : "DEBIT",
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
@@ -208,6 +213,7 @@ export function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
       setSubject("");
+      setNotes("");
       setAmount("");
       setBudgetId("");
       setOperation("DEDUCT");
@@ -216,13 +222,13 @@ export function TransactionsPage() {
   });
 
   const updateTx = useMutation({
-    mutationFn: (payload: { id: string; subject: string; details?: string | null; amountCents: number; operation: "DEDUCT" | "ADD" }) =>
+    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD" }) =>
       fetchJson(`/api/transactions/${payload.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subject: payload.subject,
-          details: payload.details ?? null,
+          notes: payload.notes ?? null,
           amountCents: payload.amountCents,
           direction: payload.operation === "ADD" ? "CREDIT" : "DEBIT",
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
@@ -233,7 +239,7 @@ export function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
       setEditingTxId(null);
       setEditSubject("");
-      setEditDetails("");
+      setEditNotes("");
       setEditAmount("");
       setEditOperation("DEDUCT");
     },
@@ -254,6 +260,7 @@ export function TransactionsPage() {
     if (!workspaceId || !accountId || !subject || !amount) return;
     createTx.mutate({
       subject,
+      notes: notes || undefined,
       amountCents: Math.round(Number(amount) * 100),
       accountId,
       operation,
@@ -290,7 +297,7 @@ export function TransactionsPage() {
   const beginEdit = (tx: Transaction) => {
     setEditingTxId(tx.id);
     setEditSubject(tx.subject);
-    setEditDetails(tx.details || "");
+    setEditNotes(tx.notes || tx.details || "");
     setEditAmount((tx.amountCents / 100).toFixed(2));
     setEditOperation(tx.direction === "CREDIT" ? "ADD" : "DEDUCT");
   };
@@ -298,7 +305,7 @@ export function TransactionsPage() {
   const closeEditModal = () => {
     setEditingTxId(null);
     setEditSubject("");
-    setEditDetails("");
+    setEditNotes("");
     setEditAmount("");
     setEditOperation("DEDUCT");
   };
@@ -309,10 +316,19 @@ export function TransactionsPage() {
     updateTx.mutate({
       id: editingTxId,
       subject: editSubject,
-      details: editDetails || null,
+      notes: editNotes || null,
       amountCents: Math.round(Number(editAmount) * 100),
       operation: editOperation,
     });
+  };
+
+  const openCreateModal = () => {
+    setSubject("");
+    setNotes("");
+    setAmount("");
+    setOperation("DEDUCT");
+    setBudgetId(activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "");
+    setIsCreateModalOpen(true);
   };
 
   return (
@@ -320,7 +336,7 @@ export function TransactionsPage() {
       <section className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "10px" }}>
           <div style={{ fontSize: "13px", fontWeight: 600 }}>Bank Accounts</div>
-          <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+          <button className="btn btn-primary" onClick={openCreateModal}>
             Add Transaction
           </button>
         </div>
@@ -454,8 +470,8 @@ export function TransactionsPage() {
                   {tx.subject} {formatCents(tx.amountCents)}
                 </span>
                 <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(tx.date).toLocaleString()}</span>
-                {tx.details ? (
-                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{tx.details}</span>
+                {tx.notes || tx.details ? (
+                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px", whiteSpace: "pre-wrap" }}>{tx.notes || tx.details}</span>
                 ) : null}
               </div>
               <div className="crud-actions">
@@ -474,7 +490,7 @@ export function TransactionsPage() {
               title="No transactions yet"
               description={selectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
               action={
-                <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+                <button className="btn btn-primary" onClick={openCreateModal}>
                   + Add Transaction
                 </button>
               }
@@ -485,62 +501,90 @@ export function TransactionsPage() {
 
       {isCreateModalOpen && (
         <div className="profile-modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
-          <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Add Transaction</h3>
               <button className="profile-modal-close" onClick={() => setIsCreateModalOpen(false)}>
                 Close
               </button>
             </div>
-            <div className="profile-modal-body" style={{ display: "grid", gap: "12px" }}>
-              <div style={{ display: "grid", gap: "8px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Bank account</div>
-                {bankAccounts.data && bankAccounts.data.length === 1 ? (
-                  <div className="crud-row" style={{ marginBottom: 0 }}>
-                    <span>{bankAccounts.data[0].name}</span>
-                  </div>
-                ) : (
-                  <select className="input" value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)}>
-                    <option value="" disabled>
-                      Select bank account
-                    </option>
-                    {bankAccounts.data?.map((bank) => (
-                      <option key={bank.id} value={bank.id}>
-                        {bank.name}
+            <div className="profile-modal-body txn-modal-body">
+              <form className="txn-modal-form" onSubmit={onSubmit}>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Bank Account
+                  {bankAccounts.data && bankAccounts.data.length === 1 ? (
+                    <div className="crud-row" style={{ marginBottom: 0 }}>
+                      <span>{bankAccounts.data[0].name}</span>
+                    </div>
+                  ) : (
+                    <select className="input" value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)}>
+                      <option value="" disabled>
+                        Select bank account
+                      </option>
+                      {bankAccounts.data?.map((bank) => (
+                        <option key={bank.id} value={bank.id}>
+                          {bank.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Sub Account
+                  <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
+                    <option value="">No account</option>
+                    {visibleBudgets.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
                       </option>
                     ))}
                   </select>
-                )}
-              </div>
-              <form style={{ display: "grid", gap: "10px" }} onSubmit={onSubmit}>
-                <input className="input" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
-                <input
-                  className="input"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  placeholder="Amount"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                </label>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Amount
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    placeholder="Amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Deduct or Add
+                  <div className="segmented-toggle" role="tablist" aria-label="Transaction operation">
+                    <button
+                      type="button"
+                      className={`segmented-toggle-btn segmented-toggle-btn-deduct ${operation === "DEDUCT" ? "is-active" : ""}`}
+                      onClick={() => setOperation("DEDUCT")}
+                    >
+                      Deduct
+                    </button>
+                    <button
+                      type="button"
+                      className={`segmented-toggle-btn segmented-toggle-btn-add ${operation === "ADD" ? "is-active" : ""}`}
+                      onClick={() => setOperation("ADD")}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </label>
+                <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Title
+                  <input className="input" placeholder="Title" value={subject} onChange={(e) => setSubject(e.target.value)} />
+                </label>
+                <MarkdownEditor
+                  className="modal-grid-span-2"
+                  label="Notes"
+                  value={notes}
+                  onChange={setNotes}
+                  placeholder="Write notes in Markdown"
+                  rows={12}
+                  minHeight={300}
                 />
-                <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
-                  <option value="">No account</option>
-                  {visibleBudgets.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="input"
-                  value={operation}
-                  onChange={(e) => setOperation(e.target.value as "DEDUCT" | "ADD")}
-                  style={{ color: operation === "DEDUCT" ? "var(--amount-negative)" : "var(--amount-positive)" }}
-                >
-                  <option value="DEDUCT">Deduct</option>
-                  <option value="ADD">Add</option>
-                </select>
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                   <button className="btn btn-ghost" type="button" onClick={() => setIsCreateModalOpen(false)}>
                     Cancel
                   </button>
@@ -556,41 +600,59 @@ export function TransactionsPage() {
 
       {editingTxId && (
         <div className="profile-modal-overlay" onClick={closeEditModal}>
-          <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Transaction</h3>
               <button className="profile-modal-close" onClick={closeEditModal}>
                 Close
               </button>
             </div>
-            <form className="profile-modal-body" style={{ display: "grid", gap: "12px" }} onSubmit={onSubmitEdit}>
-              <input className="input" placeholder="Subject" value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
-              <textarea
-                className="input"
-                rows={3}
-                placeholder="Details"
-                value={editDetails}
-                onChange={(e) => setEditDetails(e.target.value)}
+            <form className="profile-modal-body txn-modal-body txn-modal-form" onSubmit={onSubmitEdit}>
+              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                Amount
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  placeholder="Amount"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                />
+              </label>
+              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                Deduct or Add
+                <div className="segmented-toggle" role="tablist" aria-label="Transaction operation">
+                  <button
+                    type="button"
+                    className={`segmented-toggle-btn segmented-toggle-btn-deduct ${editOperation === "DEDUCT" ? "is-active" : ""}`}
+                    onClick={() => setEditOperation("DEDUCT")}
+                  >
+                    Deduct
+                  </button>
+                  <button
+                    type="button"
+                    className={`segmented-toggle-btn segmented-toggle-btn-add ${editOperation === "ADD" ? "is-active" : ""}`}
+                    onClick={() => setEditOperation("ADD")}
+                  >
+                    Add
+                  </button>
+                </div>
+              </label>
+              <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                Title
+                <input className="input" placeholder="Title" value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
+              </label>
+              <MarkdownEditor
+                className="modal-grid-span-2"
+                label="Notes"
+                value={editNotes}
+                onChange={setEditNotes}
+                placeholder="Write notes in Markdown"
+                rows={12}
+                minHeight={300}
               />
-              <input
-                className="input"
-                type="number"
-                min="1"
-                step="0.01"
-                placeholder="Amount"
-                value={editAmount}
-                onChange={(e) => setEditAmount(e.target.value)}
-              />
-              <select
-                className="input"
-                value={editOperation}
-                onChange={(e) => setEditOperation(e.target.value as "DEDUCT" | "ADD")}
-                style={{ color: editOperation === "DEDUCT" ? "var(--amount-negative)" : "var(--amount-positive)" }}
-              >
-                <option value="DEDUCT">Deduct</option>
-                <option value="ADD">Add</option>
-              </select>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                 <button className="btn btn-ghost" type="button" onClick={closeEditModal}>
                   Cancel
                 </button>

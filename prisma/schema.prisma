@@ -341,6 +341,7 @@ model Transaction {
   amountCents     Int
   subject         String
   details         String?
+  notes           String?              @db.NVarChar(Max)
   isSynced        Boolean              @default(false)
   isFromFamily    Boolean              @default(false)
   externalRef     String?
@@ -432,6 +433,7 @@ model Receivable {
   isFamily         Boolean          @default(false)
   status           String           @default("OPEN")
   remarkTogether   String?
+  notes            String?          @db.NVarChar(Max)
   fromUserId       String?
   toUserId         String?
   createdAt        DateTime         @default(now())

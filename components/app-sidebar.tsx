@@ -3,10 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTheme } from "./theme-provider";
 import { SidebarSkeleton } from "./ui-skeleton";
+
+type Workspace = {
+  id: string;
+  name: string;
+  baseCurrency: string;
+  role: string;
+};
 
 function getInitials(name: string) {
   return name
@@ -90,8 +98,23 @@ export function AppSidebar({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  // Fetch all workspaces for switching
+  const workspacesQuery = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: async () => {
+      const res = await fetch("/api/workspaces");
+      if (!res.ok) throw new Error("Failed to load workspaces");
+      return res.json() as Promise<Workspace[]>;
+    },
+    enabled: profileMenuOpen,
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -167,6 +190,34 @@ export function AppSidebar({
     if (window.matchMedia("(max-width: 1024px)").matches) {
       setIsOpen(false);
       window.sessionStorage.setItem("nest:ui:sidebarOpen", "0");
+    }
+  };
+
+  const switchWorkspace = async (workspaceId: string) => {
+    if (workspaceId === resolvedContext?.workspaceName) return;
+    setSwitchingWorkspaceId(workspaceId);
+    setIsTransitioning(true);
+    try {
+      const res = await fetch("/api/workspaces/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId }),
+      });
+      if (!res.ok) throw new Error("Failed to switch workspace");
+      // Invalidate all queries to refresh data
+      await queryClient.invalidateQueries();
+      // Close menu and navigate to dashboard
+      setProfileMenuOpen(false);
+      router.push("/");
+      router.refresh();
+      // Hide transition overlay after navigation completes
+      setTimeout(() => {
+        setIsTransitioning(false);
+        setSwitchingWorkspaceId(null);
+      }, 800);
+    } catch {
+      setSwitchingWorkspaceId(null);
+      setIsTransitioning(false);
     }
   };
 
@@ -283,6 +334,33 @@ export function AppSidebar({
               >
                 {theme === "light" ? "🌙 Dark Mode" : "☀️ Light Mode"}
               </button>
+              <div className="sb-user-menu-divider" />
+              <div className="sb-user-menu-section">Switch Workspace</div>
+              {workspacesQuery.isLoading ? (
+                <div className="sb-user-menu-item sb-user-menu-loading">
+                  <span className="sb-workspace-spinner" />
+                  Loading...
+                </div>
+              ) : (
+                workspacesQuery.data?.map((ws) => {
+                  const isCurrent = ws.name === resolvedContext?.workspaceName;
+                  const isSwitching = switchingWorkspaceId === ws.id;
+                  return (
+                    <button
+                      key={ws.id}
+                      className={`sb-user-menu-item sb-user-menu-workspace${isCurrent ? " active" : ""}${isSwitching ? " switching" : ""}`}
+                      onClick={() => switchWorkspace(ws.id)}
+                      disabled={isCurrent || isSwitching}
+                    >
+                      <span className="sb-workspace-icon">
+                        {isSwitching ? <span className="sb-workspace-spinner" /> : isCurrent ? "✓" : "○"}
+                      </span>
+                      <span className="sb-workspace-name">{ws.name}</span>
+                    </button>
+                  );
+                })
+              )}
+              <div className="sb-user-menu-divider" />
               <button className="sb-user-menu-item" onClick={() => signOut({ callbackUrl: "/signin" })}>
                 Log Out
               </button>
@@ -336,7 +414,18 @@ export function AppSidebar({
           </div>
         </div>
       )}
+
       </aside>
+
+      {/* Workspace Transition Overlay */}
+      {isTransitioning && (
+        <div className="workspace-transition-overlay">
+          <div className="workspace-transition-content">
+            <div className="workspace-transition-spinner" />
+            <span className="workspace-transition-text">Switching workspace...</span>
+          </div>
+        </div>
+      )}
     </>
   );
 }

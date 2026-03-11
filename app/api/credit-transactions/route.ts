@@ -1,4 +1,5 @@
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { deriveStatementCycle } from "@/lib/credit-card-statement-cycle";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -75,8 +76,6 @@ export async function POST(request: Request) {
       creditCardId,
       transactionDate,
       paymentDueDate,
-      statementMonth,
-      statementYear,
       amountCents,
       subject,
       isInstallment,
@@ -87,21 +86,28 @@ export async function POST(request: Request) {
     // Verify credit card exists
     const card = await prisma.creditCardAccount.findUnique({
       where: { id: creditCardId },
-      select: { id: true, workspaceId: true },
+      select: { id: true, workspaceId: true, statementDay: true, paymentDueDay: true },
     });
 
     if (!card || card.workspaceId !== workspaceId) {
       return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
     }
 
+    const parsedTransactionDate = new Date(transactionDate);
+    const cycle = deriveStatementCycle({
+      transactionDate: parsedTransactionDate,
+      statementDay: card.statementDay,
+      paymentDueDay: card.paymentDueDay,
+    });
+
     const transaction = await prisma.creditCardTransaction.create({
       data: {
         workspaceId,
         creditCardId,
-        transactionDate: new Date(transactionDate),
-        paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
-        statementMonth,
-        statementYear,
+        transactionDate: parsedTransactionDate,
+        paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : cycle.paymentDueDate,
+        statementMonth: cycle.statementMonth,
+        statementYear: cycle.statementYear,
         amountCents,
         subject,
         isInstallment,

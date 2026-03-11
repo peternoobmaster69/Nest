@@ -12,6 +12,7 @@ const UpdateTransactionSchema = z.object({
     .enum(["EXPENSE", "INCOME", "TRANSFER", "CREDIT_CARD_PAYMENT", "RECEIVABLE_PAYMENT", "ADJUSTMENT"])
     .optional(),
   details: z.string().max(500).nullable().optional(),
+  notes: z.string().nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

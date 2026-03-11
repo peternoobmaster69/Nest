@@ -1,4 +1,6 @@
-import { parseDbsTransactionAlert } from "@/lib/credit-alert-parser";
+import { parseCreditAlert } from "@/lib/credit-alert-parser";
+import { deriveStatementCycle } from "@/lib/credit-card-statement-cycle";
+import { getSingaporeBankByName } from "@/lib/singapore-banks";
 import { prisma } from "@/lib/prisma";
 
 export async function ingestCreditAlert(params: {
@@ -8,7 +10,14 @@ export async function ingestCreditAlert(params: {
   source?: string;
 }) {
   const { workspaceId, rawBody, rawSubject, source = "EMAIL" } = params;
-  const parsedAlert = parseDbsTransactionAlert(rawBody);
+  const parsedAlert = parseCreditAlert(rawBody, rawSubject);
+  const normalizedBank = getSingaporeBankByName(parsedAlert.bankName)?.name ?? parsedAlert.bankName;
+  const signedAmountCents =
+    parsedAlert.amountCents === undefined
+      ? undefined
+      : parsedAlert.alertType === "REVERSAL"
+        ? -Math.abs(parsedAlert.amountCents)
+        : parsedAlert.amountCents;
 
   if (parsedAlert.transactionRef) {
     const existing = await prisma.cardAlertStaging.findFirst({
@@ -34,10 +43,10 @@ export async function ingestCreditAlert(params: {
       source,
       rawSubject,
       rawBody,
-      bankName: parsedAlert.bankName,
+      bankName: normalizedBank,
       transactionRef: parsedAlert.transactionRef,
       currency: parsedAlert.currency,
-      amountCents: parsedAlert.amountCents,
+      amountCents: signedAmountCents,
       transactionDate: parsedAlert.transactionDate,
       merchant: parsedAlert.merchant,
       cardLast4: parsedAlert.cardLast4,
@@ -50,15 +59,28 @@ export async function ingestCreditAlert(params: {
     return staging;
   }
 
-  const card = await prisma.creditCardAccount.findFirst({
-    where: {
-      workspaceId,
-      isActive: true,
-      last4Digit: parsedAlert.cardLast4!,
-    },
-    orderBy: { updatedAt: "desc" },
-    select: { id: true },
-  });
+  const card =
+    (normalizedBank
+      ? await prisma.creditCardAccount.findFirst({
+          where: {
+            workspaceId,
+            isActive: true,
+            last4Digit: parsedAlert.cardLast4!,
+            bankName: normalizedBank,
+          },
+          orderBy: { updatedAt: "desc" },
+          select: { id: true, statementDay: true, paymentDueDay: true },
+        })
+      : null) ??
+    await prisma.creditCardAccount.findFirst({
+      where: {
+        workspaceId,
+        isActive: true,
+        last4Digit: parsedAlert.cardLast4!,
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, statementDay: true, paymentDueDay: true },
+    });
 
   if (!card) {
     return prisma.cardAlertStaging.update({
@@ -76,7 +98,7 @@ export async function ingestCreditAlert(params: {
       workspaceId,
       creditCardId: card.id,
       transactionDate: parsedAlert.transactionDate!,
-      amountCents: parsedAlert.amountCents!,
+      amountCents: signedAmountCents!,
       subject: parsedAlert.merchant!,
     },
     select: { id: true },
@@ -95,14 +117,20 @@ export async function ingestCreditAlert(params: {
   }
 
   const txDate = parsedAlert.transactionDate!;
+  const cycle = deriveStatementCycle({
+    transactionDate: txDate,
+    statementDay: card.statementDay,
+    paymentDueDay: card.paymentDueDay,
+  });
   const createdTx = await prisma.creditCardTransaction.create({
     data: {
       workspaceId,
       creditCardId: card.id,
       transactionDate: txDate,
-      statementMonth: txDate.getUTCMonth() + 1,
-      statementYear: txDate.getUTCFullYear(),
-      amountCents: parsedAlert.amountCents!,
+      paymentDueDate: cycle.paymentDueDate,
+      statementMonth: cycle.statementMonth,
+      statementYear: cycle.statementYear,
+      amountCents: signedAmountCents!,
       subject: parsedAlert.merchant!,
       isInstallment: false,
     },
@@ -119,4 +147,3 @@ export async function ingestCreditAlert(params: {
     },
   });
 }
-

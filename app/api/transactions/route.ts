@@ -20,6 +20,7 @@ const CreateTransactionSchema = z.object({
   ]),
   date: z.string().datetime(),
   details: z.string().max(500).optional(),
+  notes: z.string().optional(),
   budgetId: z.string().min(1).optional(),
   budgetOperation: z.enum(["DEDUCT", "ADD"]).optional(),
 });
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
         amountCents: true,
         subject: true,
         details: true,
+        notes: true,
         isSynced: true,
         isFromFamily: true,
         externalRef: true,

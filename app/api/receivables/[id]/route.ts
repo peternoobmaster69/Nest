@@ -9,6 +9,7 @@ const UpdateReceivableSchema = z.object({
   date: z.string().datetime().optional(),
   transactionDate: z.string().datetime().nullable().optional(),
   remarks: z.string().max(500).optional(),
+  notes: z.string().nullable().optional(),
   status: z.enum(["OPEN", "PARTIAL", "PAID", "VOID"]).optional(),
   isFamily: z.boolean().optional(),
   isMom: z.boolean().optional(),
@@ -58,6 +59,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
               ? null
               : new Date(parsed.data.transactionDate),
         remarkTogether: parsed.data.remarks,
+        notes: parsed.data.notes,
         status: parsed.data.status,
         isFamily: parsed.data.isFamily,
         isMom: parsed.data.isMom,

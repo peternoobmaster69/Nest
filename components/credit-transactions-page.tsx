@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
-import { FormEvent, useMemo, useState } from "react";
+import { MarkdownEditor } from "@/components/markdown-editor";
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
 
@@ -40,6 +41,21 @@ type CardCount = {
 type AppContext = {
   workspaceId: string | null;
   baseCurrency?: string | null;
+  defaultAccountId?: string | null;
+  defaultBudgetId?: string | null;
+};
+
+type BankAccount = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+type Budget = {
+  id: string;
+  accountId: string;
+  name: string;
+  isActive: boolean;
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -59,6 +75,12 @@ function getAmountToneClass(valueCents: number) {
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+}
+
+function toDateInputValue(dateStr: string) {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
 function getDaysUntil(dateStr: string): number {
@@ -86,7 +108,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [showUnaccountedOnly, setShowUnaccountedOnly] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAccountingModalOpen, setIsAccountingModalOpen] = useState(false);
+  const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
+  const [accountingTarget, setAccountingTarget] = useState<CreditCardTransaction | null>(null);
+  const [receivableTarget, setReceivableTarget] = useState<CreditCardTransaction | null>(null);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
+  const [importMessage, setImportMessage] = useState("");
+  const maybankFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [deductAccountId, setDeductAccountId] = useState("");
+  const [deductBudgetId, setDeductBudgetId] = useState("");
+  const [receivableDate, setReceivableDate] = useState("");
+  const [receivableTxnDate, setReceivableTxnDate] = useState("");
+  const [receivableAmount, setReceivableAmount] = useState("");
+  const [receivableTitle, setReceivableTitle] = useState("");
+  const [receivableNotes, setReceivableNotes] = useState("");
 
   // Form state
   const [formCardId, setFormCardId] = useState("");
@@ -104,6 +139,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   });
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
   const formatCurrency = (cents: number) => formatMoney(cents, baseCurrency);
+  const defaultReceivableAccountId = context.data?.defaultAccountId ?? null;
+  const defaultReceivableBudgetId = context.data?.defaultBudgetId ?? null;
+
+  const bankAccounts = useQuery({
+    queryKey: ["bank-accounts", context.data?.workspaceId],
+    queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${context.data?.workspaceId}`),
+    enabled: Boolean(context.data?.workspaceId),
+  });
+
+  const budgets = useQuery({
+    queryKey: ["budgets", context.data?.workspaceId],
+    queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${context.data?.workspaceId}`),
+    enabled: Boolean(context.data?.workspaceId),
+  });
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["credit-transactions", selectedCardId, selectedYear, selectedMonth],
@@ -170,8 +219,73 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["credit-transactions"] }),
   });
 
+  const importMaybankCsv = useMutation({
+    mutationFn: async (payload: { creditCardId: string; csvContent: string }) =>
+      fetchJson<{
+        imported: number;
+        skippedDuplicates: number;
+        skippedPayments: number;
+        totalRows: number;
+      }>("/api/credit-transactions/import-maybank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (result) => {
+      setImportMessage(
+        `Maybank CSV imported: ${result.imported} added, ${result.skippedDuplicates} duplicates skipped, ${result.skippedPayments} payment rows skipped.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+    },
+    onError: (error) => {
+      setImportMessage(error instanceof Error ? error.message : "Maybank CSV import failed.");
+    },
+  });
+
+  const accountCreditTxn = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      action: "DEDUCT" | "RECEIVABLE";
+      accountId?: string;
+      budgetId?: string;
+      receivableDate?: string;
+      transactionDate?: string;
+      amountCents?: number;
+      title?: string;
+      notes?: string;
+    }) =>
+      fetchJson(`/api/credit-transactions/${payload.id}/accounting`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (_result, variables) => {
+      setImportMessage(
+        variables.action === "DEDUCT"
+          ? "Credit transaction deducted and marked accounted."
+          : "Receivable created and credit transaction marked accounted.",
+      );
+      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      if (variables.action === "DEDUCT") {
+        closeAccountingModal();
+      } else {
+        closeReceivableModal();
+      }
+    },
+    onError: (error) => {
+      setImportMessage(error instanceof Error ? error.message : "Failed to account for credit transaction.");
+    },
+  });
+
   const openModal = () => {
-    setFormCardId(sortedCards[0]?.id || "");
+    setFormCardId(
+      selectedCardId !== "all"
+        ? selectedCardId
+        : sortedCards[0]?.id || "",
+    );
     setFormDate(new Date().toISOString().split("T")[0]);
     setFormPaymentDue("");
     setFormSubject("");
@@ -184,6 +298,87 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   const closeModal = () => {
     setIsModalOpen(false);
+  };
+
+  const openDeductModal = (tx: CreditCardTransaction) => {
+    setAccountingTarget(tx);
+    const initialAccountId = deductAccountId || bankAccounts.data?.[0]?.id || "";
+    setDeductAccountId(initialAccountId);
+    const firstBudgetForAccount =
+      budgets.data?.find((budget) => budget.accountId === initialAccountId)?.id || "";
+    setDeductBudgetId(firstBudgetForAccount);
+    setIsAccountingModalOpen(true);
+  };
+
+  const closeAccountingModal = () => {
+    setIsAccountingModalOpen(false);
+    setAccountingTarget(null);
+  };
+
+  const openReceivableModal = (tx: CreditCardTransaction) => {
+    setReceivableTarget(tx);
+    setReceivableDate(toDateInputValue(tx.transactionDate));
+    setReceivableTxnDate(toDateInputValue(tx.transactionDate));
+    setReceivableAmount((tx.amountCents / 100).toFixed(2));
+    setReceivableTitle(tx.subject);
+    setReceivableNotes("");
+    setIsReceivableModalOpen(true);
+  };
+
+  const closeReceivableModal = () => {
+    setIsReceivableModalOpen(false);
+    setReceivableTarget(null);
+    setReceivableTitle("");
+    setReceivableNotes("");
+  };
+
+  const onPickMaybankCsv = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (selectedCardId === "all") {
+      setImportMessage("Select a specific card before importing a Maybank CSV.");
+      return;
+    }
+
+    try {
+      const csvContent = await file.text();
+      importMaybankCsv.mutate({ creditCardId: selectedCardId, csvContent });
+    } catch {
+      setImportMessage("Failed to read CSV file.");
+    }
+  };
+
+  const filteredBudgets = useMemo(
+    () => (budgets.data ?? []).filter((budget) => budget.accountId === deductAccountId),
+    [budgets.data, deductAccountId],
+  );
+
+  const onSubmitDeduct = (event: FormEvent) => {
+    event.preventDefault();
+    if (!accountingTarget || !deductAccountId || !deductBudgetId) return;
+    accountCreditTxn.mutate({
+      id: accountingTarget.id,
+      action: "DEDUCT",
+      accountId: deductAccountId,
+      budgetId: deductBudgetId,
+    });
+  };
+
+  const onSubmitReceivable = (event: FormEvent) => {
+    event.preventDefault();
+    if (!receivableTarget || !receivableDate || !receivableAmount) return;
+    accountCreditTxn.mutate({
+      id: receivableTarget.id,
+      action: "RECEIVABLE",
+      receivableDate: new Date(`${receivableDate}T00:00:00.000Z`).toISOString(),
+      transactionDate: receivableTxnDate ? new Date(`${receivableTxnDate}T00:00:00.000Z`).toISOString() : undefined,
+      amountCents: Math.round(Number(receivableAmount || "0") * 100),
+      title: receivableTitle || receivableTarget.subject,
+      notes: receivableNotes || undefined,
+      accountId: defaultReceivableAccountId || undefined,
+      budgetId: defaultReceivableBudgetId || undefined,
+    });
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -295,7 +490,28 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         <button className="btn btn-primary" onClick={openModal}>
           + Add Transaction
         </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => maybankFileInputRef.current?.click()}
+          disabled={selectedCardId === "all" || importMaybankCsv.isPending}
+        >
+          {importMaybankCsv.isPending ? "Importing..." : "Import Maybank CSV"}
+        </button>
+        <input
+          ref={maybankFileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: "none" }}
+          onChange={onPickMaybankCsv}
+          disabled={selectedCardId === "all" || importMaybankCsv.isPending}
+        />
       </div>
+      {importMessage ? (
+        <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-secondary)" }}>
+          {importMessage}
+        </div>
+      ) : null}
 
       {/* Transactions Table */}
       <div className="cct-table-wrapper">
@@ -373,11 +589,30 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                         type="checkbox"
                         checked={tx.isAllocated}
                         onChange={() => toggleAllocated.mutate({ id: tx.id, isAllocated: !tx.isAllocated })}
+                        disabled={tx.isAllocated}
                       />
                       <span>{tx.creditCard.cardName}</span>
                     </label>
                   </td>
                   <td className="cct-tx-actions">
+                    {!tx.isAllocated && (
+                      <>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => openDeductModal(tx)}
+                          disabled={accountCreditTxn.isPending}
+                        >
+                          Deduct
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => openReceivableModal(tx)}
+                          disabled={accountCreditTxn.isPending}
+                        >
+                          Receivable
+                        </button>
+                      </>
+                    )}
                     <button
                       className="btn btn-ghost btn-xs"
                       onClick={() => deleteTransaction.mutate(tx.id)}
@@ -412,7 +647,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       {/* Add Transaction Modal */}
       {isModalOpen && (
         <div className="cct-modal-overlay" onClick={closeModal}>
-          <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="cct-modal cct-modal-wide" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Add Credit Card Transaction</h3>
               <button className="cct-close-btn" onClick={closeModal}>
@@ -510,6 +745,126 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={createTransaction.isPending}>
                   {createTransaction.isPending ? "Adding..." : "Add Transaction"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isAccountingModalOpen && accountingTarget && (
+        <div className="cct-modal-overlay" onClick={closeAccountingModal}>
+          <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cct-modal-header">
+              <h3>Deduct Credit Transaction</h3>
+              <button className="cct-close-btn" onClick={closeAccountingModal}>✕</button>
+            </div>
+            <form className="cct-modal-form" onSubmit={onSubmitDeduct}>
+              <div className="cct-form-grid">
+                <div className="form-group cct-span-2">
+                  <label className="label">Reference</label>
+                  <div className="input" style={{ display: "flex", alignItems: "center" }}>
+                    {accountingTarget.subject} • {formatCurrency(accountingTarget.amountCents)}
+                  </div>
+                </div>
+                <div className="form-group cct-span-2">
+                  <label className="label">Bank Account</label>
+                  <select
+                    className="input"
+                    value={deductAccountId}
+                    onChange={(e) => {
+                      const nextAccountId = e.target.value;
+                      setDeductAccountId(nextAccountId);
+                      const nextBudgetId = (budgets.data ?? []).find((budget) => budget.accountId === nextAccountId)?.id || "";
+                      setDeductBudgetId(nextBudgetId);
+                    }}
+                    required
+                  >
+                    <option value="" disabled>Select account</option>
+                    {(bankAccounts.data ?? []).map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group cct-span-2">
+                  <label className="label">Sub Account</label>
+                  <select
+                    className="input"
+                    value={deductBudgetId}
+                    onChange={(e) => setDeductBudgetId(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Select sub account</option>
+                    {filteredBudgets.map((budget) => (
+                      <option key={budget.id} value={budget.id}>
+                        {budget.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="cct-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeAccountingModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={accountCreditTxn.isPending}>
+                  {accountCreditTxn.isPending ? "Saving..." : "Deduct"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isReceivableModalOpen && receivableTarget && (
+        <div className="cct-modal-overlay" onClick={closeReceivableModal}>
+          <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cct-modal-header">
+              <h3>Create Receivable</h3>
+              <button className="cct-close-btn" onClick={closeReceivableModal}>✕</button>
+            </div>
+            <form className="cct-modal-form cct-receivable-form" onSubmit={onSubmitReceivable}>
+              <div className="cct-form-grid">
+                <div className="form-group cct-span-2">
+                  <label className="label">Reference</label>
+                  <div className="input" style={{ display: "flex", alignItems: "center" }}>
+                    {receivableTarget.subject}
+                  </div>
+                </div>
+                <div className="form-group cct-span-2">
+                  <label className="label">Title</label>
+                  <input className="input" type="text" value={receivableTitle} onChange={(e) => setReceivableTitle(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label className="label">Receivable Date</label>
+                  <input className="input" type="date" value={receivableDate} onChange={(e) => setReceivableDate(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label className="label">Txn Date</label>
+                  <input className="input" type="date" value={receivableTxnDate} onChange={(e) => setReceivableTxnDate(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="label">Amount ($)</label>
+                  <input className="input" type="number" step="0.01" min="0.01" value={receivableAmount} onChange={(e) => setReceivableAmount(e.target.value)} required />
+                </div>
+                <MarkdownEditor
+                  className="form-group cct-span-2"
+                  label="Notes"
+                  value={receivableNotes}
+                  onChange={setReceivableNotes}
+                  placeholder="Write notes in Markdown"
+                  rows={12}
+                  minHeight={300}
+                />
+              </div>
+              <div className="cct-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeReceivableModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={accountCreditTxn.isPending}>
+                  {accountCreditTxn.isPending ? "Saving..." : "Create Receivable"}
                 </button>
               </div>
             </form>
