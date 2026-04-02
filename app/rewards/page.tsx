@@ -133,6 +133,7 @@ export default async function RewardsRoute() {
       title="Rewards & Miles"
       current="/rewards"
       userName={userName}
+      userImage={session.user?.image || null}
       badgeCounts={{
         budgets: creditCards.length + frequentFlyers.length,
       }}

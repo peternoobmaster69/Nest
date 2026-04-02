@@ -1,6 +1,7 @@
 import { authOptions } from "@/lib/auth";
 import { getBankConsistency } from "@/lib/bank-consistency";
 import { prisma } from "@/lib/prisma";
+import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
@@ -111,32 +112,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     } else {
-      const existingMembership = await prisma.workspaceMember.findFirst({
-        where: { userId },
-        orderBy: { createdAt: "asc" },
-        select: { workspaceId: true },
+      const workspace = await ensureUserWithDefaultWorkspace({
+        id: userId,
+        email: sessionEmail,
+        name: sessionName,
       });
-
-      if (existingMembership?.workspaceId) {
-        workspaceId = existingMembership.workspaceId;
-      } else {
-        const workspace = await prisma.workspace.create({
-          data: {
-            name: "My Workspace",
-            baseCurrency: "SGD",
-          },
-        });
-
-        await prisma.workspaceMember.create({
-          data: {
-            workspaceId: workspace.id,
-            userId,
-            role: "OWNER",
-          },
-        });
-
-        workspaceId = workspace.id;
-      }
+      workspaceId = workspace.id;
     }
 
     let bankType = await prisma.accountType.findFirst({

@@ -7,7 +7,7 @@ export default async function BudgetPlanRoute() {
   const userName = session.user?.name || session.user?.email || "User";
 
   return (
-    <PageFrame title="Budget Plan" current="/budgets/plan" userName={userName}>
+    <PageFrame title="Budget Plan" current="/budgets/plan" userName={userName} userImage={session.user?.image || null}>
       <BudgetPlanPage />
     </PageFrame>
   );

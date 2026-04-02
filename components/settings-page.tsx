@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { GMAIL_SYNC_INTERVAL_MS } from "@/lib/gmail-alert-query";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useState } from "react";
@@ -43,16 +44,24 @@ type Budget = {
   isActive: boolean;
 };
 
+type GmailSyncProgress = {
+  phase: "idle" | "reading" | "writing" | "complete" | "error";
+  progress: number;
+  message: string;
+  total: number;
+  current: number;
+  updatedAt: number;
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
+    let detail = `Request failed (${res.status})`;
     try {
       const payload = await res.json();
-      const detail = payload?.message || payload?.error || `Request failed (${res.status})`;
-      throw new Error(detail);
-    } catch {
-      throw new Error(`Request failed (${res.status})`);
-    }
+      detail = payload?.message || payload?.error || detail;
+    } catch {}
+    throw new Error(detail);
   }
   return res.json();
 }
@@ -62,6 +71,7 @@ export function SettingsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [gmailMessage, setGmailMessage] = useState("");
+  const [gmailSyncProgress, setGmailSyncProgress] = useState<GmailSyncProgress | null>(null);
   const [currencyMessage, setCurrencyMessage] = useState("");
   const [receivableAccountMessage, setReceivableAccountMessage] = useState("");
 
@@ -133,18 +143,95 @@ export function SettingsPage() {
 
   const syncGmail = useMutation({
     mutationFn: () =>
-      fetchJson<{ scannedMessages: number; processed: number; duplicates: number; failed: number }>("/api/gmail/sync", {
+      fetchJson<{ scannedMessages: number; processed: number; duplicates: number; failed: number; skipped?: boolean; reason?: string }>("/api/gmail/sync", {
         method: "POST",
       }),
     onSuccess: (data) => {
-      setGmailMessage(
-        `Synced ${data.scannedMessages} emails: ${data.processed} processed, ${data.duplicates} duplicates, ${data.failed} failed.`,
+      const message = data.skipped && data.reason
+        ? data.reason
+        : `Synced ${data.scannedMessages} emails: ${data.processed} processed, ${data.duplicates} duplicates, ${data.failed} failed.`;
+      setGmailMessage(message);
+      setGmailSyncProgress((current) =>
+        current
+          ? {
+              ...current,
+              phase: "complete",
+              progress: 100,
+              message,
+              total: data.scannedMessages,
+              current: data.scannedMessages,
+            }
+          : current,
       );
       queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
       queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
     },
-    onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Gmail sync failed."),
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Gmail sync failed.";
+      setGmailMessage(message);
+      setGmailSyncProgress((current) =>
+        current
+          ? {
+              ...current,
+              phase: "error",
+              progress: 100,
+              message,
+            }
+          : null,
+      );
+    },
   });
+
+  useEffect(() => {
+    if (!syncGmail.isPending) {
+      if (gmailSyncProgress?.phase === "complete" || gmailSyncProgress?.phase === "error") {
+        const timeout = window.setTimeout(() => setGmailSyncProgress(null), 1200);
+        return () => window.clearTimeout(timeout);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setGmailMessage("Syncing Gmail inbox...");
+    setGmailSyncProgress({
+      phase: "reading",
+      progress: 0,
+      message: "Starting sync...",
+      total: 0,
+      current: 0,
+      updatedAt: Date.now(),
+    });
+
+    const poll = async () => {
+      try {
+        const progress = await fetchJson<GmailSyncProgress>("/api/gmail/sync");
+        if (!cancelled) {
+          setGmailSyncProgress(progress);
+        }
+      } catch {}
+    };
+
+    void poll();
+    const interval = window.setInterval(() => {
+      void poll();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [syncGmail.isPending]);
+
+  useEffect(() => {
+    if (!gmailStatus.data?.connected || syncGmail.isPending) return;
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || syncGmail.isPending) return;
+      syncGmail.mutate();
+    }, GMAIL_SYNC_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [gmailStatus.data?.connected, syncGmail]);
 
   const disconnectGmail = useMutation({
     mutationFn: () =>
@@ -301,7 +388,17 @@ export function SettingsPage() {
       <div className="card" style={{ marginBottom: "12px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
           <div>
-            <div style={{ fontSize: "13px", fontWeight: 600 }}>Gmail Card Alerts</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600 }}>Gmail Card Alerts</div>
+              <a
+                href="/credit-alerts"
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: "12px", color: "var(--brand-500)", textDecoration: "none", fontWeight: 500 }}
+              >
+                Open Staging Table
+              </a>
+            </div>
             <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
               Authorize once for read-only Gmail access. Nest only scans card transaction alert emails, extracts transaction details,
               and auto-adds them to Credit Card Transactions for tracking. Nest does not send, delete, or modify your emails.
@@ -332,6 +429,16 @@ export function SettingsPage() {
         ) : (
           <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Not connected.</div>
         )}
+        {gmailSyncProgress ? (
+          <div className="gmail-sync-progress-wrap" aria-label="Gmail inbox sync progress" aria-live="polite">
+            <div className="gmail-sync-progress">
+              <div className="gmail-sync-progress-bar" style={{ width: `${Math.min(gmailSyncProgress.progress, 100)}%` }} />
+            </div>
+            <div className="gmail-sync-progress-text">
+              {gmailSyncProgress.message || `Syncing inbox ${Math.round(gmailSyncProgress.progress)}%`}
+            </div>
+          </div>
+        ) : null}
         {gmailMessage ? <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>{gmailMessage}</div> : null}
       </div>
 

@@ -7,7 +7,7 @@ export default async function CollaboratorsRoute() {
   const userName = session.user?.name || session.user?.email || "User";
 
   return (
-    <PageFrame title="Workspaces" current="/collaborators" userName={userName}>
+    <PageFrame title="Workspaces" current="/collaborators" userName={userName} userImage={session.user?.image || null}>
       <CollaboratorsPage />
     </PageFrame>
   );

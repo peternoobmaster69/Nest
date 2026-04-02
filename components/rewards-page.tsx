@@ -768,13 +768,14 @@ export function RewardsPage({
                   </div>
                 </div>
                 {editingCardId === card.id ? (
-                  <div style={{ marginTop: "10px", display: "flex", gap: "8px", alignItems: "center" }}>
+                  <div style={{ marginTop: "10px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                     <input
                       className="input"
                       type="number"
                       min="0"
                       value={editingCardPoints}
                       onChange={(e) => setEditingCardPoints(e.target.value)}
+                      style={{ flex: "1 1 140px", minWidth: "120px" }}
                     />
                     <button
                       className="btn btn-secondary btn-xs"
@@ -1059,7 +1060,15 @@ export function RewardsPage({
                       )}
                     </div>
                     {!earnEntries.length && (
-                      <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>No earn transactions yet.</div>
+                      <div className="card-sm" style={{ background: "var(--bg-subtle)", border: "1px dashed var(--border-default)" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "8px" }}>No earn transactions yet.</div>
+                        <div style={{ display: "grid", gap: "6px", fontSize: "11px", color: "var(--text-disabled)" }}>
+                          <div>Date — When miles were earned</div>
+                          <div>Miles — Number of miles earned</div>
+                          <div>Title — Description of the transaction</div>
+                          <div>Expiry — When these miles expire</div>
+                        </div>
+                      </div>
                     )}
                     {pagedEarnEntries.map((entry) => (
                       <div key={entry.id} className="card-sm" style={{ display: "grid", gap: "8px" }}>
@@ -1176,7 +1185,14 @@ export function RewardsPage({
                       )}
                     </div>
                     {!redemptionEntries.length && (
-                      <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>No redemption transactions yet.</div>
+                      <div className="card-sm" style={{ background: "var(--bg-subtle)", border: "1px dashed var(--border-default)" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "8px" }}>No redemption transactions yet.</div>
+                        <div style={{ display: "grid", gap: "6px", fontSize: "11px", color: "var(--text-disabled)" }}>
+                          <div>Title — Description of the redemption</div>
+                          <div>Date — When miles were redeemed</div>
+                          <div>Miles — Number of miles used</div>
+                        </div>
+                      </div>
                     )}
                     {pagedRedemptionEntries.map((entry) => (
                       <div key={entry.id} className="card-sm" style={{ display: "grid", gap: "4px" }}>

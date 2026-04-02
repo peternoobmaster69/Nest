@@ -7,7 +7,7 @@ export default async function SettingsRoute() {
   const userName = session.user?.name || session.user?.email || "User";
 
   return (
-    <PageFrame title="Settings" current="/settings" userName={userName}>
+    <PageFrame title="Settings" current="/settings" userName={userName} userImage={session.user?.image || null}>
       <SettingsPage />
     </PageFrame>
   );

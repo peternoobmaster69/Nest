@@ -111,6 +111,7 @@ export async function POST(request: Request) {
         },
       });
 
+      existingKeys.add(key);
       seenImportKeys.add(key);
       imported += 1;
     }

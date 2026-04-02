@@ -134,10 +134,33 @@ type GmailPayload = {
   parts?: GmailPayload[];
 };
 
+function htmlToText(input: string) {
+  return input
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 function extractTextPart(payload: GmailPayload | null): string {
   if (!payload) return "";
   if (payload.mimeType === "text/plain" && payload.body?.data) {
     return decodeBase64Url(payload.body.data);
+  }
+  if (payload.mimeType === "text/html" && payload.body?.data) {
+    return htmlToText(decodeBase64Url(payload.body.data));
   }
   if (Array.isArray(payload.parts)) {
     for (const part of payload.parts) {
@@ -149,16 +172,34 @@ function extractTextPart(payload: GmailPayload | null): string {
 }
 
 export async function listGmailMessageIds(accessToken: string, q: string) {
-  const url = `${GMAIL_API_BASE}/users/me/messages?${new URLSearchParams({ q, maxResults: "25" }).toString()}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Gmail list failed: ${text}`);
-  }
-  const data = (await res.json()) as { messages?: Array<{ id: string }> };
-  return data.messages ?? [];
+  const allMessages: Array<{ id: string }> = [];
+  let pageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      q,
+      maxResults: "500",
+    });
+    if (pageToken) {
+      params.set("pageToken", pageToken);
+    }
+
+    const res = await fetch(`${GMAIL_API_BASE}/users/me/messages?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Gmail list failed: ${text}`);
+    }
+    const data = (await res.json()) as {
+      messages?: Array<{ id: string }>;
+      nextPageToken?: string;
+    };
+    allMessages.push(...(data.messages ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return allMessages;
 }
 
 export async function fetchGmailMessage(accessToken: string, messageId: string) {

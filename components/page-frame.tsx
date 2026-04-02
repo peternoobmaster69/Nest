@@ -26,12 +26,14 @@ export function PageFrame({
   title,
   current,
   userName,
+  userImage,
   badgeCounts,
   children,
 }: {
   title: string;
   current: string;
   userName: string;
+  userImage?: string | null;
   badgeCounts?: {
     budgets?: number;
     receivables?: number;
@@ -62,6 +64,7 @@ export function PageFrame({
     <div className="app-shell">
       <AppSidebar
         userName={userName}
+        userImage={userImage}
         currentPath={current}
         badgeCounts={badgeCounts}
         sidebarOpen={sidebarOpen}

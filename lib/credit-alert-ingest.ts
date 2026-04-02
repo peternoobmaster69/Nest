@@ -2,6 +2,7 @@ import { parseCreditAlert } from "@/lib/credit-alert-parser";
 import { deriveStatementCycle } from "@/lib/credit-card-statement-cycle";
 import { getSingaporeBankByName } from "@/lib/singapore-banks";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export async function ingestCreditAlert(params: {
   workspaceId: string;
@@ -37,23 +38,47 @@ export async function ingestCreditAlert(params: {
   const requiredMissing =
     !parsedAlert.cardLast4 || !parsedAlert.merchant || !parsedAlert.amountCents || !parsedAlert.transactionDate;
 
-  const staging = await prisma.cardAlertStaging.create({
-    data: {
-      workspaceId,
-      source,
-      rawSubject,
-      rawBody,
-      bankName: normalizedBank,
-      transactionRef: parsedAlert.transactionRef,
-      currency: parsedAlert.currency,
-      amountCents: signedAmountCents,
-      transactionDate: parsedAlert.transactionDate,
-      merchant: parsedAlert.merchant,
-      cardLast4: parsedAlert.cardLast4,
-      parseStatus: requiredMissing ? "FAILED" : "PARSED",
-      failureReason: requiredMissing ? "Unable to parse required fields from alert." : null,
-    },
-  });
+  let staging;
+  try {
+    staging = await prisma.cardAlertStaging.create({
+      data: {
+        workspaceId,
+        source,
+        rawSubject,
+        rawBody,
+        bankName: normalizedBank,
+        transactionRef: parsedAlert.transactionRef,
+        currency: parsedAlert.currency,
+        amountCents: signedAmountCents,
+        transactionDate: parsedAlert.transactionDate,
+        merchant: parsedAlert.merchant,
+        cardLast4: parsedAlert.cardLast4,
+        parseStatus: requiredMissing ? "FAILED" : "PARSED",
+        failureReason: requiredMissing ? "Unable to parse required fields from alert." : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const duplicateStaging =
+        (parsedAlert.transactionRef
+          ? await prisma.cardAlertStaging.findFirst({
+              where: { workspaceId, transactionRef: parsedAlert.transactionRef },
+              select: { id: true, parseStatus: true, creditTransactionId: true },
+            })
+          : null) ??
+        null;
+
+      if (duplicateStaging) {
+        return {
+          id: duplicateStaging.id,
+          parseStatus: duplicateStaging.parseStatus,
+          creditTransactionId: duplicateStaging.creditTransactionId,
+          duplicate: true,
+        };
+      }
+    }
+    throw error;
+  }
 
   if (requiredMissing) {
     return staging;

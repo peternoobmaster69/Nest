@@ -20,6 +20,7 @@ export default async function CreditTransactionsRoute() {
       title="Credit Card Transactions"
       current="/credit-transactions"
       userName={userName}
+      userImage={session.user?.image || null}
     >
       <CreditTransactionsPage initialCards={creditCards} />
     </PageFrame>

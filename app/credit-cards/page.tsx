@@ -7,7 +7,7 @@ export default async function CreditCardsRoute() {
   const userName = session.user?.name || session.user?.email || "User";
 
   return (
-    <PageFrame title="Credit Cards" current="/credit-cards" userName={userName}>
+    <PageFrame title="Credit Cards" current="/credit-cards" userName={userName} userImage={session.user?.image || null}>
       <CreditCardsPage />
     </PageFrame>
   );

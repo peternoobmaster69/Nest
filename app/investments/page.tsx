@@ -7,7 +7,7 @@ export default async function InvestmentsRoute() {
   const userName = session.user?.name || session.user?.email || "User";
 
   return (
-    <PageFrame title="Investments" current="/investments" userName={userName}>
+    <PageFrame title="Investments" current="/investments" userName={userName} userImage={session.user?.image || null}>
       <InvestmentsPage />
     </PageFrame>
   );

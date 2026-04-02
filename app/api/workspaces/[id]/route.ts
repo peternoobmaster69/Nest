@@ -62,3 +62,50 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Failed to update workspace", message }, { status: 500 });
   }
 }
+
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const auth = await requireWorkspaceAccess(id);
+    const membership = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: id,
+          userId: auth.userId,
+        },
+      },
+      select: { role: true },
+    });
+    if (!membership || membership.role !== "OWNER") {
+      return NextResponse.json({ error: "Only workspace owner can delete a workspace." }, { status: 403 });
+    }
+
+    const workspaceCount = await prisma.workspaceMember.count({
+      where: { userId: auth.userId },
+    });
+    if (workspaceCount <= 1) {
+      return NextResponse.json({ error: "At least one workspace must remain." }, { status: 400 });
+    }
+
+    await prisma.workspace.delete({ where: { id } });
+
+    const nextMembership = await prisma.workspaceMember.findFirst({
+      where: { userId: auth.userId },
+      orderBy: { createdAt: "asc" },
+      select: { workspaceId: true },
+    });
+
+    await prisma.user.update({
+      where: { id: auth.userId },
+      data: { activeWorkspaceId: nextMembership?.workspaceId ?? null },
+    });
+
+    return NextResponse.json({ ok: true, activeWorkspaceId: nextMembership?.workspaceId ?? null });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to delete workspace", message }, { status: 500 });
+  }
+}

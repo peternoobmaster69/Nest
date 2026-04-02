@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -24,9 +24,6 @@ type CreditCardTransaction = {
   statementYear: number;
   amountCents: number;
   subject: string;
-  isInstallment: boolean;
-  installmentNo: number | null;
-  totalInstallments: number | null;
   isAllocated: boolean;
   creditCard: {
     cardName: string;
@@ -66,6 +63,8 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const CREDIT_TX_MONTH_COOKIE = "nest_credit_tx_month";
+const CREDIT_TX_CARD_COOKIE = "nest_credit_tx_card";
 
 function getAmountToneClass(valueCents: number) {
   if (valueCents < 0) return "negative";
@@ -91,6 +90,19 @@ function getDaysUntil(dateStr: string): number {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+function readCookie(name: string) {
+  if (typeof document === "undefined") return null;
+  const entry = document.cookie
+    .split("; ")
+    .find((part) => part.startsWith(`${name}=`));
+  return entry ? decodeURIComponent(entry.split("=").slice(1).join("=")) : null;
+}
+
+function writeCookie(name: string, value: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
+}
+
 export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
   const queryClient = useQueryClient();
   const sortedCards = useMemo(() => {
@@ -109,12 +121,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [showUnaccountedOnly, setShowUnaccountedOnly] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [isAccountingModalOpen, setIsAccountingModalOpen] = useState(false);
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
   const [accountingTarget, setAccountingTarget] = useState<CreditCardTransaction | null>(null);
   const [receivableTarget, setReceivableTarget] = useState<CreditCardTransaction | null>(null);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [importMessage, setImportMessage] = useState("");
+  const [paymentDueMessage, setPaymentDueMessage] = useState("");
+  const [importProgress, setImportProgress] = useState(0);
   const maybankFileInputRef = useRef<HTMLInputElement | null>(null);
   const [deductAccountId, setDeductAccountId] = useState("");
   const [deductBudgetId, setDeductBudgetId] = useState("");
@@ -123,16 +138,50 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [receivableAmount, setReceivableAmount] = useState("");
   const [receivableTitle, setReceivableTitle] = useState("");
   const [receivableNotes, setReceivableNotes] = useState("");
+  const [sharedPaymentDueDate, setSharedPaymentDueDate] = useState("");
+  const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
 
   // Form state
   const [formCardId, setFormCardId] = useState("");
   const [formDate, setFormDate] = useState("");
   const [formPaymentDue, setFormPaymentDue] = useState("");
+  const [formStatementMonth, setFormStatementMonth] = useState("");
+  const [formStatementYear, setFormStatementYear] = useState("");
   const [formSubject, setFormSubject] = useState("");
   const [formAmount, setFormAmount] = useState("");
-  const [formIsInstallment, setFormIsInstallment] = useState(false);
-  const [formInstallmentNo, setFormInstallmentNo] = useState("");
-  const [formTotalInstallments, setFormTotalInstallments] = useState("");
+  const [filtersReady, setFiltersReady] = useState(false);
+
+  useEffect(() => {
+    const savedMonth = readCookie(CREDIT_TX_MONTH_COOKIE);
+    const savedCard = readCookie(CREDIT_TX_CARD_COOKIE);
+
+    if (savedMonth !== null) {
+      const parsedMonth = parseInt(savedMonth, 10);
+      if (parsedMonth >= -1 && parsedMonth <= 11) {
+        setSelectedMonth(parsedMonth);
+      }
+    }
+
+    if (savedCard) {
+      setSelectedCardId(savedCard);
+    }
+
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    writeCookie(CREDIT_TX_MONTH_COOKIE, String(selectedMonth));
+  }, [filtersReady, selectedMonth]);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    if (selectedCardId !== "all" && !sortedCards.some((card) => card.id === selectedCardId)) {
+      setSelectedCardId("all");
+      return;
+    }
+    writeCookie(CREDIT_TX_CARD_COOKIE, selectedCardId);
+  }, [filtersReady, selectedCardId, sortedCards]);
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -161,14 +210,22 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       fetchJson<{
         transactions: CreditCardTransaction[];
         cardCounts: CardCount[];
-      }>(
-        `/api/credit-transactions?cardId=${selectedCardId}&year=${selectedYear}&month=${selectedMonth + 1}`
-      ),
+      }>(`/api/credit-transactions?${new URLSearchParams({
+        cardId: selectedCardId,
+        year: String(selectedYear),
+        ...(selectedMonth >= 0 ? { month: String(selectedMonth + 1) } : {}),
+      }).toString()}`),
     enabled: sortedCards.length > 0,
   });
 
   const transactions = data?.transactions || [];
   const cardCounts = data?.cardCounts || [];
+  const selectedCard = useMemo(
+    () => sortedCards.find((card) => card.id === selectedCardId) ?? null,
+    [selectedCardId, sortedCards],
+  );
+  const selectedCardBank = getSingaporeBankByName(selectedCard?.bankName);
+  const canImportMaybankCsv = selectedCardBank?.code === "MAYBANK";
 
   const filteredTransactions = useMemo(() => {
     if (!showUnaccountedOnly) return transactions;
@@ -181,6 +238,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     return { total, unaccounted };
   }, [filteredTransactions]);
 
+  const earliestPaymentDue = useMemo(() => {
+    const dueTransactions = transactions.filter((t) => t.paymentDueDate);
+    if (dueTransactions.length === 0) return null;
+
+    return dueTransactions.reduce((earliest, tx) => {
+      if (!earliest.paymentDueDate) return tx;
+      return new Date(tx.paymentDueDate!).getTime() < new Date(earliest.paymentDueDate).getTime() ? tx : earliest;
+    });
+  }, [transactions]);
+
   const createTransaction = useMutation({
     mutationFn: (payload: {
       creditCardId: string;
@@ -190,9 +257,6 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       statementYear: number;
       amountCents: number;
       subject: string;
-      isInstallment: boolean;
-      installmentNo?: number;
-      totalInstallments?: number;
     }) =>
       fetchJson("/api/credit-transactions", {
         method: "POST",
@@ -205,9 +269,36 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     },
   });
 
+  const updateTransaction = useMutation({
+    mutationFn: ({ id, payload }: {
+      id: string;
+      payload: {
+        creditCardId: string;
+        transactionDate: string;
+        paymentDueDate?: string | null;
+        statementMonth: number;
+        statementYear: number;
+        amountCents: number;
+        subject: string;
+      };
+    }) =>
+      fetchJson(`/api/credit-transactions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      closeModal();
+    },
+  });
+
   const deleteTransaction = useMutation({
     mutationFn: (id: string) => fetchJson(`/api/credit-transactions/${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["credit-transactions"] }),
+    onError: (_error, id) => {
+      setDeletingTransactionIds((current) => current.filter((item) => item !== id));
+    },
   });
 
   const toggleAllocated = useMutation({
@@ -242,6 +333,26 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       setImportMessage(error instanceof Error ? error.message : "Maybank CSV import failed.");
     },
   });
+
+  useEffect(() => {
+    if (!importMaybankCsv.isPending) {
+      setImportProgress((current) => (current > 0 ? 100 : 0));
+      const timeout = window.setTimeout(() => setImportProgress(0), 500);
+      return () => window.clearTimeout(timeout);
+    }
+
+    setImportProgress(8);
+    const interval = window.setInterval(() => {
+      setImportProgress((current) => {
+        if (current >= 90) return current;
+        if (current < 35) return current + 12;
+        if (current < 65) return current + 7;
+        return current + 3;
+      });
+    }, 180);
+
+    return () => window.clearInterval(interval);
+  }, [importMaybankCsv.isPending]);
 
   const accountCreditTxn = useMutation({
     mutationFn: (payload: {
@@ -281,24 +392,63 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     },
   });
 
+  const updateSharedPaymentDue = useMutation({
+    mutationFn: (payload: {
+      cardId?: string;
+      statementMonth: number;
+      statementYear: number;
+      paymentDueDate: string | null;
+    }) =>
+      fetchJson<{ ok: true; updatedCount: number }>("/api/credit-transactions/payment-due", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (result) => {
+      setPaymentDueMessage(
+        result.updatedCount > 0
+          ? `Payment due updated for ${result.updatedCount} transaction${result.updatedCount === 1 ? "" : "s"}.`
+          : "No transactions matched this statement month.",
+      );
+      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+    },
+    onError: (error) => {
+      setPaymentDueMessage(error instanceof Error ? error.message : "Failed to update payment due date.");
+    },
+  });
+
   const openModal = () => {
+    const now = new Date();
     setFormCardId(
       selectedCardId !== "all"
         ? selectedCardId
         : sortedCards[0]?.id || "",
     );
-    setFormDate(new Date().toISOString().split("T")[0]);
+    setEditingTransactionId(null);
+    setFormDate(now.toISOString().split("T")[0]);
     setFormPaymentDue("");
+    setFormStatementMonth(String(selectedMonth >= 0 ? selectedMonth + 1 : now.getMonth() + 1));
+    setFormStatementYear(String(selectedYear || now.getFullYear()));
     setFormSubject("");
     setFormAmount("");
-    setFormIsInstallment(false);
-    setFormInstallmentNo("");
-    setFormTotalInstallments("");
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
+    setEditingTransactionId(null);
+  };
+
+  const openEditModal = (tx: CreditCardTransaction) => {
+    setEditingTransactionId(tx.id);
+    setFormCardId(tx.creditCardId);
+    setFormDate(toDateInputValue(tx.transactionDate));
+    setFormPaymentDue(tx.paymentDueDate ? toDateInputValue(tx.paymentDueDate) : "");
+    setFormStatementMonth(String(tx.statementMonth));
+    setFormStatementYear(String(tx.statementYear));
+    setFormSubject(tx.subject);
+    setFormAmount((tx.amountCents / 100).toFixed(2));
+    setIsModalOpen(true);
   };
 
   const openDeductModal = (tx: CreditCardTransaction) => {
@@ -382,21 +532,40 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     });
   };
 
+  useEffect(() => {
+    setSharedPaymentDueDate(earliestPaymentDue?.paymentDueDate ? toDateInputValue(earliestPaymentDue.paymentDueDate) : "");
+  }, [earliestPaymentDue?.paymentDueDate, selectedCardId, selectedMonth, selectedYear]);
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!formCardId || !formDate || !formSubject || !formAmount) return;
+    if (!formCardId || !formDate || !formSubject || !formAmount || !formStatementMonth || !formStatementYear) return;
+
+    const payload = {
+      creditCardId: formCardId,
+      transactionDate: new Date(formDate).toISOString(),
+      paymentDueDate: formPaymentDue ? new Date(formPaymentDue).toISOString() : null,
+      statementMonth: parseInt(formStatementMonth, 10),
+      statementYear: parseInt(formStatementYear, 10),
+      amountCents: Math.round(parseFloat(formAmount) * 100),
+      subject: formSubject,
+    };
+
+    if (editingTransactionId) {
+      updateTransaction.mutate({
+        id: editingTransactionId,
+        payload,
+      });
+      return;
+    }
 
     createTransaction.mutate({
       creditCardId: formCardId,
-      transactionDate: new Date(formDate).toISOString(),
-      paymentDueDate: formPaymentDue ? new Date(formPaymentDue).toISOString() : undefined,
-      statementMonth: selectedMonth + 1,
-      statementYear: selectedYear,
-      amountCents: Math.round(parseFloat(formAmount) * 100),
-      subject: formSubject,
-      isInstallment: formIsInstallment,
-      installmentNo: formIsInstallment && formInstallmentNo ? parseInt(formInstallmentNo) : undefined,
-      totalInstallments: formIsInstallment && formTotalInstallments ? parseInt(formTotalInstallments) : undefined,
+      transactionDate: payload.transactionDate,
+      paymentDueDate: payload.paymentDueDate ?? undefined,
+      statementMonth: payload.statementMonth,
+      statementYear: payload.statementYear,
+      amountCents: payload.amountCents,
+      subject: payload.subject,
     });
   };
 
@@ -405,8 +574,26 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   };
 
   const confirmDeleteTransaction = (transactionId: string) => {
-    if (!confirmDestructiveAction("Delete this credit card transaction?")) return;
-    deleteTransaction.mutate(transactionId);
+    if (!confirmDestructiveAction("Delete this credit card transaction permanently? This cannot be undone.")) return;
+    if (deletingTransactionIds.includes(transactionId)) return;
+    setDeletingTransactionIds((current) => [...current, transactionId]);
+    window.setTimeout(() => {
+      deleteTransaction.mutate(transactionId);
+    }, 180);
+  };
+
+  const earliestDueDays = earliestPaymentDue?.paymentDueDate ? getDaysUntil(earliestPaymentDue.paymentDueDate) : null;
+  const earliestDueIsOverdue = earliestDueDays !== null && earliestDueDays < 0;
+  const earliestDueIsUrgent = earliestDueDays !== null && earliestDueDays >= 0 && earliestDueDays <= 3;
+  const canEditSharedPaymentDue = selectedMonth >= 0;
+  const saveSharedPaymentDue = () => {
+    if (!canEditSharedPaymentDue) return;
+    updateSharedPaymentDue.mutate({
+      ...(selectedCardId !== "all" ? { cardId: selectedCardId } : {}),
+      statementMonth: selectedMonth + 1,
+      statementYear: selectedYear,
+      paymentDueDate: sharedPaymentDueDate ? new Date(`${sharedPaymentDueDate}T00:00:00.000Z`).toISOString() : null,
+    });
   };
 
   return (
@@ -448,23 +635,37 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         })}
       </div>
 
-      {/* Month Tabs */}
-      <div className="cct-month-tabs">
-        <button
-          className={`cct-month-tab ${selectedMonth === -1 ? "active" : ""}`}
-          onClick={() => setSelectedMonth(-1)}
-        >
-          All
-        </button>
-        {MONTHS.map((month, idx) => (
+      {/* Period Filter */}
+      <div className="cct-period-bar">
+        <div className="cct-month-tabs">
           <button
-            key={month}
-            className={`cct-month-tab ${selectedMonth === idx ? "active" : ""}`}
-            onClick={() => setSelectedMonth(idx)}
+            className={`cct-month-tab ${selectedMonth === -1 ? "active" : ""}`}
+            onClick={() => setSelectedMonth(-1)}
           >
-            {month}
+            All
           </button>
-        ))}
+          {MONTHS.map((month, idx) => (
+            <button
+              key={month}
+              className={`cct-month-tab ${selectedMonth === idx ? "active" : ""}`}
+              onClick={() => setSelectedMonth(idx)}
+            >
+              {month}
+            </button>
+          ))}
+        </div>
+        <div className="cct-year-picker">
+          <label className="label" htmlFor="credit-transactions-year">Statement Year</label>
+          <input
+            id="credit-transactions-year"
+            type="number"
+            min="2020"
+            max="2100"
+            className="input"
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value || String(new Date().getFullYear()), 10))}
+          />
+        </div>
       </div>
 
       {/* Summary Section */}
@@ -491,31 +692,85 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         </div>
       </div>
 
+      <div className="cct-due-panel">
+        <div className="cct-due-panel-meta">
+          <span className="cct-summary-label">Payment Due</span>
+          {earliestPaymentDue?.paymentDueDate ? (
+            <span className={`cct-due-badge ${earliestDueIsOverdue ? "overdue" : earliestDueIsUrgent ? "urgent" : ""}`}>
+              {earliestDueIsOverdue ? "⚠️ " : earliestDueIsUrgent ? "⏰ " : ""}
+              {formatDate(earliestPaymentDue.paymentDueDate)}
+            </span>
+          ) : (
+            <span className="cct-summary-meta">—</span>
+          )}
+        </div>
+        <div className="cct-due-panel-controls">
+          <input
+            type="date"
+            className="input cct-due-input"
+            value={sharedPaymentDueDate}
+            onChange={(e) => setSharedPaymentDueDate(e.target.value)}
+            disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
+          />
+          <button
+            type="button"
+            className="btn btn-primary btn-xs cct-due-save-btn"
+            onClick={saveSharedPaymentDue}
+            disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
+          >
+            {updateSharedPaymentDue.isPending ? "Saving..." : "Save Due Date"}
+          </button>
+        </div>
+      </div>
+      {selectedMonth < 0 ? (
+        <div className="cct-inline-note">Select a statement month to update the shared payment due date.</div>
+      ) : null}
+      {paymentDueMessage ? (
+        <div className="cct-inline-note">{paymentDueMessage}</div>
+      ) : null}
+
       {/* Actions */}
       <div className="cct-actions">
         <button className="btn btn-primary" onClick={openModal}>
           + Add Transaction
         </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => maybankFileInputRef.current?.click()}
-          disabled={selectedCardId === "all" || importMaybankCsv.isPending}
-        >
-          {importMaybankCsv.isPending ? "Importing..." : "Import Maybank CSV"}
-        </button>
+        {canImportMaybankCsv && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon cct-import-btn"
+            onClick={() => maybankFileInputRef.current?.click()}
+            disabled={importMaybankCsv.isPending}
+            title={importMaybankCsv.isPending ? "Importing Maybank CSV" : "Import Maybank CSV"}
+            aria-label={importMaybankCsv.isPending ? "Importing Maybank CSV" : "Import Maybank CSV"}
+          >
+            {importMaybankCsv.isPending ? "…" : "📄"}
+          </button>
+        )}
         <input
           ref={maybankFileInputRef}
           type="file"
           accept=".csv,text/csv"
           style={{ display: "none" }}
           onChange={onPickMaybankCsv}
-          disabled={selectedCardId === "all" || importMaybankCsv.isPending}
+          disabled={!canImportMaybankCsv || importMaybankCsv.isPending}
         />
       </div>
       {importMessage ? (
         <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-secondary)" }}>
           {importMessage}
+        </div>
+      ) : null}
+      {importProgress > 0 ? (
+        <div className="cct-import-progress" aria-label="CSV import progress" aria-live="polite">
+          <div className="cct-import-progress-track">
+            <div
+              className="cct-import-progress-bar"
+              style={{ width: `${Math.min(importProgress, 100)}%` }}
+            />
+          </div>
+          <div className="cct-import-progress-text">
+            {importMaybankCsv.isPending ? `Importing CSV ${Math.round(importProgress)}%` : "Import complete"}
+          </div>
         </div>
       ) : null}
 
@@ -525,7 +780,6 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <thead>
             <tr>
               <th>Date</th>
-              <th>Payment Due</th>
               <th>Subject</th>
               <th>Amount</th>
               <th>Card</th>
@@ -535,17 +789,17 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <tbody>
             {isLoading && (
               <>
-                <SkeletonTableRow cols={6} />
-                <SkeletonTableRow cols={6} />
-                <SkeletonTableRow cols={6} />
-                <SkeletonTableRow cols={6} />
-                <SkeletonTableRow cols={6} />
+                <SkeletonTableRow cols={5} />
+                <SkeletonTableRow cols={5} />
+                <SkeletonTableRow cols={5} />
+                <SkeletonTableRow cols={5} />
+                <SkeletonTableRow cols={5} />
               </>
             )}
 
             {isError && (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={5}>
                   <div className="empty-state" style={{ padding: "40px 20px" }}>
                     <div className="empty-state-icon">⚠️</div>
                     <h3 className="empty-state-title">Failed to load transactions</h3>
@@ -558,34 +812,19 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             )}
 
             {!isLoading && !isError && filteredTransactions.map((tx) => {
-              const daysUntil = tx.paymentDueDate ? getDaysUntil(tx.paymentDueDate) : null;
-              const isOverdue = daysUntil !== null && daysUntil < 0;
-              const isUrgent = daysUntil !== null && daysUntil >= 0 && daysUntil <= 3;
-
+              const isDeleting = deletingTransactionIds.includes(tx.id);
               return (
-                <tr key={tx.id} className={tx.isAllocated ? "allocated" : "unallocated"}>
+                <tr
+                  key={tx.id}
+                  className={`${tx.isAllocated ? "allocated" : "unallocated"}${isDeleting ? " cct-row-deleting" : ""}`}
+                >
                   <td className="cct-tx-date">
                     <span className="cct-tx-day">{formatDate(tx.transactionDate)}</span>
-                  </td>
-                  <td className="cct-tx-due">
-                    {tx.paymentDueDate ? (
-                      <span className={`cct-due-badge ${isOverdue ? "overdue" : isUrgent ? "urgent" : ""}`}>
-                        {isOverdue ? "⚠️ " : isUrgent ? "⏰ " : ""}
-                        {formatDate(tx.paymentDueDate)}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
                   </td>
                   <td className="cct-tx-subject">
                     <div className="cct-subject-wrapper">
                       <span className="cct-subject-icon">🛒</span>
                       <span>{tx.subject}</span>
-                      {tx.isInstallment && tx.totalInstallments && (
-                        <span className="cct-installment-badge">
-                          {tx.installmentNo}/{tx.totalInstallments}
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className={`cct-tx-amount ${getAmountToneClass(tx.amountCents)}`}>{formatCurrency(tx.amountCents)}</td>
@@ -604,27 +843,42 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     {!tx.isAllocated && (
                       <>
                         <button
-                          className="btn btn-ghost btn-xs"
+                          className="btn btn-ghost btn-icon cct-action-btn"
                           onClick={() => openDeductModal(tx)}
-                          disabled={accountCreditTxn.isPending}
+                          disabled={accountCreditTxn.isPending || isDeleting}
+                          title="Deduct transaction"
+                          aria-label="Deduct transaction"
                         >
-                          Deduct
+                          ➖
                         </button>
                         <button
-                          className="btn btn-ghost btn-xs"
+                          className="btn btn-ghost btn-icon cct-action-btn"
                           onClick={() => openReceivableModal(tx)}
-                          disabled={accountCreditTxn.isPending}
+                          disabled={accountCreditTxn.isPending || isDeleting}
+                          title="Create receivable"
+                          aria-label="Create receivable"
                         >
-                          Receivable
+                          🧾
                         </button>
                       </>
                     )}
                     <button
-                      className="btn btn-ghost btn-xs"
-                      onClick={() => confirmDeleteTransaction(tx.id)}
-                      disabled={deleteTransaction.isPending}
+                      className="btn btn-ghost btn-icon cct-action-btn"
+                      onClick={() => openEditModal(tx)}
+                      disabled={updateTransaction.isPending || isDeleting}
+                      title="Edit transaction"
+                      aria-label="Edit transaction"
                     >
-                      Delete
+                      ✏️
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-icon cct-action-btn cct-action-delete"
+                      onClick={() => confirmDeleteTransaction(tx.id)}
+                      disabled={deleteTransaction.isPending || isDeleting}
+                      title="Delete transaction"
+                      aria-label="Delete transaction"
+                    >
+                      🗑
                     </button>
                   </td>
                 </tr>
@@ -632,7 +886,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             })}
             {!isLoading && !isError && filteredTransactions.length === 0 && (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={5}>
                   <EmptyState
                     icon="🧾"
                     title="No transactions yet"
@@ -655,7 +909,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         <div className="cct-modal-overlay" onClick={closeModal}>
           <div className="cct-modal cct-modal-wide" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
-              <h3>Add Credit Card Transaction</h3>
+              <h3>{editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}</h3>
               <button className="cct-close-btn" onClick={closeModal}>
                 ✕
               </button>
@@ -686,6 +940,33 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   <label className="label">Payment Due Date</label>
                   <input type="date" className="input" value={formPaymentDue} onChange={(e) => setFormPaymentDue(e.target.value)} />
                 </div>
+                <div className="form-group">
+                  <label className="label">Statement Month</label>
+                  <select
+                    className="input"
+                    value={formStatementMonth}
+                    onChange={(e) => setFormStatementMonth(e.target.value)}
+                    required
+                  >
+                    {MONTHS.map((month, idx) => (
+                      <option key={month} value={idx + 1}>
+                        {month}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label">Statement Year</label>
+                  <input
+                    type="number"
+                    min="2020"
+                    max="2100"
+                    className="input"
+                    value={formStatementYear}
+                    onChange={(e) => setFormStatementYear(e.target.value)}
+                    required
+                  />
+                </div>
                 <div className="form-group cct-span-2">
                   <label className="label">Subject</label>
                   <input
@@ -710,47 +991,23 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     required
                   />
                 </div>
-                <div className="form-group">
-                  <label className="label">
-                    <input
-                      type="checkbox"
-                      checked={formIsInstallment}
-                      onChange={(e) => setFormIsInstallment(e.target.checked)}
-                    />
-                    Installment
-                  </label>
-                </div>
-                {formIsInstallment && (
-                  <>
-                    <div className="form-group">
-                      <label className="label">Installment #</label>
-                      <input
-                        type="number"
-                        min="1"
-                        className="input"
-                        value={formInstallmentNo}
-                        onChange={(e) => setFormInstallmentNo(e.target.value)}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="label">Total Installments</label>
-                      <input
-                        type="number"
-                        min="1"
-                        className="input"
-                        value={formTotalInstallments}
-                        onChange={(e) => setFormTotalInstallments(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
               </div>
               <div className="cct-modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={closeModal}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={createTransaction.isPending}>
-                  {createTransaction.isPending ? "Adding..." : "Add Transaction"}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createTransaction.isPending || updateTransaction.isPending}
+                >
+                  {editingTransactionId
+                    ? updateTransaction.isPending
+                      ? "Saving..."
+                      : "Save Changes"
+                    : createTransaction.isPending
+                      ? "Adding..."
+                      : "Add Transaction"}
                 </button>
               </div>
             </form>

@@ -190,7 +190,7 @@ export function parseUobTransactionAlert(rawBody: string): ParsedAlert {
 
 export function parseOcbcTransactionAlert(rawBody: string): ParsedAlert {
   const match = rawBody.match(
-    /We wish to inform you that\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+was charged at\s+(\d{2}:\d{2})\s+on\s+(\d{2}-[A-Z]{3}-\d{2})\s+to your card\s+\(-(\d{4})\)\s+at\s+(.+?)\./i,
+    /We wish to inform you that\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+was charged at\s+(\d{2}:\d{2})\s+on\s+(\d{2}-[A-Z]{3}-\d{2})\s+to your card\s+\(-(\d{4})\)\s+at\s+(.+?)(?:\.|$)/i,
   );
 
   if (!match) {
@@ -212,11 +212,11 @@ export function parseOcbcTransactionAlert(rawBody: string): ParsedAlert {
 }
 
 export function parseCitiTransactionAlert(rawBody: string): ParsedAlert {
-  const cardLast4 = rawBody.match(/Account number:\s*X{4}-X{4}-X{4}-(\d{4})/i)?.[1];
-  const dateRaw = rawBody.match(/Transaction date:\s*(\d{2}\/\d{2}\/\d{2})/i)?.[1];
-  const timeRaw = rawBody.match(/Transaction time:\s*(\d{2}:\d{2}:\d{2})/i)?.[1];
-  const amountMatch = rawBody.match(/Transaction amount:\s*([A-Z]{3})\s*([0-9,]+\.[0-9]{2})/i);
-  const merchant = rawBody.match(/Transaction details\s*:\s*([^\n\r]+)/i)?.[1]?.trim();
+  const cardLast4 = rawBody.match(/Account\s+Number\s*:\s*X{4}-X{4}-X{4}-(\d{4})/i)?.[1];
+  const dateRaw = rawBody.match(/Transaction\s+date\s*:\s*(\d{2}\/\d{2}\/\d{2})/i)?.[1];
+  const timeRaw = rawBody.match(/Transaction\s+time\s*:\s*(\d{2}:\d{2}:\d{2})/i)?.[1];
+  const amountMatch = rawBody.match(/Transaction\s+amount\s*:\s*([A-Z]{3})\s*([0-9,]+\.[0-9]{2})/i);
+  const merchant = rawBody.match(/Transaction\s+details\s*:\s*([^\n\r]+)/i)?.[1]?.trim();
 
   return {
     bankName: "Citibank",
@@ -244,8 +244,7 @@ export function parseCreditAlert(rawBody: string, rawSubject?: string): ParsedAl
 
   if (
     subject.includes("card transaction alert") &&
-    body.includes("to your card (-") &&
-    body.includes("ocbc")
+    body.includes("to your card (-")
   ) {
     return parseOcbcTransactionAlert(rawBody);
   }

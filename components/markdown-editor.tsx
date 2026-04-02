@@ -13,23 +13,43 @@ type MarkdownEditorProps = {
 };
 
 type ToolbarAction = {
-  label: string;
+  icon: string;
   title: string;
   wrap?: [string, string];
   blockPrefix?: string;
   insert?: string;
 };
 
-const TOOLBAR_ACTIONS: ToolbarAction[] = [
-  { label: "H", title: "Heading", blockPrefix: "# " },
-  { label: "B", title: "Bold", wrap: ["**", "**"] },
-  { label: "I", title: "Italic", wrap: ["*", "*"] },
-  { label: "S", title: "Strike", wrap: ["~~", "~~"] },
-  { label: "•", title: "Bullet list", blockPrefix: "- " },
-  { label: "1.", title: "Numbered list", blockPrefix: "1. " },
-  { label: "|", title: "Quote", blockPrefix: "> " },
-  { label: "</>", title: "Code", wrap: ["`", "`"] },
-  { label: "Link", title: "Link", insert: "[label](https://example.com)" },
+type ToolbarGroup = {
+  label: string;
+  actions: ToolbarAction[];
+};
+
+const TOOLBAR_GROUPS: ToolbarGroup[] = [
+  {
+    label: "Text",
+    actions: [
+      { icon: "H1", title: "Heading", blockPrefix: "# " },
+      { icon: "B", title: "Bold", wrap: ["**", "**"] },
+      { icon: "I", title: "Italic", wrap: ["*", "*"] },
+      { icon: "S", title: "Strike", wrap: ["~~", "~~"] },
+    ],
+  },
+  {
+    label: "Lists",
+    actions: [
+      { icon: "•", title: "Bullet list", blockPrefix: "- " },
+      { icon: "1.", title: "Numbered list", blockPrefix: "1. " },
+      { icon: '"', title: "Quote", blockPrefix: "> " },
+    ],
+  },
+  {
+    label: "Insert",
+    actions: [
+      { icon: "</>", title: "Code", wrap: ["`", "`"] },
+      { icon: "🔗", title: "Link", insert: "[label](https://example.com)" },
+    ],
+  },
 ];
 
 function escapeHtml(value: string) {
@@ -168,36 +188,42 @@ export function MarkdownEditor({
       <span>{label}</span>
       <div className="markdown-editor">
         <div className="markdown-toolbar-row">
-          <div className="markdown-toolbar" role="toolbar" aria-label={`${label} formatting tools`}>
-            {TOOLBAR_ACTIONS.map((action) => (
-              <button
-                key={action.title}
-                className="markdown-tool"
-                type="button"
-                title={action.title}
-                aria-label={action.title}
-                onClick={() => applyAction(action)}
-                disabled={mode === "preview"}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-          <div className="markdown-mode-toggle" role="tablist" aria-label={`${label} view mode`}>
-            <button
-              type="button"
-              className={`markdown-mode-btn ${mode === "edit" ? "is-active" : ""}`}
-              onClick={() => setMode("edit")}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              className={`markdown-mode-btn ${mode === "preview" ? "is-active" : ""}`}
-              onClick={() => setMode("preview")}
-            >
-              Preview
-            </button>
+          <div className="markdown-toolbar-scroll">
+            <div className="markdown-toolbar" role="toolbar" aria-label={`${label} formatting tools`}>
+              {TOOLBAR_GROUPS.map((group) => (
+                <div key={group.label} className="markdown-tool-group" role="group" aria-label={group.label}>
+                  {group.actions.map((action) => (
+                    <button
+                      key={action.title}
+                      className="markdown-tool"
+                      type="button"
+                      title={action.title}
+                      aria-label={action.title}
+                      onClick={() => applyAction(action)}
+                      disabled={mode === "preview"}
+                    >
+                      {action.icon}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              <div className="markdown-mode-toggle" role="tablist" aria-label={`${label} view mode`}>
+                <button
+                  type="button"
+                  className={`markdown-mode-btn ${mode === "edit" ? "is-active" : ""}`}
+                  onClick={() => setMode("edit")}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className={`markdown-mode-btn ${mode === "preview" ? "is-active" : ""}`}
+                  onClick={() => setMode("preview")}
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         {mode === "edit" ? (

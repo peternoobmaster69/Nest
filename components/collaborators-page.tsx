@@ -16,10 +16,10 @@ const DEFAULT_MONEY_PAGES = {
 };
 
 const MONEY_PAGE_CONFIG = [
+  { key: "transactions", label: "Transactions", icon: "📑" },
   { key: "creditCards", label: "Credit Cards", icon: "💳" },
   { key: "creditTransactions", label: "Card Transactions", icon: "🧾" },
   { key: "receivables", label: "Receivables", icon: "↩" },
-  { key: "transactions", label: "Transactions", icon: "📑" },
   { key: "rewards", label: "Rewards", icon: "◎" },
   { key: "investments", label: "Investments", icon: "📈" },
 ];

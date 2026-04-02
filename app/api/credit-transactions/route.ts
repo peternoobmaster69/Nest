@@ -12,9 +12,6 @@ const CreateTransactionSchema = z.object({
   statementYear: z.number().int().min(2020).max(2100),
   amountCents: z.number().int().min(0),
   subject: z.string().min(1),
-  isInstallment: z.boolean().default(false),
-  installmentNo: z.number().int().min(1).optional(),
-  totalInstallments: z.number().int().min(1).optional(),
 });
 
 export async function GET(request: Request) {
@@ -31,8 +28,11 @@ export async function GET(request: Request) {
       where.creditCardId = cardId;
     }
 
-    if (year && month) {
+    if (year) {
       where.statementYear = parseInt(year);
+    }
+
+    if (month) {
       where.statementMonth = parseInt(month);
     }
 
@@ -76,11 +76,10 @@ export async function POST(request: Request) {
       creditCardId,
       transactionDate,
       paymentDueDate,
+      statementMonth,
+      statementYear,
       amountCents,
       subject,
-      isInstallment,
-      installmentNo,
-      totalInstallments,
     } = parsed.data;
 
     // Verify credit card exists
@@ -106,13 +105,13 @@ export async function POST(request: Request) {
         creditCardId,
         transactionDate: parsedTransactionDate,
         paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : cycle.paymentDueDate,
-        statementMonth: cycle.statementMonth,
-        statementYear: cycle.statementYear,
+        statementMonth,
+        statementYear,
         amountCents,
         subject,
-        isInstallment,
-        installmentNo,
-        totalInstallments,
+        isInstallment: false,
+        installmentNo: null,
+        totalInstallments: null,
       },
       include: { creditCard: true },
     });

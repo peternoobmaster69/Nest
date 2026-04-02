@@ -1,5 +1,6 @@
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { getServerSession } from "next-auth";
 
 export class ApiAuthError extends Error {
@@ -29,6 +30,16 @@ export async function requireSessionUserId() {
 
 export async function requireWorkspaceAccess(requestedWorkspaceId?: string | null) {
   const userId = await requireSessionUserId();
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true, activeWorkspaceId: true },
+  });
+
+  if (!user) {
+    throw new ApiAuthError(401, "Unauthorized");
+  }
+
+  await ensureUserWithDefaultWorkspace(user);
 
   if (requestedWorkspaceId) {
     const member = await prisma.workspaceMember.findUnique({
@@ -47,12 +58,6 @@ export async function requireWorkspaceAccess(requestedWorkspaceId?: string | nul
 
     return { userId, workspaceId: requestedWorkspaceId };
   }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { activeWorkspaceId: true },
-  });
-
   if (user?.activeWorkspaceId) {
     const activeMembership = await prisma.workspaceMember.findUnique({
       where: {

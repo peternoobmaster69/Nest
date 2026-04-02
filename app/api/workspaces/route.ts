@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { ApiAuthError, requireSessionUserId } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -10,6 +11,13 @@ const CreateWorkspaceSchema = z.object({
 export async function GET() {
   try {
     const userId = await requireSessionUserId();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, activeWorkspaceId: true },
+    });
+    if (user) {
+      await ensureUserWithDefaultWorkspace(user);
+    }
     const memberships = await prisma.workspaceMember.findMany({
       where: { userId },
       include: {

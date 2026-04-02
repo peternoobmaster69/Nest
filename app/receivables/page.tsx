@@ -7,7 +7,7 @@ export default async function ReceivablesRoute() {
   const userName = session.user?.name || session.user?.email || "User";
 
   return (
-    <PageFrame title="Receivables" current="/receivables" userName={userName}>
+    <PageFrame title="Receivables" current="/receivables" userName={userName} userImage={session.user?.image || null}>
       <ReceivablesPage />
     </PageFrame>
   );

@@ -142,6 +142,7 @@ export default async function Home() {
     <DashboardShell
       userName={session.user.name || session.user.email || "Nest User"}
       userEmail={session.user.email || ""}
+      userImage={session.user.image || null}
     />
   );
 }

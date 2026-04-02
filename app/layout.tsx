@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Providers } from "@/app/providers";
+import { startGmailSyncScheduler } from "@/lib/gmail-sync-scheduler";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,6 +33,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  startGmailSyncScheduler();
+
   return (
     <html lang="en">
       <head>

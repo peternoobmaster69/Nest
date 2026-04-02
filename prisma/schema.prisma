@@ -667,7 +667,7 @@ model CardAlertStaging {
   parseStatus         String                 @default("PENDING")
   failureReason       String?
   creditCardId        String?
-  creditTransactionId String?                @unique
+  creditTransactionId String?
   createdAt           DateTime               @default(now())
   processedAt         DateTime?
   workspace           Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -676,6 +676,7 @@ model CardAlertStaging {
 
   @@index([workspaceId, parseStatus])
   @@index([workspaceId, createdAt])
+  @@index([creditTransactionId])
 }
 
 model GmailIntegration {

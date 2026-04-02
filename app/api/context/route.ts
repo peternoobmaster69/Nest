@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { authOptions } from "@/lib/auth";
 import { ApiAuthError, requireSessionUserId, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
@@ -76,6 +77,12 @@ export async function GET() {
     }
 
     const userId = userLookup.id;
+    await ensureUserWithDefaultWorkspace({
+      id: userId,
+      email,
+      activeWorkspaceId: userLookup.activeWorkspaceId,
+      name: session?.user?.name,
+    });
 
     if (email) {
       const pending = await prisma.workspaceInvite.findMany({

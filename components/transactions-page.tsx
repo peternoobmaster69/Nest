@@ -85,6 +85,8 @@ export function TransactionsPage() {
   const [editNotes, setEditNotes] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("DEDUCT");
+  const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
+  const [editBankBalance, setEditBankBalance] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -254,6 +256,20 @@ export function TransactionsPage() {
     },
   });
 
+  const updateBankBalance = useMutation({
+    mutationFn: ({ id, startingCents }: { id: string; startingCents: number }) =>
+      fetchJson(`/api/accounts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startingCents }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] });
+      setEditingBankAccount(null);
+      setEditBankBalance("");
+    },
+  });
+
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     const selectedBudget = budgets.data?.find((b) => b.id === budgetId);
@@ -337,8 +353,27 @@ export function TransactionsPage() {
     deleteTx.mutate(transactionId);
   };
 
+  const openEditBankBalance = (bank: BankAccount) => {
+    setEditingBankAccount(bank);
+    setEditBankBalance((bank.currentBalanceCents / 100).toFixed(2));
+  };
+
+  const closeEditBankBalance = () => {
+    setEditingBankAccount(null);
+    setEditBankBalance("");
+  };
+
+  const onSubmitBankBalance = (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingBankAccount || !editBankBalance) return;
+    updateBankBalance.mutate({
+      id: editingBankAccount.id,
+      startingCents: Math.round(Number(editBankBalance) * 100),
+    });
+  };
+
   return (
-    <div style={{ display: "grid", gap: "14px" }}>
+    <div className="txn-page" style={{ display: "grid", gap: "14px" }}>
       <section className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "10px" }}>
           <div style={{ fontSize: "13px", fontWeight: 600 }}>Bank Accounts</div>
@@ -359,7 +394,7 @@ export function TransactionsPage() {
           {!bankAccounts.isLoading && (
             <>
               <div
-                className="budget-mini budget-mini-compact"
+                className="budget-mini budget-mini-compact tx-bank-card"
                 onClick={() => setSelectedBankId("")}
                 style={{
                   borderColor: !selectedBankId ? "var(--brand-500)" : undefined,
@@ -370,40 +405,54 @@ export function TransactionsPage() {
                 <div className={`bm-amount ${getAmountToneClass(totalBankBalanceCents)}`}>{formatCents(totalBankBalanceCents)}</div>
               </div>
               {(bankAccounts.data ?? []).map((bank) => (
-            <div
-              key={bank.id}
-              className="budget-mini budget-mini-compact"
-              onClick={() => setSelectedBankId(bank.id)}
-              style={{
-                borderColor: selectedBankId === bank.id ? "var(--brand-500)" : undefined,
-                boxShadow: selectedBankId === bank.id ? "var(--shadow-sm)" : undefined,
-              }}
-            >
-              <div className="bm-name" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                {(() => {
-                  const bankMeta = getSingaporeBankByName(bank.bankName || bank.name);
-                  const logo = getBankLogoUrl(bankMeta);
-                  return logo && !failedBankLogos[bank.id] ? (
-                    <img
-                      src={logo}
-                      alt={bankMeta?.name || "Bank"}
-                      className="bank-logo-img"
-                      loading="lazy"
-                      onError={() => setFailedBankLogos((prev) => ({ ...prev, [bank.id]: true }))}
-                    />
-                  ) : bankMeta ? (
-                    <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
-                      {bankMeta.short}
-                    </span>
-                  ) : (
-                    <span className="bank-icon bank-icon-default">BNK</span>
-                  );
-                })()}
-                <span>{bank.name}</span>
-              </div>
-              <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
-            </div>
-          ))}
+                <div
+                  key={bank.id}
+                  className="budget-mini budget-mini-compact tx-bank-card"
+                  onClick={() => setSelectedBankId(bank.id)}
+                  style={{
+                    borderColor: selectedBankId === bank.id ? "var(--brand-500)" : undefined,
+                    boxShadow: selectedBankId === bank.id ? "var(--shadow-sm)" : undefined,
+                  }}
+                >
+                  <div className="bm-top" style={{ marginBottom: "4px" }}>
+                    <div className="bm-name" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 0 }}>
+                      {(() => {
+                        const bankMeta = getSingaporeBankByName(bank.bankName || bank.name);
+                        const logo = getBankLogoUrl(bankMeta);
+                        return logo && !failedBankLogos[bank.id] ? (
+                          <img
+                            src={logo}
+                            alt={bankMeta?.name || "Bank"}
+                            className="bank-logo-img"
+                            loading="lazy"
+                            onError={() => setFailedBankLogos((prev) => ({ ...prev, [bank.id]: true }))}
+                          />
+                        ) : bankMeta ? (
+                          <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
+                            {bankMeta.short}
+                          </span>
+                        ) : (
+                          <span className="bank-icon bank-icon-default">BNK</span>
+                        );
+                      })()}
+                      <span>{bank.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="bm-edit-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openEditBankBalance(bank);
+                      }}
+                      aria-label={`Edit ${bank.name} balance`}
+                      title="Edit balance"
+                    >
+                      ✎
+                    </button>
+                  </div>
+                  <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
+                </div>
+              ))}
             </>
           )}
         </div>
@@ -664,6 +713,41 @@ export function TransactionsPage() {
                 </button>
                 <button className="btn btn-primary" type="submit" disabled={updateTx.isPending}>
                   {updateTx.isPending ? <LoadingDots /> : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingBankAccount && (
+        <div className="profile-modal-overlay txn-contained-modal-overlay" onClick={closeEditBankBalance}>
+          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>Edit Bank Balance</h3>
+              <button className="profile-modal-close" onClick={closeEditBankBalance}>✕</button>
+            </div>
+            <form className="profile-modal-body txn-modal-body txn-modal-form txn-bank-balance-form" onSubmit={onSubmitBankBalance}>
+              <div className="form-group">
+                <label className="label">Bank Account</label>
+                <input className="input" value={editingBankAccount.name} disabled />
+              </div>
+              <div className="form-group">
+                <label className="label">Balance ({baseCurrency})</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input"
+                  value={editBankBalance}
+                  onChange={(event) => setEditBankBalance(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="profile-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeEditBankBalance}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={updateBankBalance.isPending}>
+                  {updateBankBalance.isPending ? "Saving..." : "Save Balance"}
                 </button>
               </div>
             </form>

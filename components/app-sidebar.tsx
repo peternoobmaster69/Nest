@@ -28,6 +28,7 @@ function getInitials(name: string) {
 export function AppSidebar({
   userName,
   userEmail,
+  userImage,
   onDisplayNameUpdated,
   currentPath,
   badgeCounts,
@@ -38,6 +39,7 @@ export function AppSidebar({
 }: {
   userName: string;
   userEmail?: string;
+  userImage?: string | null;
   onDisplayNameUpdated?: (name: string) => void;
   currentPath: string;
   badgeCounts?: {
@@ -106,6 +108,7 @@ export function AppSidebar({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
+  const avatarAlt = displayName || userName || userEmail || "User";
 
   // Fetch all workspaces for switching
   const workspacesQuery = useQuery({
@@ -278,6 +281,11 @@ export function AppSidebar({
         </Link>
 
         <div className="sb-sec">Money</div>
+        {sidebarMoneyPages.transactions !== false && (
+          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick}>
+            <span className="sb-ic">📑</span>Transactions
+          </Link>
+        )}
         {sidebarMoneyPages.creditCards !== false && (
           <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick}>
             <span className="sb-ic">💳</span>Credit Cards
@@ -292,11 +300,6 @@ export function AppSidebar({
           <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
             <span className="sb-ic">↩</span>Receivables
             {badgeCounts?.receivables ? <span className="sb-badge">{badgeCounts.receivables}</span> : null}
-          </Link>
-        )}
-        {sidebarMoneyPages.transactions !== false && (
-          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick}>
-            <span className="sb-ic">📑</span>Transactions
           </Link>
         )}
         {sidebarMoneyPages.rewards !== false && (
@@ -330,7 +333,11 @@ export function AppSidebar({
       <div className="sb-bot">
         <div className="sb-user-wrap" ref={profileMenuRef}>
           <button className="sb-user" onClick={() => setProfileMenuOpen((open) => !open)}>
-            <div className="avatar avatar-md avatar-green">{getInitials(userName)}</div>
+            {userImage ? (
+              <Image src={userImage} alt={avatarAlt} width={36} height={36} className="avatar avatar-md avatar-image" />
+            ) : (
+              <div className="avatar avatar-md avatar-green">{getInitials(userName)}</div>
+            )}
             <div className="sb-user-meta">
               <span className="sb-user-name">{displayName}</span>
               <span className="sb-user-sub">
@@ -407,7 +414,11 @@ export function AppSidebar({
               </button>
             </div>
             <div className="profile-modal-body">
-              <div className="avatar avatar-lg avatar-green">{getInitials(displayName)}</div>
+              {userImage ? (
+                <Image src={userImage} alt={avatarAlt} width={44} height={44} className="avatar avatar-lg avatar-image" />
+              ) : (
+                <div className="avatar avatar-lg avatar-green">{getInitials(displayName)}</div>
+              )}
               <div className="profile-field">
                 <span>Name</span>
                 <input

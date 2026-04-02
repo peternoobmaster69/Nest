@@ -225,9 +225,11 @@ function getTxEmoji(subject: string) {
 export function DashboardShell({
   userName,
   userEmail,
+  userImage,
 }: {
   userName: string;
   userEmail: string;
+  userImage?: string | null;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -255,6 +257,8 @@ export function DashboardShell({
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [editingBankAccount, setEditingBankAccount] = useState<BankAccountSummary | null>(null);
+  const [editBankBalance, setEditBankBalance] = useState("");
 
   const contextQuery = useQuery({
     queryKey: ["app-context"],
@@ -306,6 +310,25 @@ export function DashboardShell({
   });
   const firstBankAccountId = bankAccountsQuery.data?.[0]?.id;
 
+  const updateBankBalance = useMutation({
+    mutationFn: ({ id, startingCents }: { id: string; startingCents: number }) =>
+      fetchJson(`/api/accounts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startingCents }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary", workspaceId] });
+      setEditingBankAccount(null);
+      setEditBankBalance("");
+      pushToast("success", "Bank balance updated.");
+    },
+    onError: (error) => {
+      pushToast("error", error instanceof Error ? error.message : "Failed to update bank balance.");
+    },
+  });
+
   const refreshAll = useMemo(
     () => () =>
       Promise.all([
@@ -325,6 +348,25 @@ export function DashboardShell({
     const id = `${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev, { id, kind, message }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2600);
+  };
+
+  const openEditBankBalance = (bank: BankAccountSummary) => {
+    setEditingBankAccount(bank);
+    setEditBankBalance((bank.currentBalanceCents / 100).toFixed(2));
+  };
+
+  const closeEditBankBalance = () => {
+    setEditingBankAccount(null);
+    setEditBankBalance("");
+  };
+
+  const onSubmitBankBalance = (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingBankAccount || !editBankBalance) return;
+    updateBankBalance.mutate({
+      id: editingBankAccount.id,
+      startingCents: Math.round(Number(editBankBalance) * 100),
+    });
   };
 
   const createBudget = useMutation({
@@ -785,6 +827,7 @@ export function DashboardShell({
       <AppSidebar
         userName={displayName}
         userEmail={userEmail}
+        userImage={userImage}
         onDisplayNameUpdated={setDisplayName}
         currentPath="/"
         badgeCounts={{
@@ -844,27 +887,41 @@ export function DashboardShell({
                     boxShadow: selectedBankFilterId === bank.id ? "var(--shadow-sm)" : undefined,
                   }}
                 >
-                  <div className="bm-name" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    {(() => {
-                      const bankMeta = getSingaporeBankByName(bank.bankName || bank.name);
-                      const logo = getBankLogoUrl(bankMeta);
-                      return logo && !failedBankLogos[bank.id] ? (
-                        <img
-                          src={logo}
-                          alt={bankMeta?.name || "Bank"}
-                          className="bank-logo-img"
-                          loading="lazy"
-                          onError={() => setFailedBankLogos((prev) => ({ ...prev, [bank.id]: true }))}
-                        />
-                      ) : bankMeta ? (
-                        <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
-                          {bankMeta.short}
-                        </span>
-                      ) : (
-                        <span className="bank-icon bank-icon-default">BNK</span>
-                      );
-                    })()}
-                    <span>{bank.name}</span>
+                  <div className="bm-top" style={{ marginBottom: "4px" }}>
+                    <div className="bm-name" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 0 }}>
+                      {(() => {
+                        const bankMeta = getSingaporeBankByName(bank.bankName || bank.name);
+                        const logo = getBankLogoUrl(bankMeta);
+                        return logo && !failedBankLogos[bank.id] ? (
+                          <img
+                            src={logo}
+                            alt={bankMeta?.name || "Bank"}
+                            className="bank-logo-img"
+                            loading="lazy"
+                            onError={() => setFailedBankLogos((prev) => ({ ...prev, [bank.id]: true }))}
+                          />
+                        ) : bankMeta ? (
+                          <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
+                            {bankMeta.short}
+                          </span>
+                        ) : (
+                          <span className="bank-icon bank-icon-default">BNK</span>
+                        );
+                      })()}
+                      <span>{bank.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="bm-edit-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openEditBankBalance(bank);
+                      }}
+                      aria-label={`Edit ${bank.name} balance`}
+                      title="Edit balance"
+                    >
+                      ✎
+                    </button>
                   </div>
                   <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
                 </div>
@@ -1374,6 +1431,41 @@ export function DashboardShell({
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {editingBankAccount && (
+          <div className="profile-modal-overlay txn-contained-modal-overlay" onClick={closeEditBankBalance}>
+            <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="profile-modal-head">
+                <h3>Edit Bank Balance</h3>
+                <button className="profile-modal-close" onClick={closeEditBankBalance}>✕</button>
+              </div>
+              <form className="profile-modal-body txn-bank-balance-form" onSubmit={onSubmitBankBalance}>
+                <div className="profile-field">
+                  <span>Bank Account</span>
+                  <strong>{editingBankAccount.name}</strong>
+                </div>
+                <div className="form-group">
+                  <label className="label">Balance ({baseCurrency})</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="input"
+                    value={editBankBalance}
+                    onChange={(event) => setEditBankBalance(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="profile-actions">
+                  <button type="button" className="btn btn-ghost" onClick={closeEditBankBalance}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={updateBankBalance.isPending}>
+                    {updateBankBalance.isPending ? "Saving..." : "Save Balance"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
