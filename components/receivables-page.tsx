@@ -541,19 +541,28 @@ export function ReceivablesPage() {
                     {closeReceivable.isPending ? "Closing..." : "Close"}
                   </button>
                 )}
-                <button className="btn btn-ghost btn-xs" onClick={() => openEditModal(r)}>
-                  Edit
+                <button
+                  className="btn btn-ghost btn-icon"
+                  style={{ width: "32px", height: "32px" }}
+                  onClick={() => openEditModal(r)}
+                  title="Edit"
+                  aria-label="Edit receivable"
+                >
+                  ✎
                 </button>
                 <button
-                  className="btn btn-danger btn-xs"
+                  className="btn btn-ghost btn-icon"
+                  style={{ width: "32px", height: "32px", color: "var(--danger)" }}
                   onClick={() => {
                     if (confirmDestructiveAction("Delete this receivable?")) {
                       deleteReceivable.mutate(r.id);
                     }
                   }}
                   disabled={deleteReceivable.isPending}
+                  title="Delete"
+                  aria-label="Delete receivable"
                 >
-                  Delete
+                  🗑
                 </button>
               </span>
             </div>

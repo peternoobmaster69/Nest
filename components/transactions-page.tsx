@@ -74,7 +74,7 @@ export function TransactionsPage() {
   const [notes, setNotes] = useState("");
   const [amount, setAmount] = useState("");
   const [budgetId, setBudgetId] = useState("");
-  const [operation, setOperation] = useState<"DEDUCT" | "ADD">("DEDUCT");
+  const [operation, setOperation] = useState<"DEDUCT" | "ADD">("ADD");
   const [selectedBankId, setSelectedBankId] = useState("");
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [activeBudgetFilterId, setActiveBudgetFilterId] = useState<string>("ALL");
@@ -84,7 +84,7 @@ export function TransactionsPage() {
   const [editSubject, setEditSubject] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editAmount, setEditAmount] = useState("");
-  const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("DEDUCT");
+  const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("ADD");
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
   const [editBankBalance, setEditBankBalance] = useState("");
 
@@ -269,6 +269,16 @@ export function TransactionsPage() {
       setEditBankBalance("");
     },
   });
+
+  const handleAmountChange = (value: string) => {
+    // Detect minus sign to switch to DEDUCT mode
+    if (value.startsWith("-")) {
+      setOperation("DEDUCT");
+      setAmount(value.slice(1));
+    } else {
+      setAmount(value);
+    }
+  };
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -529,12 +539,25 @@ export function TransactionsPage() {
                   <span style={{ color: "var(--text-tertiary)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.notes || tx.details}</span>
                 ) : null}
               </div>
-              <div className="crud-actions">
-                <button className="btn btn-ghost btn-xs" onClick={() => beginEdit(tx)}>
-                  Edit
+              <div className="crud-actions" style={{ display: "flex", gap: "4px" }}>
+                <button
+                  className="btn btn-ghost btn-icon"
+                  style={{ width: "32px", height: "32px" }}
+                  onClick={() => beginEdit(tx)}
+                  title="Edit"
+                  aria-label="Edit transaction"
+                >
+                  ✎
                 </button>
-                <button className="btn btn-ghost btn-xs" onClick={() => confirmDeleteTx(tx.id)} disabled={deleteTx.isPending}>
-                  Delete
+                <button
+                  className="btn btn-ghost btn-icon"
+                  style={{ width: "32px", height: "32px", color: "var(--danger)" }}
+                  onClick={() => confirmDeleteTx(tx.id)}
+                  disabled={deleteTx.isPending}
+                  title="Delete"
+                  aria-label="Delete transaction"
+                >
+                  🗑
                 </button>
               </div>
             </div>
@@ -604,7 +627,7 @@ export function TransactionsPage() {
                     step="0.01"
                     placeholder="Amount"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => handleAmountChange(e.target.value)}
                   />
                 </label>
                 <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>

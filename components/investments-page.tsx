@@ -875,8 +875,15 @@ export function InvestmentsPage() {
                           <span>Invested: {formatCents(entry.investedCents)}</span>
                           <span>Current: {formatCents(entry.currentValueCents)}</span>
                         </div>
-                        <button className="btn btn-ghost btn-xs" type="button" onClick={() => openEditEntryModal(entry)}>
-                          Edit
+                        <button
+                          className="btn btn-ghost btn-icon"
+                          style={{ width: "32px", height: "32px" }}
+                          type="button"
+                          onClick={() => openEditEntryModal(entry)}
+                          title="Edit"
+                          aria-label="Edit entry"
+                        >
+                          ✎
                         </button>
                       </div>
                     ))
