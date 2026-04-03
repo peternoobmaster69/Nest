@@ -219,7 +219,7 @@ export function TransactionsPage() {
       setNotes("");
       setAmount("");
       setBudgetId("");
-      setOperation("DEDUCT");
+      setOperation("ADD");
       setIsCreateModalOpen(false);
     },
   });
@@ -353,7 +353,7 @@ export function TransactionsPage() {
     setSubject("");
     setNotes("");
     setAmount("");
-    setOperation("DEDUCT");
+    setOperation("ADD");
     setBudgetId(activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "");
     setIsCreateModalOpen(true);
   };
@@ -539,7 +539,7 @@ export function TransactionsPage() {
                   <span style={{ color: "var(--text-tertiary)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.notes || tx.details}</span>
                 ) : null}
               </div>
-              <div className="crud-actions" style={{ display: "flex", gap: "4px" }}>
+              <div className="crud-actions" style={{ display: "flex", flexDirection: "column", gap: "4px", marginLeft: "auto" }}>
                 <button
                   className="btn btn-ghost btn-icon"
                   style={{ width: "32px", height: "32px" }}

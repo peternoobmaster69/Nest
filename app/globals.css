@@ -1126,6 +1126,27 @@ body {
   color: var(--brand-500);
 }
 
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--danger) 90%, black 10%);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-danger.btn-icon {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-danger.btn-icon:hover {
+  background: color-mix(in srgb, var(--danger) 90%, black 10%);
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);

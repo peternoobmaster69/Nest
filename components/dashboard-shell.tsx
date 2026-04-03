@@ -621,24 +621,6 @@ export function DashboardShell({
     onSettled: refreshAll,
   });
 
-  const deleteTransaction = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/transactions/${id}`, { method: "DELETE" }),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: transactionsKey });
-      const previousTransactions = queryClient.getQueryData<Transaction[]>(transactionsKey);
-      queryClient.setQueryData<Transaction[]>(transactionsKey, (old) => (old ?? []).filter((t) => t.id !== id));
-      return { previousTransactions };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousTransactions) {
-        queryClient.setQueryData(transactionsKey, context.previousTransactions);
-      }
-      pushToast("error", "Transaction delete failed.");
-    },
-    onSuccess: () => pushToast("success", "Transaction deleted."),
-    onSettled: refreshAll,
-  });
-
   const onCreateBudget = (event: FormEvent) => {
     event.preventDefault();
     if (!workspaceId || !budgetAccountId || !defaultUserId || !budgetName.trim()) return;
@@ -1291,36 +1273,9 @@ export function DashboardShell({
                         {(tx.budgetId && budgetNameById.get(tx.budgetId)) || "Unassigned"}
                       </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div className={`tx-amount ${getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}`}>
-                        {tx.direction === "DEBIT" ? "−" : "+"}
-                        {formatCents(tx.amountCents)}
-                      </div>
-                      <div style={{ display: "flex", gap: "4px" }}>
-                        <button
-                          className="btn btn-ghost btn-icon"
-                          style={{ width: "32px", height: "32px" }}
-                          onClick={() => router.push(`/transactions?edit=${tx.id}`)}
-                          title="Edit"
-                          aria-label="Edit transaction"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-icon"
-                          style={{ width: "32px", height: "32px", color: "var(--danger)" }}
-                          onClick={() => {
-                            if (confirmDestructiveAction("Delete this transaction?")) {
-                              deleteTransaction.mutate(tx.id);
-                            }
-                          }}
-                          disabled={deleteTransaction.isPending}
-                          title="Delete"
-                          aria-label="Delete transaction"
-                        >
-                          🗑
-                        </button>
-                      </div>
+                    <div className={`tx-amount ${getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}`}>
+                      {tx.direction === "DEBIT" ? "−" : "+"}
+                      {formatCents(tx.amountCents)}
                     </div>
                   </div>
                 ))}
