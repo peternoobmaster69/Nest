@@ -692,39 +692,38 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         </div>
       </div>
 
-      <div className="cct-due-panel">
-        <div className="cct-due-panel-meta">
-          <span className="cct-summary-label">Payment Due</span>
-          {earliestPaymentDue?.paymentDueDate ? (
-            <span className={`cct-due-badge ${earliestDueIsOverdue ? "overdue" : earliestDueIsUrgent ? "urgent" : ""}`}>
-              {earliestDueIsOverdue ? "⚠️ " : earliestDueIsUrgent ? "⏰ " : ""}
-              {formatDate(earliestPaymentDue.paymentDueDate)}
-            </span>
-          ) : (
-            <span className="cct-summary-meta">—</span>
-          )}
+      {selectedCardId !== "all" && selectedMonth >= 0 && (
+        <div className="cct-due-panel">
+          <div className="cct-due-panel-meta">
+            <span className="cct-summary-label">Payment Due</span>
+            {earliestPaymentDue?.paymentDueDate ? (
+              <span className={`cct-due-badge ${earliestDueIsOverdue ? "overdue" : earliestDueIsUrgent ? "urgent" : ""}`}>
+                {earliestDueIsOverdue ? "⚠️ " : earliestDueIsUrgent ? "⏰ " : ""}
+                {formatDate(earliestPaymentDue.paymentDueDate)}
+              </span>
+            ) : (
+              <span className="cct-summary-meta">—</span>
+            )}
+          </div>
+          <div className="cct-due-panel-controls">
+            <input
+              type="date"
+              className="input cct-due-input"
+              value={sharedPaymentDueDate}
+              onChange={(e) => setSharedPaymentDueDate(e.target.value)}
+              disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
+            />
+            <button
+              type="button"
+              className="btn btn-primary btn-xs cct-due-save-btn"
+              onClick={saveSharedPaymentDue}
+              disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
+            >
+              {updateSharedPaymentDue.isPending ? "Saving..." : "Save Due Date"}
+            </button>
+          </div>
         </div>
-        <div className="cct-due-panel-controls">
-          <input
-            type="date"
-            className="input cct-due-input"
-            value={sharedPaymentDueDate}
-            onChange={(e) => setSharedPaymentDueDate(e.target.value)}
-            disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
-          />
-          <button
-            type="button"
-            className="btn btn-primary btn-xs cct-due-save-btn"
-            onClick={saveSharedPaymentDue}
-            disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
-          >
-            {updateSharedPaymentDue.isPending ? "Saving..." : "Save Due Date"}
-          </button>
-        </div>
-      </div>
-      {selectedMonth < 0 ? (
-        <div className="cct-inline-note">Select a statement month to update the shared payment due date.</div>
-      ) : null}
+      )}
       {paymentDueMessage ? (
         <div className="cct-inline-note">{paymentDueMessage}</div>
       ) : null}
