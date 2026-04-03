@@ -526,7 +526,7 @@ export function TransactionsPage() {
                 </span>
                 <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(tx.date).toLocaleString()}</span>
                 {tx.notes || tx.details ? (
-                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px", whiteSpace: "pre-wrap" }}>{tx.notes || tx.details}</span>
+                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.notes || tx.details}</span>
                 ) : null}
               </div>
               <div className="crud-actions">

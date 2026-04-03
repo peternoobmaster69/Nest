@@ -1274,7 +1274,7 @@ export function DashboardShell({
                 {filteredTransactions.slice(0, 5).map((tx) => (
                   <div key={tx.id} className="tx-item">
                     <div className="tx-icon">{getTxEmoji(tx.subject)}</div>
-                    <div className="tx-meta">
+                    <div className="tx-meta" style={{ flex: 1, minWidth: 0 }}>
                       <div className="tx-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                         {selectedBankFilterId === "ALL" && tx.budgetId && budgetById.get(tx.budgetId) ? (
                           <span aria-hidden="true">
@@ -1291,10 +1291,35 @@ export function DashboardShell({
                         {(tx.budgetId && budgetNameById.get(tx.budgetId)) || "Unassigned"}
                       </div>
                     </div>
-                    <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <div className={`tx-amount ${getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}`}>
                         {tx.direction === "DEBIT" ? "−" : "+"}
                         {formatCents(tx.amountCents)}
+                      </div>
+                      <div style={{ display: "flex", gap: "4px" }}>
+                        <button
+                          className="btn btn-ghost btn-icon"
+                          style={{ width: "32px", height: "32px" }}
+                          onClick={() => router.push(`/transactions?edit=${tx.id}`)}
+                          title="Edit"
+                          aria-label="Edit transaction"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-icon"
+                          style={{ width: "32px", height: "32px", color: "var(--danger)" }}
+                          onClick={() => {
+                            if (confirmDestructiveAction("Delete this transaction?")) {
+                              deleteTransaction.mutate(tx.id);
+                            }
+                          }}
+                          disabled={deleteTransaction.isPending}
+                          title="Delete"
+                          aria-label="Delete transaction"
+                        >
+                          🗑
+                        </button>
                       </div>
                     </div>
                   </div>

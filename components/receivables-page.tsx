@@ -518,7 +518,7 @@ export function ReceivablesPage() {
                   {r.account ? ` · Deduct from: ${r.account.workspace.name} / ${r.account.name}` : ""}
                 </span>
                 {r.notes ? (
-                  <span style={{ color: "var(--text-secondary)", fontSize: "11px", whiteSpace: "pre-wrap" }}>
+                  <span style={{ color: "var(--text-secondary)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {r.notes}
                   </span>
                 ) : null}
