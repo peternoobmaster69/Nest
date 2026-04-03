@@ -10,7 +10,7 @@ const CreateTransactionSchema = z.object({
   paymentDueDate: z.string().datetime().optional(),
   statementMonth: z.number().int().min(1).max(12),
   statementYear: z.number().int().min(2020).max(2100),
-  amountCents: z.number().int().min(0),
+  amountCents: z.number().int(),
   subject: z.string().min(1),
 });
 
