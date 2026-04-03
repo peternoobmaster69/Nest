@@ -665,7 +665,7 @@ export function TransactionsPage() {
                   />
                 </div>
               </div>
-              <div className="profile-actions txn-modal-actions">
+              <div className="txn-modal-actions">
                 <button className="btn btn-ghost" type="button" onClick={() => setIsCreateModalOpen(false)}>
                   Cancel
                 </button>

@@ -594,6 +594,7 @@ body {
 
 .txn-modal-actions .btn {
   min-width: 100px;
+  justify-content: center;
 }
 
 .txn-contained-modal-overlay {
@@ -916,6 +917,7 @@ body {
 
   .txn-modal-actions .btn {
     flex: 1;
+    justify-content: center;
   }
 }
 
