@@ -2,7 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
@@ -906,7 +908,7 @@ export function InvestmentsPage() {
         />
       ) : null}
 
-      {accountModalOpen ? (
+      {accountModalOpen && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onClick={closeAccountModal}>
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
@@ -966,10 +968,11 @@ export function InvestmentsPage() {
               {accountError ? <div className="profile-error">{accountError}</div> : null}
             </form>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body
+      )}
 
-      {entryModalOpen ? (
+      {entryModalOpen && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onClick={closeEntryModal}>
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
@@ -995,16 +998,16 @@ export function InvestmentsPage() {
               {entryModalMode === "create" ? (
                 <div className="profile-field">
                   <span>New Funds Added</span>
-                  <input className="input" type="number" step="0.01" value={newFunds} onChange={(e) => setNewFunds(e.target.value)} />
+                  <NumericCalculatorInput step="0.01" value={newFunds} onValueChange={setNewFunds} />
                 </div>
               ) : null}
               <div className="profile-field">
                 <span>Total Invested Amount</span>
-                <input className="input" type="number" step="0.01" value={entryInvested} onChange={(e) => setEntryInvested(e.target.value)} required />
+                <NumericCalculatorInput step="0.01" value={entryInvested} onValueChange={setEntryInvested} required />
               </div>
               <div className="profile-field">
                 <span>Current Value</span>
-                <input className="input" type="number" step="0.01" value={entryCurrentValue} onChange={(e) => setEntryCurrentValue(e.target.value)} required />
+                <NumericCalculatorInput step="0.01" value={entryCurrentValue} onValueChange={setEntryCurrentValue} required />
               </div>
               <div className="profile-actions inv-modal-actions">
                 {entryModalMode === "edit" && editingEntryId ? (
@@ -1027,8 +1030,9 @@ export function InvestmentsPage() {
               {entryError ? <div className="profile-error">{entryError}</div> : null}
             </form>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

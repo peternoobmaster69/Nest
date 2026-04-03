@@ -13,6 +13,7 @@ const UpdateTransactionSchema = z.object({
     .optional(),
   details: z.string().max(500).nullable().optional(),
   notes: z.string().nullable().optional(),
+  date: z.string().datetime().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

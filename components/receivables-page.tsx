@@ -3,7 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
@@ -103,6 +105,7 @@ export function ReceivablesPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [hideClosed, setHideClosed] = useState(true);
   const [closeError, setCloseError] = useState<string | null>(null);
+  const [closingReceivableId, setClosingReceivableId] = useState<string | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -248,11 +251,13 @@ export function ReceivablesPage() {
       }),
     onSuccess: () => {
       setCloseError(null);
+      setClosingReceivableId(null);
       queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
     onError: (error) => {
+      setClosingReceivableId(null);
       setCloseError((error as Error)?.message || "Failed to close receivable");
     },
   });
@@ -496,7 +501,9 @@ export function ReceivablesPage() {
             />
           )}
 
-          {!isLoading && !isError && monthFilteredReceivables.map((r) => (
+          {!isLoading && !isError && monthFilteredReceivables.map((r) => {
+            const isClosing = closingReceivableId === r.id;
+            return (
             <div key={r.id} className="crud-row">
               <span style={{ display: "grid", gap: "4px", minWidth: 0 }}>
                 <span
@@ -530,15 +537,18 @@ export function ReceivablesPage() {
                 {r.status !== "PAID" && (
                   <button
                     className="btn btn-primary btn-xs"
-                    onClick={() => closeReceivable.mutate({ id: r.id })}
-                    disabled={closeReceivable.isPending || !receivableDefaultAccountId || !receivableDefaultBudgetId}
+                    onClick={() => {
+                      setClosingReceivableId(r.id);
+                      closeReceivable.mutate({ id: r.id });
+                    }}
+                    disabled={Boolean(closingReceivableId) || !receivableDefaultAccountId || !receivableDefaultBudgetId}
                     title={
                       receivableDefaultAccountId && receivableDefaultBudgetId
                         ? "Close receivable"
                         : "Configure default receivable account and subaccount in Settings"
                     }
                   >
-                    {closeReceivable.isPending ? "Closing..." : "Close"}
+                    {isClosing ? "Closing..." : "Close"}
                   </button>
                 )}
                 <button
@@ -566,7 +576,7 @@ export function ReceivablesPage() {
                 </button>
               </span>
             </div>
-          ))}
+          )})}
           {!isLoading && !isError && monthFilteredReceivables.length === 0 && (
             <EmptyState
               icon="📥"
@@ -582,7 +592,7 @@ export function ReceivablesPage() {
         </div>
       </section>
 
-      {isModalOpen && (
+      {isModalOpen && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onClick={closeModal}>
           <div className="profile-modal recv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
@@ -607,14 +617,12 @@ export function ReceivablesPage() {
                 </label>
                 <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                   Amount
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="0.01"
                     step="0.01"
                     placeholder="0.00"
                     value={formAmount}
-                    onChange={(e) => setFormAmount(e.target.value)}
+                    onValueChange={setFormAmount}
                   />
                 </label>
                 <MarkdownEditor
@@ -724,7 +732,8 @@ export function ReceivablesPage() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

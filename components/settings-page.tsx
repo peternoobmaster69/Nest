@@ -4,6 +4,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS } from "@/lib/credit-txn-auto-rules";
 import { GMAIL_SYNC_INTERVAL_MS } from "@/lib/gmail-alert-query";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonBankCard, SkeletonGrid, EmptyState, PageLoadingState } from "@/components/ui-skeleton";
@@ -128,6 +129,7 @@ export function SettingsPage() {
   const [autoRuleMessage, setAutoRuleMessage] = useState("");
   const [ruleDrafts, setRuleDrafts] = useState<AutoRule[]>([]);
   const [ruleDraftWorkspaceId, setRuleDraftWorkspaceId] = useState<string | null>(null);
+  const [ruleFilterDrafts, setRuleFilterDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -195,6 +197,9 @@ export function SettingsPage() {
     if (ruleDraftWorkspaceId === workspaceId) return;
     setRuleDrafts(autoRules.data.rules);
     setRuleDraftWorkspaceId(workspaceId);
+    setRuleFilterDrafts(
+      Object.fromEntries(autoRules.data.rules.map((rule) => [rule.id, serializeRuleFilters(rule.filters)])),
+    );
   }, [autoRules.data, ruleDraftWorkspaceId, workspaceId]);
 
   const workspaces = context.data?.workspaces ?? [];
@@ -413,6 +418,9 @@ export function SettingsPage() {
     onSuccess: (data) => {
       setRuleDrafts(data.rules);
       setRuleDraftWorkspaceId(data.workspaceId);
+      setRuleFilterDrafts(
+        Object.fromEntries(data.rules.map((rule) => [rule.id, serializeRuleFilters(rule.filters)])),
+      );
       setAutoRuleMessage(`Rules saved. Auto-accounting runs every ${Math.round(CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS / 60000)} minutes.`);
       queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", workspaceId] });
     },
@@ -561,10 +569,17 @@ export function SettingsPage() {
 
   const removeRule = (id: string) => {
     setRuleDrafts((current) => current.filter((rule) => rule.id !== id));
+    setRuleFilterDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   };
 
   const addRule = () => {
-    setRuleDrafts((current) => [...current, createEmptyAutoRule()]);
+    const nextRule = createEmptyAutoRule();
+    setRuleDrafts((current) => [...current, nextRule]);
+    setRuleFilterDrafts((current) => ({ ...current, [nextRule.id]: "" }));
   };
 
   const onSaveAutoRules = () => {
@@ -839,13 +854,11 @@ export function SettingsPage() {
                       <textarea
                         className="input"
                         rows={4}
-                        value={serializeRuleFilters(rule.filters)}
-                        onChange={(event) => updateDraftRule(rule.id, (current) => ({ ...current, filters: parseRuleFilters(event.target.value) }))}
-                        onKeyDown={(event) => {
-                          // Allow Enter key to insert newlines instead of submitting
-                          if (event.key === "Enter" && !event.shiftKey) {
-                            event.stopPropagation();
-                          }
+                        value={ruleFilterDrafts[rule.id] ?? serializeRuleFilters(rule.filters)}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          setRuleFilterDrafts((current) => ({ ...current, [rule.id]: raw }));
+                          updateDraftRule(rule.id, (current) => ({ ...current, filters: parseRuleFilters(raw) }));
                         }}
                         placeholder={"One contains filter per line\nnetflix\nfairprice\njohn"}
                       />
@@ -1166,14 +1179,12 @@ export function SettingsPage() {
                 </div>
                 <div className="form-group">
                   <label className="label">Starting Balance</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="0"
                     step="0.01"
                     placeholder="0.00"
                     value={balance}
-                    onChange={(e) => setBalance(e.target.value)}
+                    onValueChange={setBalance}
                   />
                 </div>
                 <div className="form-group">
@@ -1239,13 +1250,11 @@ export function SettingsPage() {
                 </div>
                 <div className="form-group">
                   <label className="label">Balance</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="0"
                     step="0.01"
                     value={editingBalance}
-                    onChange={(e) => setEditingBalance(e.target.value)}
+                    onValueChange={setEditingBalance}
                   />
                 </div>
                 <div className="form-group">

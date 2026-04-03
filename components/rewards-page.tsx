@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useState } from "react";
 import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -769,12 +770,11 @@ export function RewardsPage({
                 </div>
                 {editingCardId === card.id ? (
                   <div style={{ marginTop: "10px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                    <input
-                      className="input"
-                      type="number"
+                    <NumericCalculatorInput
                       min="0"
+                      allowDecimal={false}
                       value={editingCardPoints}
-                      onChange={(e) => setEditingCardPoints(e.target.value)}
+                      onValueChange={setEditingCardPoints}
                       style={{ flex: "1 1 140px", minWidth: "120px" }}
                     />
                     <button
@@ -828,36 +828,31 @@ export function RewardsPage({
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  className="input"
+                <NumericCalculatorInput
+                  allowDecimal={false}
                   placeholder="Current points"
                   value={newCardPoints}
-                  onChange={(e) => setNewCardPoints(e.target.value)}
+                  onValueChange={setNewCardPoints}
                   required
                 />
-                <input
-                  type="number"
+                <NumericCalculatorInput
                   step="0.01"
-                  className="input"
                   placeholder="Cash value ($)"
                   value={newCardValue}
-                  onChange={(e) => setNewCardValue(e.target.value)}
+                  onValueChange={setNewCardValue}
                 />
-                <input
-                  type="number"
-                  className="input"
+                <NumericCalculatorInput
+                  allowDecimal={false}
                   placeholder="Conv points"
                   value={newCardConvPoints}
-                  onChange={(e) => setNewCardConvPoints(e.target.value)}
+                  onValueChange={setNewCardConvPoints}
                   required
                 />
-                <input
-                  type="number"
-                  className="input"
+                <NumericCalculatorInput
+                  allowDecimal={false}
                   placeholder="Conv miles"
                   value={newCardConvMiles}
-                  onChange={(e) => setNewCardConvMiles(e.target.value)}
+                  onValueChange={setNewCardConvMiles}
                   required
                 />
                 <button type="submit" className="btn btn-primary" disabled={createCardReward.isPending}>
@@ -1080,12 +1075,11 @@ export function RewardsPage({
                               value={editingEarnDate}
                               onChange={(e) => setEditingEarnDate(e.target.value)}
                             />
-                            <input
-                              className="input"
-                              type="number"
+                            <NumericCalculatorInput
                               min="1"
+                              allowDecimal={false}
                               value={editingEarnMiles}
-                              onChange={(e) => setEditingEarnMiles(e.target.value)}
+                              onValueChange={setEditingEarnMiles}
                             />
                             <input
                               className="input"
@@ -1231,19 +1225,17 @@ export function RewardsPage({
               <div key={conv.id} className="card" style={{ marginBottom: "8px" }}>
                 {editingConversionId === conv.id ? (
                   <div className="crud-edit" style={{ gridTemplateColumns: "140px 140px 1fr auto auto" }}>
-                    <input
-                      type="number"
+                    <NumericCalculatorInput
                       min="1"
-                      className="input"
+                      allowDecimal={false}
                       value={editingConvPoints}
-                      onChange={(e) => setEditingConvPoints(e.target.value)}
+                      onValueChange={setEditingConvPoints}
                     />
-                    <input
-                      type="number"
+                    <NumericCalculatorInput
                       min="1"
-                      className="input"
+                      allowDecimal={false}
                       value={editingConvMiles}
-                      onChange={(e) => setEditingConvMiles(e.target.value)}
+                      onValueChange={setEditingConvMiles}
                     />
                     <input
                       type="text"
@@ -1344,20 +1336,18 @@ export function RewardsPage({
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  className="input"
+                <NumericCalculatorInput
+                  allowDecimal={false}
                   placeholder="Points"
                   value={convPoints}
-                  onChange={(e) => setConvPoints(e.target.value)}
+                  onValueChange={setConvPoints}
                   required
                 />
-                <input
-                  type="number"
-                  className="input"
+                <NumericCalculatorInput
+                  allowDecimal={false}
                   placeholder="Miles"
                   value={convMiles}
-                  onChange={(e) => setConvMiles(e.target.value)}
+                  onValueChange={setConvMiles}
                   required
                 />
                 <button
@@ -1431,35 +1421,32 @@ export function RewardsPage({
                 </div>
                 <div className="form-group">
                   <label className="label">Current Miles</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="0"
+                    allowDecimal={false}
                     placeholder="0"
                     value={ffFormMiles}
-                    onChange={(e) => setFFFormMiles(e.target.value)}
+                    onValueChange={setFFFormMiles}
                   />
                 </div>
                 <div className="form-group">
                   <label className="label">Target Miles</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="0"
+                    allowDecimal={false}
                     placeholder="Optional"
                     value={ffFormTarget}
-                    onChange={(e) => setFFFormTarget(e.target.value)}
+                    onValueChange={setFFFormTarget}
                   />
                 </div>
                 <div className="form-group">
                   <label className="label">Expiry Warning (months)</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="1"
                     max="24"
+                    allowDecimal={false}
                     value={ffFormExpiry}
-                    onChange={(e) => setFFFormExpiry(e.target.value)}
+                    onValueChange={setFFFormExpiry}
                   />
                 </div>
                 <div className="form-group st-span-2">
@@ -1538,13 +1525,12 @@ export function RewardsPage({
                 </div>
                 <div className="form-group">
                   <label className="label">Miles Earned</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="1"
+                    allowDecimal={false}
                     placeholder="0"
                     value={earnMiles}
-                    onChange={(e) => setEarnMiles(e.target.value)}
+                    onValueChange={setEarnMiles}
                     required
                   />
                 </div>
@@ -1626,13 +1612,12 @@ export function RewardsPage({
                 </div>
                 <div className="form-group">
                   <label className="label">Miles to Redeem</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="1"
+                    allowDecimal={false}
                     placeholder="0"
                     value={redeemMiles}
-                    onChange={(e) => setRedeemMiles(e.target.value)}
+                    onValueChange={setRedeemMiles}
                     required
                   />
                 </div>

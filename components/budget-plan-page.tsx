@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useMemo, useState } from "react";
 import { EmptyState, SkeletonCard, SkeletonGrid } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -604,7 +605,7 @@ export function BudgetPlanPage() {
             </div>
             <div className="form-group">
               <label className="label">Year</label>
-              <input className="input" type="number" value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} min={2024} max={2030} />
+              <NumericCalculatorInput value={selectedYear} allowDecimal={false} onValueChange={(value) => setSelectedYear(parseInt(value || "2024", 10))} min={2024} max={2030} />
             </div>
           </div>
         </div>
@@ -936,14 +937,12 @@ export function BudgetPlanPage() {
                 </div>
                 <div className="form-group">
                   <label className="label">Amount</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     step="0.01"
                     min="0"
                     placeholder="0.00"
                     value={itemAmount}
-                    onChange={(e) => setItemAmount(e.target.value)}
+                    onValueChange={setItemAmount}
                     required
                   />
                 </div>
@@ -1019,14 +1018,12 @@ export function BudgetPlanPage() {
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Amount</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     step="0.01"
                     min="0"
                     placeholder="0.00"
                     value={sourceAmount}
-                    onChange={(e) => setSourceAmount(e.target.value)}
+                    onValueChange={setSourceAmount}
                     required
                   />
                 </div>
@@ -1101,13 +1098,11 @@ export function BudgetPlanPage() {
               </div>
               <div className="form-group">
                 <label className="label">Amount</label>
-                <input
-                  className="input"
-                  type="number"
+                <NumericCalculatorInput
                   min="0"
                   step="0.01"
                   value={editingAllocationAmount}
-                  onChange={(e) => setEditingAllocationAmount(e.target.value)}
+                  onValueChange={setEditingAllocationAmount}
                   autoFocus
                 />
               </div>
@@ -1145,13 +1140,11 @@ export function BudgetPlanPage() {
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Amount</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     step="0.01"
                     min="0"
                     value={quickEditAmount}
-                    onChange={(e) => setQuickEditAmount(e.target.value)}
+                    onValueChange={setQuickEditAmount}
                     required
                   />
                 </div>

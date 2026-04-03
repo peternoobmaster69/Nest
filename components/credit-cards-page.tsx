@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonCreditCard, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -801,27 +802,25 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label className="label">Expiry Month</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="1"
                     max="12"
                     placeholder="MM"
                     value={expiryMonth}
-                    onChange={(e) => setExpiryMonth(e.target.value.slice(0, 2))}
+                    allowDecimal={false}
+                    onValueChange={(value) => setExpiryMonth(value.slice(0, 2))}
                   />
                 </div>
 
                 <div className="form-group">
                   <label className="label">Expiry Year</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="2024"
                     max="2100"
                     placeholder="YYYY"
                     value={expiryYear}
-                    onChange={(e) => setExpiryYear(e.target.value.slice(0, 4))}
+                    allowDecimal={false}
+                    onValueChange={(value) => setExpiryYear(value.slice(0, 4))}
                   />
                 </div>
 
@@ -840,26 +839,24 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label className="label">Statement Day</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="1"
                     max="31"
                     value={statementDay}
-                    onChange={(e) => setStatementDay(e.target.value)}
+                    allowDecimal={false}
+                    onValueChange={setStatementDay}
                     required
                   />
                 </div>
 
                 <div className="form-group">
                   <label className="label">Payment Due Day</label>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="1"
                     max="31"
                     value={paymentDueDay}
-                    onChange={(e) => setPaymentDueDay(e.target.value)}
+                    allowDecimal={false}
+                    onValueChange={setPaymentDueDay}
                     required
                   />
                 </div>

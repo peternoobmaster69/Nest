@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { AppSidebar } from "./app-sidebar";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonCard, SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
@@ -35,6 +36,18 @@ type DashboardSummary = {
     date: string;
     budgetName?: string | null;
   }>;
+  creditCardSummary?: {
+    cards: Array<{
+      cardId: string;
+      cardName: string;
+      totalSpentCents: number;
+      accountedCents: number;
+      unaccountedCents: number;
+    }>;
+    totalSpentCents: number;
+    totalAccountedCents: number;
+    totalUnaccountedCents: number;
+  };
 };
 
 type AppContext = {
@@ -1157,90 +1170,61 @@ export function DashboardShell({
 
           {/* Two Column Layout - Moved to bottom */}
           <div className="grid-2" style={{ marginTop: "14px" }}>
-            {/* Spending Breakdown */}
+            {/* Credit Card Summary */}
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600 }}>Sub-Accounts Overview</div>
-                <div className="segmented">
-                  <button className="segmented-btn on">Month</button>
-                  <button className="segmented-btn">Year</button>
-                </div>
+                <div style={{ fontSize: "13px", fontWeight: 600 }}>Credit Card Transactions</div>
+                <button className="btn btn-ghost btn-xs" onClick={() => router.push("/credit-transactions")}>
+                  View all →
+                </button>
               </div>
 
-              <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                <div className="ring-wrap">
-                  <svg width="110" height="110" viewBox="0 0 110 110">
-                    <circle cx="55" cy="55" r="44" fill="none" stroke="var(--bg-subtle)" strokeWidth="12" />
-                    {filteredBudgets.length > 0 && (
-                      <>
-                        <circle
-                          cx="55"
-                          cy="55"
-                          r="44"
-                          fill="none"
-                          stroke="#3AADA6"
-                          strokeWidth="12"
-                          strokeDasharray={`${Math.min(filteredBudgets[0]?.availableCents || 0, 27632) / 1000 * 14} 276`}
-                          strokeDashoffset="0"
-                          strokeLinecap="round"
-                        />
-                        {filteredBudgets[1] && (
-                          <circle
-                            cx="55"
-                            cy="55"
-                            r="44"
-                            fill="none"
-                            stroke="#8CC832"
-                            strokeWidth="12"
-                            strokeDasharray={`${Math.min(filteredBudgets[1]?.availableCents || 0, 27632) / 1000 * 10} 276`}
-                            strokeDashoffset={`-${Math.min(filteredBudgets[0]?.availableCents || 0, 27632) / 1000 * 14}`}
-                            strokeLinecap="round"
-                          />
-                        )}
-                      </>
-                    )}
-                  </svg>
-                  <div className="ring-center">
-                    <div className="ring-value">{filteredBudgets.length}</div>
-                    <div className="ring-label">accounts</div>
+              {data?.creditCardSummary && data.creditCardSummary.cards.length > 0 ? (
+                <>
+                  {/* Summary stats */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px", padding: "12px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Total Spent</div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)" }}>{formatCents(data.creditCardSummary.totalSpentCents)}</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Accounted</div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)", color: "var(--success)" }}>{formatCents(data.creditCardSummary.totalAccountedCents)}</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Unaccounted</div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)", color: data.creditCardSummary.totalUnaccountedCents > 0 ? "var(--warning)" : "var(--success)" }}>{formatCents(data.creditCardSummary.totalUnaccountedCents)}</div>
+                    </div>
                   </div>
-                </div>
 
-                <div style={{ flex: 1 }}>
-                  {filteredBudgets.slice(0, 5).map((budget, i) => {
-                    const colors = ["#3AADA6", "#8CC832", "#F0926A", "#D97706", "var(--border-default)"];
-                    const pct = budget.targetCents > 0 ? Math.round((budget.availableCents / budget.targetCents) * 100) : 0;
-                    return (
-                      <div
-                        className="legend"
-                        key={budget.id}
-                        onClick={() => goToTransactionsForSubAccount(budget.id, budget.accountId)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            goToTransactionsForSubAccount(budget.id, budget.accountId);
-                          }
-                        }}
-                        title={`Open transactions for ${budget.name}`}
-                      >
-                        <div className="legend-dot" style={{ background: colors[i % colors.length] }} />
-                        <div className="legend-name">{budget.name}</div>
-                        <div className="legend-value">{formatCents(budget.availableCents)}</div>
-                      </div>
-                    );
-                  })}
-                  {budgetsQuery.isLoading && <SkeletonList count={3} type="transaction" />}
-                  {!budgetsQuery.isLoading && !filteredBudgets.length && (
-                    <EmptyState
-                      icon="📁"
-                      title="No sub-accounts yet"
-                      description="Create your first sub-account to start tracking spending."
-                    />
-                  )}
-                </div>
-              </div>
+                  {/* Card breakdown */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {data.creditCardSummary.cards.map((card) => {
+                      const accountedPct = card.totalSpentCents > 0 ? Math.round((card.accountedCents / card.totalSpentCents) * 100) : 0;
+                      return (
+                        <div key={card.cardId} style={{ padding: "10px 12px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                            <span style={{ fontSize: "12px", fontWeight: 600 }}>{card.cardName}</span>
+                            <span style={{ fontSize: "12px", fontWeight: 600, fontFamily: "var(--font-display)" }}>{formatCents(card.totalSpentCents)}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <div style={{ flex: 1, height: "6px", background: "var(--bg-surface)", borderRadius: "3px", overflow: "hidden" }}>
+                              <div style={{ width: `${accountedPct}%`, height: "100%", background: accountedPct === 100 ? "var(--success)" : "var(--warning)", transition: "width 0.3s ease" }} />
+                            </div>
+                            <span style={{ fontSize: "11px", color: accountedPct === 100 ? "var(--success)" : "var(--text-tertiary)", minWidth: "32px", textAlign: "right" }}>{accountedPct}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <EmptyState
+                  icon="💳"
+                  title="No credit card transactions"
+                  description="Add credit card transactions to track your spending and accounting."
+                />
+              )}
             </div>
 
             {/* Recent Transactions */}
@@ -1323,14 +1307,12 @@ export function DashboardShell({
                     ))}
                   </select>
                   <span>Monthly limit (optional)</span>
-                  <input
-                    className="input"
+                  <NumericCalculatorInput
                     placeholder="0.00"
-                    type="number"
                     min="0"
                     step="0.01"
                     value={budgetTarget}
-                    onChange={(e) => setBudgetTarget(e.target.value)}
+                    onValueChange={setBudgetTarget}
                   />
                   <div className="profile-actions">
                     <button className="btn btn-ghost btn-xs" type="button" onClick={() => setCreateBudgetOpen(false)}>
@@ -1362,13 +1344,11 @@ export function DashboardShell({
                 </div>
                 <div className="profile-field">
                   <span>Monthly limit (optional)</span>
-                  <input
-                    className="input"
-                    type="number"
+                  <NumericCalculatorInput
                     min="0"
                     step="0.01"
                     value={editingBudgetTarget}
-                    onChange={(e) => setEditingBudgetTarget(e.target.value)}
+                    onValueChange={setEditingBudgetTarget}
                   />
                 </div>
                 <div className="profile-field">
@@ -1429,13 +1409,11 @@ export function DashboardShell({
                 </div>
                 <div className="form-group">
                   <label className="label">Balance ({baseCurrency})</label>
-                  <input
-                    type="number"
+                  <NumericCalculatorInput
                     step="0.01"
                     min="0"
-                    className="input"
                     value={editBankBalance}
-                    onChange={(event) => setEditBankBalance(event.target.value)}
+                    onValueChange={setEditBankBalance}
                     required
                   />
                 </div>

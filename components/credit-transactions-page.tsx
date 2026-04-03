@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
@@ -54,6 +55,7 @@ type Budget = {
   accountId: string;
   name: string;
   isActive: boolean;
+  availableCents: number;
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -204,6 +206,19 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     enabled: Boolean(context.data?.workspaceId),
   });
 
+  const receivablesSummary = useQuery({
+    queryKey: ["receivables-summary", context.data?.workspaceId],
+    queryFn: () =>
+      fetchJson<{ totalCents: number }>(`/api/receivables/summary?workspaceId=${context.data?.workspaceId}`),
+    enabled: Boolean(context.data?.workspaceId),
+  });
+
+  const defaultSubaccountBalance = useMemo(() => {
+    if (!defaultReceivableBudgetId || !budgets.data) return 0;
+    const budget = budgets.data.find((b) => b.id === defaultReceivableBudgetId);
+    return budget?.availableCents ?? 0;
+  }, [budgets.data, defaultReceivableBudgetId]);
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["credit-transactions", selectedCardId, selectedYear, selectedMonth],
     queryFn: () =>
@@ -238,6 +253,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     const unaccounted = filteredTransactions.filter((t) => !t.isAllocated).reduce((sum, t) => sum + t.amountCents, 0);
     return { total, unaccounted };
   }, [filteredTransactions]);
+
+  const totalReceivableCents = receivablesSummary.data?.totalCents ?? 0;
+  const isBalanced = useMemo(() => {
+    const expectedTotal = totalReceivableCents + defaultSubaccountBalance;
+    return totals.total === expectedTotal && totals.total !== 0 && totals.unaccounted === 0;
+  }, [totals.total, totalReceivableCents, defaultSubaccountBalance, totals.unaccounted]);
 
   const earliestPaymentDue = useMemo(() => {
     const dueTransactions = transactions.filter((t) => t.paymentDueDate);
@@ -657,14 +678,13 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         </div>
         <div className="cct-year-picker">
           <label className="label" htmlFor="credit-transactions-year">Statement Year</label>
-          <input
+          <NumericCalculatorInput
             id="credit-transactions-year"
-            type="number"
             min="2020"
             max="2100"
-            className="input"
+            allowDecimal={false}
             value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value || String(new Date().getFullYear()), 10))}
+            onValueChange={(value) => setSelectedYear(parseInt(value || String(new Date().getFullYear()), 10))}
           />
         </div>
       </div>
@@ -676,22 +696,30 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             <span className="cct-summary-label">Total Amount</span>
             <span className={`cct-summary-value ${getAmountToneClass(totals.total)}`}>{formatCurrency(totals.total)}</span>
           </div>
-          <label className="cct-toggle">
-            <input
-              type="checkbox"
-              checked={showUnaccountedOnly}
-              onChange={(e) => setShowUnaccountedOnly(e.target.checked)}
-            />
-            <span>Unaccounted only</span>
-          </label>
-        </div>
-        <div className="cct-summary-right">
-          <div className="cct-summary-item cct-summary-deficit">
-            <span className="cct-summary-label">Unallocated</span>
-            <span className={`cct-summary-value ${getAmountToneClass(totals.unaccounted)}`}>{formatCurrency(totals.unaccounted)}</span>
+          <div className="cct-summary-group">
+            <div className="cct-summary-item">
+              <span className="cct-summary-label">Total Receivable</span>
+              <span className="cct-summary-value">{formatCurrency(receivablesSummary.data?.totalCents ?? 0)}</span>
+            </div>
+            <div className="cct-summary-item">
+              <span className="cct-summary-label">Default Subaccount</span>
+              <span className={`cct-summary-value ${getAmountToneClass(defaultSubaccountBalance)}`}>{formatCurrency(defaultSubaccountBalance)}</span>
+            </div>
           </div>
         </div>
+        {totals.unaccounted > 0 && (
+          <div className="cct-summary-right">
+            <div className="cct-summary-item cct-summary-deficit">
+              <span className="cct-summary-label">Shortfall</span>
+              <span className={`cct-summary-value ${getAmountToneClass(totals.unaccounted)}`}>{formatCurrency(totals.unaccounted)}</span>
+            </div>
+          </div>
+        )}
       </div>
+
+      {isBalanced && (
+        <div className="cct-balanced-message">Perfectly balanced as all things should be</div>
+      )}
 
       {selectedCardId !== "all" && selectedMonth >= 0 && (
         <div className="cct-due-panel">
@@ -731,6 +759,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Actions */}
       <div className="cct-actions">
+        <label className="cct-toggle">
+          <input
+            type="checkbox"
+            checked={showUnaccountedOnly}
+            onChange={(e) => setShowUnaccountedOnly(e.target.checked)}
+          />
+          <span>Unaccounted only</span>
+        </label>
         <button className="btn btn-primary" onClick={openModal}>
           + Add Transaction
         </button>
@@ -957,13 +993,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group">
                   <label className="label">Statement Year</label>
-                  <input
-                    type="number"
+                  <NumericCalculatorInput
                     min="2020"
                     max="2100"
-                    className="input"
+                    allowDecimal={false}
                     value={formStatementYear}
-                    onChange={(e) => setFormStatementYear(e.target.value)}
+                    onValueChange={setFormStatementYear}
                     required
                   />
                 </div>
@@ -980,14 +1015,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group">
                   <label className="label">Amount ($)</label>
-                  <input
-                    type="number"
+                  <NumericCalculatorInput
                     step="0.01"
                     min="0"
-                    className="input"
                     placeholder="0.00"
                     value={formAmount}
-                    onChange={(e) => setFormAmount(e.target.value)}
+                    onValueChange={setFormAmount}
                     required
                   />
                 </div>
@@ -1110,7 +1143,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group">
                   <label className="label">Amount ($)</label>
-                  <input className="input" type="number" step="0.01" min="0.01" value={receivableAmount} onChange={(e) => setReceivableAmount(e.target.value)} required />
+                  <NumericCalculatorInput step="0.01" min="0.01" value={receivableAmount} onValueChange={setReceivableAmount} required />
                 </div>
                 <MarkdownEditor
                   className="form-group cct-span-2"
