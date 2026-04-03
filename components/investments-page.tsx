@@ -414,34 +414,55 @@ export function InvestmentsPage() {
     setEntryInvested(nextValue.toFixed(2));
   }, [entryModalMode, newFunds, latestEntryAccountEntry?.investedCents]);
 
-  // Aggregate all accounts data by date
+  // Aggregate all accounts data by date with forward-fill for continuous chart
   const aggregatedAllAccountsData = useMemo(() => {
-    const entriesByDate = new Map<string, { invested: number; current: number }>();
+    // Collect all entries from all accounts with running totals per account
+    const allDates = new Set<string>();
+    const accountEntries = new Map<string, Array<{ date: string; invested: number; current: number }>>();
 
     for (const account of accounts.data ?? []) {
-      for (const entry of account.entries ?? []) {
-        const dateKey = entry.date.slice(0, 10); // YYYY-MM-DD
-        const existing = entriesByDate.get(dateKey);
-        if (existing) {
-          existing.invested += entry.investedCents;
-          existing.current += entry.currentValueCents;
-        } else {
-          entriesByDate.set(dateKey, {
-            invested: entry.investedCents,
-            current: entry.currentValueCents,
-          });
-        }
+      const entries = (account.entries ?? [])
+        .map((e) => ({
+          date: e.date.slice(0, 10),
+          invested: e.investedCents,
+          current: e.currentValueCents,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      if (entries.length > 0) {
+        accountEntries.set(account.id, entries);
+        entries.forEach((e) => allDates.add(e.date));
       }
     }
 
-    return Array.from(entriesByDate.entries())
-      .map(([date, values]) => ({
-        id: `all-${date}`,
-        date: new Date(date),
-        invested: values.invested,
-        current: values.current,
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    if (allDates.size === 0) return [];
+
+    // Sort all unique dates
+    const sortedDates = Array.from(allDates).sort();
+
+    // For each date, sum up the latest known values from each account
+    return sortedDates.map((dateKey) => {
+      let totalInvested = 0;
+      let totalCurrent = 0;
+
+      for (const [, entries] of accountEntries) {
+        // Find the latest entry for this account up to this date
+        const latestEntry = entries
+          .filter((e) => e.date <= dateKey)
+          .pop();
+        if (latestEntry) {
+          totalInvested += latestEntry.invested;
+          totalCurrent += latestEntry.current;
+        }
+      }
+
+      return {
+        id: `all-${dateKey}`,
+        date: new Date(dateKey),
+        invested: totalInvested,
+        current: totalCurrent,
+      };
+    });
   }, [accounts.data]);
 
   // eslint-disable-next-line react-hooks/purity
@@ -523,6 +544,22 @@ export function InvestmentsPage() {
 
   return (
     <div className="inv-page">
+      {/* Add Button - Outside card */}
+      {!accountsLoading && (
+        <div style={{ marginBottom: "8px", display: "flex", justifyContent: "flex-end" }}>
+          <button
+            className="btn btn-primary btn-sm"
+            type="button"
+            onClick={openCreateAccountModal}
+            disabled={!workspaceId}
+            aria-label="Add Investment Account"
+            title="Add Investment Account"
+          >
+            + Add Account
+          </button>
+        </div>
+      )}
+
       {/* Modern Fintech-Style Dashboard Header */}
       <section className="card" style={{ padding: "24px" }}>
         {accountsLoading ? (
@@ -532,74 +569,60 @@ export function InvestmentsPage() {
             <div style={{ flex: 1 }}><SkeletonMiniCard /></div>
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
-            {/* Total Portfolio Value - Primary */}
-            <div style={{ flex: "1 1 200px" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
-                Total Portfolio Value
+          <div className="inv-portfolio-header">
+              {/* Total Portfolio Value - Primary */}
+              <div style={{ flex: "1 1 200px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                  Total Portfolio Value
+                </div>
+                <div style={{ fontSize: "32px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>
+                  {formatCents(totalCurrentAcrossAll)}
+                </div>
               </div>
-              <div style={{ fontSize: "32px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>
-                {formatCents(totalCurrentAcrossAll)}
+
+              {/* Divider */}
+              <div style={{ width: "1px", height: "50px", background: "var(--border-subtle)", flexShrink: 0 }} />
+
+              {/* Invested Amount */}
+              <div style={{ flex: "0 1 150px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+                  Total Invested
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                  {formatCents(totalInvestedAcrossAll)}
+                </div>
+              </div>
+
+              {/* Gain/Loss */}
+              <div style={{ flex: "0 1 150px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+                  {isProfit ? "Gain" : "Loss"}
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)" }}>
+                  {isProfit ? "+" : "-"}{formatCents(Math.abs(totalGainCents))}
+                </div>
+              </div>
+
+              {/* Return Percentage */}
+              <div style={{ flex: "0 1 150px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+                  Return
+                </div>
+                <div style={{
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}>
+                  <span>{isProfit ? "▲" : "▼"}</span>
+                  <span>{Math.abs(returnPercentage).toFixed(2)}%</span>
+                </div>
               </div>
             </div>
-
-            {/* Divider */}
-            <div style={{ width: "1px", height: "50px", background: "var(--border-subtle)", flexShrink: 0 }} />
-
-            {/* Invested Amount */}
-            <div style={{ flex: "0 1 150px" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                Total Invested
-              </div>
-              <div style={{ fontSize: "18px", fontWeight: 600, color: "var(--text-secondary)" }}>
-                {formatCents(totalInvestedAcrossAll)}
-              </div>
-            </div>
-
-            {/* Gain/Loss */}
-            <div style={{ flex: "0 1 150px" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                {isProfit ? "Gain" : "Loss"}
-              </div>
-              <div style={{ fontSize: "18px", fontWeight: 700, color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)" }}>
-                {isProfit ? "+" : "-"}{formatCents(Math.abs(totalGainCents))}
-              </div>
-            </div>
-
-            {/* Return Percentage */}
-            <div style={{ flex: "0 1 150px" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                Return
-              </div>
-              <div style={{
-                fontSize: "18px",
-                fontWeight: 700,
-                color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px"
-              }}>
-                <span>{isProfit ? "▲" : "▼"}</span>
-                <span>{Math.abs(returnPercentage).toFixed(2)}%</span>
-              </div>
-            </div>
-
-            {/* Add Button */}
-            <div style={{ marginLeft: "auto" }}>
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={openCreateAccountModal}
-                disabled={!workspaceId}
-                aria-label="Add Investment Account"
-                title="Add Investment Account"
-              >
-                + Add Account
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
 
       {/* View Toggle */}
       <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
@@ -668,13 +691,13 @@ export function InvestmentsPage() {
           const entries = [...account.entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
           const latest = entries[entries.length - 1] ?? null;
           const recentlyUpdated = account.entries.some((entry) => isWithinLastDay(entry.createdAt));
-          const selected = account.id === selectedAccountId;
+          const selected = !showAllAccounts && account.id === selectedAccountId;
           const investedCents = latest?.investedCents ?? 0;
           const currentCents = latest?.currentValueCents ?? 0;
           const currentValueClass = currentCents >= investedCents ? "positive" : "negative";
           const inceptionBadge = formatInceptionBadge(account.inceptionDate);
           return (
-            <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""}`}>
+            <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""} ${recentlyUpdated ? "is-recently-updated" : ""}`}>
               <button
                 className="inv-edit-icon"
                 type="button"
@@ -686,23 +709,7 @@ export function InvestmentsPage() {
               </button>
               <button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
                 <div className="inv-account-head">
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-                    <strong>{account.displayName || account.productName}</strong>
-                    {recentlyUpdated ? (
-                      <span
-                        aria-label="Recently updated"
-                        title="Updated in the last 24 hours"
-                        style={{
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "999px",
-                          background: "var(--success)",
-                          boxShadow: "0 0 0 2px var(--success-bg)",
-                          flexShrink: 0,
-                        }}
-                      />
-                    ) : null}
-                  </div>
+                  <strong>{account.displayName || account.productName}</strong>
                   <span>{account.productName} · {account.institutionName}</span>
                 </div>
                 <div className="inv-account-amounts">
@@ -718,8 +725,13 @@ export function InvestmentsPage() {
               </button>
               <div className="inv-account-actions">
                 {inceptionBadge ? <span className="inv-inception-chip">{inceptionBadge}</span> : null}
-                <button className="btn btn-primary btn-xs" type="button" onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}>
-                  + Add Update
+                <button
+                  className="btn btn-primary btn-icon btn-xs inv-add-update-btn"
+                  type="button"
+                  onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}
+                  title="Add Update"
+                >
+                  🔄
                 </button>
               </div>
             </article>

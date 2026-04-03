@@ -1988,7 +1988,7 @@ body {
    RESPONSIVE
    ============================================================ */
 
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .hamburger {
     display: flex;
   }
@@ -2928,6 +2928,19 @@ body {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-500) 25%, transparent);
 }
 
+.inv-account-card.is-recently-updated::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  border-top: 2px solid var(--success);
+  border-right: 2px solid var(--success);
+  border-top-right-radius: calc(var(--r-lg) - 1px);
+  pointer-events: none;
+}
+
 .inv-account-select {
   border: 0;
   padding: 0;
@@ -2997,6 +3010,17 @@ body {
 
 .inv-account-actions .btn {
   margin-left: 0;
+}
+
+.inv-account-actions .inv-add-update-btn {
+  margin-left: auto;
+}
+
+.inv-portfolio-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
 }
 
 .inv-edit-icon {
@@ -3282,6 +3306,45 @@ body {
   .inv-account-actions {
     flex-direction: row;
     justify-content: flex-end;
+  }
+
+  .inv-portfolio-header {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px 8px !important;
+  }
+
+  .inv-portfolio-header > div:first-child {
+    grid-column: 1 / -1;
+    flex: none !important;
+  }
+
+  .inv-portfolio-header > div:first-child > div:last-child {
+    font-size: 24px !important;
+  }
+
+  .inv-portfolio-header > div[style*="width: 1px"] {
+    display: none;
+  }
+
+  .inv-portfolio-header > div:nth-child(3),
+  .inv-portfolio-header > div:nth-child(5),
+  .inv-portfolio-header > div:nth-child(7) {
+    flex: none !important;
+    min-width: 0;
+  }
+
+  .inv-portfolio-header > div:nth-child(3) > div:first-child,
+  .inv-portfolio-header > div:nth-child(5) > div:first-child,
+  .inv-portfolio-header > div:nth-child(7) > div:first-child {
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .inv-portfolio-header > div:nth-child(3) > div:last-child,
+  .inv-portfolio-header > div:nth-child(5) > div:last-child,
+  .inv-portfolio-header > div:nth-child(7) > div:last-child {
+    font-size: 14px !important;
   }
 
   .inv-modal-actions {
