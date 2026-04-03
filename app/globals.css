@@ -2010,6 +2010,13 @@ body {
   border-color: var(--border-default);
 }
 
+.crud-row.crud-row-deleting {
+  opacity: 0.45;
+  transform: translateX(8px) scale(0.985);
+  filter: saturate(0.6);
+  pointer-events: none;
+}
+
 .crud-actions {
   display: flex;
   gap: 8px;

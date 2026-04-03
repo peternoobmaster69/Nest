@@ -47,10 +47,26 @@ export async function GET(request: Request) {
         .map((row) => [row.budgetId as string, row._sum.amountCents ?? 0]),
     );
 
+    const receivableSourceTotals = await prisma.receivable.groupBy({
+      by: ["sourceBudgetId"],
+      where: {
+        sourceWorkspaceId: workspaceId,
+        sourceBudgetId: { not: null },
+        status: { in: ["OPEN", "PARTIAL"] },
+      },
+      _sum: { amountCents: true },
+    });
+    const receivableByBudget = new Map(
+      receivableSourceTotals
+        .filter((row) => row.sourceBudgetId)
+        .map((row) => [row.sourceBudgetId as string, row._sum.amountCents ?? 0]),
+    );
+
     return NextResponse.json(
       budgets.map((budget) => ({
         ...budget,
         monthlyOutgoingCents: outgoingByBudget.get(budget.id) ?? 0,
+        receivableReservedCents: receivableByBudget.get(budget.id) ?? 0,
       })),
     );
   } catch (error) {

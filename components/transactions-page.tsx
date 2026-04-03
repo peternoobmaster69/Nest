@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots } from "@/components/ui-skeleton";
@@ -21,6 +22,7 @@ type Budget = {
   icon?: string | null;
   availableCents: number;
   targetCents: number;
+  receivableReservedCents?: number;
 };
 
 type Transaction = {
@@ -81,6 +83,7 @@ export function TransactionsPage() {
   const [urlFilterHydrated, setUrlFilterHydrated] = useState(false);
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
   const [editSubject, setEditSubject] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editAmount, setEditAmount] = useState("");
@@ -102,6 +105,7 @@ export function TransactionsPage() {
     queryKey: ["budgets", workspaceId],
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const bankAccounts = useQuery({
@@ -250,9 +254,29 @@ export function TransactionsPage() {
 
   const deleteTx = useMutation({
     mutationFn: (id: string) => fetchJson(`/api/transactions/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] });
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["transactions", workspaceId] });
+      const previousTransactions = queryClient.getQueryData<Transaction[]>(["transactions", workspaceId]);
+      queryClient.setQueryData<Transaction[]>(
+        ["transactions", workspaceId],
+        (current) => (current ?? []).filter((tx) => tx.id !== id),
+      );
+      return { previousTransactions };
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] });
+      await queryClient.refetchQueries({ queryKey: ["transactions", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+    onError: (_error, id, context) => {
+      if (context?.previousTransactions) {
+        queryClient.setQueryData(["transactions", workspaceId], context.previousTransactions);
+      }
+      setDeletingTransactionIds((current) => current.filter((transactionId) => transactionId !== id));
+    },
+    onSettled: (_data, _error, id) => {
+      setDeletingTransactionIds((current) => current.filter((transactionId) => transactionId !== id));
     },
   });
 
@@ -360,7 +384,11 @@ export function TransactionsPage() {
 
   const confirmDeleteTx = (transactionId: string) => {
     if (!confirmDestructiveAction("Delete this transaction?")) return;
-    deleteTx.mutate(transactionId);
+    if (deletingTransactionIds.includes(transactionId)) return;
+    setDeletingTransactionIds((current) => [...current, transactionId]);
+    window.setTimeout(() => {
+      deleteTx.mutate(transactionId);
+    }, 180);
   };
 
   const openEditBankBalance = (bank: BankAccount) => {
@@ -508,6 +536,11 @@ export function TransactionsPage() {
                 <span>{b.name}</span>
               </div>
               <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
+              {b.receivableReservedCents ? (
+                <div className="bm-target" style={{ marginTop: "4px" }}>
+                  ({formatCents(b.receivableReservedCents)} receivable)
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -528,8 +561,10 @@ export function TransactionsPage() {
             </div>
           )}
 
-          {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) => (
-            <div key={tx.id} className="crud-row">
+          {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) => {
+            const isDeleting = deletingTransactionIds.includes(tx.id);
+            return (
+            <div key={tx.id} className={`crud-row${isDeleting ? " crud-row-deleting" : ""}`}>
               <div style={{ display: "grid", gap: "3px" }}>
                 <span className={getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}>
                   {tx.subject} {formatCents(tx.amountCents)}
@@ -553,15 +588,15 @@ export function TransactionsPage() {
                   className="btn btn-ghost btn-icon"
                   style={{ width: "32px", height: "32px", color: "var(--danger)" }}
                   onClick={() => confirmDeleteTx(tx.id)}
-                  disabled={deleteTx.isPending}
-                  title="Delete"
+                  disabled={isDeleting}
+                  title={isDeleting ? "Deleting..." : "Delete"}
                   aria-label="Delete transaction"
                 >
-                  🗑
+                  {isDeleting ? "…" : "🗑"}
                 </button>
               </div>
             </div>
-          ))}
+          )})}
           {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
             <EmptyState
               icon="📑"
@@ -577,7 +612,7 @@ export function TransactionsPage() {
         </div>
       </section>
 
-      {isCreateModalOpen && (
+      {isCreateModalOpen && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
@@ -675,10 +710,11 @@ export function TransactionsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {editingTxId && (
+      {editingTxId && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onClick={closeEditModal}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
@@ -742,11 +778,12 @@ export function TransactionsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {editingBankAccount && (
-        <div className="profile-modal-overlay txn-contained-modal-overlay" onClick={closeEditBankBalance}>
+      {editingBankAccount && typeof document !== "undefined" && createPortal(
+        <div className="profile-modal-overlay" onClick={closeEditBankBalance}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Bank Balance</h3>
@@ -777,7 +814,8 @@ export function TransactionsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

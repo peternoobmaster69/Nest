@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Providers } from "@/app/providers";
 import { startGmailSyncScheduler } from "@/lib/gmail-sync-scheduler";
+import { startCreditTxnAutoAccountScheduler } from "@/lib/credit-txn-auto-account-scheduler";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   startGmailSyncScheduler();
+  startCreditTxnAutoAccountScheduler();
 
   return (
     <html lang="en">

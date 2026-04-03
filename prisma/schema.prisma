@@ -76,6 +76,7 @@ model Workspace {
   receivableDefaultBudgetId  String?
   isShared        Boolean            @default(false)
   sidebarMoneyPages String?          // Stores visibility settings for Money section pages in sidebar (JSON string)
+  creditCardAutoRules String?        // Stores ordered credit card auto-accounting rules (JSON string)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   receivableDefaultAccount FinancialAccount? @relation("WorkspaceReceivableDefaultAccount", fields: [receivableDefaultAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -436,6 +437,9 @@ model Receivable {
   notes            String?          @db.NVarChar(Max)
   fromUserId       String?
   toUserId         String?
+  sourceWorkspaceId String?
+  sourceAccountId   String?
+  sourceBudgetId    String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -446,6 +450,7 @@ model Receivable {
   toUser           User?            @relation("ReceivableTo", fields: [toUserId], references: [id], onDelete: NoAction)
 
   @@index([workspaceId, status])
+  @@index([sourceWorkspaceId, sourceBudgetId, status])
 }
 
 model SalaryEntry {

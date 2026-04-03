@@ -216,6 +216,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         ...(selectedMonth >= 0 ? { month: String(selectedMonth + 1) } : {}),
       }).toString()}`),
     enabled: sortedCards.length > 0,
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const transactions = data?.transactions || [];

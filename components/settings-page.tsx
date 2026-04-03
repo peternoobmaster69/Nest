@@ -1,10 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS } from "@/lib/credit-txn-auto-rules";
 import { GMAIL_SYNC_INTERVAL_MS } from "@/lib/gmail-alert-query";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SkeletonBankCard, SkeletonGrid, EmptyState, PageLoadingState } from "@/components/ui-skeleton";
 
 type Context = {
@@ -12,6 +13,7 @@ type Context = {
   defaultAccountId: string | null;
   defaultBudgetId: string | null;
   baseCurrency?: string | null;
+  workspaces?: Array<{ id: string; name: string }>;
 };
 
 type GmailStatus = {
@@ -42,7 +44,29 @@ type Budget = {
   accountId: string;
   name: string;
   isActive: boolean;
+  receivableReservedCents?: number;
 };
+
+type AutoRule =
+  | {
+      id: string;
+      name: string;
+      enabled: boolean;
+      action: "DEDUCT_SAME_WORKSPACE";
+      filters: string[];
+      destinationAccountId: string;
+      destinationBudgetId: string;
+    }
+  | {
+      id: string;
+      name: string;
+      enabled: boolean;
+      action: "RECEIVABLE_OTHER_WORKSPACE";
+      filters: string[];
+      sourceWorkspaceId: string;
+      sourceAccountId: string;
+      sourceBudgetId: string;
+    };
 
 type GmailSyncProgress = {
   phase: "idle" | "reading" | "writing" | "complete" | "error";
@@ -66,6 +90,33 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+function createEmptyAutoRule(): AutoRule {
+  const id =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    id,
+    name: "New rule",
+    enabled: true,
+    action: "DEDUCT_SAME_WORKSPACE",
+    filters: [""],
+    destinationAccountId: "",
+    destinationBudgetId: "",
+  };
+}
+
+function serializeRuleFilters(filters: string[]) {
+  return filters.join("\n");
+}
+
+function parseRuleFilters(raw: string) {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -74,6 +125,9 @@ export function SettingsPage() {
   const [gmailSyncProgress, setGmailSyncProgress] = useState<GmailSyncProgress | null>(null);
   const [currencyMessage, setCurrencyMessage] = useState("");
   const [receivableAccountMessage, setReceivableAccountMessage] = useState("");
+  const [autoRuleMessage, setAutoRuleMessage] = useState("");
+  const [ruleDrafts, setRuleDrafts] = useState<AutoRule[]>([]);
+  const [ruleDraftWorkspaceId, setRuleDraftWorkspaceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -129,6 +183,68 @@ export function SettingsPage() {
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
+
+  const autoRules = useQuery({
+    queryKey: ["credit-txn-auto-rules", workspaceId],
+    queryFn: () => fetchJson<{ workspaceId: string; rules: AutoRule[] }>(`/api/credit-transactions/auto-rules?workspaceId=${workspaceId}`),
+    enabled: Boolean(workspaceId),
+  });
+
+  useEffect(() => {
+    if (!autoRules.data) return;
+    if (ruleDraftWorkspaceId === workspaceId) return;
+    setRuleDrafts(autoRules.data.rules);
+    setRuleDraftWorkspaceId(workspaceId);
+  }, [autoRules.data, ruleDraftWorkspaceId, workspaceId]);
+
+  const workspaces = context.data?.workspaces ?? [];
+  const sourceWorkspaceIds = useMemo(
+    () => Array.from(new Set(
+      ruleDrafts
+        .filter((rule): rule is Extract<AutoRule, { action: "RECEIVABLE_OTHER_WORKSPACE" }> => rule.action === "RECEIVABLE_OTHER_WORKSPACE")
+        .map((rule) => rule.sourceWorkspaceId)
+        .filter(Boolean),
+    )),
+    [ruleDrafts],
+  );
+
+  const crossWorkspaceData = useQueries({
+    queries: sourceWorkspaceIds.flatMap((targetWorkspaceId) => ([
+      {
+        queryKey: ["rule-bank-accounts", targetWorkspaceId],
+        queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${targetWorkspaceId}`),
+        enabled: Boolean(targetWorkspaceId),
+      },
+      {
+        queryKey: ["rule-budgets", targetWorkspaceId],
+        queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${targetWorkspaceId}`),
+        enabled: Boolean(targetWorkspaceId),
+      },
+    ])),
+  });
+
+  const crossWorkspaceAccountsById = useMemo(() => {
+    const map = new Map<string, BankAccount[]>();
+    sourceWorkspaceIds.forEach((targetWorkspaceId, index) => {
+      const result = crossWorkspaceData[index * 2];
+      map.set(targetWorkspaceId, (result?.data as BankAccount[] | undefined) ?? []);
+    });
+    return map;
+  }, [crossWorkspaceData, sourceWorkspaceIds]);
+
+  const crossWorkspaceBudgetsById = useMemo(() => {
+    const map = new Map<string, Budget[]>();
+    sourceWorkspaceIds.forEach((targetWorkspaceId, index) => {
+      const result = crossWorkspaceData[index * 2 + 1];
+      map.set(targetWorkspaceId, (result?.data as Budget[] | undefined) ?? []);
+    });
+    return map;
+  }, [crossWorkspaceData, sourceWorkspaceIds]);
+
+  const hasAutoRuleChanges = useMemo(
+    () => JSON.stringify(ruleDrafts) !== JSON.stringify(autoRules.data?.rules ?? []),
+    [ruleDrafts, autoRules.data?.rules],
+  );
 
   const connectGmail = useMutation({
     mutationFn: () =>
@@ -281,6 +397,49 @@ export function SettingsPage() {
       setReceivableAccountMessage(error instanceof Error ? error.message : "Failed to update default receivable account."),
   });
 
+  const saveAutoRules = useMutation({
+    mutationFn: (rules: AutoRule[]) =>
+      fetchJson<{ workspaceId: string; rules: AutoRule[] }>("/api/credit-transactions/auto-rules", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          rules: rules.map((rule) => ({
+            ...rule,
+            filters: rule.filters.map((filter) => filter.trim()).filter(Boolean),
+          })),
+        }),
+      }),
+    onSuccess: (data) => {
+      setRuleDrafts(data.rules);
+      setRuleDraftWorkspaceId(data.workspaceId);
+      setAutoRuleMessage(`Rules saved. Auto-accounting runs every ${Math.round(CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS / 60000)} minutes.`);
+      queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", workspaceId] });
+    },
+    onError: (error) => {
+      setAutoRuleMessage(error instanceof Error ? error.message : "Failed to save auto-accounting rules.");
+    },
+  });
+
+  const runAutoRules = useMutation({
+    mutationFn: () =>
+      fetchJson<{ ok: boolean; scanned: number; matched: number; accounted: number; skipped: number }>("/api/credit-transactions/auto-rules/run", {
+        method: "POST",
+      }),
+    onSuccess: (data) => {
+      setAutoRuleMessage(
+        `Auto-accounted ${data.accounted} transaction${data.accounted === 1 ? "" : "s"} from ${data.matched} matched rule hits.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+    onError: (error) => {
+      setAutoRuleMessage(error instanceof Error ? error.message : "Failed to run auto-accounting.");
+    },
+  });
+
   const createAccount = useMutation({
     mutationFn: () =>
       fetchJson<{ workspaceId: string }>("/api/accounts", {
@@ -381,6 +540,36 @@ export function SettingsPage() {
       startingCents: Math.round(Number(editingBalance || "0") * 100),
       isActive: editingIsActive,
     });
+  };
+
+  const updateDraftRule = (id: string, updater: (rule: AutoRule) => AutoRule) => {
+    setRuleDrafts((current) => current.map((rule) => (rule.id === id ? updater(rule) : rule)));
+  };
+
+  const moveRule = (id: string, direction: -1 | 1) => {
+    setRuleDrafts((current) => {
+      const index = current.findIndex((rule) => rule.id === id);
+      if (index < 0) return current;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  };
+
+  const removeRule = (id: string) => {
+    setRuleDrafts((current) => current.filter((rule) => rule.id !== id));
+  };
+
+  const addRule = () => {
+    setRuleDrafts((current) => [...current, createEmptyAutoRule()]);
+  };
+
+  const onSaveAutoRules = () => {
+    if (!workspaceId) return;
+    saveAutoRules.mutate(ruleDrafts);
   };
 
   return (
@@ -525,6 +714,298 @@ export function SettingsPage() {
           </select>
         </div>
         {receivableAccountMessage ? <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{receivableAccountMessage}</div> : null}
+      </div>
+
+      <div className="card" style={{ marginBottom: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>Credit Card Auto Accounting</div>
+            <div style={{ fontSize: "12px", color: "var(--text-tertiary)", maxWidth: "720px" }}>
+              Ordered rules match unaccounted credit card transaction subjects using case-insensitive contains filters. First match wins.
+              Matching transactions are auto-accounted every 5 minutes.
+            </div>
+          </div>
+          <div style={{ display: "inline-flex", gap: "8px", flexWrap: "wrap" }}>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={() => setRuleDrafts(autoRules.data?.rules ?? [])} disabled={saveAutoRules.isPending || runAutoRules.isPending || !hasAutoRuleChanges}>
+              Reset
+            </button>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={() => runAutoRules.mutate()} disabled={!workspaceId || runAutoRules.isPending}>
+              {runAutoRules.isPending ? "Running..." : "Run Now"}
+            </button>
+            <button className="btn btn-primary btn-xs" type="button" onClick={onSaveAutoRules} disabled={!workspaceId || saveAutoRules.isPending || !hasAutoRuleChanges}>
+              {saveAutoRules.isPending ? "Saving..." : "Save Rules"}
+            </button>
+          </div>
+        </div>
+
+        {autoRules.isLoading ? (
+          <PageLoadingState>Loading auto-accounting rules...</PageLoadingState>
+        ) : autoRules.isError ? (
+          <EmptyState
+            icon="⚠️"
+            title="Failed to load auto-accounting rules"
+            description="Refresh the page and try again."
+          />
+        ) : (
+          <div style={{ display: "grid", gap: "12px" }}>
+            {ruleDrafts.map((rule, index) => {
+              const sameWorkspaceBudgets = (budgets.data ?? []).filter(
+                (budget) => budget.isActive && rule.action === "DEDUCT_SAME_WORKSPACE" && budget.accountId === rule.destinationAccountId,
+              );
+              const sourceAccounts =
+                rule.action === "RECEIVABLE_OTHER_WORKSPACE"
+                  ? (crossWorkspaceAccountsById.get(rule.sourceWorkspaceId) ?? []).filter((account) => account.isActive)
+                  : [];
+              const sourceBudgets =
+                rule.action === "RECEIVABLE_OTHER_WORKSPACE"
+                  ? (crossWorkspaceBudgetsById.get(rule.sourceWorkspaceId) ?? []).filter(
+                      (budget) => budget.isActive && budget.accountId === rule.sourceAccountId,
+                    )
+                  : [];
+
+              return (
+                <div key={rule.id} style={{ border: "1px solid var(--border)", borderRadius: "14px", padding: "14px", background: "var(--surface)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", marginBottom: "12px", flexWrap: "wrap" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontWeight: 600 }}>Rule {index + 1}</span>
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                        <input
+                          type="checkbox"
+                          checked={rule.enabled}
+                          onChange={(event) => updateDraftRule(rule.id, (current) => ({ ...current, enabled: event.target.checked }))}
+                        />
+                        Enabled
+                      </label>
+                    </div>
+                    <div style={{ display: "inline-flex", gap: "8px" }}>
+                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => moveRule(rule.id, -1)} disabled={index === 0}>
+                        ↑
+                      </button>
+                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => moveRule(rule.id, 1)} disabled={index === ruleDrafts.length - 1}>
+                        ↓
+                      </button>
+                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => removeRule(rule.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Rule name</div>
+                      <input
+                        className="input"
+                        type="text"
+                        value={rule.name}
+                        onChange={(event) => updateDraftRule(rule.id, (current) => ({ ...current, name: event.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Action</div>
+                      <select
+                        className="input"
+                        value={rule.action}
+                        onChange={(event) =>
+                          updateDraftRule(rule.id, (current) =>
+                            event.target.value === "DEDUCT_SAME_WORKSPACE"
+                              ? {
+                                  id: current.id,
+                                  name: current.name,
+                                  enabled: current.enabled,
+                                  action: "DEDUCT_SAME_WORKSPACE",
+                                  filters: current.filters,
+                                  destinationAccountId: accounts.data?.find((account) => account.isActive)?.id ?? "",
+                                  destinationBudgetId: "",
+                                }
+                              : {
+                                  id: current.id,
+                                  name: current.name,
+                                  enabled: current.enabled,
+                                  action: "RECEIVABLE_OTHER_WORKSPACE",
+                                  filters: current.filters,
+                                  sourceWorkspaceId: workspaces.find((workspace) => workspace.id !== workspaceId)?.id ?? "",
+                                  sourceAccountId: "",
+                                  sourceBudgetId: "",
+                                },
+                          )
+                        }
+                      >
+                        <option value="DEDUCT_SAME_WORKSPACE">Deduct from same-workspace sub account</option>
+                        <option value="RECEIVABLE_OTHER_WORKSPACE">Create receivable from another workspace</option>
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Subject filters</div>
+                      <textarea
+                        className="input"
+                        rows={4}
+                        value={serializeRuleFilters(rule.filters)}
+                        onChange={(event) => updateDraftRule(rule.id, (current) => ({ ...current, filters: parseRuleFilters(event.target.value) }))}
+                        onKeyDown={(event) => {
+                          // Allow Enter key to insert newlines instead of submitting
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.stopPropagation();
+                          }
+                        }}
+                        placeholder={"One contains filter per line\nnetflix\nfairprice\njohn"}
+                      />
+                      <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-tertiary)" }}>
+                        Any line can match. Matching is case-insensitive.
+                      </div>
+                    </div>
+
+                    {rule.action === "DEDUCT_SAME_WORKSPACE" ? (
+                      <>
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Bank account</div>
+                          <select
+                            className="input"
+                            value={rule.destinationAccountId}
+                            onChange={(event) =>
+                              updateDraftRule(rule.id, (current) => {
+                                if (current.action !== "DEDUCT_SAME_WORKSPACE") return current;
+                                const nextAccountId = event.target.value;
+                                const nextBudgetId =
+                                  (budgets.data ?? []).find((budget) => budget.accountId === nextAccountId && budget.isActive)?.id ?? "";
+                                return {
+                                  ...current,
+                                  destinationAccountId: nextAccountId,
+                                  destinationBudgetId: nextBudgetId,
+                                };
+                              })
+                            }
+                          >
+                            <option value="">Select bank account</option>
+                            {(accounts.data ?? []).filter((account) => account.isActive).map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Sub account</div>
+                          <select
+                            className="input"
+                            value={rule.destinationBudgetId}
+                            onChange={(event) =>
+                              updateDraftRule(rule.id, (current) =>
+                                current.action === "DEDUCT_SAME_WORKSPACE"
+                                  ? { ...current, destinationBudgetId: event.target.value }
+                                  : current,
+                              )
+                            }
+                          >
+                            <option value="">Select sub account</option>
+                            {sameWorkspaceBudgets.map((budget) => (
+                              <option key={budget.id} value={budget.id}>
+                                {budget.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Source workspace</div>
+                          <select
+                            className="input"
+                            value={rule.sourceWorkspaceId}
+                            onChange={(event) =>
+                              updateDraftRule(rule.id, (current) =>
+                                current.action === "RECEIVABLE_OTHER_WORKSPACE"
+                                  ? {
+                                      ...current,
+                                      sourceWorkspaceId: event.target.value,
+                                      sourceAccountId: "",
+                                      sourceBudgetId: "",
+                                    }
+                                  : current,
+                              )
+                            }
+                          >
+                            <option value="">Select workspace</option>
+                            {workspaces.filter((workspace) => workspace.id !== workspaceId).map((workspace) => (
+                              <option key={workspace.id} value={workspace.id}>
+                                {workspace.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Source bank account</div>
+                          <select
+                            className="input"
+                            value={rule.sourceAccountId}
+                            onChange={(event) =>
+                              updateDraftRule(rule.id, (current) => {
+                                if (current.action !== "RECEIVABLE_OTHER_WORKSPACE") return current;
+                                const nextAccountId = event.target.value;
+                                const nextBudgetId =
+                                  (crossWorkspaceBudgetsById.get(current.sourceWorkspaceId) ?? []).find(
+                                    (budget) => budget.isActive && budget.accountId === nextAccountId,
+                                  )?.id ?? "";
+                                return {
+                                  ...current,
+                                  sourceAccountId: nextAccountId,
+                                  sourceBudgetId: nextBudgetId,
+                                };
+                              })
+                            }
+                          >
+                            <option value="">Select bank account</option>
+                            {sourceAccounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Source sub account</div>
+                          <select
+                            className="input"
+                            value={rule.sourceBudgetId}
+                            onChange={(event) =>
+                              updateDraftRule(rule.id, (current) =>
+                                current.action === "RECEIVABLE_OTHER_WORKSPACE"
+                                  ? { ...current, sourceBudgetId: event.target.value }
+                                  : current,
+                              )
+                            }
+                          >
+                            <option value="">Select sub account</option>
+                            {sourceBudgets.map((budget) => (
+                              <option key={budget.id} value={budget.id}>
+                                {budget.name}
+                                {budget.receivableReservedCents ? ` (${formatMoney(budget.receivableReservedCents, baseCurrency)})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-tertiary)" }}>
+                            Open receivables earmarked against the selected source sub account are shown in brackets.
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <button className="btn btn-ghost btn-xs" type="button" onClick={addRule}>
+                Add Rule
+              </button>
+              <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                Rules are checked top to bottom. Only unaccounted credit card transactions are affected.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {autoRuleMessage ? <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-secondary)" }}>{autoRuleMessage}</div> : null}
       </div>
 
       {/* Header with Add Button */}
