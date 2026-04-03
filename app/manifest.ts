@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Nest Personal Finance Companion",
     start_url: "/",
     display: "standalone",
-    background_color: "#f5f2ed",
-    theme_color: "#f5f2ed",
+    background_color: "#1C2B1C",
+    theme_color: "#1C2B1C",
     icons: [
       {
         src: "/icon.svg",

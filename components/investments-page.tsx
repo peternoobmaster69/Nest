@@ -66,16 +66,26 @@ function formatInceptionBadge(value: string) {
   return `Since ${year}`;
 }
 
-function buildSmoothPath(points: Array<{ x: number; y: number }>) {
+function buildSmoothPath(points: Array<{ x: number; y: number }>, tension = 0.3) {
   if (!points.length) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
 
   let path = `M ${points[0].x} ${points[0].y}`;
+
   for (let index = 0; index < points.length - 1; index += 1) {
     const current = points[index];
     const next = points[index + 1];
-    const controlX = current.x + (next.x - current.x) / 2;
-    path += ` C ${controlX} ${current.y}, ${controlX} ${next.y}, ${next.x} ${next.y}`;
+
+    // For smoother curves, use tension-based control points
+    const prev = index > 0 ? points[index - 1] : current;
+    const nextNext = index < points.length - 2 ? points[index + 2] : next;
+
+    const cp1x = current.x + (next.x - prev.x) * tension / 2;
+    const cp1y = current.y + (next.y - prev.y) * tension / 2;
+    const cp2x = next.x - (nextNext.x - current.x) * tension / 2;
+    const cp2y = next.y - (nextNext.y - current.y) * tension / 2;
+
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`;
   }
   return path;
 }
@@ -516,8 +526,12 @@ export function InvestmentsPage() {
     const spanTime = Math.max(1, maxTime - minTime);
     const spanY = Math.max(1, high - low);
 
-    const points = chartRows.map((row) => {
-      const x = pad + ((row.date.getTime() - minTime) / spanTime) * plotW;
+    // For All Accounts view, use equal spacing for smoother, more uniform look
+    const useEqualSpacing = showAllAccounts && chartRows.length > 1;
+    const points = chartRows.map((row, index) => {
+      const x = useEqualSpacing
+        ? pad + (index / (chartRows.length - 1)) * plotW
+        : pad + ((row.date.getTime() - minTime) / spanTime) * plotW;
       const yInvested = pad + (1 - (row.invested - low) / spanY) * plotH;
       const yCurrent = pad + (1 - (row.current - low) / spanY) * plotH;
       const label = row.date.toLocaleDateString();
