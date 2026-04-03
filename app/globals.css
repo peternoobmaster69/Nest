@@ -557,11 +557,16 @@ body {
 .recv-modal,
 .txn-modal {
   width: min(96vw, 1100px);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
 }
 
 .recv-modal-body,
 .txn-modal-body {
   width: 100%;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .recv-modal-form,
@@ -569,6 +574,26 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.txn-modal-form-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.txn-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.txn-modal-actions .btn {
+  min-width: 100px;
 }
 
 .txn-contained-modal-overlay {
@@ -852,6 +877,7 @@ body {
   .profile-modal-body {
     overflow-y: auto;
     flex: 1;
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
   .recv-modal-form,
@@ -865,16 +891,31 @@ body {
   }
 
   .profile-actions {
-    padding-top: 16px;
-    border-top: 1px solid var(--border-subtle);
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0));
+    border-top: 2px solid var(--border-subtle);
+    background: var(--bg-elevated);
     position: sticky;
     bottom: 0;
+    margin: 0 -16px -16px;
+    flex-shrink: 0;
   }
 
   .profile-actions .btn {
     flex: 1;
-    padding: 12px 20px;
+    padding: 14px 20px;
     font-size: 15px;
+    min-height: 48px;
+  }
+
+  .txn-modal-actions {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0));
+    position: sticky;
+    bottom: 0;
+  }
+
+  .txn-modal-actions .btn {
+    flex: 1;
   }
 }
 
@@ -3388,6 +3429,14 @@ body {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-elevated);
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0));
+    border-top: 2px solid var(--border-subtle);
+    margin: 0 -16px -16px;
+    flex-shrink: 0;
   }
 
   .inv-modal-primary-actions {
@@ -3398,6 +3447,7 @@ body {
 
   .inv-modal-actions .btn {
     width: 100%;
+    min-height: 48px;
   }
 }
 
@@ -5241,10 +5291,16 @@ body {
   .cct-modal-actions {
     position: sticky;
     bottom: 0;
+    background: var(--bg-elevated);
+    padding: 16px 20px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0));
+    border-top: 2px solid var(--border-subtle);
+    flex-shrink: 0;
   }
 
   .cct-modal-actions .btn {
     flex: 1;
+    min-height: 48px;
   }
 }
 

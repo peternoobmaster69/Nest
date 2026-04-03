@@ -586,92 +586,94 @@ export function TransactionsPage() {
                 Close
               </button>
             </div>
-            <div className="profile-modal-body txn-modal-body">
-              <form className="txn-modal-form" onSubmit={onSubmit}>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Bank Account
-                  {bankAccounts.data && bankAccounts.data.length === 1 ? (
-                    <div className="crud-row" style={{ marginBottom: 0 }}>
-                      <span>{bankAccounts.data[0].name}</span>
-                    </div>
-                  ) : (
-                    <select className="input" value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)}>
-                      <option value="" disabled>
-                        Select bank account
-                      </option>
-                      {bankAccounts.data?.map((bank) => (
-                        <option key={bank.id} value={bank.id}>
-                          {bank.name}
+            <form onSubmit={onSubmit} className="txn-modal-form-wrapper">
+              <div className="profile-modal-body txn-modal-body">
+                <div className="txn-modal-form">
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Bank Account
+                    {bankAccounts.data && bankAccounts.data.length === 1 ? (
+                      <div className="crud-row" style={{ marginBottom: 0 }}>
+                        <span>{bankAccounts.data[0].name}</span>
+                      </div>
+                    ) : (
+                      <select className="input" value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)}>
+                        <option value="" disabled>
+                          Select bank account
+                        </option>
+                        {bankAccounts.data?.map((bank) => (
+                          <option key={bank.id} value={bank.id}>
+                            {bank.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </label>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Sub Account
+                    <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
+                      <option value="">No account</option>
+                      {visibleBudgets.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
                         </option>
                       ))}
                     </select>
-                  )}
-                </label>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Sub Account
-                  <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
-                    <option value="">No account</option>
-                    {visibleBudgets.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Amount
-                  <input
-                    className="input"
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    placeholder="Amount"
-                    value={amount}
-                    onChange={(e) => handleAmountChange(e.target.value)}
+                  </label>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Amount
+                    <input
+                      className="input"
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      placeholder="Amount"
+                      value={amount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Deduct or Add
+                    <div className="segmented-toggle" role="tablist" aria-label="Transaction operation">
+                      <button
+                        type="button"
+                        className={`segmented-toggle-btn segmented-toggle-btn-deduct ${operation === "DEDUCT" ? "is-active" : ""}`}
+                        onClick={() => setOperation("DEDUCT")}
+                      >
+                        Deduct
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-toggle-btn segmented-toggle-btn-add ${operation === "ADD" ? "is-active" : ""}`}
+                        onClick={() => setOperation("ADD")}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </label>
+                  <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Title
+                    <input className="input" placeholder="Title" value={subject} onChange={(e) => setSubject(e.target.value)} />
+                  </label>
+                  <MarkdownEditor
+                    className="modal-grid-span-2"
+                    label="Notes"
+                    value={notes}
+                    onChange={setNotes}
+                    placeholder="Write notes in Markdown"
+                    rows={12}
+                    minHeight={300}
                   />
-                </label>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Deduct or Add
-                  <div className="segmented-toggle" role="tablist" aria-label="Transaction operation">
-                    <button
-                      type="button"
-                      className={`segmented-toggle-btn segmented-toggle-btn-deduct ${operation === "DEDUCT" ? "is-active" : ""}`}
-                      onClick={() => setOperation("DEDUCT")}
-                    >
-                      Deduct
-                    </button>
-                    <button
-                      type="button"
-                      className={`segmented-toggle-btn segmented-toggle-btn-add ${operation === "ADD" ? "is-active" : ""}`}
-                      onClick={() => setOperation("ADD")}
-                    >
-                      Add
-                    </button>
-                  </div>
-                </label>
-                <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Title
-                  <input className="input" placeholder="Title" value={subject} onChange={(e) => setSubject(e.target.value)} />
-                </label>
-                <MarkdownEditor
-                  className="modal-grid-span-2"
-                  label="Notes"
-                  value={notes}
-                  onChange={setNotes}
-                  placeholder="Write notes in Markdown"
-                  rows={12}
-                  minHeight={300}
-                />
-                <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                  <button className="btn btn-ghost" type="button" onClick={() => setIsCreateModalOpen(false)}>
-                    Cancel
-                  </button>
-                  <button className="btn btn-primary" type="submit" disabled={createTx.isPending}>
-                    {createTx.isPending ? "Adding..." : "Add"}
-                  </button>
                 </div>
-              </form>
-            </div>
+              </div>
+              <div className="profile-actions txn-modal-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => setIsCreateModalOpen(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" type="submit" disabled={createTx.isPending}>
+                  {createTx.isPending ? "Adding..." : "Add"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
