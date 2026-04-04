@@ -622,49 +622,71 @@ export async function POST(request: Request) {
           where: { workspaceId: body.workspaceId, year, month },
           orderBy: { createdAt: "asc" },
         });
-
-        if (currentRows.length === 0) {
-          throw new Error("No monthly budget draft exists for this month.");
-        }
-
-        if (currentRows.some((row) => !row.isDraft)) {
-          throw new Error("This monthly budget has already been approved.");
-        }
-
-        const allocationMap = new Map(
-          allocations.map((allocation) => [allocationKey(allocation.budgetItemId, allocation.budgetSourceId), allocation]),
+        const currentRowByKey = new Map(
+          currentRows.map((row) => [allocationKey(row.budgetItemId, row.budgetSourceId), row]),
         );
-        const budgetItemTitleById = new Map(allocations.map((allocation) => [allocation.budgetItemId, allocation.budgetItemTitle]));
-        const budgetSourceTitleById = new Map(allocations.map((allocation) => [allocation.budgetSourceId, allocation.budgetSourceTitle]));
         const monthlyBudgetSources = await db.monthlyBudgetSource.findMany({
           where: { workspaceId: body.workspaceId, year, month },
           select: { id: true, budgetSourceId: true, title: true, amountCents: true, isDraft: true },
           orderBy: { createdAt: "asc" },
         });
 
-        const toDeleteIds: string[] = [];
-        const toConfirm = [];
-        for (const row of currentRows) {
-          const allocation = allocationMap.get(allocationKey(row.budgetItemId, row.budgetSourceId));
-          if (!allocation || allocation.allocatedCents <= 0) {
-            toDeleteIds.push(row.id);
-            continue;
-          }
-          toConfirm.push({
-            ...row,
-            allocatedCents: allocation.allocatedCents,
-            budgetItemTitle: allocation.budgetItemTitle || budgetItemTitleById.get(row.budgetItemId) || null,
-            budgetSourceTitle: allocation.budgetSourceTitle || budgetSourceTitleById.get(row.budgetSourceId) || null,
-          });
+        if (monthlyBudgetSources.length === 0) {
+          throw new Error("No monthly source plan exists for this month.");
         }
+
+        if (currentRows.some((row) => !row.isDraft) || monthlyBudgetSources.some((source) => !source.isDraft)) {
+          throw new Error("This monthly budget has already been approved.");
+        }
+
+        const validSourceIds = new Set(monthlyBudgetSources.map((source) => source.budgetSourceId));
+        const positiveAllocations = allocations.filter((allocation) => allocation.allocatedCents > 0);
+        for (const allocation of positiveAllocations) {
+          if (!validSourceIds.has(allocation.budgetSourceId)) {
+            throw new Error(`Source "${allocation.budgetSourceTitle || allocation.budgetSourceId}" is not in this month's source plan.`);
+          }
+        }
+
+        const budgetItems = positiveAllocations.length
+          ? await db.budgetItem.findMany({
+              where: {
+                workspaceId: body.workspaceId,
+                id: { in: [...new Set(positiveAllocations.map((allocation) => allocation.budgetItemId))] },
+                isActive: true,
+              },
+              select: { id: true, title: true, destinationSubAccountId: true },
+            })
+          : [];
+        const budgetItemById = new Map(budgetItems.map((item) => [item.id, item]));
+        const monthlySourceById = new Map(monthlyBudgetSources.map((source) => [source.budgetSourceId, source]));
+
+        const toConfirm = positiveAllocations.map((allocation) => {
+          const budgetItem = budgetItemById.get(allocation.budgetItemId);
+          if (!budgetItem) {
+            throw new Error(`Budget item "${allocation.budgetItemTitle || allocation.budgetItemId}" is invalid or inactive.`);
+          }
+          const source = monthlySourceById.get(allocation.budgetSourceId);
+          if (!source) {
+            throw new Error(`Source "${allocation.budgetSourceTitle || allocation.budgetSourceId}" is not in this month's source plan.`);
+          }
+          const existingRow = currentRowByKey.get(allocationKey(allocation.budgetItemId, allocation.budgetSourceId));
+
+          return {
+            id: existingRow?.id,
+            budgetItemId: budgetItem.id,
+            budgetSourceId: source.budgetSourceId,
+            destinationSubAccountId: budgetItem.destinationSubAccountId,
+            allocatedCents: allocation.allocatedCents,
+            budgetItemTitle: allocation.budgetItemTitle || budgetItem.title,
+            budgetSourceTitle: allocation.budgetSourceTitle || source.title,
+          };
+        });
+        const toDeleteIds = currentRows
+          .filter((row) => !positiveAllocations.some((allocation) => allocationKey(allocation.budgetItemId, allocation.budgetSourceId) === allocationKey(row.budgetItemId, row.budgetSourceId)))
+          .map((row) => row.id);
 
         if (toConfirm.length === 0) {
           throw new Error("At least one monthly allocation must remain before approval.");
-        }
-
-        const allocatedBySourceId = new Map<string, number>();
-        for (const row of toConfirm) {
-          allocatedBySourceId.set(row.budgetSourceId, (allocatedBySourceId.get(row.budgetSourceId) ?? 0) + row.allocatedCents);
         }
 
         // Only check that total allocated equals total sources (no per-item validation)
@@ -674,12 +696,6 @@ export async function POST(request: Request) {
           throw new Error(
             `Total allocated (${totalAllocatedCents}) must equal total sources (${totalSourceCents}).`,
           );
-        }
-
-        if (toDeleteIds.length > 0) {
-          await db.monthlyBudget.deleteMany({
-            where: { workspaceId: body.workspaceId, id: { in: toDeleteIds } },
-          });
         }
 
         const destinationBudgetIds = [
@@ -699,51 +715,62 @@ export async function POST(request: Request) {
           data: { isDraft: false, confirmedAt: applyTimestamp },
         });
 
-        for (const row of toConfirm) {
-          await db.monthlyBudget.update({
-            where: { id: row.id },
-            data: {
-              allocatedCents: row.allocatedCents,
-              isDraft: false,
-              confirmedAt: applyTimestamp,
-              appliedAt:
-                applyToSubAccounts && row.destinationSubAccountId && row.allocatedCents > 0 ? applyTimestamp : null,
-            },
+        await db.monthlyBudget.deleteMany({
+          where: { workspaceId: body.workspaceId, year, month },
+        });
+
+        await db.monthlyBudget.createMany({
+          data: toConfirm.map((row) => ({
+            workspaceId: body.workspaceId,
+            budgetItemId: row.budgetItemId,
+            budgetSourceId: row.budgetSourceId,
+            year,
+            month,
+            budgetItemTitle: row.budgetItemTitle,
+            budgetSourceTitle: row.budgetSourceTitle,
+            destinationSubAccountId: row.destinationSubAccountId,
+            allocatedCents: row.allocatedCents,
+            isDraft: false,
+            confirmedAt: applyTimestamp,
+            appliedAt:
+              applyToSubAccounts && row.destinationSubAccountId && row.allocatedCents > 0 ? applyTimestamp : null,
+          })),
+        });
+
+        const ledgerRows = toConfirm.filter((row) => applyToSubAccounts && row.destinationSubAccountId && row.allocatedCents > 0);
+        if (ledgerRows.length > 0) {
+          await db.transaction.createMany({
+            data: ledgerRows.map((row) => {
+              const destinationBudget = destinationBudgetById.get(row.destinationSubAccountId!);
+              if (!destinationBudget) {
+                throw new Error(`Destination sub-account is missing for "${row.budgetItemTitle ?? "budget item"}".`);
+              }
+
+              return {
+                workspaceId: body.workspaceId,
+                accountId: destinationBudget.accountId,
+                budgetId: destinationBudget.id,
+                kind: "ADJUSTMENT",
+                direction: "CREDIT",
+                date: monthDate(year, month),
+                amountCents: row.allocatedCents,
+                subject: `Monthly budget allocation: ${row.budgetItemTitle ?? "Budget item"}`,
+                details: `Approved budget for ${month}/${year} funded by ${row.budgetSourceTitle ?? "source"}`,
+              };
+            }),
           });
-
-          if (!applyToSubAccounts || !row.destinationSubAccountId || row.allocatedCents <= 0) {
-            continue;
-          }
-
-          const destinationBudget = destinationBudgetById.get(row.destinationSubAccountId);
-          if (!destinationBudget) {
-            throw new Error(`Destination sub-account is missing for "${row.budgetItemTitle ?? "budget item"}".`);
-          }
-
-          await db.transaction.create({
-            data: {
-              workspaceId: body.workspaceId,
-              accountId: destinationBudget.accountId,
-              budgetId: destinationBudget.id,
-              kind: "ADJUSTMENT",
-              direction: "CREDIT",
-              date: monthDate(year, month),
-              amountCents: row.allocatedCents,
-              subject: `Monthly budget allocation: ${row.budgetItemTitle ?? "Budget item"}`,
-              details: `Approved budget for ${month}/${year} funded by ${row.budgetSourceTitle ?? "source"}`,
-            },
-          });
-        }
-
-        for (const budgetId of destinationBudgetById.keys()) {
-          await recalculateBudgetAvailableCents(db, body.workspaceId, budgetId);
         }
 
         return {
           confirmed: toConfirm.length,
           appliedToSubAccounts: applyToSubAccounts,
+          destinationBudgetIds: [...destinationBudgetById.keys()],
         };
       });
+
+      for (const budgetId of result.destinationBudgetIds) {
+        await recalculateBudgetAvailableCents(prisma, body.workspaceId, budgetId);
+      }
 
       return NextResponse.json(result);
     }

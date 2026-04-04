@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, GeneratingState, SkeletonCard, SkeletonGrid } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
@@ -168,6 +168,7 @@ export function BudgetPlanPage() {
   const [confirmProgress, setConfirmProgress] = useState(0);
   const [confirmStage, setConfirmStage] = useState("");
   const [pendingConfirmApplyToSubAccounts, setPendingConfirmApplyToSubAccounts] = useState(false);
+  const confirmProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
   const context = useQuery({
@@ -777,53 +778,58 @@ export function BudgetPlanPage() {
     setConfirmStage("Click Save to finalize...");
   };
 
+  const clearConfirmProgressTimer = () => {
+    if (confirmProgressTimerRef.current) {
+      clearInterval(confirmProgressTimerRef.current);
+      confirmProgressTimerRef.current = null;
+    }
+  };
+
+  const resetConfirmDialog = () => {
+    clearConfirmProgressTimer();
+    setShowConfirmDialog(false);
+    setConfirmProgress(0);
+    setConfirmStage("");
+    setPendingConfirmApplyToSubAccounts(false);
+  };
+
   const executeConfirmMonthly = () => {
     if (!workspaceId || !previewAllocations) return;
-    setConfirmStage("Initializing...");
+    clearConfirmProgressTimer();
+    setConfirmProgress(12);
+    setConfirmStage("Sending approval request...");
 
-    // Simulate progress steps
-    const stages = [
-      { progress: 20, message: "Validating allocations...", delay: 300 },
-      { progress: 50, message: "Saving to database...", delay: 600 },
-      { progress: 80, message: "Applying to sub-accounts...", delay: 900 },
-      { progress: 100, message: "Complete!", delay: 1200 },
-    ];
-
-    stages.forEach(({ progress, message, delay }) => {
-      setTimeout(() => {
-        setConfirmProgress(progress);
-        setConfirmStage(message);
-      }, delay);
-    });
-
-    // Actually perform the save after a brief delay
-    setTimeout(() => {
-      confirmMonthly.mutate({
-        workspaceId,
-        action: "confirmMonthly",
-        year: selectedYear,
-        month: selectedMonth,
-        allocations: previewAllocations,
-        applyToSubAccounts: pendingConfirmApplyToSubAccounts,
-      }, {
-        onSuccess: () => {
-          setTimeout(() => {
-            setShowConfirmDialog(false);
-            setConfirmProgress(0);
-            setConfirmStage("");
-            setPendingConfirmApplyToSubAccounts(false);
-          }, 500);
-        },
-        onError: () => {
-          setConfirmStage("Error occurred!");
-          setTimeout(() => {
-            setShowConfirmDialog(false);
-            setConfirmProgress(0);
-            setConfirmStage("");
-          }, 2000);
-        },
+    confirmProgressTimerRef.current = setInterval(() => {
+      setConfirmProgress((current) => {
+        if (current >= 90) return current;
+        return Math.min(90, current + (current < 50 ? 12 : 5));
       });
-    }, 800);
+    }, 450);
+
+    confirmMonthly.mutate({
+      workspaceId,
+      action: "confirmMonthly",
+      year: selectedYear,
+      month: selectedMonth,
+      allocations: previewAllocations,
+      applyToSubAccounts: pendingConfirmApplyToSubAccounts,
+    }, {
+      onSuccess: () => {
+        clearConfirmProgressTimer();
+        setConfirmStage("Complete!");
+        setConfirmProgress(100);
+        setTimeout(() => {
+          resetConfirmDialog();
+        }, 400);
+      },
+      onError: (error) => {
+        clearConfirmProgressTimer();
+        setConfirmStage(error instanceof Error ? error.message : "Error occurred.");
+        setTimeout(() => {
+          resetConfirmDialog();
+        }, 2000);
+      },
+    });
   };
 
   const onConfirmMonthly = (applyToSubAccounts: boolean) => {
@@ -1047,9 +1053,7 @@ export function BudgetPlanPage() {
         {isPreviewMode && (
           <div style={{ marginBottom: "20px", padding: "16px", background: "var(--warning-bg)", borderRadius: "var(--r-md)" }}>
             <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ flex: 1, fontSize: "14px" }}>
-                Review source totals and budget item totals below, then confirm to save for {MONTHS[selectedMonth - 1]} {selectedYear}.
-              </span>
+              <span style={{ flex: 1, fontSize: "14px" }} />
               <button className="btn btn-ghost" onClick={openAddAllocationModal}>
                 Add Allocation
               </button>
@@ -1061,15 +1065,12 @@ export function BudgetPlanPage() {
               </button>
               <button
                 className="btn btn-primary"
-                onClick={() => setShowConfirmDialog(true)}
+                onClick={() => onConfirmMonthly(true)}
                 disabled={confirmMonthly.isPending || !canApproveMonthly}
               >
                 {confirmMonthly.isPending ? "Saving..." : "Confirm & Save"}
               </button>
             </div>
-            <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "8px" }}>
-              This will save the monthly budget to the database for {MONTHS[selectedMonth - 1]} {selectedYear} and add allocated amounts to sub-accounts.
-            </p>
             {!canApproveMonthly && (
               <p style={{ fontSize: "12px", color: "var(--danger)", marginTop: "8px" }}>
                 Approval disabled: allocated {formatCents(monthlyTotal)} ≠ sources {formatCents(templateSourceTotal)} ({formatCents(totalUnallocatedSourceCents)} unallocated)
@@ -1095,34 +1096,6 @@ export function BudgetPlanPage() {
               <div className="bp-stat-value">{formatCents(templateItemTotal)}</div>
               <div className="bp-stat-sub">{itemTargetMismatches.length} items need review</div>
             </div>
-          </div>
-        )}
-
-        {isPreviewMode && (overAllocatedSources.length > 0 || itemTargetMismatches.length > 0 || totalUnallocatedSourceCents > 0) && (
-          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)" }}>
-            {itemTargetMismatches.length > 0 && (
-              <div style={{ fontSize: "13px", marginBottom: "8px" }}>
-                Item mismatches: {itemTargetMismatches.slice(0, 3).map((item) => {
-                  const allocated = itemAllocatedById.get(item.id) ?? 0;
-                  return `${item.title} (${formatCents(allocated)} / ${formatCents(item.amountCents)})`;
-                }).join(", ")}
-                {itemTargetMismatches.length > 3 ? " ..." : ""}
-              </div>
-            )}
-            {overAllocatedSources.length > 0 && (
-              <div style={{ fontSize: "13px", marginBottom: "8px" }}>
-                Overallocated sources: {overAllocatedSources.slice(0, 3).map((source) => {
-                  const allocated = sourceAllocatedById.get(source.budgetSourceId) ?? 0;
-                  return `${source.title} (${formatCents(allocated)} / ${formatCents(source.amountCents)})`;
-                }).join(", ")}
-                {overAllocatedSources.length > 3 ? " ..." : ""}
-              </div>
-            )}
-            {totalUnallocatedSourceCents > 0 && (
-              <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-                Unallocated monthly source remainder: {formatCents(totalUnallocatedSourceCents)}.
-              </div>
-            )}
           </div>
         )}
 
@@ -1205,7 +1178,7 @@ export function BudgetPlanPage() {
           <div className="bp-two-col">
             {/* Budget Sources Column - Left */}
             <div className="bp-col">
-              <div className="st-header">
+              <div className="st-header" style={{ marginBottom: "12px" }}>
                 <h4 className="st-title">Sources</h4>
                 {isPreviewMode && (
                   <button className="btn btn-ghost btn-xs" onClick={openAddSourceModal}>
@@ -1237,8 +1210,13 @@ export function BudgetPlanPage() {
 
             {/* Budget Items Column - Right */}
             <div className="bp-col">
-              <div className="st-header">
-                <h4 className="st-title">Budget Item Allocations {isPreviewMode && "(click to edit)"}</h4>
+              <div className="st-header" style={{ marginBottom: "12px" }}>
+                <h4 className="st-title">Budget Items</h4>
+                {isPreviewMode && (
+                  <button className="btn btn-ghost btn-xs" onClick={openAddAllocationModal}>
+                    + Add Budget
+                  </button>
+                )}
               </div>
               <div className="st-grid">
                 {budgetItemAllocationSummaries.map((alloc) => (
@@ -1743,7 +1721,7 @@ export function BudgetPlanPage() {
                     {pendingConfirmApplyToSubAccounts && " Allocated amounts will be added to sub-accounts."}
                   </p>
                   <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-                    <button className="btn btn-ghost" onClick={() => setShowConfirmDialog(false)}>
+                    <button className="btn btn-ghost" onClick={resetConfirmDialog}>
                       Cancel
                     </button>
                     <button className="btn btn-primary" onClick={executeConfirmMonthly}>
