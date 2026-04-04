@@ -14,6 +14,7 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 type AppContext = {
   workspaceId: string | null;
   baseCurrency?: string | null;
+  defaultBudgetId?: string | null;
 };
 
 type Budget = {
