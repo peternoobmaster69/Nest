@@ -36,6 +36,10 @@ const ConfirmMonthlyBudgetSchema = z.object({
   applyToSubAccounts: z.boolean().default(false),
 });
 
+const ApproveBudgetItemSchema = z.object({
+  monthlyBudgetId: z.string(),
+});
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -77,10 +81,17 @@ export async function GET(request: Request) {
       const yearNum = parseInt(year);
       const monthNum = parseInt(month);
       monthlyBudgets = await prisma.monthlyBudget.findMany({
-        where: { workspaceId, year: yearNum, month: monthNum },
+        where: {
+          workspaceId,
+          year: yearNum,
+          month: monthNum,
+          // Only include budgets where both the item and source are still active
+          budgetItem: { isActive: true },
+          budgetSource: { isActive: true },
+        },
         include: {
           budgetItem: {
-            select: { id: true, title: true },
+            select: { id: true, title: true, destinationSubAccountId: true },
           },
           budgetSource: {
             select: { id: true, title: true },
@@ -146,6 +157,11 @@ export async function POST(request: Request) {
           isMonthly: parsed.data.isMonthly,
           destinationSubAccountId: parsed.data.destinationSubAccountId,
         },
+        include: {
+          destinationSubAccount: {
+            select: { id: true, name: true },
+          },
+        },
       });
 
       return NextResponse.json(item);
@@ -165,6 +181,11 @@ export async function POST(request: Request) {
           title: parsed.data.title,
           ownerId: parsed.data.ownerId,
           amountCents: parsed.data.amountCents,
+        },
+        include: {
+          owner: {
+            select: { id: true, name: true, email: true },
+          },
         },
       });
 
@@ -201,30 +222,36 @@ export async function POST(request: Request) {
       // Calculate total budget item amount
       const totalBudgetCents = budgetItems.reduce((sum, i) => sum + i.amountCents, 0);
 
-      // Delete existing monthly budgets for this month
-      await prisma.monthlyBudget.deleteMany({
-        where: { workspaceId: body.workspaceId, year, month },
-      });
-
       // Generate monthly budgets
-      // Distribute each budget item's amount proportionally across sources
+      // Create allocation records for each item/source combination
+      // Use template amount as initial allocatedCents (user can edit manually)
       const generatedMonthlyBudgets = [];
       for (const item of budgetItems) {
-        // Skip items with 0 amount
         if (item.amountCents === 0) continue;
 
-        // Distribute across sources proportionally
         for (const source of budgetSources) {
           if (source.amountCents === 0) continue;
 
-          // Source's proportion of total
-          const sourceProportion = totalSourceCents > 0 ? source.amountCents / totalSourceCents : 0;
+          // Use the budget item amount as the initial allocation
+          // User will manually adjust this to their exact desired amount
+          const allocatedCents = item.amountCents;
 
-          // Calculate allocation: item amount * source proportion
-          // This ensures all allocations sum to total source amount
-          const allocatedCents = Math.round(item.amountCents * sourceProportion);
+          // Check if record already exists
+          const existing = await prisma.monthlyBudget.findFirst({
+            where: {
+              workspaceId: body.workspaceId,
+              budgetItemId: item.id,
+              budgetSourceId: source.id,
+              year,
+              month,
+            },
+          });
 
-          if (allocatedCents > 0) {
+          if (existing) {
+            // Update existing record, keeping current allocatedCents
+            generatedMonthlyBudgets.push(existing);
+          } else {
+            // Create new record with template amount as initial allocation
             const monthlyBudget = await prisma.monthlyBudget.create({
               data: {
                 workspaceId: body.workspaceId,
@@ -260,6 +287,73 @@ export async function POST(request: Request) {
       return NextResponse.json({ deleted: deleted.count });
     }
 
+    if (action === "approveItem") {
+      const parsed = ApproveBudgetItemSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
+
+      await requireWorkspaceAccess(body.workspaceId);
+      const { monthlyBudgetId } = parsed.data;
+
+      // Get the monthly budget with its associated budget item
+      const monthlyBudget = await prisma.monthlyBudget.findUnique({
+        where: { id: monthlyBudgetId },
+        include: {
+          budgetItem: {
+            select: { id: true, destinationSubAccountId: true },
+          },
+        },
+      });
+
+      if (!monthlyBudget) {
+        return NextResponse.json({ error: "Monthly budget not found" }, { status: 404 });
+      }
+
+      if (monthlyBudget.workspaceId !== body.workspaceId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
+
+      // Check if already applied to sub-account (prevent duplicates)
+      if (monthlyBudget.isAppliedToSubAccount) {
+        return NextResponse.json({ error: "Already approved and applied to sub-account" }, { status: 409 });
+      }
+
+      // Check if it has a destination sub-account
+      if (!monthlyBudget.budgetItem.destinationSubAccountId) {
+        return NextResponse.json({ error: "No destination sub-account configured for this budget item" }, { status: 400 });
+      }
+
+      // We already verified destinationSubAccountId exists above
+      const destinationSubAccountId = monthlyBudget.budgetItem.destinationSubAccountId!;
+
+      // Apply the allocated amount to the destination sub-account
+      await prisma.$transaction(async (tx) => {
+        // Update the monthly budget to mark as applied
+        await tx.monthlyBudget.update({
+          where: { id: monthlyBudgetId },
+          data: {
+            isAppliedToSubAccount: true,
+            appliedAt: new Date(),
+          },
+        });
+
+        // Add the allocated amount to the destination sub-account
+        await tx.budgetEnvelope.update({
+          where: { id: destinationSubAccountId },
+          data: {
+            availableCents: { increment: monthlyBudget.allocatedCents },
+          },
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        appliedCents: monthlyBudget.allocatedCents,
+        destinationSubAccountId: destinationSubAccountId,
+      });
+    }
+
     if (action === "confirmMonthly") {
       const parsed = ConfirmMonthlyBudgetSchema.safeParse(body);
       if (!parsed.success) {
@@ -290,8 +384,8 @@ export async function POST(request: Request) {
         if (!budgetItem) continue;
         if (!sourceIdsSet.has(alloc.budgetSourceId)) continue;
 
-        // Update the draft record with new amount and mark as confirmed
-        const monthlyBudget = await prisma.monthlyBudget.updateMany({
+        // Find the existing monthly budget record
+        const existingMonthlyBudget = await prisma.monthlyBudget.findFirst({
           where: {
             workspaceId: body.workspaceId,
             budgetItemId: alloc.budgetItemId,
@@ -299,20 +393,40 @@ export async function POST(request: Request) {
             year,
             month,
           },
+        });
+
+        if (!existingMonthlyBudget) continue;
+
+        // Update the draft record with new amount and mark as confirmed
+        await prisma.monthlyBudget.update({
+          where: {
+            id: existingMonthlyBudget.id,
+          },
           data: {
             allocatedCents: alloc.allocatedCents,
             isDraft: false,
             confirmedAt: new Date(),
           },
         });
-        confirmedBudgets.push(monthlyBudget);
+        confirmedBudgets.push(existingMonthlyBudget.id);
 
-        // Apply to sub-accounts if requested
-        if (applyToSubAccounts && budgetItem.destinationSubAccountId) {
+        // Apply to sub-accounts if requested and not already applied
+        if (applyToSubAccounts && budgetItem.destinationSubAccountId && !existingMonthlyBudget.isAppliedToSubAccount) {
           await prisma.budgetEnvelope.update({
             where: { id: budgetItem.destinationSubAccountId },
             data: {
               availableCents: { increment: alloc.allocatedCents },
+            },
+          });
+
+          // Also mark the monthly budget as applied to prevent duplicate additions
+          await prisma.monthlyBudget.update({
+            where: {
+              id: existingMonthlyBudget.id,
+            },
+            data: {
+              isAppliedToSubAccount: true,
+              appliedAt: new Date(),
             },
           });
         }

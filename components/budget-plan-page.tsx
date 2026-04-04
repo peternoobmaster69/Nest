@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useMemo, useState } from "react";
-import { EmptyState, SkeletonCard, SkeletonGrid } from "@/components/ui-skeleton";
+import { EmptyState, GeneratingState, SkeletonCard, SkeletonGrid } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type BudgetItem = {
@@ -35,7 +35,8 @@ type MonthlyBudget = {
   year: number;
   month: number;
   allocatedCents: number;
-  budgetItem: { id: string; title: string };
+  isAppliedToSubAccount: boolean;
+  budgetItem: { id: string; title: string; destinationSubAccountId: string | null };
   budgetSource: { id: string; title: string };
 };
 
@@ -112,6 +113,7 @@ export function BudgetPlanPage() {
   const [quickEditDescription, setQuickEditDescription] = useState("");
   const [quickEditAmount, setQuickEditAmount] = useState("");
 
+
   const context = useQuery({
     queryKey: ["app-context"],
     queryFn: () => fetchJson<AppContext>("/api/context"),
@@ -131,6 +133,8 @@ export function BudgetPlanPage() {
         subAccounts: { id: string; name: string }[];
       }>(`/api/budgets/plan?workspaceId=${workspaceId}&year=${selectedYear}&month=${selectedMonth}`),
     enabled: Boolean(workspaceId),
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchOnWindowFocus: false,
   });
 
   const budgetItems = budgetData.data?.budgetItems || [];
@@ -172,31 +176,47 @@ export function BudgetPlanPage() {
       .reduce((sum, item) => sum + item.amountCents, 0);
   }, [isPreviewMode, previewAllocations, monthlyBudgets, budgetItems]);
 
-  const createBudgetItem = useMutation({
-    mutationFn: (payload: {
-      workspaceId: string;
-      action: "createItem";
-      title: string;
-      amountCents: number;
-      isMonthly: boolean;
-      destinationSubAccountId?: string;
-    }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+  const createBudgetItem = useMutation<BudgetItem, Error, {
+    workspaceId: string;
+    action: "createItem";
+    title: string;
+    amountCents: number;
+    isMonthly: boolean;
+    destinationSubAccountId?: string;
+  }>({
+    mutationFn: (payload) =>
+      fetchJson<BudgetItem>("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: (data) => {
+      // Optimistically add the new item to the cache
+      queryClient.setQueryData<{ budgetItems: BudgetItem[]; budgetSources: BudgetSource[]; monthlyBudgets: MonthlyBudget[]; members: WorkspaceMember[]; subAccounts: { id: string; name: string }[] }>(
+        ["budget-plan", workspaceId, selectedYear, selectedMonth],
+        (old) => {
+          if (!old) return old;
+          return { ...old, budgetItems: [...old.budgetItems, data] };
+        }
+      );
       closeItemModal();
     },
   });
 
-  const createBudgetSource = useMutation({
-    mutationFn: (payload: {
-      workspaceId: string;
-      action: "createSource";
-      title: string;
-      amountCents: number;
-      ownerId: string;
-    }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+  const createBudgetSource = useMutation<BudgetSource, Error, {
+    workspaceId: string;
+    action: "createSource";
+    title: string;
+    amountCents: number;
+    ownerId: string;
+  }>({
+    mutationFn: (payload) =>
+      fetchJson<BudgetSource>("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: (data) => {
+      // Optimistically add the new source to the cache
+      queryClient.setQueryData<{ budgetItems: BudgetItem[]; budgetSources: BudgetSource[]; monthlyBudgets: MonthlyBudget[]; members: WorkspaceMember[]; subAccounts: { id: string; name: string }[] }>(
+        ["budget-plan", workspaceId, selectedYear, selectedMonth],
+        (old) => {
+          if (!old) return old;
+          return { ...old, budgetSources: [...old.budgetSources, data] };
+        }
+      );
       closeSourceModal();
     },
   });
@@ -285,6 +305,17 @@ export function BudgetPlanPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
       closeQuickEditModal();
+    },
+  });
+
+  const approveBudgetItem = useMutation({
+    mutationFn: (payload: {
+      workspaceId: string;
+      action: "approveItem";
+      monthlyBudgetId: string;
+    }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
     },
   });
 
@@ -454,20 +485,7 @@ export function BudgetPlanPage() {
   };
 
   const cancelPreview = () => {
-    if (!workspaceId) return;
-    // Delete draft budgets
-    fetchJson("/api/budgets/plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workspaceId,
-        action: "cancelDraft",
-        year: selectedYear,
-        month: selectedMonth,
-      }),
-    }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-    });
+    // Just exit preview mode, don't delete any records
     setIsPreviewMode(false);
     setPreviewAllocations(null);
   };
@@ -617,6 +635,20 @@ export function BudgetPlanPage() {
               <span style={{ flex: 1, fontSize: "14px" }}>
                 Review allocations below. Click Budgeted Items to edit amounts, then confirm to save for {MONTHS[selectedMonth - 1]} {selectedYear}.
               </span>
+              <button className="btn btn-ghost" onClick={openAddSourceModal}>
+                + Add Source
+              </button>
+              <button className="btn btn-ghost" onClick={openAddItemModal}>
+                + Add Item
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={generatePreview}
+                disabled={generateMonthly.isPending}
+                title="Regenerate allocations after adding items or sources"
+              >
+                {generateMonthly.isPending ? "Regenerating..." : "Regenerate"}
+              </button>
               <button className="btn btn-ghost" onClick={cancelPreview}>
                 Cancel
               </button>
@@ -653,19 +685,76 @@ export function BudgetPlanPage() {
           </div>
         )}
 
-        {/* Generate Button when empty */}
-        {!isPreviewMode && displayAllocations.length === 0 && (
+        {/* Generate Button when empty - only show if no monthly budgets exist */}
+        {!isPreviewMode && displayAllocations.length === 0 && !generateMonthly.isPending && monthlyBudgets.length === 0 && (
           <div style={{ marginBottom: "20px" }}>
             <button
               className="btn btn-primary"
               onClick={generatePreview}
               disabled={budgetData.isLoading || !isTemplateReady}
             >
-              {budgetData.isLoading ? "Loading template..." : "Generate from Template"}
+              {budgetData.isLoading ? "Loading..." : "Generate from Template"}
             </button>
             {!budgetData.isLoading && !isTemplateReady && (
               <p className="bp-hint">Add budget items and sources to the template first.</p>
             )}
+          </div>
+        )}
+
+        {/* Review & Confirm section when there are existing monthly budgets */}
+        {!isPreviewMode && displayAllocations.length > 0 && monthlyBudgets.length > 0 && (
+          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--success-bg)", borderRadius: "var(--r-md)", border: "1px solid var(--success)" }}>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ flex: 1, fontSize: "14px", color: "var(--success)" }}>
+                {monthlyBudgets.some(mb => mb.isAppliedToSubAccount)
+                  ? "Some items have been approved and applied to sub-accounts."
+                  : "Monthly budget is confirmed but not yet applied to sub-accounts."}
+              </span>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  // Load existing monthly budgets into preview mode for review
+                  const allocations: AllocationPreview[] = monthlyBudgets.map((mb) => ({
+                    budgetItemId: mb.budgetItemId,
+                    budgetItemTitle: mb.budgetItem.title,
+                    budgetSourceId: mb.budgetSourceId,
+                    budgetSourceTitle: mb.budgetSource.title,
+                    allocatedCents: mb.allocatedCents,
+                  }));
+                  setPreviewAllocations(allocations);
+                  setIsPreviewMode(true);
+                }}
+              >
+                Review & Confirm
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Debug info */}
+        {isPreviewMode && previewAllocations && (
+          <div style={{ marginBottom: "20px", padding: "12px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)", fontSize: "12px", fontFamily: "monospace" }}>
+            <div><strong>Debug:</strong> {previewAllocations.length} allocations</div>
+            <div style={{ marginTop: "4px" }}>
+              {previewAllocations.slice(0, 3).map((a, i) => (
+                <div key={i}>{a.budgetSourceTitle} → {a.budgetItemTitle}: {a.allocatedCents}c</div>
+              ))}
+              {previewAllocations.length > 3 && <div>...</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Generating animation */}
+        {generateMonthly.isPending && (
+          <div style={{ marginBottom: "20px" }}>
+            <GeneratingState title="Generating monthly budget..." />
+          </div>
+        )}
+
+        {/* Generation error */}
+        {generateMonthly.isError && (
+          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--danger-bg)", borderRadius: "var(--r-md)", color: "var(--danger)" }}>
+            Failed to generate: {generateMonthly.error?.message || "Unknown error"}
           </div>
         )}
 
@@ -676,118 +765,62 @@ export function BudgetPlanPage() {
             {/* Budget Sources Column - Left */}
             <div className="bp-col">
               <div className="st-header">
-                <h4 className="st-title">Source Breakdown</h4>
+                <h4 className="st-title">Source Allocations</h4>
               </div>
               <div className="st-grid">
-                {/* Group allocations by budget source */}
-                {(() => {
-                  const sourceTotals = new Map<string, { title: string; total: number }>();
-                  displayAllocations.forEach(alloc => {
-                    const existing = sourceTotals.get(alloc.budgetSourceId);
-                    if (existing) {
-                      existing.total += alloc.allocatedCents;
-                    } else {
-                      sourceTotals.set(alloc.budgetSourceId, { title: alloc.budgetSourceTitle, total: alloc.allocatedCents });
-                    }
-                  });
-                  return Array.from(sourceTotals.entries()).map(([id, data]) => (
-                    <div key={id} className="st-card bp-two-line-card">
-                      <div className="bp-two-line-head">
-                        <div className="bp-two-line-title-wrap">
-                          <span className="st-bank-fallback" style={{ backgroundColor: "#d97706", width: "24px", height: "24px", fontSize: "12px" }}>
-                            💰
-                          </span>
-                          <h5 className="bp-two-line-title">{data.title}</h5>
-                        </div>
-                        <button
-                          className="btn btn-ghost btn-icon"
-                          type="button"
-                          onClick={() => openQuickEditSourceModal(id)}
-                          title={`Edit ${data.title}`}
-                          aria-label={`Edit ${data.title}`}
-                        >
-                          ✏️
-                        </button>
+                {/* Show individual allocations */}
+                {displayAllocations.map((alloc, index) => (
+                  <div key={`${alloc.budgetSourceId}-${alloc.budgetItemId}`} className="st-card bp-two-line-card">
+                    <div className="bp-two-line-head">
+                      <div className="bp-two-line-title-wrap">
+                        <span className="st-bank-fallback" style={{ backgroundColor: "#d97706", width: "24px", height: "24px", fontSize: "12px" }}>
+                          💰
+                        </span>
+                        <h5 className="bp-two-line-title">{alloc.budgetSourceTitle}</h5>
                       </div>
-                      <div className="bp-two-line-amount">
-                        {formatCents(
-                          isPreviewMode
-                            ? data.total
-                            : budgetSources.find((source) => source.id === id)?.amountCents ?? data.total,
-                        )}
-                      </div>
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>→ {alloc.budgetItemTitle}</span>
                     </div>
-                  ));
-                })()}
+                    <div className="bp-two-line-amount">
+                      {formatCents(alloc.allocatedCents)}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
             {/* Budget Items Column - Right */}
             <div className="bp-col">
               <div className="st-header">
-                <h4 className="st-title">Budgeted Items {isPreviewMode && "(click to edit)"}</h4>
+                <h4 className="st-title">Budget Item Allocations {isPreviewMode && "(click to edit)"}</h4>
               </div>
               <div className="st-grid">
-                {/* Group allocations by budget item */}
-                {(() => {
-                  const itemTotals = new Map<string, { title: string; total: number; allocations: AllocationPreview[] }>();
-                  displayAllocations.forEach(alloc => {
-                    const existing = itemTotals.get(alloc.budgetItemId);
-                    if (existing) {
-                      existing.total += alloc.allocatedCents;
-                      existing.allocations.push(alloc);
-                    } else {
-                      itemTotals.set(alloc.budgetItemId, { title: alloc.budgetItemTitle, total: alloc.allocatedCents, allocations: [alloc] });
-                    }
-                  });
-                  return Array.from(itemTotals.entries()).map(([id, data]) => (
-                    <div
-                      key={id}
-                      className={`st-card bp-two-line-card ${isPreviewMode ? 'bp-editable-card' : ''}`}
-                      onClick={isPreviewMode ? () => {
-                        // Find first allocation index for this item in previewAllocations
-                        if (previewAllocations && data.allocations.length > 0) {
-                          const firstAlloc = data.allocations[0];
-                          const index = previewAllocations.findIndex(
-                            a => a.budgetItemId === firstAlloc.budgetItemId && a.budgetSourceId === firstAlloc.budgetSourceId
-                          );
-                          if (index !== -1) openEditAllocationModal(index);
-                        }
-                      } : undefined}
-                      style={isPreviewMode ? { cursor: 'pointer' } : undefined}
-                    >
-                      <div className="bp-two-line-head">
-                        <div className="bp-two-line-title-wrap">
-                          <span className="st-bank-fallback" style={{ backgroundColor: "#1a8f58", width: "24px", height: "24px", fontSize: "12px" }}>
-                            📋
-                          </span>
-                          <h5 className="bp-two-line-title">{data.title}</h5>
-                        </div>
-                        {!isPreviewMode && (
-                          <button
-                            className="btn btn-ghost btn-icon"
-                            type="button"
-                            onClick={() => openQuickEditItemModal(id)}
-                            title={`Edit ${data.title}`}
-                            aria-label={`Edit ${data.title}`}
-                          >
-                            ✏️
-                          </button>
-                        )}
-                        {isPreviewMode && (
-                          <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', opacity: 0.5 }}>✏️</span>
-                        )}
+                {/* Show individual allocations */}
+                {displayAllocations.map((alloc, index) => (
+                  <div
+                    key={`${alloc.budgetItemId}-${alloc.budgetSourceId}`}
+                    className={`st-card bp-two-line-card ${isPreviewMode ? 'bp-editable-card' : ''}`}
+                    onClick={isPreviewMode ? () => {
+                      const idx = previewAllocations?.findIndex(
+                        a => a.budgetItemId === alloc.budgetItemId && a.budgetSourceId === alloc.budgetSourceId
+                      );
+                      if (idx !== undefined && idx !== -1) openEditAllocationModal(idx);
+                    } : undefined}
+                    style={isPreviewMode ? { cursor: 'pointer' } : undefined}
+                  >
+                    <div className="bp-two-line-head">
+                      <div className="bp-two-line-title-wrap">
+                        <span className="st-bank-fallback" style={{ backgroundColor: "#1a8f58", width: "24px", height: "24px", fontSize: "12px" }}>
+                          📋
+                        </span>
+                        <h5 className="bp-two-line-title">{alloc.budgetItemTitle}</h5>
                       </div>
-                      <div className="bp-two-line-amount">
-                        {formatCents(
-                          isPreviewMode
-                            ? data.total
-                            : budgetItems.find((item) => item.id === id)?.amountCents ?? data.total,
-                        )}
-                      </div>
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>← {alloc.budgetSourceTitle}</span>
                     </div>
-                  ));
-                })()}
+                    <div className="bp-two-line-amount">
+                      {formatCents(alloc.allocatedCents)}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -809,12 +842,26 @@ export function BudgetPlanPage() {
           <section className="card" style={{ marginTop: "24px", padding: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h3 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>Budget Template</h3>
-              <button className="btn btn-ghost btn-xs" onClick={() => setShowTemplate(false)}>
-                Hide
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => budgetData.refetch()}
+                  disabled={budgetData.isLoading}
+                >
+                  {budgetData.isLoading ? "Refreshing..." : "Refresh"}
+                </button>
+                <button className="btn btn-ghost btn-xs" onClick={() => setShowTemplate(false)}>
+                  Hide
+                </button>
+              </div>
             </div>
             <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
               Template items and sources used to generate monthly budgets
+              {budgetData.data && (
+                <span style={{ marginLeft: "8px", color: "var(--text-secondary)" }}>
+                  ({budgetItems.length} items, {budgetSources.length} sources)
+                </span>
+              )}
             </p>
           </section>
 
@@ -877,6 +924,13 @@ export function BudgetPlanPage() {
 
               <div className="st-grid">
                 {budgetData.isLoading && <SkeletonGrid count={2} type="card" />}
+
+                {/* Debug info */}
+                {!budgetData.isLoading && !budgetData.isError && budgetItems.length === 0 && (
+                  <div style={{ padding: "12px", background: "var(--warning-bg)", borderRadius: "var(--r-md)", fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                    No budget items found. Add your first item using the + Add Item button.
+                  </div>
+                )}
 
                 {!budgetData.isLoading && !budgetData.isError && budgetItems.map((item) => (
                   <div key={item.id} className="st-card bp-compact-card" onClick={() => openEditItemModal(item)} style={{ cursor: 'pointer' }}>

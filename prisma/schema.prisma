@@ -300,20 +300,22 @@ model BudgetSource {
 
 // Monthly generated budget entries
 model MonthlyBudget {
-  id             String       @id @default(cuid())
-  workspaceId    String
-  budgetItemId   String
-  budgetSourceId String
-  year           Int
-  month          Int          // 1-12
-  allocatedCents Int          @default(0)
-  isDraft        Boolean      @default(true)  // true until user confirms
-  confirmedAt    DateTime?    // set when user confirms
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  budgetItem     BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
-  budgetSource   BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
+  id                   String       @id @default(cuid())
+  workspaceId          String
+  budgetItemId         String
+  budgetSourceId       String
+  year                 Int
+  month                Int          // 1-12
+  allocatedCents       Int          @default(0)
+  isDraft              Boolean      @default(true)  // true until user confirms
+  confirmedAt          DateTime?    // set when user confirms
+  isAppliedToSubAccount Boolean     @default(false) // true when allocated amount is added to destination sub-account
+  appliedAt            DateTime?    // set when applied to sub-account
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  workspace            Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  budgetItem           BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+  budgetSource         BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, year, month, budgetItemId, budgetSourceId])
   @@index([workspaceId, year, month])
