@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EmptyState, GeneratingState, SkeletonCard, SkeletonGrid } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
@@ -34,13 +34,16 @@ type MonthlyBudget = {
   budgetSourceId: string;
   year: number;
   month: number;
+  isDraft: boolean;
   allocatedCents: number;
-  isAppliedToSubAccount: boolean;
-  budgetItem: { id: string; title: string; destinationSubAccountId: string | null };
+  budgetItemTitle?: string | null;
+  budgetSourceTitle?: string | null;
+  budgetItem: { id: string; title: string };
   budgetSource: { id: string; title: string };
 };
 
 type AllocationPreview = {
+  id?: string;
   budgetItemId: string;
   budgetItemTitle: string;
   budgetSourceId: string;
@@ -57,8 +60,11 @@ type GenerateMonthlyPayload = {
 
 type GenerateMonthlyResponse = {
   monthlyBudgets: Array<{
+    id: string;
     budgetItemId: string;
     budgetSourceId: string;
+    budgetItemTitle?: string | null;
+    budgetSourceTitle?: string | null;
     allocatedCents: number;
   }>;
 };
@@ -109,6 +115,10 @@ export function BudgetPlanPage() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [editingAllocationIndex, setEditingAllocationIndex] = useState<number | null>(null);
   const [editingAllocationAmount, setEditingAllocationAmount] = useState("");
+  const [isAddAllocationModalOpen, setIsAddAllocationModalOpen] = useState(false);
+  const [allocationItemId, setAllocationItemId] = useState("");
+  const [allocationSourceId, setAllocationSourceId] = useState("");
+  const [allocationAmount, setAllocationAmount] = useState("");
   const [quickEditTarget, setQuickEditTarget] = useState<{ type: "item" | "source"; id: string } | null>(null);
   const [quickEditDescription, setQuickEditDescription] = useState("");
   const [quickEditAmount, setQuickEditAmount] = useState("");
@@ -143,6 +153,7 @@ export function BudgetPlanPage() {
   const members: WorkspaceMember[] = budgetData.data?.members || [];
   const subAccounts = budgetData.data?.subAccounts || [];
   const isTemplateReady = budgetItems.length > 0 && budgetSources.length > 0;
+  const hasDraftMonthlyBudgets = monthlyBudgets.some((budget) => budget.isDraft);
 
   // Template counts for display
   const templateCounts = useMemo(() => ({
@@ -150,31 +161,28 @@ export function BudgetPlanPage() {
     sources: budgetSources.length,
   }), [budgetItems, budgetSources]);
 
-  const monthlyTotal = useMemo(() => {
-    if (isPreviewMode && previewAllocations) {
-      return previewAllocations.reduce((sum, a) => sum + a.allocatedCents, 0);
-    }
-    return monthlyBudgets.reduce((sum, mb) => sum + mb.allocatedCents, 0);
-  }, [monthlyBudgets, previewAllocations, isPreviewMode]);
-
-  const totalSourcesCents = useMemo(
-    () => budgetSources.reduce((sum, source) => sum + source.amountCents, 0),
-    [budgetSources],
+  const persistedAllocations = useMemo(
+    () =>
+      monthlyBudgets.map((mb) => ({
+        id: mb.id,
+        budgetItemId: mb.budgetItemId,
+        budgetItemTitle: mb.budgetItemTitle || mb.budgetItem.title,
+        budgetSourceId: mb.budgetSourceId,
+        budgetSourceTitle: mb.budgetSourceTitle || mb.budgetSource.title,
+        allocatedCents: mb.allocatedCents,
+      })),
+    [monthlyBudgets],
   );
-  const totalBudgetedCents = useMemo(() => {
-    if (isPreviewMode && previewAllocations) {
-      return previewAllocations.reduce((sum, a) => sum + a.allocatedCents, 0);
-    }
 
-    const allocatedItemIds = new Set(monthlyBudgets.map((mb) => mb.budgetItemId));
-    if (allocatedItemIds.size === 0) {
-      return monthlyBudgets.reduce((sum, mb) => sum + mb.allocatedCents, 0);
-    }
+  const displayAllocations = isPreviewMode && previewAllocations ? previewAllocations : persistedAllocations;
 
-    return budgetItems
-      .filter((item) => allocatedItemIds.has(item.id))
-      .reduce((sum, item) => sum + item.amountCents, 0);
-  }, [isPreviewMode, previewAllocations, monthlyBudgets, budgetItems]);
+  const monthlyTotal = useMemo(
+    () => displayAllocations.reduce((sum, allocation) => sum + allocation.allocatedCents, 0),
+    [displayAllocations],
+  );
+
+  const totalSourcesCents = monthlyTotal;
+  const totalBudgetedCents = monthlyTotal;
 
   const createBudgetItem = useMutation<BudgetItem, Error, {
     workspaceId: string;
@@ -234,6 +242,70 @@ export function BudgetPlanPage() {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
       setIsPreviewMode(false);
       setPreviewAllocations(null);
+    },
+  });
+
+  const addMonthlyAllocation = useMutation({
+    mutationFn: (payload: {
+      workspaceId: string;
+      action: "addAllocation";
+      year: number;
+      month: number;
+      budgetItemId: string;
+      budgetSourceId: string;
+      allocatedCents: number;
+    }) =>
+      fetchJson<{
+        id: string;
+        budgetItemId: string;
+        budgetSourceId: string;
+        budgetItemTitle?: string | null;
+        budgetSourceTitle?: string | null;
+        allocatedCents: number;
+      }>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (allocation) => {
+      const itemTitle =
+        allocation.budgetItemTitle || budgetItems.find((item) => item.id === allocation.budgetItemId)?.title || "Unknown";
+      const sourceTitle =
+        allocation.budgetSourceTitle ||
+        budgetSources.find((source) => source.id === allocation.budgetSourceId)?.title ||
+        "Unknown";
+      setPreviewAllocations((current) => {
+        const next = current ? [...current] : [];
+        const nextAllocation = {
+          id: allocation.id,
+          budgetItemId: allocation.budgetItemId,
+          budgetItemTitle: itemTitle,
+          budgetSourceId: allocation.budgetSourceId,
+          budgetSourceTitle: sourceTitle,
+          allocatedCents: allocation.allocatedCents,
+        };
+        const existingIndex = next.findIndex(
+          (entry) =>
+            entry.budgetItemId === allocation.budgetItemId && entry.budgetSourceId === allocation.budgetSourceId,
+        );
+        if (existingIndex >= 0) {
+          next[existingIndex] = nextAllocation;
+        } else {
+          next.push(nextAllocation);
+        }
+        return next;
+      });
+      setIsPreviewMode(true);
+      closeAddAllocationModal();
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    },
+  });
+
+  const deleteMonthlyAllocation = useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      fetchJson(`/api/budgets/plan?id=${id}&type=allocation&workspaceId=${workspaceId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
     },
   });
 
@@ -305,17 +377,6 @@ export function BudgetPlanPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
       closeQuickEditModal();
-    },
-  });
-
-  const approveBudgetItem = useMutation({
-    mutationFn: (payload: {
-      workspaceId: string;
-      action: "approveItem";
-      monthlyBudgetId: string;
-    }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
     },
   });
 
@@ -425,12 +486,12 @@ export function BudgetPlanPage() {
         body: JSON.stringify(payload),
       }),
     onSuccess: (data) => {
-      // Convert the saved monthly budgets to preview format
       const allocations: AllocationPreview[] = data.monthlyBudgets.map((mb) => ({
+        id: mb.id,
         budgetItemId: mb.budgetItemId,
-        budgetItemTitle: budgetItems.find(i => i.id === mb.budgetItemId)?.title || "Unknown",
+        budgetItemTitle: mb.budgetItemTitle || budgetItems.find(i => i.id === mb.budgetItemId)?.title || "Unknown",
         budgetSourceId: mb.budgetSourceId,
-        budgetSourceTitle: budgetSources.find(s => s.id === mb.budgetSourceId)?.title || "Unknown",
+        budgetSourceTitle: mb.budgetSourceTitle || budgetSources.find(s => s.id === mb.budgetSourceId)?.title || "Unknown",
         allocatedCents: mb.allocatedCents,
       }));
       setPreviewAllocations(allocations);
@@ -463,6 +524,7 @@ export function BudgetPlanPage() {
       body: JSON.stringify({
         workspaceId,
         action: "updateAllocation",
+        id: alloc.id,
         year: selectedYear,
         month: selectedMonth,
         budgetItemId: alloc.budgetItemId,
@@ -485,7 +547,19 @@ export function BudgetPlanPage() {
   };
 
   const cancelPreview = () => {
-    // Just exit preview mode, don't delete any records
+    if (!workspaceId) return;
+    fetchJson("/api/budgets/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId,
+        action: "cancelDraft",
+        year: selectedYear,
+        month: selectedMonth,
+      }),
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    });
     setIsPreviewMode(false);
     setPreviewAllocations(null);
   };
@@ -507,6 +581,46 @@ export function BudgetPlanPage() {
     if (Number.isNaN(value) || value < 0) return;
     updateAllocation(editingAllocationIndex, Math.round(value * 100));
     closeEditAllocationModal();
+  };
+
+  const removeAllocation = () => {
+    if (editingAllocationIndex === null || !previewAllocations) return;
+    const allocation = previewAllocations[editingAllocationIndex];
+    if (allocation.id) {
+      deleteMonthlyAllocation.mutate({ id: allocation.id });
+    }
+    setPreviewAllocations(previewAllocations.filter((_, index) => index !== editingAllocationIndex));
+    closeEditAllocationModal();
+  };
+
+  const openAddAllocationModal = () => {
+    setAllocationItemId(budgetItems[0]?.id || "");
+    setAllocationSourceId(budgetSources[0]?.id || "");
+    setAllocationAmount("");
+    setIsAddAllocationModalOpen(true);
+  };
+
+  const closeAddAllocationModal = () => {
+    setIsAddAllocationModalOpen(false);
+    setAllocationItemId("");
+    setAllocationSourceId("");
+    setAllocationAmount("");
+  };
+
+  const saveAddedAllocation = (e: FormEvent) => {
+    e.preventDefault();
+    if (!workspaceId || !allocationItemId || !allocationSourceId || !allocationAmount) return;
+    const amountCents = Math.round(parseFloat(allocationAmount) * 100);
+    if (Number.isNaN(amountCents) || amountCents < 0) return;
+    addMonthlyAllocation.mutate({
+      workspaceId,
+      action: "addAllocation",
+      year: selectedYear,
+      month: selectedMonth,
+      budgetItemId: allocationItemId,
+      budgetSourceId: allocationSourceId,
+      allocatedCents: amountCents,
+    });
   };
 
   const openQuickEditItemModal = (itemId: string) => {
@@ -574,15 +688,15 @@ export function BudgetPlanPage() {
     });
   };
 
-  const displayAllocations = isPreviewMode && previewAllocations
-    ? previewAllocations
-    : monthlyBudgets.map(mb => ({
-        budgetItemId: mb.budgetItemId,
-        budgetItemTitle: mb.budgetItem.title,
-        budgetSourceId: mb.budgetSourceId,
-        budgetSourceTitle: mb.budgetSource.title,
-        allocatedCents: mb.allocatedCents,
-      }));
+  useEffect(() => {
+    if (hasDraftMonthlyBudgets) {
+      setPreviewAllocations(persistedAllocations);
+      setIsPreviewMode(true);
+      return;
+    }
+    setPreviewAllocations(null);
+    setIsPreviewMode(false);
+  }, [hasDraftMonthlyBudgets, persistedAllocations]);
 
   return (
     <div className="bp-container">
@@ -635,19 +749,8 @@ export function BudgetPlanPage() {
               <span style={{ flex: 1, fontSize: "14px" }}>
                 Review allocations below. Click Budgeted Items to edit amounts, then confirm to save for {MONTHS[selectedMonth - 1]} {selectedYear}.
               </span>
-              <button className="btn btn-ghost" onClick={openAddSourceModal}>
-                + Add Source
-              </button>
-              <button className="btn btn-ghost" onClick={openAddItemModal}>
-                + Add Item
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={generatePreview}
-                disabled={generateMonthly.isPending}
-                title="Regenerate allocations after adding items or sources"
-              >
-                {generateMonthly.isPending ? "Regenerating..." : "Regenerate"}
+              <button className="btn btn-ghost" onClick={openAddAllocationModal}>
+                Add Allocation
               </button>
               <button className="btn btn-ghost" onClick={cancelPreview}>
                 Cancel
@@ -706,26 +809,24 @@ export function BudgetPlanPage() {
           <div style={{ marginBottom: "20px", padding: "16px", background: "var(--success-bg)", borderRadius: "var(--r-md)", border: "1px solid var(--success)" }}>
             <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ flex: 1, fontSize: "14px", color: "var(--success)" }}>
-                {monthlyBudgets.some(mb => mb.isAppliedToSubAccount)
-                  ? "Some items have been approved and applied to sub-accounts."
-                  : "Monthly budget is confirmed but not yet applied to sub-accounts."}
+                Monthly budget exists for this period. Open it again to review or make a new draft from the template.
               </span>
               <button
                 className="btn btn-primary"
                 onClick={() => {
-                  // Load existing monthly budgets into preview mode for review
                   const allocations: AllocationPreview[] = monthlyBudgets.map((mb) => ({
+                    id: mb.id,
                     budgetItemId: mb.budgetItemId,
-                    budgetItemTitle: mb.budgetItem.title,
+                    budgetItemTitle: mb.budgetItemTitle || mb.budgetItem.title,
                     budgetSourceId: mb.budgetSourceId,
-                    budgetSourceTitle: mb.budgetSource.title,
+                    budgetSourceTitle: mb.budgetSourceTitle || mb.budgetSource.title,
                     allocatedCents: mb.allocatedCents,
                   }));
                   setPreviewAllocations(allocations);
                   setIsPreviewMode(true);
                 }}
               >
-                Review & Confirm
+                Review Monthly Budget
               </button>
             </div>
           </div>
@@ -1161,6 +1262,10 @@ export function BudgetPlanPage() {
                 />
               </div>
               <div className="st-modal-actions" style={{ marginTop: "16px" }}>
+                <button type="button" className="btn btn-danger" onClick={removeAllocation} disabled={deleteMonthlyAllocation.isPending}>
+                  {deleteMonthlyAllocation.isPending ? "Removing..." : "Remove"}
+                </button>
+                <div style={{ flex: 1 }} />
                 <button type="button" className="btn btn-ghost" onClick={closeEditAllocationModal}>
                   Cancel
                 </button>
@@ -1169,6 +1274,57 @@ export function BudgetPlanPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isAddAllocationModalOpen && (
+        <div className="st-modal-overlay" onClick={closeAddAllocationModal}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Add Monthly Allocation</h3>
+              <button className="st-close-btn" onClick={closeAddAllocationModal}>âœ•</button>
+            </div>
+            <form className="st-modal-form" onSubmit={saveAddedAllocation}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label">Budget Item</label>
+                  <select className="input" value={allocationItemId} onChange={(e) => setAllocationItemId(e.target.value)} required>
+                    <option value="">Select template item...</option>
+                    {budgetItems.map((item) => (
+                      <option key={item.id} value={item.id}>{item.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Funding Source</label>
+                  <select className="input" value={allocationSourceId} onChange={(e) => setAllocationSourceId(e.target.value)} required>
+                    <option value="">Select template source...</option>
+                    {budgetSources.map((source) => (
+                      <option key={source.id} value={source.id}>{source.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Amount</label>
+                  <NumericCalculatorInput
+                    min="0"
+                    step="0.01"
+                    value={allocationAmount}
+                    onValueChange={setAllocationAmount}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeAddAllocationModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={addMonthlyAllocation.isPending}>
+                  {addMonthlyAllocation.isPending ? "Adding..." : "Add Allocation"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
