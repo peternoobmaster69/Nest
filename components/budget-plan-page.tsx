@@ -24,6 +24,18 @@ type BudgetSource = {
   owner: { id: string; name: string | null; email: string | null };
 };
 
+type MonthlyBudgetSource = {
+  id: string;
+  budgetSourceId: string;
+  year: number;
+  month: number;
+  title: string;
+  ownerId: string;
+  amountCents: number;
+  isDraft: boolean;
+  owner: { id: string; name: string | null; email: string | null };
+};
+
 type WorkspaceMember = {
   user: { id: string; name: string | null; email: string | null };
 };
@@ -80,9 +92,31 @@ type AppContext = {
   baseCurrency?: string | null;
 };
 
+type BudgetPlanData = {
+  budgetItems: BudgetItem[];
+  budgetSources: BudgetSource[];
+  monthlyBudgetSources: MonthlyBudgetSource[];
+  monthlyBudgets: MonthlyBudget[];
+  members: WorkspaceMember[];
+  subAccounts: { id: string; name: string }[];
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  if (!res.ok) {
+    let detail = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.message) {
+        detail = `${detail}: ${body.message}`;
+      } else if (body?.error && typeof body.error === "string") {
+        detail = `${detail}: ${body.error}`;
+      }
+    } catch {
+      // Ignore non-JSON error bodies and fall back to status code.
+    }
+    throw new Error(detail);
+  }
   return res.json();
 }
 
@@ -129,6 +163,12 @@ export function BudgetPlanPage() {
   const [quickEditDescription, setQuickEditDescription] = useState("");
   const [quickEditAmount, setQuickEditAmount] = useState("");
 
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmProgress, setConfirmProgress] = useState(0);
+  const [confirmStage, setConfirmStage] = useState("");
+  const [pendingConfirmApplyToSubAccounts, setPendingConfirmApplyToSubAccounts] = useState(false);
+
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -144,6 +184,7 @@ export function BudgetPlanPage() {
       fetchJson<{
         budgetItems: BudgetItem[];
         budgetSources: BudgetSource[];
+        monthlyBudgetSources: MonthlyBudgetSource[];
         monthlyBudgets: MonthlyBudget[];
         members: WorkspaceMember[];
         subAccounts: { id: string; name: string }[];
@@ -155,9 +196,11 @@ export function BudgetPlanPage() {
 
   const budgetItems = budgetData.data?.budgetItems || [];
   const budgetSources = budgetData.data?.budgetSources || [];
+  const monthlyBudgetSources = budgetData.data?.monthlyBudgetSources || [];
   const monthlyBudgets = budgetData.data?.monthlyBudgets || [];
   const members: WorkspaceMember[] = budgetData.data?.members || [];
   const subAccounts = budgetData.data?.subAccounts || [];
+  const budgetDataError = budgetData.error instanceof Error ? budgetData.error.message : null;
   const isTemplateReady = budgetItems.length > 0 && budgetSources.length > 0;
   const hasDraftMonthlyBudgets = monthlyBudgets.some((budget) => budget.isDraft);
 
@@ -222,14 +265,62 @@ export function BudgetPlanPage() {
       ? sourceAllocationSummaries.find((entry) => entry.id === editingAllocationTarget.id) ?? null
       : budgetItemAllocationSummaries.find((entry) => entry.id === editingAllocationTarget.id) ?? null;
   }, [budgetItemAllocationSummaries, editingAllocationTarget, sourceAllocationSummaries]);
+  const editingAllocationTemplateSource = useMemo(() => {
+    if (!editingAllocationTarget || editingAllocationTarget.type !== "source") return null;
+    return monthlyBudgetSources.find((entry) => entry.budgetSourceId === editingAllocationTarget.id) ?? null;
+  }, [monthlyBudgetSources, editingAllocationTarget]);
 
   const monthlyTotal = useMemo(
     () => displayAllocations.reduce((sum, allocation) => sum + allocation.allocatedCents, 0),
     [displayAllocations],
   );
 
-  const totalSourcesCents = monthlyTotal;
-  const totalBudgetedCents = monthlyTotal;
+  const planningSources = useMemo(
+    () =>
+      monthlyBudgetSources.length > 0
+        ? monthlyBudgetSources
+        : budgetSources.map((source) => ({
+            id: `template-${source.id}`,
+            budgetSourceId: source.id,
+            year: selectedYear,
+            month: selectedMonth,
+            title: source.title,
+            ownerId: source.ownerId,
+            amountCents: source.amountCents,
+            isDraft: true,
+            owner: source.owner,
+          })),
+    [monthlyBudgetSources, budgetSources, selectedYear, selectedMonth],
+  );
+  const templateSourceTotal = useMemo(
+    () => planningSources.reduce((sum, source) => sum + source.amountCents, 0),
+    [planningSources],
+  );
+  const templateItemTotal = useMemo(
+    () => budgetItems.filter((item) => item.isMonthly).reduce((sum, item) => sum + item.amountCents, 0),
+    [budgetItems],
+  );
+  const sourceAllocatedById = useMemo(
+    () => new Map(sourceAllocationSummaries.map((entry) => [entry.id, entry.allocatedCents])),
+    [sourceAllocationSummaries],
+  );
+  const itemAllocatedById = useMemo(
+    () => new Map(budgetItemAllocationSummaries.map((entry) => [entry.id, entry.allocatedCents])),
+    [budgetItemAllocationSummaries],
+  );
+  const overAllocatedSources = useMemo(
+    () => planningSources.filter((source) => (sourceAllocatedById.get(source.budgetSourceId) ?? 0) > source.amountCents),
+    [planningSources, sourceAllocatedById],
+  );
+  const itemTargetMismatches = useMemo(
+    () => budgetItems
+      .filter((item) => item.isMonthly)
+      .filter((item) => (itemAllocatedById.get(item.id) ?? 0) !== item.amountCents),
+    [budgetItems, itemAllocatedById],
+  );
+  const totalUnallocatedSourceCents = Math.max(0, templateSourceTotal - monthlyTotal);
+  // Approve allowed when total allocated equals total sources
+  const canApproveMonthly = monthlyTotal === templateSourceTotal;
 
   const createBudgetItem = useMutation<BudgetItem, Error, {
     workspaceId: string;
@@ -243,7 +334,7 @@ export function BudgetPlanPage() {
       fetchJson<BudgetItem>("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: (data) => {
       // Optimistically add the new item to the cache
-      queryClient.setQueryData<{ budgetItems: BudgetItem[]; budgetSources: BudgetSource[]; monthlyBudgets: MonthlyBudget[]; members: WorkspaceMember[]; subAccounts: { id: string; name: string }[] }>(
+      queryClient.setQueryData<BudgetPlanData>(
         ["budget-plan", workspaceId, selectedYear, selectedMonth],
         (old) => {
           if (!old) return old;
@@ -265,12 +356,58 @@ export function BudgetPlanPage() {
       fetchJson<BudgetSource>("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: (data) => {
       // Optimistically add the new source to the cache
-      queryClient.setQueryData<{ budgetItems: BudgetItem[]; budgetSources: BudgetSource[]; monthlyBudgets: MonthlyBudget[]; members: WorkspaceMember[]; subAccounts: { id: string; name: string }[] }>(
+      queryClient.setQueryData<BudgetPlanData>(
         ["budget-plan", workspaceId, selectedYear, selectedMonth],
         (old) => {
           if (!old) return old;
           return { ...old, budgetSources: [...old.budgetSources, data] };
         }
+      );
+      closeSourceModal();
+    },
+  });
+
+  const createMonthlyBudgetSource = useMutation<
+    MonthlyBudgetSource,
+    Error,
+    {
+      workspaceId: string;
+      action: "createMonthlySource";
+      year: number;
+      month: number;
+      title: string;
+      amountCents: number;
+      ownerId: string;
+    }
+  >({
+    mutationFn: (payload) =>
+      fetchJson<MonthlyBudgetSource>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData<BudgetPlanData>(
+        ["budget-plan", workspaceId, selectedYear, selectedMonth],
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            budgetSources: old.budgetSources.some((source) => source.id === data.budgetSourceId)
+              ? old.budgetSources
+              : [
+                  ...old.budgetSources,
+                  {
+                    id: data.budgetSourceId,
+                    title: data.title,
+                    amountCents: data.amountCents,
+                    ownerId: data.ownerId,
+                    owner: data.owner,
+                  },
+                ],
+            monthlyBudgetSources: [...old.monthlyBudgetSources, data],
+          };
+        },
       );
       closeSourceModal();
     },
@@ -319,7 +456,7 @@ export function BudgetPlanPage() {
         allocation.budgetItemTitle || budgetItems.find((item) => item.id === allocation.budgetItemId)?.title || "Unknown";
       const sourceTitle =
         allocation.budgetSourceTitle ||
-        budgetSources.find((source) => source.id === allocation.budgetSourceId)?.title ||
+        planningSources.find((source) => source.budgetSourceId === allocation.budgetSourceId)?.title ||
         "Unknown";
       setPreviewAllocations((current) => {
         const next = current ? [...current] : [];
@@ -505,13 +642,24 @@ export function BudgetPlanPage() {
   const onSubmitSource = (e: FormEvent) => {
     e.preventDefault();
     if (!workspaceId || !sourceTitle || !sourceAmount || !sourceOwnerId) return;
+    const amountCents = Math.round(parseFloat(sourceAmount) * 100);
     if (editingSourceId) {
       updateBudgetSource.mutate({
         id: editingSourceId,
         workspaceId,
         action: "updateSource",
         title: sourceTitle,
-        amountCents: Math.round(parseFloat(sourceAmount) * 100),
+        amountCents,
+        ownerId: sourceOwnerId,
+      });
+    } else if (isPreviewMode) {
+      createMonthlyBudgetSource.mutate({
+        workspaceId,
+        action: "createMonthlySource",
+        year: selectedYear,
+        month: selectedMonth,
+        title: sourceTitle,
+        amountCents,
         ownerId: sourceOwnerId,
       });
     } else {
@@ -519,7 +667,7 @@ export function BudgetPlanPage() {
         workspaceId,
         action: "createSource",
         title: sourceTitle,
-        amountCents: Math.round(parseFloat(sourceAmount) * 100),
+        amountCents,
         ownerId: sourceOwnerId,
       });
     }
@@ -538,7 +686,7 @@ export function BudgetPlanPage() {
         budgetItemId: mb.budgetItemId,
         budgetItemTitle: mb.budgetItemTitle || budgetItems.find(i => i.id === mb.budgetItemId)?.title || "Unknown",
         budgetSourceId: mb.budgetSourceId,
-        budgetSourceTitle: mb.budgetSourceTitle || budgetSources.find(s => s.id === mb.budgetSourceId)?.title || "Unknown",
+        budgetSourceTitle: mb.budgetSourceTitle || planningSources.find((s) => s.budgetSourceId === mb.budgetSourceId)?.title || "Unknown",
         allocatedCents: mb.allocatedCents,
       }));
       setPreviewAllocations(allocations);
@@ -548,7 +696,7 @@ export function BudgetPlanPage() {
   });
 
   const generatePreview = () => {
-    if (!workspaceId || budgetItems.length === 0 || budgetSources.length === 0) return;
+    if (!workspaceId || budgetItems.length === 0 || planningSources.length === 0) return;
     generateMonthly.mutate({
       workspaceId,
       action: "generateMonthly",
@@ -623,16 +771,64 @@ export function BudgetPlanPage() {
     ));
   };
 
-  const onConfirmMonthly = (applyToSubAccounts: boolean) => {
+  const openConfirmDialog = () => {
+    setShowConfirmDialog(true);
+    setConfirmProgress(0);
+    setConfirmStage("Click Save to finalize...");
+  };
+
+  const executeConfirmMonthly = () => {
     if (!workspaceId || !previewAllocations) return;
-    confirmMonthly.mutate({
-      workspaceId,
-      action: "confirmMonthly",
-      year: selectedYear,
-      month: selectedMonth,
-      allocations: previewAllocations,
-      applyToSubAccounts,
+    setConfirmStage("Initializing...");
+
+    // Simulate progress steps
+    const stages = [
+      { progress: 20, message: "Validating allocations...", delay: 300 },
+      { progress: 50, message: "Saving to database...", delay: 600 },
+      { progress: 80, message: "Applying to sub-accounts...", delay: 900 },
+      { progress: 100, message: "Complete!", delay: 1200 },
+    ];
+
+    stages.forEach(({ progress, message, delay }) => {
+      setTimeout(() => {
+        setConfirmProgress(progress);
+        setConfirmStage(message);
+      }, delay);
     });
+
+    // Actually perform the save after a brief delay
+    setTimeout(() => {
+      confirmMonthly.mutate({
+        workspaceId,
+        action: "confirmMonthly",
+        year: selectedYear,
+        month: selectedMonth,
+        allocations: previewAllocations,
+        applyToSubAccounts: pendingConfirmApplyToSubAccounts,
+      }, {
+        onSuccess: () => {
+          setTimeout(() => {
+            setShowConfirmDialog(false);
+            setConfirmProgress(0);
+            setConfirmStage("");
+            setPendingConfirmApplyToSubAccounts(false);
+          }, 500);
+        },
+        onError: () => {
+          setConfirmStage("Error occurred!");
+          setTimeout(() => {
+            setShowConfirmDialog(false);
+            setConfirmProgress(0);
+            setConfirmStage("");
+          }, 2000);
+        },
+      });
+    }, 800);
+  };
+
+  const onConfirmMonthly = (applyToSubAccounts: boolean) => {
+    setPendingConfirmApplyToSubAccounts(applyToSubAccounts);
+    openConfirmDialog();
   };
 
   const cancelPreview = () => {
@@ -700,7 +896,7 @@ export function BudgetPlanPage() {
 
   const openAddAllocationModal = () => {
     setAllocationItemId(budgetItems[0]?.id || "");
-    setAllocationSourceId(budgetSources[0]?.id || "");
+    setAllocationSourceId(planningSources[0]?.budgetSourceId || "");
     setAllocationAmount("");
     setIsAddAllocationModalOpen(true);
   };
@@ -823,7 +1019,7 @@ export function BudgetPlanPage() {
                 onClick={() => setShowTemplate(!showTemplate)}
                 disabled={budgetData.isLoading}
               >
-                {showTemplate ? "Hide Template" : "Edit Template"}
+                {showTemplate ? "Hide Setup" : "Edit Setup"}
               </button>
             )}
           </div>
@@ -857,13 +1053,16 @@ export function BudgetPlanPage() {
               <button className="btn btn-ghost" onClick={openAddAllocationModal}>
                 Add Allocation
               </button>
+              <button className="btn btn-ghost" onClick={openAddSourceModal}>
+                Add Source
+              </button>
               <button className="btn btn-ghost" onClick={cancelPreview}>
                 Cancel
               </button>
               <button
                 className="btn btn-primary"
-                onClick={() => onConfirmMonthly(true)}
-                disabled={confirmMonthly.isPending}
+                onClick={() => setShowConfirmDialog(true)}
+                disabled={confirmMonthly.isPending || !canApproveMonthly}
               >
                 {confirmMonthly.isPending ? "Saving..." : "Confirm & Save"}
               </button>
@@ -871,6 +1070,11 @@ export function BudgetPlanPage() {
             <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "8px" }}>
               This will save the monthly budget to the database for {MONTHS[selectedMonth - 1]} {selectedYear} and add allocated amounts to sub-accounts.
             </p>
+            {!canApproveMonthly && (
+              <p style={{ fontSize: "12px", color: "var(--danger)", marginTop: "8px" }}>
+                Approval disabled: allocated {formatCents(monthlyTotal)} ≠ sources {formatCents(templateSourceTotal)} ({formatCents(totalUnallocatedSourceCents)} unallocated)
+              </p>
+            )}
           </div>
         )}
 
@@ -878,18 +1082,47 @@ export function BudgetPlanPage() {
         {(displayAllocations.length > 0 || isPreviewMode) && (
           <div className="bp-stat-grid" style={{ marginBottom: "24px" }}>
             <div className="bp-stat">
-              <div className="bp-stat-label">Total Budgeted</div>
-              <div className="bp-stat-value">{formatCents(totalBudgetedCents)}</div>
+              <div className="bp-stat-label">Allocated</div>
+              <div className="bp-stat-value">{formatCents(monthlyTotal)}</div>
             </div>
             <div className="bp-stat">
-              <div className="bp-stat-label">Total Sources</div>
-              <div className="bp-stat-value">{formatCents(totalSourcesCents)}</div>
+              <div className="bp-stat-label">Monthly Source Plan</div>
+              <div className="bp-stat-value">{formatCents(templateSourceTotal)}</div>
+              <div className="bp-stat-sub">{formatCents(totalUnallocatedSourceCents)} unallocated</div>
             </div>
             <div className="bp-stat">
-              <div className="bp-stat-label">Allocations</div>
-              <div className="bp-stat-value">{displayAllocations.length}</div>
-              <div className="bp-stat-sub">Items</div>
+              <div className="bp-stat-label">Monthly Item Targets</div>
+              <div className="bp-stat-value">{formatCents(templateItemTotal)}</div>
+              <div className="bp-stat-sub">{itemTargetMismatches.length} items need review</div>
             </div>
+          </div>
+        )}
+
+        {isPreviewMode && (overAllocatedSources.length > 0 || itemTargetMismatches.length > 0 || totalUnallocatedSourceCents > 0) && (
+          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)" }}>
+            {itemTargetMismatches.length > 0 && (
+              <div style={{ fontSize: "13px", marginBottom: "8px" }}>
+                Item mismatches: {itemTargetMismatches.slice(0, 3).map((item) => {
+                  const allocated = itemAllocatedById.get(item.id) ?? 0;
+                  return `${item.title} (${formatCents(allocated)} / ${formatCents(item.amountCents)})`;
+                }).join(", ")}
+                {itemTargetMismatches.length > 3 ? " ..." : ""}
+              </div>
+            )}
+            {overAllocatedSources.length > 0 && (
+              <div style={{ fontSize: "13px", marginBottom: "8px" }}>
+                Overallocated sources: {overAllocatedSources.slice(0, 3).map((source) => {
+                  const allocated = sourceAllocatedById.get(source.budgetSourceId) ?? 0;
+                  return `${source.title} (${formatCents(allocated)} / ${formatCents(source.amountCents)})`;
+                }).join(", ")}
+                {overAllocatedSources.length > 3 ? " ..." : ""}
+              </div>
+            )}
+            {totalUnallocatedSourceCents > 0 && (
+              <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                Unallocated monthly source remainder: {formatCents(totalUnallocatedSourceCents)}.
+              </div>
+            )}
           </div>
         )}
 
@@ -913,7 +1146,7 @@ export function BudgetPlanPage() {
               </button>
             </div>
             {!budgetData.isLoading && !isTemplateReady && (
-              <p className="bp-hint">Add template items and sources first, then save month-specific allocations here.</p>
+              <p className="bp-hint">Add budget items and source templates first, then build the monthly plan here.</p>
             )}
           </div>
         )}
@@ -923,7 +1156,7 @@ export function BudgetPlanPage() {
           <div style={{ marginBottom: "20px", padding: "16px", background: "var(--success-bg)", borderRadius: "var(--r-md)", border: "1px solid var(--success)" }}>
             <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ flex: 1, fontSize: "14px", color: "var(--success)" }}>
-                Monthly budget exists for this period. Open it again to review or make a new draft from the template.
+                A monthly budget already exists for this period. Open it again to review it or create a fresh draft from the current setup.
               </span>
               <button
                 className="btn btn-primary"
@@ -946,19 +1179,6 @@ export function BudgetPlanPage() {
           </div>
         )}
 
-        {/* Debug info */}
-        {isPreviewMode && previewAllocations && (
-          <div style={{ marginBottom: "20px", padding: "12px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)", fontSize: "12px", fontFamily: "monospace" }}>
-            <div><strong>Debug:</strong> {previewAllocations.length} allocations</div>
-            <div style={{ marginTop: "4px" }}>
-              {sourceAllocationSummaries.slice(0, 3).map((summary, i) => (
-                <div key={i}>Source {summary.title}: {summary.allocatedCents}c</div>
-              ))}
-              {sourceAllocationSummaries.length > 3 && <div>...</div>}
-            </div>
-          </div>
-        )}
-
         {/* Generating animation */}
         {generateMonthly.isPending && (
           <div style={{ marginBottom: "20px" }}>
@@ -973,6 +1193,12 @@ export function BudgetPlanPage() {
           </div>
         )}
 
+        {budgetData.isError && (
+          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--danger-bg)", borderRadius: "var(--r-md)", color: "var(--danger)" }}>
+            Failed to load budget plan data: {budgetDataError || "Unknown error"}
+          </div>
+        )}
+
 
         {/* Two Column Layout for Monthly Budget */}
         {displayAllocations.length > 0 && (
@@ -980,26 +1206,29 @@ export function BudgetPlanPage() {
             {/* Budget Sources Column - Left */}
             <div className="bp-col">
               <div className="st-header">
-                <h4 className="st-title">Source Allocations</h4>
+                <h4 className="st-title">Sources</h4>
+                {isPreviewMode && (
+                  <button className="btn btn-ghost btn-xs" onClick={openAddSourceModal}>
+                    + Add Source
+                  </button>
+                )}
               </div>
               <div className="st-grid">
-                {sourceAllocationSummaries.map((alloc) => (
+                {monthlyBudgetSources.map((source) => (
                   <div
-                    key={alloc.id}
-                    className={`st-card bp-two-line-card ${isPreviewMode ? 'bp-editable-card' : ''}`}
-                    onClick={isPreviewMode ? () => openEditAllocationModal({ type: "source", id: alloc.id }) : undefined}
-                    style={isPreviewMode ? { cursor: 'pointer' } : undefined}
+                    key={source.budgetSourceId}
+                    className="st-card bp-two-line-card"
                   >
                     <div className="bp-two-line-head">
                       <div className="bp-two-line-title-wrap">
                         <span className="st-bank-fallback" style={{ backgroundColor: "#d97706", width: "24px", height: "24px", fontSize: "12px" }}>
                           💰
                         </span>
-                        <h5 className="bp-two-line-title">{alloc.title}</h5>
+                        <h5 className="bp-two-line-title">{source.title}</h5>
                       </div>
                     </div>
                     <div className="bp-two-line-amount">
-                      {formatCents(alloc.allocatedCents)}
+                      {formatCents(source.amountCents)}
                     </div>
                   </div>
                 ))}
@@ -1052,7 +1281,7 @@ export function BudgetPlanPage() {
           {/* Template Header */}
           <section className="card" style={{ marginTop: "24px", padding: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>Budget Template</h3>
+              <h3 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>Budget Setup</h3>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
                   className="btn btn-ghost btn-xs"
@@ -1067,7 +1296,7 @@ export function BudgetPlanPage() {
               </div>
             </div>
             <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
-              Template items and sources used to generate monthly budgets
+              Budget items and source templates used to generate monthly budgets
               {budgetData.data && (
                 <span style={{ marginLeft: "8px", color: "var(--text-secondary)" }}>
                   ({budgetItems.length} items, {budgetSources.length} sources)
@@ -1075,6 +1304,12 @@ export function BudgetPlanPage() {
               )}
             </p>
           </section>
+
+          {budgetData.isError && (
+            <section className="card" style={{ marginTop: "12px", padding: "16px", background: "var(--danger-bg)", color: "var(--danger)" }}>
+              Could not load template data: {budgetDataError || "Unknown error"}
+            </section>
+          )}
 
           {/* Two Column Layout: Budget Sources and Budget Items */}
           <div className="bp-two-col">
@@ -1305,9 +1540,9 @@ export function BudgetPlanPage() {
                   </small>
                 </div>
               </div>
-              {(createBudgetSource.isError || updateBudgetSource.isError) && (
+              {(createBudgetSource.isError || createMonthlyBudgetSource.isError || updateBudgetSource.isError) && (
                 <div className="st-error">
-                  Failed to save: {(createBudgetSource.error as Error)?.message || (updateBudgetSource.error as Error)?.message || "Unknown error"}
+                  Failed to save: {(createMonthlyBudgetSource.error as Error)?.message || (createBudgetSource.error as Error)?.message || (updateBudgetSource.error as Error)?.message || "Unknown error"}
                 </div>
               )}
               <div className="st-modal-actions">
@@ -1328,11 +1563,11 @@ export function BudgetPlanPage() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={createBudgetSource.isPending || updateBudgetSource.isPending || !sourceOwnerId}
+                  disabled={createBudgetSource.isPending || createMonthlyBudgetSource.isPending || updateBudgetSource.isPending || !sourceOwnerId}
                 >
                   {editingSourceId
                     ? (updateBudgetSource.isPending ? "Saving..." : "Save Changes")
-                    : (createBudgetSource.isPending ? "Adding..." : "Add Source")}
+                    : ((createBudgetSource.isPending || createMonthlyBudgetSource.isPending) ? "Adding..." : "Add Source")}
                 </button>
               </div>
             </form>
@@ -1345,7 +1580,7 @@ export function BudgetPlanPage() {
         <div className="st-modal-overlay" onClick={closeEditAllocationModal}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
-              <h3>Edit {editingAllocationTarget.type === "source" ? "Source Total" : "Budget Item Total"}</h3>
+              <h3>Edit {editingAllocationTarget.type === "source" ? "Allocated Amount for Source" : "Budget Item Total"}</h3>
               <button className="st-close-btn" onClick={closeEditAllocationModal}>✕</button>
             </div>
             <div className="st-modal-form">
@@ -1355,8 +1590,13 @@ export function BudgetPlanPage() {
                   {editingAllocationSummary.title}
                 </div>
               </div>
+              {editingAllocationTarget.type === "source" && editingAllocationTemplateSource && (
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "-4px" }}>
+                  Template source amount stays at {formatCents(editingAllocationTemplateSource.amountCents)}. This only changes how much of that source is allocated in this month.
+                </div>
+              )}
               <div className="form-group">
-                <label className="label">Amount</label>
+                <label className="label">{editingAllocationTarget.type === "source" ? "Allocated Amount" : "Amount"}</label>
                 <NumericCalculatorInput
                   min="0"
                   step="0.01"
@@ -1367,7 +1607,7 @@ export function BudgetPlanPage() {
               </div>
               <div className="st-modal-actions" style={{ marginTop: "16px" }}>
                 <button type="button" className="btn btn-danger" onClick={removeAllocation}>
-                  Remove Total
+                  Remove Allocation
                 </button>
                 <div style={{ flex: 1 }} />
                 <button type="button" className="btn btn-ghost" onClick={closeEditAllocationModal}>
@@ -1404,8 +1644,8 @@ export function BudgetPlanPage() {
                   <label className="label">Funding Source</label>
                   <select className="input" value={allocationSourceId} onChange={(e) => setAllocationSourceId(e.target.value)} required>
                     <option value="">Select source...</option>
-                    {budgetSources.map((source) => (
-                      <option key={source.id} value={source.id}>{source.title}</option>
+                    {planningSources.map((source) => (
+                      <option key={source.id} value={source.budgetSourceId}>{source.title}</option>
                     ))}
                   </select>
                 </div>
@@ -1484,6 +1724,51 @@ export function BudgetPlanPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm & Save Progress Dialog */}
+      {showConfirmDialog && (
+        <div className="st-modal-overlay">
+          <div className="st-modal" style={{ maxWidth: "400px" }}>
+            <div className="st-modal-header">
+              <h3>{confirmProgress === 0 ? "Confirm Monthly Budget" : "Finalizing..."}</h3>
+            </div>
+            <div className="st-modal-form" style={{ padding: "24px" }}>
+              {confirmProgress === 0 ? (
+                <>
+                  <p style={{ marginBottom: "20px", fontSize: "14px", color: "var(--text-secondary)" }}>
+                    This will finalize the monthly budget for {MONTHS[selectedMonth - 1]} {selectedYear}.
+                    {pendingConfirmApplyToSubAccounts && " Allocated amounts will be added to sub-accounts."}
+                  </p>
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                    <button className="btn btn-ghost" onClick={() => setShowConfirmDialog(false)}>
+                      Cancel
+                    </button>
+                    <button className="btn btn-primary" onClick={executeConfirmMonthly}>
+                      Save & Finalize
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ textAlign: "center", marginBottom: "20px" }}>
+                    <div className="generating-spinner" style={{ margin: "0 auto 16px" }} />
+                    <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{confirmStage}</div>
+                  </div>
+                  <div className="progress-track">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${confirmProgress}%` }}
+                    />
+                  </div>
+                  <div style={{ textAlign: "center", marginTop: "8px", fontSize: "12px", color: "var(--text-tertiary)" }}>
+                    {confirmProgress}%
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import NextAuth from "next-auth";
 import AppleProvider from "next-auth/providers/apple";
 import FacebookProvider from "next-auth/providers/facebook";
 import GoogleProvider from "next-auth/providers/google";
+import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 
 const providers = [];
@@ -54,6 +55,63 @@ export const authOptions: NextAuthOptions = {
     signIn: "/signin",
   },
 };
+
+export const SESSION_COOKIE_NAME = "nest-session";
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+
+function getSessionSecret() {
+  return process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "dev-only-insecure-session-secret";
+}
+
+function signSessionPayload(payload: string) {
+  return createHmac("sha256", getSessionSecret()).update(payload).digest("base64url");
+}
+
+export const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true as const,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: Math.floor(SESSION_TTL_MS / 1000),
+};
+
+export function createSessionToken(payload: { userId: string }) {
+  const body = {
+    userId: payload.userId,
+    exp: Date.now() + SESSION_TTL_MS,
+  };
+  const encoded = Buffer.from(JSON.stringify(body)).toString("base64url");
+  const signature = signSessionPayload(encoded);
+  return `${encoded}.${signature}`;
+}
+
+export function verifySessionToken(token: string): { userId: string } | null {
+  const [encoded, signature] = token.split(".");
+  if (!encoded || !signature) return null;
+
+  const expected = signSessionPayload(encoded);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    providedBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(providedBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as {
+      userId?: string;
+      exp?: number;
+    };
+    if (!decoded.userId || !decoded.exp || decoded.exp < Date.now()) {
+      return null;
+    }
+    return { userId: decoded.userId };
+  } catch {
+    return null;
+  }
+}
 
 const handler = NextAuth(authOptions);
 

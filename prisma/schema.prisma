@@ -30,6 +30,7 @@ model User {
   receivedWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteReceiver")
   workspaceAuditLogs WorkspaceAuditLog[]
   budgetSources   BudgetSource[]
+  monthlyBudgetSources MonthlyBudgetSource[]
 }
 
 model Account {
@@ -107,6 +108,7 @@ model Workspace {
   auditLogs           WorkspaceAuditLog[]
   budgetItems         BudgetItem[]
   budgetSources       BudgetSource[]
+  monthlyBudgetSources MonthlyBudgetSource[]
   monthlyBudgets      MonthlyBudget[]
 }
 
@@ -294,8 +296,30 @@ model BudgetSource {
   workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   monthlyBudgets MonthlyBudget[]
+  monthlyBudgetSources MonthlyBudgetSource[]
 
   @@index([workspaceId])
+}
+
+model MonthlyBudgetSource {
+  id            String       @id @default(cuid())
+  workspaceId   String
+  budgetSourceId String
+  year          Int
+  month         Int
+  title         String
+  ownerId       String
+  amountCents   Int          @default(0)
+  isDraft       Boolean      @default(true)
+  confirmedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  budgetSource  BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
+  owner         User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, year, month, budgetSourceId])
+  @@index([workspaceId, year, month])
 }
 
 // Monthly generated budget entries

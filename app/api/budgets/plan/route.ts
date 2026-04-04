@@ -17,6 +17,14 @@ const CreateBudgetSourceSchema = z.object({
   amountCents: z.number().int().min(0),
 });
 
+const CreateMonthlyBudgetSourceSchema = z.object({
+  year: z.number().int(),
+  month: z.number().int().min(1).max(12),
+  title: z.string().min(1).max(200),
+  ownerId: z.string().min(1, "Owner is required"),
+  amountCents: z.number().int().min(0),
+});
+
 const GenerateMonthlyBudgetSchema = z.object({
   year: z.number().int(),
   month: z.number().int().min(1).max(12),
@@ -56,6 +64,15 @@ const UpdateBudgetItemSchema = z.object({
 
 const UpdateBudgetSourceSchema = z.object({
   id: z.string(),
+  title: z.string().min(1).max(200),
+  ownerId: z.string().min(1, "Owner is required"),
+  amountCents: z.number().int().min(0),
+});
+
+const UpdateMonthlyBudgetSourceSchema = z.object({
+  id: z.string(),
+  year: z.number().int(),
+  month: z.number().int().min(1).max(12),
   title: z.string().min(1).max(200),
   ownerId: z.string().min(1, "Owner is required"),
   amountCents: z.number().int().min(0),
@@ -110,6 +127,72 @@ function distributeItemAcrossSources(
     .filter((entry) => entry.allocatedCents > 0);
 }
 
+function allocateItemWithinRemainingSources(
+  itemAmountCents: number,
+  remainingBySourceId: Map<string, number>,
+  sources: Array<{ budgetSourceId: string }>,
+) {
+  const availableSources = sources
+    .map((source) => ({
+      budgetSourceId: source.budgetSourceId,
+      remainingCents: remainingBySourceId.get(source.budgetSourceId) ?? 0,
+    }))
+    .filter((source) => source.remainingCents > 0);
+
+  const totalRemainingCents = availableSources.reduce((sum, source) => sum + source.remainingCents, 0);
+  const targetCents = Math.min(Math.max(0, itemAmountCents), totalRemainingCents);
+
+  if (targetCents <= 0 || availableSources.length === 0) {
+    return [] as Array<{ budgetSourceId: string; allocatedCents: number }>;
+  }
+
+  let allocatedSoFar = 0;
+  const allocations = availableSources
+    .map((source, index) => {
+      const allocatedCents =
+        index === availableSources.length - 1
+          ? targetCents - allocatedSoFar
+          : Math.min(
+              source.remainingCents,
+              Math.round((targetCents * source.remainingCents) / totalRemainingCents),
+            );
+      allocatedSoFar += allocatedCents;
+      return {
+        budgetSourceId: source.budgetSourceId,
+        allocatedCents,
+      };
+    })
+    .filter((entry) => entry.allocatedCents > 0);
+
+  const shortfall = targetCents - allocations.reduce((sum, entry) => sum + entry.allocatedCents, 0);
+  if (shortfall > 0) {
+    for (const source of availableSources) {
+      const currentRemaining = remainingBySourceId.get(source.budgetSourceId) ?? 0;
+      const alreadyAllocated =
+        allocations.find((entry) => entry.budgetSourceId === source.budgetSourceId)?.allocatedCents ?? 0;
+      const extraCapacity = currentRemaining - alreadyAllocated;
+      if (extraCapacity <= 0) continue;
+      const extra = Math.min(extraCapacity, targetCents - allocations.reduce((sum, entry) => sum + entry.allocatedCents, 0));
+      if (extra <= 0) break;
+      const existing = allocations.find((entry) => entry.budgetSourceId === source.budgetSourceId);
+      if (existing) {
+        existing.allocatedCents += extra;
+      } else {
+        allocations.push({ budgetSourceId: source.budgetSourceId, allocatedCents: extra });
+      }
+    }
+  }
+
+  for (const allocation of allocations) {
+    remainingBySourceId.set(
+      allocation.budgetSourceId,
+      Math.max(0, (remainingBySourceId.get(allocation.budgetSourceId) ?? 0) - allocation.allocatedCents),
+    );
+  }
+
+  return allocations.filter((entry) => entry.allocatedCents > 0);
+}
+
 async function ensureMonthIsNotConfirmed(workspaceId: string, year: number, month: number) {
   const confirmedCount = await prisma.monthlyBudget.count({
     where: { workspaceId, year, month, isDraft: false },
@@ -121,6 +204,60 @@ async function ensureMonthIsNotConfirmed(workspaceId: string, year: number, mont
     );
   }
   return null;
+}
+
+async function ensureMonthlyBudgetSources(workspaceId: string, year: number, month: number) {
+  const [templateSources, existingMonthlySources] = await Promise.all([
+    prisma.budgetSource.findMany({
+      where: { workspaceId, isActive: true },
+      include: {
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.monthlyBudgetSource.findMany({
+      where: { workspaceId, year, month },
+      include: {
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const existingByTemplateId = new Set(existingMonthlySources.map((source) => source.budgetSourceId));
+  const missingTemplateSources = templateSources.filter((source) => !existingByTemplateId.has(source.id));
+
+  if (missingTemplateSources.length === 0) {
+    return existingMonthlySources;
+  }
+
+  const created = await Promise.all(
+    missingTemplateSources.map((source) =>
+      prisma.monthlyBudgetSource.create({
+        data: {
+          workspaceId,
+          budgetSourceId: source.id,
+          year,
+          month,
+          title: source.title,
+          ownerId: source.ownerId,
+          amountCents: source.amountCents,
+          isDraft: true,
+        },
+        include: {
+          owner: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      }),
+    ),
+  );
+
+  return [...existingMonthlySources, ...created].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
 export async function GET(request: Request) {
@@ -157,9 +294,11 @@ export async function GET(request: Request) {
     });
 
     let monthlyBudgets: Awaited<ReturnType<typeof prisma.monthlyBudget.findMany>> = [];
+    let monthlyBudgetSources: Awaited<ReturnType<typeof prisma.monthlyBudgetSource.findMany>> = [];
     if (year && month) {
       const yearNum = parseInt(year, 10);
       const monthNum = parseInt(month, 10);
+      monthlyBudgetSources = await ensureMonthlyBudgetSources(workspaceId, yearNum, monthNum);
       monthlyBudgets = await prisma.monthlyBudget.findMany({
         where: {
           workspaceId,
@@ -176,8 +315,8 @@ export async function GET(request: Request) {
         },
         orderBy: [
           { isDraft: "desc" },
-          { budgetItemTitle: "asc" },
-          { budgetSourceTitle: "asc" },
+          { budgetItem: { title: "asc" } },
+          { budgetSource: { title: "asc" } },
           { createdAt: "asc" },
         ],
       });
@@ -202,6 +341,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       budgetItems,
       budgetSources,
+      monthlyBudgetSources,
       monthlyBudgets,
       members,
       subAccounts,
@@ -273,6 +413,54 @@ export async function POST(request: Request) {
       return NextResponse.json(source);
     }
 
+    if (action === "createMonthlySource") {
+      const parsed = CreateMonthlyBudgetSourceSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
+
+      await requireWorkspaceAccess(body.workspaceId);
+      const { year, month, title, ownerId, amountCents } = parsed.data;
+      const alreadyConfirmed = await ensureMonthIsNotConfirmed(body.workspaceId, year, month);
+      if (alreadyConfirmed) {
+        return alreadyConfirmed;
+      }
+
+      const created = await prisma.$transaction(async (db) => {
+        const templateSource = await db.budgetSource.create({
+          data: {
+            workspaceId: body.workspaceId,
+            title,
+            ownerId,
+            amountCents,
+          },
+        });
+
+        return db.monthlyBudgetSource.create({
+          data: {
+            workspaceId: body.workspaceId,
+            budgetSourceId: templateSource.id,
+            year,
+            month,
+            title,
+            ownerId,
+            amountCents,
+            isDraft: true,
+          },
+          include: {
+            owner: {
+              select: { id: true, name: true, email: true },
+            },
+            budgetSource: {
+              select: { id: true, title: true },
+            },
+          },
+        });
+      });
+
+      return NextResponse.json(created);
+    }
+
     if (action === "generateMonthly") {
       const parsed = GenerateMonthlyBudgetSchema.safeParse(body);
       if (!parsed.success) {
@@ -292,44 +480,39 @@ export async function POST(request: Request) {
         orderBy: { sortOrder: "asc" },
       });
 
-      const budgetSources = await prisma.budgetSource.findMany({
-        where: { workspaceId: body.workspaceId, isActive: true },
-        orderBy: { createdAt: "asc" },
-      });
+      const monthlyBudgetSources = await ensureMonthlyBudgetSources(body.workspaceId, year, month);
 
-      if (budgetItems.length === 0 || budgetSources.length === 0) {
+      if (budgetItems.length === 0 || monthlyBudgetSources.length === 0) {
         return NextResponse.json({ error: "Need at least one budget item and one source" }, { status: 400 });
       }
 
-      const totalSourceCents = budgetSources.reduce((sum, source) => sum + source.amountCents, 0);
+      const totalSourceCents = monthlyBudgetSources.reduce((sum, source) => sum + source.amountCents, 0);
       const totalBudgetCents = budgetItems.reduce((sum, item) => sum + item.amountCents, 0);
+      const remainingBySourceId = new Map(monthlyBudgetSources.map((source) => [source.budgetSourceId, source.amountCents]));
 
-      await prisma.monthlyBudget.deleteMany({
-        where: { workspaceId: body.workspaceId, year, month, isDraft: true },
-      });
-
+      // Create ONE allocation per budget item with template amount
+      // User will manually adjust amounts and add more allocations if needed
       const generatedMonthlyBudgets = [];
       for (const item of budgetItems) {
-        for (const sourceAllocation of distributeItemAcrossSources(item.amountCents, budgetSources, totalSourceCents)) {
-          const source = budgetSources.find((entry) => entry.id === sourceAllocation.budgetSourceId);
-          if (!source) continue;
+        // Use first source as default
+        const defaultSource = monthlyBudgetSources[0];
+        if (!defaultSource) continue;
 
-          const monthlyBudget = await prisma.monthlyBudget.create({
-            data: {
-              workspaceId: body.workspaceId,
-              budgetItemId: item.id,
-              budgetSourceId: source.id,
-              year,
-              month,
-              budgetItemTitle: item.title,
-              budgetSourceTitle: source.title,
-              destinationSubAccountId: item.destinationSubAccountId,
-              allocatedCents: sourceAllocation.allocatedCents,
-              isDraft: true,
-            },
-          });
-          generatedMonthlyBudgets.push(monthlyBudget);
-        }
+        const monthlyBudget = await prisma.monthlyBudget.create({
+          data: {
+            workspaceId: body.workspaceId,
+            budgetItemId: item.id,
+            budgetSourceId: defaultSource.budgetSourceId,
+            year,
+            month,
+            budgetItemTitle: item.title,
+            budgetSourceTitle: defaultSource.title,
+            destinationSubAccountId: item.destinationSubAccountId,
+            allocatedCents: item.amountCents, // Template amount
+            isDraft: true,
+          },
+        });
+        generatedMonthlyBudgets.push(monthlyBudget);
       }
 
       return NextResponse.json({
@@ -353,7 +536,7 @@ export async function POST(request: Request) {
         return alreadyConfirmed;
       }
 
-      const [budgetItem, budgetSource] = await Promise.all([
+      const [budgetItem, budgetSource, monthlyBudgetSource] = await Promise.all([
         prisma.budgetItem.findFirst({
           where: { workspaceId: body.workspaceId, id: budgetItemId, isActive: true },
           select: { id: true, title: true, destinationSubAccountId: true },
@@ -362,10 +545,17 @@ export async function POST(request: Request) {
           where: { workspaceId: body.workspaceId, id: budgetSourceId, isActive: true },
           select: { id: true, title: true },
         }),
+        prisma.monthlyBudgetSource.findFirst({
+          where: { workspaceId: body.workspaceId, year, month, budgetSourceId },
+          select: { id: true },
+        }),
       ]);
 
       if (!budgetItem || !budgetSource) {
         return NextResponse.json({ error: "Selected template item or source is invalid." }, { status: 400 });
+      }
+      if (!monthlyBudgetSource) {
+        return NextResponse.json({ error: "Selected source is not part of this month's source plan." }, { status: 400 });
       }
 
       const monthlyBudget = await prisma.monthlyBudget.upsert({
@@ -406,11 +596,16 @@ export async function POST(request: Request) {
       const { year, month } = body;
       await requireWorkspaceAccess(body.workspaceId);
 
-      const deleted = await prisma.monthlyBudget.deleteMany({
-        where: { workspaceId: body.workspaceId, year, month, isDraft: true },
-      });
+      const [deletedBudgets, deletedSources] = await Promise.all([
+        prisma.monthlyBudget.deleteMany({
+          where: { workspaceId: body.workspaceId, year, month, isDraft: true },
+        }),
+        prisma.monthlyBudgetSource.deleteMany({
+          where: { workspaceId: body.workspaceId, year, month, isDraft: true },
+        }),
+      ]);
 
-      return NextResponse.json({ deleted: deleted.count });
+      return NextResponse.json({ deleted: deletedBudgets.count, deletedSources: deletedSources.count });
     }
 
     if (action === "confirmMonthly") {
@@ -439,6 +634,13 @@ export async function POST(request: Request) {
         const allocationMap = new Map(
           allocations.map((allocation) => [allocationKey(allocation.budgetItemId, allocation.budgetSourceId), allocation]),
         );
+        const budgetItemTitleById = new Map(allocations.map((allocation) => [allocation.budgetItemId, allocation.budgetItemTitle]));
+        const budgetSourceTitleById = new Map(allocations.map((allocation) => [allocation.budgetSourceId, allocation.budgetSourceTitle]));
+        const monthlyBudgetSources = await db.monthlyBudgetSource.findMany({
+          where: { workspaceId: body.workspaceId, year, month },
+          select: { id: true, budgetSourceId: true, title: true, amountCents: true, isDraft: true },
+          orderBy: { createdAt: "asc" },
+        });
 
         const toDeleteIds: string[] = [];
         const toConfirm = [];
@@ -451,13 +653,27 @@ export async function POST(request: Request) {
           toConfirm.push({
             ...row,
             allocatedCents: allocation.allocatedCents,
-            budgetItemTitle: allocation.budgetItemTitle || row.budgetItemTitle,
-            budgetSourceTitle: allocation.budgetSourceTitle || row.budgetSourceTitle,
+            budgetItemTitle: allocation.budgetItemTitle || budgetItemTitleById.get(row.budgetItemId) || null,
+            budgetSourceTitle: allocation.budgetSourceTitle || budgetSourceTitleById.get(row.budgetSourceId) || null,
           });
         }
 
         if (toConfirm.length === 0) {
           throw new Error("At least one monthly allocation must remain before approval.");
+        }
+
+        const allocatedBySourceId = new Map<string, number>();
+        for (const row of toConfirm) {
+          allocatedBySourceId.set(row.budgetSourceId, (allocatedBySourceId.get(row.budgetSourceId) ?? 0) + row.allocatedCents);
+        }
+
+        // Only check that total allocated equals total sources (no per-item validation)
+        const totalAllocatedCents = toConfirm.reduce((sum, row) => sum + row.allocatedCents, 0);
+        const totalSourceCents = monthlyBudgetSources.reduce((sum, source) => sum + source.amountCents, 0);
+        if (totalAllocatedCents !== totalSourceCents) {
+          throw new Error(
+            `Total allocated (${totalAllocatedCents}) must equal total sources (${totalSourceCents}).`,
+          );
         }
 
         if (toDeleteIds.length > 0) {
@@ -478,13 +694,16 @@ export async function POST(request: Request) {
         const destinationBudgetById = new Map(destinationBudgets.map((budget) => [budget.id, budget]));
         const applyTimestamp = new Date();
 
+        await db.monthlyBudgetSource.updateMany({
+          where: { workspaceId: body.workspaceId, year, month, isDraft: true },
+          data: { isDraft: false, confirmedAt: applyTimestamp },
+        });
+
         for (const row of toConfirm) {
           await db.monthlyBudget.update({
             where: { id: row.id },
             data: {
               allocatedCents: row.allocatedCents,
-              budgetItemTitle: row.budgetItemTitle,
-              budgetSourceTitle: row.budgetSourceTitle,
               isDraft: false,
               confirmedAt: applyTimestamp,
               appliedAt:
@@ -673,6 +892,40 @@ export async function PATCH(request: Request) {
       const updated = await prisma.budgetSource.update({
         where: { id },
         data: { title, ownerId, amountCents },
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    if (action === "updateMonthlySource") {
+      const parsed = UpdateMonthlyBudgetSourceSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      }
+
+      await requireWorkspaceAccess(body.workspaceId);
+      const { id, year, month, title, ownerId, amountCents } = parsed.data;
+      const alreadyConfirmed = await ensureMonthIsNotConfirmed(body.workspaceId, year, month);
+      if (alreadyConfirmed) {
+        return alreadyConfirmed;
+      }
+
+      const existing = await prisma.monthlyBudgetSource.findUnique({
+        where: { id },
+        select: { workspaceId: true, year: true, month: true },
+      });
+      if (!existing || existing.workspaceId !== body.workspaceId || existing.year !== year || existing.month !== month) {
+        return NextResponse.json({ error: "Monthly source not found" }, { status: 404 });
+      }
+
+      const updated = await prisma.monthlyBudgetSource.update({
+        where: { id },
+        data: { title, ownerId, amountCents },
+        include: {
+          owner: {
+            select: { id: true, name: true, email: true },
+          },
+        },
       });
 
       return NextResponse.json(updated);
