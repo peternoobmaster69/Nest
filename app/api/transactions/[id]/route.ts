@@ -14,6 +14,7 @@ const UpdateTransactionSchema = z.object({
   details: z.string().max(500).nullable().optional(),
   notes: z.string().nullable().optional(),
   date: z.string().datetime().optional(),
+  budgetId: z.string().nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -79,6 +80,22 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       }
 
       await requireWorkspaceAccess(existing.workspaceId);
+
+      // Find and reset any linked credit card transactions
+      const creditCardLink = await db.creditCardTxnLink.findFirst({
+        where: { transactionId: id },
+        select: { creditCardId: true },
+      });
+
+      if (creditCardLink) {
+        await db.creditCardTransaction.update({
+          where: { id: creditCardLink.creditCardId },
+          data: { isAllocated: false },
+        });
+        await db.creditCardTxnLink.deleteMany({
+          where: { transactionId: id },
+        });
+      }
 
       await db.transaction.delete({ where: { id } });
 

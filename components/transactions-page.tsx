@@ -94,6 +94,7 @@ export function TransactionsPage() {
   const [editAmount, setEditAmount] = useState("");
   const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("ADD");
   const [editTransactionDate, setEditTransactionDate] = useState("");
+  const [editBudgetId, setEditBudgetId] = useState("");
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
   const [editBankBalance, setEditBankBalance] = useState("");
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -288,7 +289,7 @@ export function TransactionsPage() {
   });
 
   const updateTx = useMutation({
-    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string }) =>
+    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId?: string }) =>
       fetchJson(`/api/transactions/${payload.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -299,6 +300,7 @@ export function TransactionsPage() {
           direction: payload.operation === "ADD" ? "CREDIT" : "DEBIT",
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
           date: new Date(payload.date).toISOString(),
+          budgetId: payload.budgetId || null,
         }),
       }),
     onSuccess: () => {
@@ -310,6 +312,7 @@ export function TransactionsPage() {
       setEditAmount("");
       setEditOperation("DEDUCT");
       setEditTransactionDate("");
+      setEditBudgetId("");
     },
   });
 
@@ -430,6 +433,7 @@ export function TransactionsPage() {
     setEditAmount((tx.amountCents / 100).toFixed(2));
     setEditOperation(tx.direction === "CREDIT" ? "ADD" : "DEDUCT");
     setEditTransactionDate(new Date(tx.date).toISOString().split("T")[0]);
+    setEditBudgetId(tx.budgetId || "");
   };
 
   const closeEditModal = () => {
@@ -438,6 +442,7 @@ export function TransactionsPage() {
     setEditNotes("");
     setEditAmount("");
     setEditOperation("DEDUCT");
+    setEditBudgetId("");
   };
 
   const onSubmitEdit = (event: FormEvent) => {
@@ -450,6 +455,7 @@ export function TransactionsPage() {
       amountCents: Math.round(Number(editAmount) * 100),
       operation: editOperation,
       date: editTransactionDate,
+      budgetId: editBudgetId,
     });
   };
 
@@ -946,6 +952,17 @@ export function TransactionsPage() {
                     Add
                   </button>
                 </div>
+              </label>
+              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                Sub Account
+                <select className="input" value={editBudgetId} onChange={(e) => setEditBudgetId(e.target.value)}>
+                  <option value="">No account</option>
+                  {budgets.data?.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                 Title
