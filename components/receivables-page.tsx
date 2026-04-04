@@ -39,6 +39,14 @@ type Receivable = {
   accountId?: string | null;
   budgetId?: string | null;
   account?: DeductionAccount | null;
+  budget?: {
+    id: string;
+    name: string;
+  } | null;
+  subaccount?: {
+    id: string;
+    name: string;
+  } | null;
 };
 
 type BankAccount = {
@@ -81,6 +89,16 @@ function todayDateInputValue() {
   return `${year}-${month}-${day}`;
 }
 
+function getMonthEndDateInputValue(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return todayDateInputValue();
+  const monthEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+  const year = monthEnd.getUTCFullYear();
+  const month = String(monthEnd.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(monthEnd.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -106,6 +124,7 @@ export function ReceivablesPage() {
   const [hideClosed, setHideClosed] = useState(true);
   const [closeError, setCloseError] = useState<string | null>(null);
   const [closingReceivableId, setClosingReceivableId] = useState<string | null>(null);
+  const [deletingReceivableIds, setDeletingReceivableIds] = useState<string[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -267,9 +286,16 @@ export function ReceivablesPage() {
       fetchJson(`/api/receivables/${id}`, {
         method: "DELETE",
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
+    onSuccess: (_result, id) => {
+      setDeletingReceivableIds((current) => current.filter((item) => item !== id));
+      queryClient.setQueryData<Receivable[]>(
+        ["receivables", workspaceId],
+        (current) => (current ?? []).filter((receivable) => receivable.id !== id),
+      );
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+    onError: (_error, id) => {
+      setDeletingReceivableIds((current) => current.filter((item) => item !== id));
     },
   });
 
@@ -409,6 +435,12 @@ export function ReceivablesPage() {
     });
   };
 
+  useEffect(() => {
+    if (modalMode !== "create") return;
+    if (!formTransactionDate) return;
+    setFormReceivableDate(getMonthEndDateInputValue(formTransactionDate));
+  }, [modalMode, formTransactionDate]);
+
   return (
     <div style={{ display: "grid", gap: "14px" }}>
       <section className="card">
@@ -503,80 +535,76 @@ export function ReceivablesPage() {
 
           {!isLoading && !isError && monthFilteredReceivables.map((r) => {
             const isClosing = closingReceivableId === r.id;
+            const isDeleting = deletingReceivableIds.includes(r.id);
             return (
-            <div key={r.id} className="crud-row">
-              <span style={{ display: "grid", gap: "4px", minWidth: 0 }}>
-                <span
-                  style={{
-                    fontSize: "16px",
-                    fontWeight: 700,
-                    lineHeight: 1.25,
-                    color: "var(--text-primary)",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {r.title || "Untitled"}
-                </span>
-                <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>
-                  Receivable: {new Date(r.date).toLocaleDateString()} · Transaction:{" "}
-                  {r.transactionDate ? new Date(r.transactionDate).toLocaleDateString() : "—"} · Status: {r.status}
-                  {r.account ? ` · Deduct from: ${r.account.workspace.name} / ${r.account.name}` : ""}
-                </span>
-                {r.notes ? (
-                  <span style={{ color: "var(--text-secondary)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {r.notes}
-                  </span>
-                ) : null}
-              </span>
-              <span style={{ display: "inline-flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
-                <span className={getAmountToneClass(r.amountCents)} style={{ fontWeight: 700 }}>
+              <div key={r.id} className="crud-row recv-row">
+                <div className="recv-row-main">
+                  <div className="recv-row-title">
+                    {r.title || "Untitled"}
+                  </div>
+
+                  <div className="recv-row-meta">
+                    {r.transactionDate ? new Date(r.transactionDate).toLocaleDateString() : "—"}
+                    {r.account ? ` · 💰 ${r.account.workspace.name} - ${r.budget?.name ?? r.account.name}` : ""}
+                  </div>
+                </div>
+
+                <div className={`recv-row-amount ${getAmountToneClass(r.amountCents)}`}>
                   {formatCents(r.amountCents)}
-                </span>
-                {r.status !== "PAID" && (
+                </div>
+
+                <div className="recv-row-actions">
+                  {isDeleting ? (
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-tertiary)" }}>Deleting...</span>
+                  ) : r.status !== "PAID" ? (
+                    <button
+                      className="btn btn-primary btn-xs"
+                      onClick={() => {
+                        setClosingReceivableId(r.id);
+                        closeReceivable.mutate({ id: r.id });
+                      }}
+                      disabled={Boolean(closingReceivableId) || !receivableDefaultAccountId || !receivableDefaultBudgetId}
+                      title={
+                        receivableDefaultAccountId && receivableDefaultBudgetId
+                          ? "Close receivable"
+                          : "Configure default receivable account and subaccount in Settings"
+                      }
+                    >
+                      {isClosing ? "Closing..." : "Close"}
+                    </button>
+                  ) : null}
                   <button
-                    className="btn btn-primary btn-xs"
-                    onClick={() => {
-                      setClosingReceivableId(r.id);
-                      closeReceivable.mutate({ id: r.id });
-                    }}
-                    disabled={Boolean(closingReceivableId) || !receivableDefaultAccountId || !receivableDefaultBudgetId}
-                    title={
-                      receivableDefaultAccountId && receivableDefaultBudgetId
-                        ? "Close receivable"
-                        : "Configure default receivable account and subaccount in Settings"
-                    }
+                    className="btn btn-ghost btn-icon"
+                    style={{ width: "32px", height: "32px" }}
+                    onClick={() => openEditModal(r)}
+                    title="Edit"
+                    aria-label="Edit receivable"
+                    disabled={isDeleting}
                   >
-                    {isClosing ? "Closing..." : "Close"}
+                    ✎
                   </button>
-                )}
-                <button
-                  className="btn btn-ghost btn-icon"
-                  style={{ width: "32px", height: "32px" }}
-                  onClick={() => openEditModal(r)}
-                  title="Edit"
-                  aria-label="Edit receivable"
-                >
-                  ✎
-                </button>
-                <button
-                  className="btn btn-ghost btn-icon"
-                  style={{ width: "32px", height: "32px", color: "var(--danger)" }}
-                  onClick={() => {
-                    if (confirmDestructiveAction("Delete this receivable?")) {
-                      deleteReceivable.mutate(r.id);
-                    }
-                  }}
-                  disabled={deleteReceivable.isPending}
-                  title="Delete"
-                  aria-label="Delete receivable"
-                >
-                  🗑
-                </button>
-              </span>
-            </div>
-          )})}
+                  <button
+                    className="btn btn-ghost btn-icon"
+                    style={{ width: "32px", height: "32px", color: "var(--danger)" }}
+                    onClick={() => {
+                      if (confirmDestructiveAction("Delete this receivable?")) {
+                        if (deletingReceivableIds.includes(r.id)) return;
+                        setDeletingReceivableIds((current) => [...current, r.id]);
+                        window.setTimeout(() => {
+                          deleteReceivable.mutate(r.id);
+                        }, 180);
+                      }
+                    }}
+                    disabled={deleteReceivable.isPending || isDeleting}
+                    title="Delete"
+                    aria-label="Delete receivable"
+                  >
+                    🗑
+                  </button>
+                </div>
+              </div>
+            );
+          })}
           {!isLoading && !isError && monthFilteredReceivables.length === 0 && (
             <EmptyState
               icon="📥"
@@ -631,8 +659,7 @@ export function ReceivablesPage() {
                   value={formNotes}
                   onChange={setFormNotes}
                   placeholder="Write notes in Markdown"
-                  rows={12}
-                  minHeight={280}
+                  calculator
                 />
                 <label className="modal-grid-span-2" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                   <input

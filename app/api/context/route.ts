@@ -1,7 +1,8 @@
+import { getActiveWorkspaceCookie, setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
 import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { authOptions } from "@/lib/auth";
-import { ApiAuthError, requireSessionUserId, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -156,7 +157,8 @@ export async function GET() {
       orderBy: { createdAt: "asc" },
     });
 
-    const activeWorkspaceId = userLookup.activeWorkspaceId;
+    const cookieWorkspaceId = await getActiveWorkspaceCookie();
+    const activeWorkspaceId = cookieWorkspaceId || userLookup.activeWorkspaceId;
     const workspaceSummaries = memberships.map((membership) => ({
       id: membership.workspace.id,
       name: membership.workspace.name,
@@ -237,7 +239,7 @@ export async function GET() {
       return NextResponse.json(emptyContextResponse(workspaceSummaries));
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       workspaceId: workspace.id,
       defaultAccountId: workspace.receivableDefaultAccountId,
       defaultBudgetId: workspace.receivableDefaultBudgetId,
@@ -256,6 +258,10 @@ export async function GET() {
         kind: a.kind,
       })),
     });
+    if (cookieWorkspaceId !== workspace.id) {
+      return setActiveWorkspaceCookie(response, workspace.id);
+    }
+    return response;
   } catch (error) {
     if (error instanceof ApiAuthError) {
       if (error.status === 404) {
@@ -276,14 +282,8 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const userId = await requireSessionUserId();
-
     if (parsed.data.activeWorkspaceId) {
       await requireWorkspaceAccess(parsed.data.activeWorkspaceId);
-      await prisma.user.update({
-        where: { id: userId },
-        data: { activeWorkspaceId: parsed.data.activeWorkspaceId },
-      });
     }
 
     let updated: {
@@ -371,13 +371,17 @@ export async function PATCH(request: Request) {
       });
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       workspaceId: updated?.id ?? parsed.data.workspaceId ?? parsed.data.activeWorkspaceId ?? null,
       baseCurrency: updated?.baseCurrency ?? null,
       defaultAccountId: updated?.receivableDefaultAccountId ?? null,
       defaultBudgetId: updated?.receivableDefaultBudgetId ?? null,
       activeWorkspaceId: parsed.data.activeWorkspaceId ?? null,
     });
+    if (parsed.data.activeWorkspaceId) {
+      return setActiveWorkspaceCookie(response, parsed.data.activeWorkspaceId);
+    }
+    return response;
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

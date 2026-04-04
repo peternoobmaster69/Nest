@@ -1,4 +1,5 @@
 import { authOptions } from "@/lib/auth";
+import { getActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
 import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { getServerSession } from "next-auth";
@@ -58,6 +59,23 @@ export async function requireWorkspaceAccess(requestedWorkspaceId?: string | nul
 
     return { userId, workspaceId: requestedWorkspaceId };
   }
+
+  const cookieWorkspaceId = await getActiveWorkspaceCookie();
+  if (cookieWorkspaceId) {
+    const cookieMembership = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: cookieWorkspaceId,
+          userId,
+        },
+      },
+      select: { workspaceId: true },
+    });
+    if (cookieMembership) {
+      return { userId, workspaceId: cookieMembership.workspaceId };
+    }
+  }
+
   if (user?.activeWorkspaceId) {
     const activeMembership = await prisma.workspaceMember.findUnique({
       where: {

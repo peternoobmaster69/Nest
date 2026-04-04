@@ -126,6 +126,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const receivablePayload = parsed.data;
+    let sourceAccount:
+      | {
+          id: string;
+          workspaceId: string;
+        }
+      | null = null;
+    let sourceBudget:
+      | {
+          id: string;
+        }
+      | null = null;
+
+    if (receivablePayload.accountId || receivablePayload.budgetId) {
+      if (!receivablePayload.accountId || !receivablePayload.budgetId) {
+        return NextResponse.json({ error: "Select both deduction account and subaccount." }, { status: 400 });
+      }
+
+      const account = await prisma.financialAccount.findFirst({
+        where: {
+          id: receivablePayload.accountId,
+          kind: "BANK",
+          isActive: true,
+        },
+        select: { id: true, workspaceId: true },
+      });
+      if (!account) {
+        return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
+      }
+      await requireWorkspaceAccess(account.workspaceId);
+
+      const budget = await prisma.budgetEnvelope.findFirst({
+        where: {
+          id: receivablePayload.budgetId,
+          workspaceId: account.workspaceId,
+          accountId: account.id,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!budget) {
+        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
+      }
+
+      sourceAccount = account;
+      sourceBudget = budget;
+    }
+
     const created = await prisma.$transaction(async (db) => {
       const receivable = await db.receivable.create({
         data: {
@@ -136,11 +183,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           transactionDate: receivablePayload.transactionDate ? new Date(receivablePayload.transactionDate) : null,
           remarkTogether: receivablePayload.remarks?.trim() || `Created from ${existing.creditCard.cardName} ••${existing.creditCard.last4Digit}`,
           notes: receivablePayload.notes,
-          accountId: receivablePayload.accountId,
-          budgetId: receivablePayload.budgetId,
-          sourceWorkspaceId: workspaceId,
-          sourceAccountId: receivablePayload.accountId,
-          sourceBudgetId: receivablePayload.budgetId,
+          accountId: sourceAccount?.id,
+          budgetId: sourceBudget?.id,
+          sourceWorkspaceId: sourceAccount?.workspaceId,
+          sourceAccountId: sourceAccount?.id,
+          sourceBudgetId: sourceBudget?.id,
           status: "OPEN",
         },
         select: { id: true },

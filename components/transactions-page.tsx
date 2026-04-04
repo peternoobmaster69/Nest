@@ -117,7 +117,17 @@ export function TransactionsPage() {
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
     refetchInterval: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    gcTime: 0,
   });
+
+  // Debug: log budget icons
+  useEffect(() => {
+    if (budgets.data) {
+      console.log("[Transactions] Budget icons:", budgets.data.map(b => ({ id: b.id, name: b.name, icon: b.icon })));
+    }
+  }, [budgets.data]);
 
   const bankAccounts = useQuery({
     queryKey: ["bank-accounts", workspaceId],
@@ -130,21 +140,6 @@ export function TransactionsPage() {
     queryFn: () => fetchJson<Transaction[]>(`/api/transactions?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
-
-  const receivablesSummary = useQuery({
-    queryKey: ["receivables-summary", workspaceId],
-    queryFn: () =>
-      fetchJson<{ totalCents: number }>(`/api/receivables/summary?workspaceId=${workspaceId}`),
-    enabled: Boolean(workspaceId),
-  });
-
-  const defaultReceivableBudgetId = context.data?.defaultBudgetId ?? null;
-
-  const defaultSubaccountBalance = useMemo(() => {
-    if (!defaultReceivableBudgetId || !budgets.data) return 0;
-    const budget = budgets.data.find((b) => b.id === defaultReceivableBudgetId);
-    return budget?.availableCents ?? 0;
-  }, [budgets.data, defaultReceivableBudgetId]);
 
   const isRefreshing =
     (bankAccounts.isFetching && !bankAccounts.isLoading) ||
@@ -428,16 +423,6 @@ export function TransactionsPage() {
   const displayedDiscrepancyCents = displayedBankBalanceCents - displayedLinkedBudgetCents;
   const hasDisplayedDiscrepancy = displayedDiscrepancyCents !== 0;
 
-  const totalTransactionAmountCents = useMemo(
-    () => (transactions.data ?? []).reduce((sum, tx) => sum + tx.amountCents, 0),
-    [transactions.data],
-  );
-  const totalReceivableCents = receivablesSummary.data?.totalCents ?? 0;
-  const isBalanced = useMemo(() => {
-    const expectedTotal = totalReceivableCents + defaultSubaccountBalance;
-    return totalTransactionAmountCents === expectedTotal && totalTransactionAmountCents !== 0;
-  }, [totalTransactionAmountCents, totalReceivableCents, defaultSubaccountBalance]);
-
   const beginEdit = (tx: Transaction) => {
     setEditingTxId(tx.id);
     setEditSubject(tx.subject);
@@ -658,26 +643,6 @@ export function TransactionsPage() {
       </section>
 
       <section className="card">
-        <div className="cct-summary" style={{ marginBottom: isBalanced ? "12px" : 0 }}>
-          <div className="cct-summary-left">
-            <div className="cct-summary-item">
-              <span className="cct-summary-label">Total Receivable</span>
-              <span className="cct-summary-value">{formatCents(totalReceivableCents)}</span>
-            </div>
-            <div className="cct-summary-group">
-              <div className="cct-summary-item">
-                <span className="cct-summary-label">Default Subaccount</span>
-                <span className={`cct-summary-value ${getAmountToneClass(defaultSubaccountBalance)}`}>{formatCents(defaultSubaccountBalance)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        {isBalanced && (
-          <div className="cct-balanced-message">Perfectly balanced as all things should be</div>
-        )}
-      </section>
-
-      <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
             <span aria-hidden="true">📁</span>
@@ -719,7 +684,7 @@ export function TransactionsPage() {
             <div className={`bm-amount ${getAmountToneClass(visibleBudgetTotalCents)}`}>
               {formatCents(visibleBudgetTotalCents)}
             </div>
-            {hasDisplayedDiscrepancy ? <div className="bm-target tx-discrepancy-note">Mismatch</div> : null}
+            {hasDisplayedDiscrepancy ? <div className="bm-target tx-discrepancy-note">⚠️</div> : null}
           </div>
           {visibleBudgets.map((b) => (
             <div
@@ -729,18 +694,30 @@ export function TransactionsPage() {
               style={{
                 borderColor: activeBudgetFilterId === b.id ? "var(--brand-500)" : undefined,
                 boxShadow: activeBudgetFilterId === b.id ? "var(--shadow-sm)" : undefined,
+                position: "relative",
               }}
             >
-              <div className="bm-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <span aria-hidden="true">{getBudgetIcon(b.name, b.icon)}</span>
-                <span>{b.name}</span>
-              </div>
+              <div className="bm-name">{b.name}</div>
               <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
-              {b.receivableReservedCents ? (
+              {b.receivableReservedCents && b.availableCents > 0 ? (
                 <div className="bm-target" style={{ marginTop: "4px" }}>
                   ({formatCents(b.receivableReservedCents)} receivable)
                 </div>
               ) : null}
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  bottom: "4px",
+                  right: "4px",
+                  fontSize: "24px",
+                  lineHeight: 1,
+                  opacity: 0.5,
+                  pointerEvents: "none",
+                }}
+              >
+                {getBudgetIcon(b.name, b.icon)}
+              </span>
             </div>
           ))}
         </div>
@@ -903,8 +880,7 @@ export function TransactionsPage() {
                     value={notes}
                     onChange={setNotes}
                     placeholder="Write notes in Markdown"
-                    rows={12}
-                    minHeight={300}
+                    calculator
                   />
                 </div>
               </div>
@@ -981,8 +957,7 @@ export function TransactionsPage() {
                 value={editNotes}
                 onChange={setEditNotes}
                 placeholder="Write notes in Markdown"
-                rows={12}
-                minHeight={300}
+                calculator
               />
               <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                 <button className="btn btn-ghost" type="button" onClick={closeEditModal}>

@@ -1,3 +1,4 @@
+import { setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
 import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { ApiAuthError, requireSessionUserId } from "@/lib/workspace-auth";
@@ -69,11 +70,6 @@ export async function POST(request: Request) {
       },
     });
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: { activeWorkspaceId: workspace.id },
-    });
-
     await prisma.workspaceAuditLog.create({
       data: {
         workspaceId: workspace.id,
@@ -83,7 +79,8 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(workspace, { status: 201 });
+    const response = NextResponse.json(workspace, { status: 201 });
+    return setActiveWorkspaceCookie(response, workspace.id);
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

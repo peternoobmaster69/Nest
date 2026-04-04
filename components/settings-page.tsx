@@ -732,15 +732,15 @@ export function SettingsPage() {
       </div>
 
       <div className="card" style={{ marginBottom: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
-          <div>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
+          <div style={{ flex: "1 1 auto" }}>
             <div style={{ fontSize: "13px", fontWeight: 600 }}>Credit Card Auto Accounting</div>
             <div style={{ fontSize: "12px", color: "var(--text-tertiary)", maxWidth: "720px" }}>
               Ordered rules match unaccounted credit card transaction subjects using case-insensitive contains filters. First match wins.
               Matching transactions are auto-accounted every 5 minutes.
             </div>
           </div>
-          <div style={{ display: "inline-flex", gap: "8px", flexWrap: "wrap" }}>
+          <div style={{ display: "inline-flex", gap: "8px", flexWrap: "wrap", marginLeft: "auto", justifyContent: "flex-end" }}>
             <button className="btn btn-ghost btn-xs" type="button" onClick={() => setRuleDrafts(autoRules.data?.rules ?? [])} disabled={saveAutoRules.isPending || runAutoRules.isPending || !hasAutoRuleChanges}>
               Reset
             </button>

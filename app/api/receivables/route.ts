@@ -41,6 +41,12 @@ export async function GET(request: Request) {
             },
           },
         },
+        budget: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
       orderBy: { date: "desc" },
       take: 100,

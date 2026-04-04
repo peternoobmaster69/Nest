@@ -1,3 +1,4 @@
+import { clearActiveWorkspaceCookie, getActiveWorkspaceCookie, setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -66,6 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const activeWorkspaceCookie = await getActiveWorkspaceCookie();
     const auth = await requireWorkspaceAccess(id);
     const membership = await prisma.workspaceMember.findUnique({
       where: {
@@ -100,7 +102,14 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       data: { activeWorkspaceId: nextMembership?.workspaceId ?? null },
     });
 
-    return NextResponse.json({ ok: true, activeWorkspaceId: nextMembership?.workspaceId ?? null });
+    const response = NextResponse.json({ ok: true, activeWorkspaceId: nextMembership?.workspaceId ?? null });
+    if (activeWorkspaceCookie === id) {
+      if (nextMembership?.workspaceId) {
+        return setActiveWorkspaceCookie(response, nextMembership.workspaceId);
+      }
+      return clearActiveWorkspaceCookie(response);
+    }
+    return response;
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

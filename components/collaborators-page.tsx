@@ -371,10 +371,17 @@ export function CollaboratorsPage() {
                     type="checkbox"
                     checked={sidebarMoneyPages[page.key] ?? true}
                     onChange={(e) => {
-                      setSidebarMoneyPages((prev) => ({
-                        ...prev,
-                        [page.key]: e.target.checked,
-                      }));
+                      const checked = e.target.checked;
+                      setSidebarMoneyPages((prev) => {
+                        const next = {
+                          ...prev,
+                          [page.key]: checked,
+                        };
+                        if (page.key === "creditCards" && !checked) {
+                          next.creditTransactions = false;
+                        }
+                        return next;
+                      });
                     }}
                     disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
                     style={{ cursor: "pointer" }}

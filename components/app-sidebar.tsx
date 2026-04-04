@@ -89,6 +89,8 @@ export function AppSidebar({
     rewards: true,
     investments: true,
   };
+  const showCreditCards = sidebarMoneyPages.creditCards !== false;
+  const showCreditTransactions = showCreditCards && sidebarMoneyPages.creditTransactions !== false;
 
   const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
   const isOpen = sidebarOpen ?? internalSidebarOpen;
@@ -230,7 +232,7 @@ export function AppSidebar({
 
       void queryClient.invalidateQueries({ queryKey: ["app-context"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-      void queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      void queryClient.removeQueries({ queryKey: ["budgets"] });
       void queryClient.invalidateQueries({ queryKey: ["transactions"] });
       void queryClient.invalidateQueries({ queryKey: ["receivables"] });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
@@ -286,12 +288,12 @@ export function AppSidebar({
             <span className="sb-ic">📑</span>Transactions
           </Link>
         )}
-        {sidebarMoneyPages.creditCards !== false && (
+        {showCreditCards && (
           <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick}>
             <span className="sb-ic">💳</span>Credit Cards
           </Link>
         )}
-        {sidebarMoneyPages.creditTransactions !== false && (
+        {showCreditTransactions && (
           <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
             <span className="sb-ic">🧾</span>Card Transactions
           </Link>

@@ -42,12 +42,18 @@ type AppContext = {
   baseCurrency?: string | null;
   defaultAccountId?: string | null;
   defaultBudgetId?: string | null;
+  workspaces?: Array<{ id: string; name: string }>;
 };
 
 type BankAccount = {
   id: string;
   name: string;
   isActive: boolean;
+  workspaceId?: string;
+  workspace?: {
+    id: string;
+    name: string;
+  };
 };
 
 type Budget = {
@@ -83,6 +89,13 @@ function toDateInputValue(dateStr: string) {
   const date = new Date(dateStr);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
+}
+
+function toMonthEndDateInputValue(dateStr: string) {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+  const monthEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+  return monthEnd.toISOString().slice(0, 10);
 }
 
 function getDaysUntil(dateStr: string): number {
@@ -140,6 +153,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [receivableAmount, setReceivableAmount] = useState("");
   const [receivableTitle, setReceivableTitle] = useState("");
   const [receivableNotes, setReceivableNotes] = useState("");
+  const [useCrossWorkspaceReceivableSource, setUseCrossWorkspaceReceivableSource] = useState(false);
+  const [receivableSourceWorkspaceId, setReceivableSourceWorkspaceId] = useState("");
+  const [receivableSourceAccountId, setReceivableSourceAccountId] = useState("");
+  const [receivableSourceBudgetId, setReceivableSourceBudgetId] = useState("");
   const [sharedPaymentDueDate, setSharedPaymentDueDate] = useState("");
   const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
 
@@ -206,6 +223,18 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     enabled: Boolean(context.data?.workspaceId),
   });
 
+  const receivableSourceAccounts = useQuery({
+    queryKey: ["bank-accounts", receivableSourceWorkspaceId],
+    queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${receivableSourceWorkspaceId}`),
+    enabled: useCrossWorkspaceReceivableSource && Boolean(receivableSourceWorkspaceId),
+  });
+
+  const receivableSourceBudgets = useQuery({
+    queryKey: ["budgets", receivableSourceWorkspaceId],
+    queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${receivableSourceWorkspaceId}`),
+    enabled: useCrossWorkspaceReceivableSource && Boolean(receivableSourceWorkspaceId),
+  });
+
   const receivablesSummary = useQuery({
     queryKey: ["receivables-summary", context.data?.workspaceId],
     queryFn: () =>
@@ -255,6 +284,18 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   }, [filteredTransactions]);
 
   const totalReceivableCents = receivablesSummary.data?.totalCents ?? 0;
+  const workspacesForReceivableSource = useMemo(
+    () => (context.data?.workspaces ?? []).filter((workspace) => workspace.id !== context.data?.workspaceId),
+    [context.data?.workspaces, context.data?.workspaceId],
+  );
+  const receivableBudgetsById = useMemo(
+    () => new Map((receivableSourceBudgets.data ?? []).map((budget) => [budget.id, budget])),
+    [receivableSourceBudgets.data],
+  );
+  const filteredReceivableSourceBudgets = useMemo(
+    () => (receivableSourceBudgets.data ?? []).filter((budget) => budget.accountId === receivableSourceAccountId),
+    [receivableSourceBudgets.data, receivableSourceAccountId],
+  );
   const isBalanced = useMemo(() => {
     const expectedTotal = totalReceivableCents + defaultSubaccountBalance;
     return totals.total === expectedTotal && totals.total !== 0 && totals.unaccounted === 0;
@@ -490,11 +531,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   const openReceivableModal = (tx: CreditCardTransaction) => {
     setReceivableTarget(tx);
-    setReceivableDate(toDateInputValue(tx.transactionDate));
+    setReceivableDate(toMonthEndDateInputValue(tx.transactionDate));
     setReceivableTxnDate(toDateInputValue(tx.transactionDate));
     setReceivableAmount((tx.amountCents / 100).toFixed(2));
     setReceivableTitle(tx.subject);
     setReceivableNotes("");
+    setUseCrossWorkspaceReceivableSource(false);
+    setReceivableSourceWorkspaceId("");
+    setReceivableSourceAccountId("");
+    setReceivableSourceBudgetId("");
     setIsReceivableModalOpen(true);
   };
 
@@ -503,6 +548,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     setReceivableTarget(null);
     setReceivableTitle("");
     setReceivableNotes("");
+    setUseCrossWorkspaceReceivableSource(false);
+    setReceivableSourceWorkspaceId("");
+    setReceivableSourceAccountId("");
+    setReceivableSourceBudgetId("");
   };
 
   const onPickMaybankCsv = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -541,6 +590,13 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const onSubmitReceivable = (event: FormEvent) => {
     event.preventDefault();
     if (!receivableTarget || !receivableDate || !receivableAmount) return;
+    const accountId = useCrossWorkspaceReceivableSource
+      ? receivableSourceAccountId || undefined
+      : defaultReceivableAccountId || undefined;
+    const budgetId = useCrossWorkspaceReceivableSource
+      ? receivableSourceBudgetId || undefined
+      : defaultReceivableBudgetId || undefined;
+    if (useCrossWorkspaceReceivableSource && (!accountId || !budgetId)) return;
     accountCreditTxn.mutate({
       id: receivableTarget.id,
       action: "RECEIVABLE",
@@ -549,10 +605,33 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       amountCents: Math.round(Number(receivableAmount || "0") * 100),
       title: receivableTitle || receivableTarget.subject,
       notes: receivableNotes || undefined,
-      accountId: defaultReceivableAccountId || undefined,
-      budgetId: defaultReceivableBudgetId || undefined,
+      accountId,
+      budgetId,
     });
   };
+
+  useEffect(() => {
+    if (!isReceivableModalOpen) return;
+    if (!receivableTxnDate) return;
+    setReceivableDate(toMonthEndDateInputValue(receivableTxnDate));
+  }, [isReceivableModalOpen, receivableTxnDate]);
+
+  useEffect(() => {
+    if (!useCrossWorkspaceReceivableSource) return;
+    if (!receivableSourceAccountId) return;
+    if (receivableSourceBudgetId) return;
+    const firstMatchingBudget = (receivableSourceBudgets.data ?? []).find(
+      (budget) => budget.accountId === receivableSourceAccountId,
+    );
+    if (firstMatchingBudget) {
+      setReceivableSourceBudgetId(firstMatchingBudget.id);
+    }
+  }, [
+    useCrossWorkspaceReceivableSource,
+    receivableSourceAccountId,
+    receivableSourceBudgetId,
+    receivableSourceBudgets.data,
+  ]);
 
   useEffect(() => {
     setSharedPaymentDueDate(earliestPaymentDue?.paymentDueDate ? toDateInputValue(earliestPaymentDue.paymentDueDate) : "");
@@ -1145,14 +1224,104 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   <label className="label">Amount ($)</label>
                   <NumericCalculatorInput step="0.01" min="0.01" value={receivableAmount} onValueChange={setReceivableAmount} required />
                 </div>
+                <label className="form-group cct-span-2" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  <input
+                    type="checkbox"
+                    checked={useCrossWorkspaceReceivableSource}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setUseCrossWorkspaceReceivableSource(checked);
+                      if (!checked) {
+                        setReceivableSourceWorkspaceId("");
+                        setReceivableSourceAccountId("");
+                        setReceivableSourceBudgetId("");
+                      }
+                    }}
+                  />
+                  Deduct from another workspace
+                </label>
+                {useCrossWorkspaceReceivableSource && (
+                  <>
+                    <div className="form-group">
+                      <label className="label">Deduction Workspace</label>
+                      <select
+                        className="input"
+                        value={receivableSourceWorkspaceId}
+                        onChange={(e) => {
+                          setReceivableSourceWorkspaceId(e.target.value);
+                          setReceivableSourceAccountId("");
+                          setReceivableSourceBudgetId("");
+                        }}
+                        required
+                      >
+                        <option value="">Select workspace</option>
+                        {workspacesForReceivableSource.map((workspace) => (
+                          <option key={workspace.id} value={workspace.id}>
+                            {workspace.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="label">Bank Account</label>
+                      <select
+                        className="input"
+                        value={receivableSourceAccountId}
+                        onChange={(e) => {
+                          const nextAccountId = e.target.value;
+                          setReceivableSourceAccountId(nextAccountId);
+                          const nextBudgetId =
+                            (receivableSourceBudgets.data ?? []).find((budget) => budget.accountId === nextAccountId)?.id || "";
+                          setReceivableSourceBudgetId(nextBudgetId);
+                        }}
+                        disabled={!receivableSourceWorkspaceId || receivableSourceAccounts.isLoading}
+                        required
+                      >
+                        <option value="">Select account</option>
+                        {(receivableSourceAccounts.data ?? []).map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group cct-span-2">
+                      <label className="label">Sub Account</label>
+                      <select
+                        className="input"
+                        value={receivableSourceBudgetId}
+                        onChange={(e) => {
+                          const budgetId = e.target.value;
+                          setReceivableSourceBudgetId(budgetId);
+                          const selectedBudget = receivableBudgetsById.get(budgetId);
+                          if (selectedBudget) {
+                            setReceivableSourceAccountId(selectedBudget.accountId);
+                          }
+                        }}
+                        disabled={
+                          !receivableSourceWorkspaceId ||
+                          !receivableSourceAccountId ||
+                          receivableSourceBudgets.isLoading
+                        }
+                        required
+                      >
+                        <option value="">Select sub account</option>
+                        {filteredReceivableSourceBudgets.map((budget) => (
+                          <option key={budget.id} value={budget.id}>
+                            {budget.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
                 <MarkdownEditor
                   className="form-group cct-span-2"
                   label="Notes"
                   value={receivableNotes}
                   onChange={setReceivableNotes}
                   placeholder="Write notes in Markdown"
-                  rows={12}
-                  minHeight={300}
+                  calculator
                 />
               </div>
               <div className="cct-modal-actions">
