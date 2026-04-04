@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../AF/af-app"
+		}
+	],
+	"settings": {
+		"dataworkspace.excludedProjects": [
+			"Nest/Nest.sqlproj"
+		]
+	}
+}

@@ -1,146 +1,118 @@
-// app/api/transactions/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
-import { requireUser } from "@/lib/session";
+import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
-type Params = {
-  params: Promise<{ id: string }>;
-};
+const UpdateTransactionSchema = z.object({
+  subject: z.string().min(1).max(120).optional(),
+  amountCents: z.number().int().positive().optional(),
+  direction: z.enum(["DEBIT", "CREDIT"]).optional(),
+  kind: z
+    .enum(["EXPENSE", "INCOME", "TRANSFER", "CREDIT_CARD_PAYMENT", "RECEIVABLE_PAYMENT", "ADJUSTMENT"])
+    .optional(),
+  details: z.string().max(500).nullable().optional(),
+  notes: z.string().nullable().optional(),
+  date: z.string().datetime().optional(),
+  budgetId: z.string().nullable().optional(),
+});
 
-/**
- * @openapi
- * /api/accounts:
- *   get:
- *     summary: Delete Transaction by ID
- *     tags:
- *       - Accounts
- *     responses:
- *       200:
- *         description: Delete Transaction by ID
- */
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const resolvedParams = await params;
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireUser();
-    if (!user) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { id } = await params;
+    const parsed = UpdateTransactionSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    console.debug("DELETE /api/transactions", { txId: resolvedParams.id, userId: user.Id });
+    const result = await prisma.$transaction(async (db) => {
+      const existing = await db.transaction.findUnique({
+        where: { id },
+        select: { id: true, workspaceId: true, budgetId: true },
+      });
+      if (!existing) {
+        throw new Error("Transaction not found");
+      }
 
-    const pool = await getDb();
+      await requireWorkspaceAccess(existing.workspaceId);
 
-    const result = await pool
-      .request()
-      .input("txId", resolvedParams.id)
-      .input("userId", user.Id)
-      .query(`
-        DELETE t
-        FROM Transactions t
-        INNER JOIN Accounts a ON a.Id = t.AccountId
-        WHERE t.Id = @txId
-          AND a.UserId = @userId;
+      const updated = await db.transaction.update({
+        where: { id },
+        data: parsed.data,
+      });
 
-        SELECT @@ROWCOUNT AS RowsAffected;
-      `);
+      if (existing.budgetId) {
+        await recalculateBudgetAvailableCents(db, existing.workspaceId, existing.budgetId);
+      }
 
-    const rows = result.recordset[0]?.RowsAffected ?? 0;
+      return updated;
+    });
 
-    console.debug("DELETE result rows", { txId: resolvedParams.id, rows });
-    if (rows === 0) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
-
-    return NextResponse.json({ ok: true }, { status: 200 });
-  } catch (err) {
-    console.error("DELETE /api/transactions/[id] error", err);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Transaction not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+    return NextResponse.json({ error: "Failed to update transaction", message }, { status: 500 });
   }
 }
 
-/**
- * @openapi
- * /api/accounts:
- *   get:
- *     summary: Update Transaction by ID
- *     tags:
- *       - Accounts
- *     responses:
- *       200:
- *         description: Update Transaction by ID
- */
-export async function PUT(req: NextRequest, { params }: Params) {
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireUser();
-    if (!user) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { id } = await params;
+
+    await prisma.$transaction(async (db) => {
+      const existing = await db.transaction.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          workspaceId: true,
+          budgetId: true,
+        },
+      });
+
+      if (!existing) {
+        throw new Error("Transaction not found");
+      }
+
+      await requireWorkspaceAccess(existing.workspaceId);
+
+      // Find and reset any linked credit card transactions
+      const creditCardLink = await db.creditCardTxnLink.findFirst({
+        where: { transactionId: id },
+        select: { creditCardId: true },
+      });
+
+      if (creditCardLink) {
+        await db.creditCardTransaction.update({
+          where: { id: creditCardLink.creditCardId },
+          data: { isAllocated: false },
+        });
+        await db.creditCardTxnLink.deleteMany({
+          where: { transactionId: id },
+        });
+      }
+
+      await db.transaction.delete({ where: { id } });
+
+      if (existing.budgetId) {
+        await recalculateBudgetAvailableCents(db, existing.workspaceId, existing.budgetId);
+      }
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
-
-    const body = await req.json();
-    const { amount, type, category, date, note } = body;
-
-    if (amount === undefined || !type || !category || !date) {
-      return NextResponse.json(
-        { error: "missing required fields" },
-        { status: 400 }
-      );
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Transaction not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
     }
-
-    const pool = await getDb();
-
-    const resolvedParams = await params;
-
-    // Ensure tx belongs to this user (via Accounts.UserId)
-    const result = await pool
-      .request()
-      .input("txId", resolvedParams.id)
-      .input("userId", user.Id)
-      .input("amount", amount)
-      .input("type", type)
-      .input("category", category)
-      .input("date", date)
-      .input("note", note ?? null)
-      .query(`
-        UPDATE t
-        SET
-          Amount   = @amount,
-          Type     = @type,
-          Category = @category,
-          Date     = @date,
-          Note     = @note
-        FROM Transactions t
-        INNER JOIN Accounts a ON a.Id = t.AccountId
-        WHERE t.Id = @txId
-          AND a.UserId = @userId;
-
-        SELECT TOP 1
-          t.Id,
-          t.AccountId,
-          t.Amount,
-          t.Type,
-          t.Category,
-          t.Date,
-          t.Note,
-          t.CreatedAt
-        FROM Transactions t
-        INNER JOIN Accounts a ON a.Id = t.AccountId
-        WHERE t.Id = @txId
-          AND a.UserId = @userId;
-      `);
-
-    if (result.recordset.length === 0) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(result.recordset[0]);
-  } catch (err) {
-    console.error("PUT /api/transactions/[id] error", err);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete transaction", message }, { status: 500 });
   }
 }

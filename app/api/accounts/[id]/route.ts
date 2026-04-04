@@ -1,128 +1,45 @@
-// app/api/accounts/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
-import { requireUser } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
+import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
-type Params = {
-  params: Promise<{ id: string }>;
-};
+const UpdateAccountSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  bankName: z.string().min(1).max(120).nullable().optional(),
+  description: z.string().max(500).nullable().optional(),
+  startingCents: z.number().int().min(0).optional(),
+  isActive: z.boolean().optional(),
+});
 
-/**
- * @openapi
- * /api/accounts:
- *   get:
- *     summary: Create and update account by ID
- *     tags:
- *       - Accounts
- *     responses:
- *       200:
- *         description: Create and update accounts 
- */export async function GET(_req: NextRequest, { params }: Params) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const resolvedParams = await params;
-    const user = await requireUser();
-    if (!user) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { id } = await params;
+    const parsed = UpdateAccountSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const pool = await getDb();
-    const result = await pool
-      .request()
-      .input("id", resolvedParams.id)
-      .input("userId", user.Id)
-      .query(`
-        SELECT TOP 1
-          Id,
-          UserId,
-          Name,
-          Type,
-          Currency,
-          InitialAmount,
-          CreatedAt,
-          IsActive
-        FROM Accounts
-        WHERE Id = @id
-          AND UserId = @userId;
-      `);
-
-    if (result.recordset.length === 0) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+    const existing = await prisma.financialAccount.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Bank account not found" }, { status: 404 });
     }
 
-    return NextResponse.json(result.recordset[0]);
-  } catch (err) {
-    console.error("GET /api/accounts/[id] error", err);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
+    await requireWorkspaceAccess(existing.workspaceId);
 
-export async function PUT(req: NextRequest, { params }: Params) {
-  try {
-    const resolvedParams = await params;
-    const user = await requireUser();
-    if (!user) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const updated = await prisma.financialAccount.update({
+      where: { id },
+      data: parsed.data,
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
-
-    const body = await req.json();
-    const { name, type, currency, initialAmount, isActive } = body;
-
-      if (!name || !type) {
-      return NextResponse.json(
-        { error: "name and type are required" },
-        { status: 400 }
-      );
-    }
-
-    const pool = await getDb();
-
-    const result = await pool
-      .request()
-      .input("id", resolvedParams.id)
-      .input("userId", user.Id)
-      .input("name", name)
-      .input("type", type)
-      .input("currency", currency ?? "SGD")
-      .input("initialAmount", initialAmount ?? 0)
-      .input("isActive", isActive ?? true)
-      .query(`
-        UPDATE Accounts
-        SET
-          Name = @name,
-          Type = @type,
-          Currency = @currency,
-          InitialAmount = @initialAmount,
-          IsActive = @isActive
-        WHERE Id = @id
-          AND UserId = @userId;
-
-        SELECT TOP 1
-          Id,
-          UserId,
-          Name,
-          Type,
-          Currency,
-          InitialAmount,
-          CreatedAt,
-          IsActive
-        FROM Accounts
-        WHERE Id = @id
-          AND UserId = @userId;
-      `);
-
-    if (result.recordset.length === 0) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(result.recordset[0]);
-  } catch (err) {
-    console.error("PUT /api/accounts/[id] error", err);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to update bank account", message }, { status: 500 });
   }
 }

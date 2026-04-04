@@ -1,0 +1,86 @@
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+function loadDotEnv(dotenvPath) {
+  if (!fs.existsSync(dotenvPath)) return;
+  const content = fs.readFileSync(dotenvPath, "utf8");
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex === -1) continue;
+    const key = line.slice(0, separatorIndex).trim();
+    if (!key || process.env[key] !== undefined) continue;
+    let value = line.slice(separatorIndex + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+function requireValue(value, key) {
+  if (!value || !value.trim()) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value.trim();
+}
+
+function toBooleanString(value, defaultValue) {
+  if (!value) return defaultValue;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "false" || normalized === "0" ? "false" : "true";
+}
+
+function resolveDatabaseUrl(env) {
+  const rawDatabaseUrl = env.DATABASE_URL?.trim();
+  if (rawDatabaseUrl?.startsWith("sqlserver://")) {
+    return rawDatabaseUrl;
+  }
+
+  const host = requireValue(rawDatabaseUrl || env.AZURE_SQL_SERVER, "DATABASE_URL or AZURE_SQL_SERVER");
+  const database = requireValue(env.AZURE_SQL_DATABASE, "AZURE_SQL_DATABASE");
+  const user = requireValue(env.AZURE_SQL_USER, "AZURE_SQL_USER");
+  const password = requireValue(env.AZURE_SQL_PASSWORD, "AZURE_SQL_PASSWORD");
+  const encrypt = toBooleanString(env.AZURE_SQL_ENCRYPT, "true");
+  const trustServerCertificate = toBooleanString(
+    env.AZURE_SQL_TRUST_SERVER_CERTIFICATE || env.AZURE_SQL_TRUST_SERVER_CERTIFICAT,
+    "false",
+  );
+
+  const hostWithPort = host.includes(":") ? host : `${host}:1433`;
+  return `sqlserver://${hostWithPort};database=${database};user=${user};password=${password};encrypt=${encrypt};trustServerCertificate=${trustServerCertificate}`;
+}
+
+const projectRoot = process.cwd();
+loadDotEnv(path.join(projectRoot, ".env"));
+
+let resolvedUrl;
+try {
+  resolvedUrl = resolveDatabaseUrl(process.env);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+
+const prismaCliPath = path.join(projectRoot, "node_modules", "prisma", "build", "index.js");
+const args = process.argv.slice(2);
+const result = spawnSync(process.execPath, [prismaCliPath, ...args], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    DATABASE_URL: resolvedUrl,
+  },
+});
+
+if (result.error) {
+  console.error(result.error.message);
+  process.exit(1);
+}
+
+process.exit(result.status ?? 0);

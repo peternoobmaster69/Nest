@@ -1,37 +1,60 @@
-// lib/auth.ts
-import jwt from "jsonwebtoken";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import type { NextAuthOptions } from "next-auth";
+import NextAuth from "next-auth";
+import AppleProvider from "next-auth/providers/apple";
+import FacebookProvider from "next-auth/providers/facebook";
+import GoogleProvider from "next-auth/providers/google";
+import { prisma } from "@/lib/prisma";
 
-const SESSION_SECRET = process.env.SESSION_SECRET ?? (() => {
-  throw new Error("SESSION_SECRET env var is not set");
-})();
+const providers = [];
 
-const SESSION_MAX_AGE_DAYS = Number(process.env.SESSION_MAX_AGE_DAYS || "7");
-export const SESSION_MAX_AGE_SECONDS = SESSION_MAX_AGE_DAYS * 24 * 60 * 60;
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
+    }),
+  );
+}
 
-export const SESSION_COOKIE_NAME = "session" as const;
+if (process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET) {
+  providers.push(
+    AppleProvider({
+      clientId: process.env.APPLE_CLIENT_ID,
+      clientSecret: process.env.APPLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
+    }),
+  );
+}
 
-export const SESSION_COOKIE_OPTIONS = {
-  httpOnly: true as const,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: SESSION_MAX_AGE_SECONDS,
-} as const;
+if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
+  providers.push(
+    FacebookProvider({
+      clientId: process.env.FACEBOOK_CLIENT_ID,
+      clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
+    }),
+  );
+}
 
-export type SessionPayload = {
-  userId: string;
+export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma),
+  session: { strategy: "database" },
+  providers,
+  callbacks: {
+    async session({ session, user }) {
+      if (session.user) {
+        session.user.id = user.id;
+      }
+      return session;
+    },
+  },
+  pages: {
+    signIn: "/signin",
+  },
 };
 
-export function createSessionToken(payload: SessionPayload): string {
-  return jwt.sign(payload, SESSION_SECRET, {
-    expiresIn: SESSION_MAX_AGE_SECONDS,
-  });
-}
+const handler = NextAuth(authOptions);
 
-export function verifySessionToken(token: string): SessionPayload | null {
-  try {
-    return jwt.verify(token, SESSION_SECRET) as SessionPayload;
-  } catch {
-    return null;
-  }
-}
+export { handler };
