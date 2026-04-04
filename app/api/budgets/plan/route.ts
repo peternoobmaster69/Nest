@@ -165,8 +165,6 @@ export async function GET(request: Request) {
           workspaceId,
           year: yearNum,
           month: monthNum,
-          budgetItem: { isActive: true },
-          budgetSource: { isActive: true },
         },
         include: {
           budgetItem: {
