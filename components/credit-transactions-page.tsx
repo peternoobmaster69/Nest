@@ -164,6 +164,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [receivableSourceBudgetId, setReceivableSourceBudgetId] = useState("");
   const [sharedPaymentDueDate, setSharedPaymentDueDate] = useState("");
   const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
+  const cardBarRef = useRef<HTMLDivElement | null>(null);
 
   // Form state
   const [formCardId, setFormCardId] = useState("");
@@ -664,11 +665,21 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   const openDeductModal = (tx: CreditCardTransaction) => {
     setAccountingTarget(tx);
-    const initialAccountId = deductAccountId || bankAccounts.data?.[0]?.id || "";
+    // Validate that the previously selected account still exists, otherwise use first available
+    const validAccountIds = new Set((bankAccounts.data ?? []).map((a) => a.id));
+    const validBudgetIds = new Set((budgets.data ?? []).map((b) => b.id));
+
+    const initialAccountId =
+      validAccountIds.has(deductAccountId) ? deductAccountId : (bankAccounts.data?.[0]?.id ?? "");
     setDeductAccountId(initialAccountId);
-    const firstBudgetForAccount =
-      budgets.data?.find((budget) => budget.accountId === initialAccountId)?.id || "";
-    setDeductBudgetId(firstBudgetForAccount);
+
+    // Validate that the previously selected budget exists for the selected account
+    const budgetsForAccount = (budgets.data ?? []).filter((b) => b.accountId === initialAccountId);
+    const initialBudgetId =
+      validBudgetIds.has(deductBudgetId) && budgetsForAccount.some((b) => b.id === deductBudgetId)
+        ? deductBudgetId
+        : (budgetsForAccount[0]?.id ?? "");
+    setDeductBudgetId(initialBudgetId);
     setIsAccountingModalOpen(true);
   };
 
@@ -785,6 +796,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     setSharedPaymentDueDate(earliestPaymentDue?.paymentDueDate ? toDateInputValue(earliestPaymentDue.paymentDueDate) : "");
   }, [earliestPaymentDue?.paymentDueDate, selectedCardId, selectedMonth, selectedYear]);
 
+  // Scroll selected card into view when cards load or selection changes
+  useEffect(() => {
+    if (!cardBarRef.current || !sortedCards.length) return;
+
+    const activeChip = cardBarRef.current.querySelector(".cct-card-chip.active") as HTMLElement | null;
+    if (activeChip) {
+      activeChip.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }, [selectedCardId, sortedCards.length]);
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!formCardId || !formDate || !formSubject || !formAmount || !formStatementMonth || !formStatementYear) return;
@@ -848,7 +869,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   return (
     <div className="cct-container">
       {/* Card Selector Bar */}
-      <div className="cct-card-bar">
+      <div ref={cardBarRef} className="cct-card-bar">
         <button
           className={`cct-card-chip ${selectedCardId === "all" ? "active" : ""}`}
           onClick={() => setSelectedCardId("all")}
@@ -1084,7 +1105,6 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   </td>
                   <td className="cct-tx-subject">
                     <div className="cct-subject-wrapper">
-                      <span className="cct-subject-icon">🛒</span>
                       <span>{tx.subject}</span>
                     </div>
                   </td>
@@ -1101,7 +1121,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     </label>
                   </td>
                   <td className="cct-tx-actions">
-                    {!tx.isAllocated && (
+                    {!tx.isAllocated ? (
                       <>
                         <button
                           className="btn btn-ghost btn-icon cct-action-btn"
@@ -1122,6 +1142,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                           🧾
                         </button>
                       </>
+                    ) : (
+                      <span className="cct-action-placeholder" aria-hidden="true" />
                     )}
                     <button
                       className="btn btn-ghost btn-icon cct-action-btn"

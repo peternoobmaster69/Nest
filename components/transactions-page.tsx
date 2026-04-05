@@ -5,7 +5,7 @@ import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
@@ -103,6 +103,10 @@ export function TransactionsPage() {
   const [transferAmount, setTransferAmount] = useState("");
   const [transferSourceBudgetId, setTransferSourceBudgetId] = useState("");
   const [transferDestinationBudgetId, setTransferDestinationBudgetId] = useState("");
+  const recentTransactionsRef = useRef<HTMLElement | null>(null);
+  const subAccountsRef = useRef<HTMLElement | null>(null);
+  const bankPickerRef = useRef<HTMLDivElement | null>(null);
+  const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -141,6 +145,8 @@ export function TransactionsPage() {
     queryKey: ["transactions", workspaceId],
     queryFn: () => fetchJson<Transaction[]>(`/api/transactions?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const isRefreshing =
@@ -218,6 +224,18 @@ export function TransactionsPage() {
     setUrlFilterHydrated(true);
   }, [urlFilterHydrated, bankAccounts.data, budgets.data, searchParams]);
 
+  // Close bank picker when clicking outside
+  useEffect(() => {
+    if (!isBankPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!bankPickerRef.current?.contains(event.target as Node)) {
+        setIsBankPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isBankPickerOpen]);
+
   const createTx = useMutation({
     mutationFn: (payload: {
       subject: string;
@@ -245,9 +263,10 @@ export function TransactionsPage() {
           budgetOperation: payload.budgetOperation,
         }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
       setSubject("");
       setNotes("");
       setAmount("");
@@ -276,11 +295,11 @@ export function TransactionsPage() {
           destinationBudgetId: payload.destinationBudgetId,
         }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
       setIsTransferModalOpen(false);
       setTransferTitle("");
       setTransferAmount("");
@@ -304,9 +323,10 @@ export function TransactionsPage() {
           budgetId: payload.budgetId || null,
         }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
       setEditingTxId(null);
       setEditSubject("");
       setEditNotes("");
@@ -329,10 +349,9 @@ export function TransactionsPage() {
       return { previousTransactions };
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] });
-      await queryClient.refetchQueries({ queryKey: ["transactions", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
     onError: (_error, id, context) => {
       if (context?.previousTransactions) {
@@ -539,117 +558,104 @@ export function TransactionsPage() {
         </div>
       ) : null}
 
-      <section className="card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "10px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 600 }}>Bank Accounts</div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
-            {isRefreshing ? (
-              <span className="tx-inline-refresh">
-                <LoadingDots />
-              </span>
-            ) : null}
-            <button className="btn btn-ghost" onClick={openTransferModal} disabled={(budgets.data?.length ?? 0) < 2}>
-              Transfer
-            </button>
-            <button className="btn btn-primary" onClick={openCreateModal}>
-              Add Transaction
-            </button>
+      {/* Compact Bank Selector */}
+      {bankAccounts.isLoading ? (
+        <SkeletonMiniCard />
+      ) : (
+        <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
+          <div className="bank-selector-summary">
+            <div className="bank-selector-main">
+              {selectedBank ? (
+                (() => {
+                  const bankMeta = getSingaporeBankByName(selectedBank.bankName || selectedBank.name);
+                  const logo = getBankLogoUrl(bankMeta);
+                  return logo && !failedBankLogos[selectedBank.id] ? (
+                    <img
+                      src={logo}
+                      alt={bankMeta?.name || "Bank"}
+                      className="bank-logo-img"
+                      loading="lazy"
+                      onError={() => setFailedBankLogos((prev) => ({ ...prev, [selectedBank.id]: true }))}
+                    />
+                  ) : bankMeta ? (
+                    <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
+                      {bankMeta.short}
+                    </span>
+                  ) : (
+                    <span className="bank-icon bank-icon-default">BNK</span>
+                  );
+                })()
+              ) : (
+                <span className="bank-icon bank-icon-default">ALL</span>
+              )}
+              <div className={`bank-selector-amount ${getAmountToneClass(displayedBankBalanceCents)}`}>
+                {formatCents(displayedBankBalanceCents)}
+              </div>
+            </div>
+            <div className="bank-selector-actions" ref={bankPickerRef}>
+              <button
+                type="button"
+                className="bm-edit-btn"
+                onClick={() => setIsBankPickerOpen((open) => !open)}
+                aria-label="Choose bank"
+                title="Choose bank"
+              >
+                ▾
+              </button>
+              {selectedBank ? (
+                <button
+                  type="button"
+                  className="bm-edit-btn"
+                  onClick={() => openEditBankBalance(selectedBank)}
+                  aria-label={`Edit ${selectedBank.name} balance`}
+                  title="Edit balance"
+                >
+                  ✎
+                </button>
+              ) : null}
+              {isBankPickerOpen ? (
+                <div className="bank-selector-menu" role="menu" aria-label="Bank options">
+                  <button
+                    type="button"
+                    className={`bank-selector-option${selectedBankId === "" ? " is-active" : ""}`}
+                    onClick={() => {
+                      setSelectedBankId("");
+                      setIsBankPickerOpen(false);
+                    }}
+                  >
+                    All banks
+                  </button>
+                  {(bankAccounts.data ?? []).map((bank) => (
+                    <button
+                      key={bank.id}
+                      type="button"
+                      className={`bank-selector-option${selectedBankId === bank.id ? " is-active" : ""}`}
+                      onClick={() => {
+                        setSelectedBankId(bank.id);
+                        setIsBankPickerOpen(false);
+                      }}
+                    >
+                      {bank.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-        <div className="account-cards-grid">
-          {bankAccounts.isLoading && (
-            <>
-              <SkeletonMiniCard />
-              <SkeletonMiniCard />
-              <SkeletonMiniCard />
-              <SkeletonMiniCard />
-            </>
-          )}
+      )}
 
-          {!bankAccounts.isLoading && (
-            <>
-              <div
-                className="budget-mini budget-mini-compact tx-bank-card"
-                onClick={() => setSelectedBankId("")}
-                style={{
-                  borderColor: !selectedBankId ? "var(--brand-500)" : displayedBankBalanceCents !== totalLinkedBudgetCents ? "var(--warning)" : undefined,
-                  boxShadow: !selectedBankId ? "var(--shadow-sm)" : undefined,
-                }}
-              >
-                <div className="bm-name">All banks</div>
-                <div className={`bm-amount ${getAmountToneClass(totalBankBalanceCents)}`}>{formatCents(totalBankBalanceCents)}</div>
-                {displayedBankBalanceCents !== totalLinkedBudgetCents ? (
-                  <div className="bm-target tx-discrepancy-note">
-                    Discrepancy {displayedDiscrepancyCents > 0 ? "+" : ""}{formatCents(displayedDiscrepancyCents)}
-                  </div>
-                ) : null}
-              </div>
-              {(bankAccounts.data ?? []).map((bank) => (
-                <div
-                  key={bank.id}
-                  className="budget-mini budget-mini-compact tx-bank-card"
-                  onClick={() => setSelectedBankId(bank.id)}
-                  style={{
-                    borderColor:
-                      selectedBankId === bank.id
-                        ? "var(--brand-500)"
-                        : bank.currentBalanceCents !== (bank.linkedBudgetTotalCents ?? 0)
-                          ? "var(--warning)"
-                          : undefined,
-                    boxShadow: selectedBankId === bank.id ? "var(--shadow-sm)" : undefined,
-                  }}
-                >
-                  <div className="bm-top" style={{ marginBottom: "4px" }}>
-                    <div className="bm-name" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 0 }}>
-                      {(() => {
-                        const bankMeta = getSingaporeBankByName(bank.bankName || bank.name);
-                        const logo = getBankLogoUrl(bankMeta);
-                        return logo && !failedBankLogos[bank.id] ? (
-                          <img
-                            src={logo}
-                            alt={bankMeta?.name || "Bank"}
-                            className="bank-logo-img"
-                            loading="lazy"
-                            onError={() => setFailedBankLogos((prev) => ({ ...prev, [bank.id]: true }))}
-                          />
-                        ) : bankMeta ? (
-                          <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
-                            {bankMeta.short}
-                          </span>
-                        ) : (
-                          <span className="bank-icon bank-icon-default">BNK</span>
-                        );
-                      })()}
-                      <span>{bank.name}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="bm-edit-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openEditBankBalance(bank);
-                      }}
-                      aria-label={`Edit ${bank.name} balance`}
-                      title="Edit balance"
-                    >
-                      ✎
-                    </button>
-                  </div>
-                  <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
-                  {bank.currentBalanceCents !== (bank.linkedBudgetTotalCents ?? 0) ? (
-                    <div className="bm-target tx-discrepancy-note">
-                      Discrepancy {bank.currentBalanceCents - (bank.linkedBudgetTotalCents ?? 0) > 0 ? "+" : ""}
-                      {formatCents(bank.currentBalanceCents - (bank.linkedBudgetTotalCents ?? 0))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-      </section>
+      {/* Action Buttons */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+        <button className="btn btn-ghost" style={{ flex: 1 }} onClick={openTransferModal} disabled={(budgets.data?.length ?? 0) < 2}>
+          Transfer
+        </button>
+        <button className="btn btn-primary" style={{ flex: 1 }} onClick={openCreateModal}>
+          Add Transaction
+        </button>
+      </div>
 
-      <section className="card">
+      <section ref={subAccountsRef} className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
             <span aria-hidden="true">📁</span>
@@ -678,7 +684,15 @@ export function TransactionsPage() {
           */}
           <div
             className="budget-mini budget-mini-compact tx-account-card"
-            onClick={() => setActiveBudgetFilterId("ALL")}
+            onClick={() => {
+              setActiveBudgetFilterId("ALL");
+              if (subAccountsRef.current) {
+                const rect = subAccountsRef.current.getBoundingClientRect();
+                if (rect.top > 0) {
+                  subAccountsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              }
+            }}
             style={{
               borderColor: activeBudgetFilterId === "ALL" ? "var(--brand-500)" : hasDisplayedDiscrepancy ? "var(--warning)" : undefined,
               boxShadow: activeBudgetFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
@@ -697,7 +711,15 @@ export function TransactionsPage() {
             <div
               key={b.id}
               className="budget-mini budget-mini-compact tx-account-card"
-              onClick={() => setActiveBudgetFilterId(b.id)}
+              onClick={() => {
+                setActiveBudgetFilterId(b.id);
+                if (subAccountsRef.current) {
+                  const rect = subAccountsRef.current.getBoundingClientRect();
+                  if (rect.top > 0) {
+                    subAccountsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }
+              }}
               style={{
                 borderColor: activeBudgetFilterId === b.id ? "var(--brand-500)" : undefined,
                 boxShadow: activeBudgetFilterId === b.id ? "var(--shadow-sm)" : undefined,
@@ -730,7 +752,7 @@ export function TransactionsPage() {
         </div>
       </section>
 
-      <section className="card">
+      <section ref={recentTransactionsRef} className="card">
         <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Recent Transactions</div>
         <div className="simple-list">
           {transactions.isLoading && <SkeletonList count={5} type="transaction" />}

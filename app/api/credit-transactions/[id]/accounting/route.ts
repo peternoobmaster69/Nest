@@ -1,4 +1,3 @@
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -82,45 +81,94 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: "Selected sub account is invalid." }, { status: 400 });
       }
 
-      const result = await prisma.$transaction(async (db) => {
-        const tx = await db.transaction.create({
-          data: {
-            workspaceId,
-            accountId: account.id,
-            budgetId: budget.id,
-            kind: "CREDIT_CARD_PAYMENT",
-            direction: "DEBIT",
-            date: existing.transactionDate,
-            amountCents: existing.amountCents,
-            subject: existing.subject,
-            details: `Accounted from ${existing.creditCard.cardName} ••${existing.creditCard.last4Digit}`,
-            isSynced: false,
-            isFromFamily: false,
-          },
-          select: { id: true },
-        });
-
-        await db.creditCardTxnLink.create({
-          data: {
-            creditCardId: existing.creditCardId,
-            transactionId: tx.id,
-            cardNameSnapshot: existing.creditCard.cardName,
-            cardNoEnding: existing.creditCard.last4Digit,
-            txDate: existing.transactionDate,
-            isProcessed: true,
-            interfacedAt: new Date(),
-          },
-        });
-
-        await db.creditCardTransaction.update({
-          where: { id: existing.id },
-          data: { isAllocated: true },
-        });
-
-        await recalculateBudgetAvailableCents(db, workspaceId, budget.id);
-
-        return { transactionId: tx.id };
+      // Fetch workspace to get the receivable default subaccount
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
       });
+
+      // Pre-capture values to avoid accessing inside transaction
+      const {
+        id: creditCardTxnId,
+        creditCardId,
+        transactionDate,
+        amountCents,
+        subject,
+        creditCard: { cardName, last4Digit },
+      } = existing;
+
+      const result = await prisma.$transaction(
+        async (db) => {
+          // Create DEBIT transaction from the selected subaccount
+          const tx = await db.transaction.create({
+            data: {
+              workspaceId,
+              accountId: account.id,
+              budgetId: budget.id,
+              kind: "CREDIT_CARD_PAYMENT",
+              direction: "DEBIT",
+              date: transactionDate,
+              amountCents,
+              subject,
+              details: `Accounted from ${cardName} ••${last4Digit}`,
+              isSynced: false,
+              isFromFamily: false,
+            },
+            select: { id: true },
+          });
+
+          // Decrement source budget (DEBIT reduces available)
+          await db.budgetEnvelope.update({
+            where: { id: budget.id },
+            data: { availableCents: { decrement: amountCents } },
+          });
+
+          // Create CREDIT transaction to the receivable default subaccount if configured
+          if (workspace?.receivableDefaultAccountId && workspace?.receivableDefaultBudgetId) {
+            await db.transaction.create({
+              data: {
+                workspaceId,
+                accountId: workspace.receivableDefaultAccountId,
+                budgetId: workspace.receivableDefaultBudgetId,
+                kind: "CREDIT_CARD_PAYMENT",
+                direction: "CREDIT",
+                date: transactionDate,
+                amountCents,
+                subject: `Receivable: ${subject}`,
+                details: `Receivable from ${cardName} ••${last4Digit}`,
+                isSynced: false,
+                isFromFamily: false,
+              },
+            });
+
+            // Increment receivable budget (CREDIT increases available)
+            await db.budgetEnvelope.update({
+              where: { id: workspace.receivableDefaultBudgetId },
+              data: { availableCents: { increment: amountCents } },
+            });
+          }
+
+          await db.creditCardTxnLink.create({
+            data: {
+              creditCardId,
+              transactionId: tx.id,
+              cardNameSnapshot: cardName,
+              cardNoEnding: last4Digit,
+              txDate: transactionDate,
+              isProcessed: true,
+              interfacedAt: new Date(),
+            },
+          });
+
+          await db.creditCardTransaction.update({
+            where: { id: creditCardTxnId },
+            data: { isAllocated: true },
+          });
+
+          return { transactionId: tx.id };
+        },
+        { maxWait: 5000, timeout: 10000 },
+      );
 
       return NextResponse.json({ ok: true, action: "DEDUCT", ...result });
     }
