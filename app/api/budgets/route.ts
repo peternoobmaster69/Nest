@@ -31,6 +31,7 @@ export async function GET(request: Request) {
         accountId: true,
         name: true,
         icon: true,
+        isActive: true,
         availableCents: true,
         targetCents: true,
       },
@@ -64,11 +65,27 @@ export async function GET(request: Request) {
       },
       _sum: { amountCents: true },
     });
-    const receivableByBudget = new Map(
+    const receivableByBudget = new Map<string, number>(
       receivableSourceTotals
         .filter((row) => row.sourceBudgetId)
         .map((row) => [row.sourceBudgetId as string, row._sum.amountCents ?? 0]),
     );
+    const budgetIds = budgets.map((budget) => budget.id);
+    if (budgetIds.length > 0) {
+      const legacyReceivableTotals = await prisma.receivable.groupBy({
+        by: ["budgetId"],
+        where: {
+          budgetId: { in: budgetIds },
+          sourceBudgetId: null,
+          status: { in: ["OPEN", "PARTIAL"] },
+        },
+        _sum: { amountCents: true },
+      });
+      for (const row of legacyReceivableTotals) {
+        if (!row.budgetId) continue;
+        receivableByBudget.set(row.budgetId, (receivableByBudget.get(row.budgetId) ?? 0) + (row._sum.amountCents ?? 0));
+      }
+    }
 
     return NextResponse.json(
       budgets.map((budget) => ({

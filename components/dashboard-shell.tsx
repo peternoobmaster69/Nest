@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
@@ -188,12 +189,14 @@ const budgetEmojis: Record<string, string> = {
   default: "💰",
 };
 const budgetIconOptions = [
-  "💰", "🏠", "🛡️", "✈️", "🍔", "🚌", "🛍️", "💪", "💊", "🎬", "💡", "📚", "📈", "🚗", "📱", "🎯",
+  "💰", "🏠", "🛡️", "✈️", "🍔", "🥬", "🚌", "🛍️", "💪", "💊", "🎬", "💡", "📚", "📈", "🚗", "📱", "🎯",
   "🧾", "🏦", "💳", "🧮", "👶", "🎓", "🐶", "🎁", "🛠️", "💼", "🏥", "🚴", "🍜", "☕",
   // Family/Parents & Religious
   "👴", "👵", "👪", "👨‍👩‍👧‍👦", "⛪",
   // Home & Cleaning
   "🧹", "🧽", "🧼", "🪣", "🧺", "🛋️", "🛏️", "🚿", "🚽", "🪟", "🪴",
+  // Nature
+  "🍃", "🌿", "🌱",
   // Globe/World
   "🌍", "🗺️", "🧭",
 ];
@@ -261,17 +264,20 @@ export function DashboardShell({
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
   const [editingBudgetName, setEditingBudgetName] = useState("");
   const [editingBudgetIcon, setEditingBudgetIcon] = useState("");
+  const [editingBudgetIsSavings, setEditingBudgetIsSavings] = useState(false);
   const [editingBudgetTarget, setEditingBudgetTarget] = useState("");
   const [editingReceivableId, setEditingReceivableId] = useState<string | null>(null);
   const [editingReceivableTitle, setEditingReceivableTitle] = useState("");
   const [editingReceivableAmount, setEditingReceivableAmount] = useState("");
   const [selectedBankFilterId, setSelectedBankFilterId] = useState<string>("ALL");
+  const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccountSummary | null>(null);
   const [editBankBalance, setEditBankBalance] = useState("");
+  const bankPickerRef = useRef<HTMLDivElement | null>(null);
 
   const contextQuery = useQuery({
     queryKey: ["app-context"],
@@ -669,9 +675,11 @@ export function DashboardShell({
   };
 
   const startBudgetEdit = (budget: Budget) => {
+    const resolvedIcon = getBudgetIcon(budget.name, budget.icon);
     setEditingBudgetId(budget.id);
     setEditingBudgetName(budget.name);
-    setEditingBudgetIcon(getBudgetIcon(budget.name, budget.icon));
+    setEditingBudgetIcon(resolvedIcon);
+    setEditingBudgetIsSavings(resolvedIcon === "🛡️");
     setEditingBudgetTarget(String((budget.targetCents / 100).toFixed(2)));
   };
 
@@ -682,12 +690,13 @@ export function DashboardShell({
     updateBudget.mutate({
       id: editingBudgetId,
       name: editingBudgetName.trim(),
-      icon: editingBudgetIcon || undefined,
+      icon: editingBudgetIsSavings ? "🛡️" : editingBudgetIcon || undefined,
       targetCents: Math.round(parsedTarget * 100),
     });
     setEditingBudgetId(null);
     setEditingBudgetName("");
     setEditingBudgetIcon("");
+    setEditingBudgetIsSavings(false);
     setEditingBudgetTarget("");
   };
 
@@ -759,17 +768,8 @@ export function DashboardShell({
 
   const totalBudgeted = filteredBudgets.reduce((sum, b) => sum + b.availableCents, 0);
   const freeAmount = Math.max(0, filteredBankBalance - totalBudgeted);
-  const now = new Date();
-  const spentThisMonth = filteredTransactions
-    .filter((t) => t.direction === "DEBIT")
-    .filter((t) => {
-      const d = new Date(t.date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    })
-    .reduce((sum, t) => sum + t.amountCents, 0);
 
   const pendingReceivables = receivablesQuery.data?.filter((r) => r.status === "OPEN") || [];
-  const pendingAmount = pendingReceivables.reduce((sum, r) => sum + r.amountCents, 0);
   const investmentTotals = useMemo(() => {
     let invested = 0;
     let current = 0;
@@ -782,6 +782,18 @@ export function DashboardShell({
     }
     return { invested, current };
   }, [investmentsQuery.data]);
+  const investmentGain = investmentTotals.current - investmentTotals.invested;
+  const investmentGainPct = investmentTotals.invested > 0
+    ? (investmentGain / investmentTotals.invested) * 100
+    : 0;
+  const totalSavings = filteredBudgets
+    .filter((budget) => getBudgetIcon(budget.name, budget.icon) === "🛡️")
+    .reduce((sum, budget) => sum + budget.availableCents, 0);
+  const totalInvestmentsAndSavings = investmentTotals.current + totalSavings;
+  const selectedBank =
+    selectedBankFilterId === "ALL"
+      ? null
+      : bankAccountsQuery.data?.find((bank) => bank.id === selectedBankFilterId) ?? null;
 
   useEffect(() => {
     if (!dashboardBankStorageKey || typeof window === "undefined") return;
@@ -817,6 +829,17 @@ export function DashboardShell({
     window.sessionStorage.setItem("nest:ui:sidebarOpen", sidebarOpen ? "1" : "0");
   }, [sidebarOpen]);
 
+  useEffect(() => {
+    if (!isBankPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!bankPickerRef.current?.contains(event.target as Node)) {
+        setIsBankPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isBankPickerOpen]);
+
   return (
     <div className="app-shell">
       <AppSidebar
@@ -849,51 +872,24 @@ export function DashboardShell({
 
         {/* Body */}
         <div className="body">
-          <div className="card" style={{ marginBottom: "14px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Bank Accounts</div>
-            <div className="account-cards-grid">
-              {bankAccountsQuery.isLoading && (
-                <>
-                  <SkeletonMiniCard />
-                  <SkeletonMiniCard />
-                  <SkeletonMiniCard />
-                </>
-              )}
-              {!bankAccountsQuery.isLoading && (
-                <>
-                  <div
-                    className="budget-mini budget-mini-compact"
-                    onClick={() => setSelectedBankFilterId("ALL")}
-                    style={{
-                      borderColor: selectedBankFilterId === "ALL" ? "var(--brand-500)" : undefined,
-                      boxShadow: selectedBankFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
-                    }}
-                  >
-                    <div className="bm-name">All banks</div>
-                    <div className={`bm-amount ${getAmountToneClass(summary.totalBalanceCents)}`}>{formatCents(summary.totalBalanceCents)}</div>
-                  </div>
-                  {bankAccountsQuery.data?.map((bank) => (
-                <div
-                  key={bank.id}
-                  className="budget-mini budget-mini-compact"
-                  onClick={() => setSelectedBankFilterId(bank.id)}
-                  style={{
-                    borderColor: selectedBankFilterId === bank.id ? "var(--brand-500)" : undefined,
-                    boxShadow: selectedBankFilterId === bank.id ? "var(--shadow-sm)" : undefined,
-                  }}
-                >
-                  <div className="bm-top" style={{ marginBottom: "4px" }}>
-                    <div className="bm-name" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 0 }}>
-                      {(() => {
-                        const bankMeta = getSingaporeBankByName(bank.bankName || bank.name);
+          <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
+            {bankAccountsQuery.isLoading ? (
+              <SkeletonMiniCard />
+            ) : (
+              <>
+                <div className="bank-selector-summary">
+                  <div className="bank-selector-main">
+                    {selectedBank ? (
+                      (() => {
+                        const bankMeta = getSingaporeBankByName(selectedBank.bankName || selectedBank.name);
                         const logo = getBankLogoUrl(bankMeta);
-                        return logo && !failedBankLogos[bank.id] ? (
+                        return logo && !failedBankLogos[selectedBank.id] ? (
                           <img
                             src={logo}
                             alt={bankMeta?.name || "Bank"}
                             className="bank-logo-img"
                             loading="lazy"
-                            onError={() => setFailedBankLogos((prev) => ({ ...prev, [bank.id]: true }))}
+                            onError={() => setFailedBankLogos((prev) => ({ ...prev, [selectedBank.id]: true }))}
                           />
                         ) : bankMeta ? (
                           <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
@@ -902,28 +898,101 @@ export function DashboardShell({
                         ) : (
                           <span className="bank-icon bank-icon-default">BNK</span>
                         );
-                      })()}
-                      <span>{bank.name}</span>
+                      })()
+                    ) : (
+                      <span className="bank-icon bank-icon-default">ALL</span>
+                    )}
+                    <div className={`bank-selector-amount ${getAmountToneClass(filteredBankBalance)}`}>
+                      {formatCents(filteredBankBalance)}
                     </div>
+                  </div>
+                  <div className="bank-selector-actions" ref={bankPickerRef}>
                     <button
                       type="button"
                       className="bm-edit-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openEditBankBalance(bank);
-                      }}
-                      aria-label={`Edit ${bank.name} balance`}
-                      title="Edit balance"
+                      onClick={() => setIsBankPickerOpen((open) => !open)}
+                      aria-label="Choose bank"
+                      title="Choose bank"
                     >
-                      ✎
+                      ▾
                     </button>
+                    {selectedBank ? (
+                      <button
+                        type="button"
+                        className="bm-edit-btn"
+                        onClick={() => openEditBankBalance(selectedBank)}
+                        aria-label={`Edit ${selectedBank.name} balance`}
+                        title="Edit balance"
+                      >
+                        ✎
+                      </button>
+                    ) : null}
+                    {isBankPickerOpen ? (
+                      <div className="bank-selector-menu" role="menu" aria-label="Bank options">
+                        <button
+                          type="button"
+                          className={`bank-selector-option${selectedBankFilterId === "ALL" ? " is-active" : ""}`}
+                          onClick={() => {
+                            setSelectedBankFilterId("ALL");
+                            setIsBankPickerOpen(false);
+                          }}
+                        >
+                          All banks
+                        </button>
+                        {bankAccountsQuery.data?.map((bank) => (
+                          <button
+                            key={bank.id}
+                            type="button"
+                            className={`bank-selector-option${selectedBankFilterId === bank.id ? " is-active" : ""}`}
+                            onClick={() => {
+                              setSelectedBankFilterId(bank.id);
+                              setIsBankPickerOpen(false);
+                            }}
+                          >
+                            {bank.name}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className={`bm-amount ${getAmountToneClass(bank.currentBalanceCents)}`}>{formatCents(bank.currentBalanceCents)}</div>
                 </div>
-              ))}
-                </>
-              )}
-            </div>
+              </>
+            )}
+          </div>
+
+          <div style={{ marginBottom: "10px" }}>
+            {isLoading ? (
+              <SkeletonMiniCard />
+            ) : (
+              <div className="bank-selector-row dashboard-mini-card">
+                <div className="dashboard-mini-card-stack">
+                  <div className="dashboard-mini-card-total-row">
+                    <div className="dashboard-mini-card-icon" aria-hidden="true">🐷</div>
+                    <div className="dashboard-mini-card-total positive">
+                      {formatCents(totalInvestmentsAndSavings)}
+                    </div>
+                  </div>
+                  <Link
+                    href="/investments"
+                    className="dashboard-mini-card-link"
+                    style={{ textDecoration: "none", color: "inherit" }}
+                  >
+                    <span aria-hidden="true">📈</span>
+                    <span className="dashboard-mini-card-text">
+                      Investments {formatCents(investmentTotals.current)} · Gain{" "}
+                      <span>{formatCents(investmentGain)}</span>{" "}
+                      <span>
+                        {investmentGain >= 0 ? "▲" : "▼"} {Math.abs(investmentGainPct).toFixed(2)}%
+                      </span>
+                    </span>
+                  </Link>
+                  <div className="dashboard-mini-card-link">
+                    <span aria-hidden="true">🏦</span>
+                    <span className="dashboard-mini-card-text">Savings {formatCents(totalSavings)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Hero Card */}
@@ -999,54 +1068,6 @@ export function DashboardShell({
               </div>
             </div>
           )}
-
-          {/* Stat Cards */}
-          <div className="grid-4" style={{ marginBottom: "14px" }}>
-            {isLoading ? (
-              <>
-                <SkeletonMiniCard />
-                <SkeletonMiniCard />
-                <SkeletonMiniCard />
-                <SkeletonMiniCard />
-              </>
-            ) : (
-              <>
-                <div className="stat-card">
-                  <div className="stat-label">Spent this month</div>
-                  <div className="stat-value">
-                    {formatCentsShort(spentThisMonth)}
-                  </div>
-                  <div className="stat-sub">
-                    <span className="positive">&nbsp;</span>
-                  </div>
-                </div>
-
-                <div className="stat-card">
-                  <div className="stat-label">Investments</div>
-                  <div className="stat-value">{formatCentsShort(investmentTotals.current)}</div>
-                  <div className="stat-sub">
-                    Invested <span className="positive">{formatCentsShort(investmentTotals.invested)}</span>
-                  </div>
-                </div>
-
-                <div className="stat-card">
-                  <div className="stat-label">Receivables</div>
-                  <div className="stat-value">{formatCentsShort(pendingAmount)}</div>
-                  <div className="stat-sub">
-                    <span className="positive">{pendingReceivables.length} pending</span>
-                  </div>
-                </div>
-
-                <div className="stat-card">
-                  <div className="stat-label">Sub-accounts</div>
-                  <div className="stat-value">{filteredBudgets.length}</div>
-                  <div className="stat-sub">
-                    <span className="positive">Active</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
 
           {/* Budget Accounts Grid */}
           <div className="card" style={{ marginTop: "14px" }}>
@@ -1351,6 +1372,20 @@ export function DashboardShell({
                     onValueChange={setEditingBudgetTarget}
                   />
                 </div>
+                <label className="profile-field" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="checkbox"
+                    checked={editingBudgetIsSavings}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setEditingBudgetIsSavings(checked);
+                      if (checked) {
+                        setEditingBudgetIcon("🛡️");
+                      }
+                    }}
+                  />
+                  <span>Is this a savings sub-account?</span>
+                </label>
                 <div className="profile-field">
                   <span>Icon</span>
                   <div className="icon-picker">
@@ -1358,7 +1393,10 @@ export function DashboardShell({
                       <button
                         key={icon}
                         className={`icon-chip${editingBudgetIcon === icon ? " on" : ""}`}
-                        onClick={() => setEditingBudgetIcon(icon)}
+                        onClick={() => {
+                          setEditingBudgetIcon(icon);
+                          setEditingBudgetIsSavings(icon === "🛡️");
+                        }}
                         type="button"
                         aria-label={`Use ${icon} icon`}
                       >

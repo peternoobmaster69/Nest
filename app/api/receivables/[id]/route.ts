@@ -35,6 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await requireWorkspaceAccess(existing.workspaceId);
 
+    let sourceWorkspaceId: string | null | undefined = undefined;
     if (parsed.data.accountId !== undefined && parsed.data.accountId !== null) {
       const account = await prisma.financialAccount.findUnique({
         where: { id: parsed.data.accountId },
@@ -44,6 +45,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
       }
       await requireWorkspaceAccess(account.workspaceId);
+      sourceWorkspaceId = account.workspaceId;
+    } else if (parsed.data.accountId === null) {
+      sourceWorkspaceId = null;
+    }
+
+    if (parsed.data.budgetId !== undefined && parsed.data.budgetId !== null) {
+      if (parsed.data.accountId === undefined || parsed.data.accountId === null || !sourceWorkspaceId) {
+        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
+      }
+      const budget = await prisma.budgetEnvelope.findFirst({
+        where: {
+          id: parsed.data.budgetId,
+          workspaceId: sourceWorkspaceId,
+          accountId: parsed.data.accountId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!budget) {
+        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
+      }
     }
 
     const updated = await prisma.receivable.update({
@@ -65,6 +87,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         isMom: parsed.data.isMom,
         accountId: parsed.data.accountId,
         budgetId: parsed.data.budgetId,
+        sourceWorkspaceId,
+        sourceAccountId: parsed.data.accountId,
+        sourceBudgetId: parsed.data.budgetId,
       },
     });
     return NextResponse.json(updated);

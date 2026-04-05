@@ -30,6 +30,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         workspaceId: true,
         accountId: true,
         budgetId: true,
+        sourceWorkspaceId: true,
+        sourceAccountId: true,
+        sourceBudgetId: true,
         amountCents: true,
         status: true,
         title: true,
@@ -104,11 +107,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Destination workspace not found" }, { status: 404 });
     }
 
+    const effectiveSourceAccountId = receivable.sourceAccountId ?? receivable.accountId;
+    const effectiveSourceBudgetId = receivable.sourceBudgetId ?? receivable.budgetId;
+
     let sourceAccount: { id: string; name: string; workspaceId: string } | null = null;
     let sourceBudget: { id: string } | null = null;
-    if (receivable.accountId) {
+    if (effectiveSourceAccountId) {
       const account = await prisma.financialAccount.findFirst({
-        where: { id: receivable.accountId, kind: "BANK", isActive: true },
+        where: { id: effectiveSourceAccountId, kind: "BANK", isActive: true },
         select: { id: true, name: true, workspaceId: true },
       });
       if (!account) {
@@ -117,7 +123,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await requireWorkspaceAccess(account.workspaceId);
       sourceAccount = account;
 
-      if (!receivable.budgetId) {
+      if (!effectiveSourceBudgetId) {
         return NextResponse.json(
           { error: "Selected deduction subaccount is invalid." },
           { status: 400 },
@@ -125,7 +131,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       const budget = await prisma.budgetEnvelope.findFirst({
         where: {
-          id: receivable.budgetId,
+          id: effectiveSourceBudgetId,
           workspaceId: account.workspaceId,
           accountId: account.id,
           isActive: true,

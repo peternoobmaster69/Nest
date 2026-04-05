@@ -58,6 +58,7 @@ type BankAccount = {
 type DeductionBudget = {
   id: string;
   name: string;
+  icon?: string | null;
   accountId: string;
   isActive: boolean;
 };
@@ -161,12 +162,16 @@ export function ReceivablesPage() {
     queryKey: ["bank-accounts", formDeductWorkspaceId],
     queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${formDeductWorkspaceId}`),
     enabled: formUseCrossWorkspaceDeduction && Boolean(formDeductWorkspaceId),
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 
   const deductionBudgets = useQuery({
     queryKey: ["budgets", formDeductWorkspaceId],
     queryFn: () => fetchJson<DeductionBudget[]>(`/api/budgets?workspaceId=${formDeductWorkspaceId}`),
     enabled: formUseCrossWorkspaceDeduction && Boolean(formDeductWorkspaceId),
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 
   const deductionAccountNames = useMemo(
@@ -178,6 +183,10 @@ export function ReceivablesPage() {
     () => new Map((deductionBudgets.data ?? []).map((budget) => [budget.id, budget])),
     [deductionBudgets.data],
   );
+  const isDeductionSubaccountsLoading =
+    formUseCrossWorkspaceDeduction &&
+    Boolean(formDeductWorkspaceId) &&
+    (deductionBudgets.isLoading || deductionAccounts.isLoading);
 
   useEffect(() => {
     if (!formUseCrossWorkspaceDeduction) return;
@@ -298,6 +307,7 @@ export function ReceivablesPage() {
       setDeletingReceivableIds((current) => current.filter((item) => item !== id));
     },
   });
+  const isSavingReceivable = createReceivable.isPending || updateReceivable.isPending;
 
   const pendingCount = useMemo(
     () => (receivables.data ?? []).filter((r) => r.status === "OPEN").length,
@@ -621,11 +631,11 @@ export function ReceivablesPage() {
       </section>
 
       {isModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={closeModal}>
+        <div className="profile-modal-overlay" onClick={isSavingReceivable ? undefined : closeModal}>
           <div className="profile-modal recv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>
-              <button className="profile-modal-close" onClick={closeModal}>
+              <button className="profile-modal-close" onClick={closeModal} disabled={isSavingReceivable}>
                 Close
               </button>
             </div>
@@ -699,32 +709,35 @@ export function ReceivablesPage() {
                     </label>
                     <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                       Deduction Sub Account
-                      <select
-                        className="input"
-                        value={formDeductBudgetId}
-                        onChange={(e) => {
-                          const budgetId = e.target.value;
-                          setFormDeductBudgetId(budgetId);
-                          const selectedBudget = deductionBudgetById.get(budgetId);
-                          setFormDeductAccountId(selectedBudget?.accountId ?? "");
-                        }}
-                        disabled={
-                          !formDeductWorkspaceId ||
-                          deductionBudgets.isLoading ||
-                          deductionAccounts.isLoading ||
-                          (deductionBudgets.data ?? []).length === 0
-                        }
-                      >
-                        <option value="">Select subaccount</option>
-                        {(deductionBudgets.data ?? [])
-                          .filter((budget) => budget.isActive)
-                          .map((budget) => (
-                            <option key={budget.id} value={budget.id}>
-                              {budget.name}
-                              {deductionAccountNames.get(budget.accountId) ? ` · ${deductionAccountNames.get(budget.accountId)}` : ""}
-                            </option>
-                          ))}
-                      </select>
+                      <div className={`recv-field-shell ${isDeductionSubaccountsLoading ? "is-loading" : ""}`}>
+                        <select
+                          className="input"
+                          value={formDeductBudgetId}
+                          onChange={(e) => {
+                            const budgetId = e.target.value;
+                            setFormDeductBudgetId(budgetId);
+                            const selectedBudget = deductionBudgetById.get(budgetId);
+                            setFormDeductAccountId(selectedBudget?.accountId ?? "");
+                          }}
+                          disabled={
+                            !formDeductWorkspaceId ||
+                            isDeductionSubaccountsLoading ||
+                            (deductionBudgets.data ?? []).length === 0
+                          }
+                        >
+                          <option value="">
+                            {isDeductionSubaccountsLoading ? "Loading subaccounts..." : "Select subaccount"}
+                          </option>
+                          {(deductionBudgets.data ?? [])
+                            .filter((budget) => budget.isActive !== false)
+                            .map((budget) => (
+                              <option key={budget.id} value={budget.id}>
+                                {budget.icon ? `${budget.icon} ` : ""}
+                                {budget.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
                     </label>
                   </>
                 )}
@@ -740,17 +753,34 @@ export function ReceivablesPage() {
                   </label>
                 )}
                 <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "6px" }}>
-                  <button className="btn btn-ghost" type="button" onClick={closeModal}>
+                  <button className="btn btn-ghost" type="button" onClick={closeModal} disabled={isSavingReceivable}>
                     Cancel
                   </button>
                   <button
-                    className="btn btn-primary"
+                    className={`btn btn-primary ${isSavingReceivable ? "recv-save-btn is-saving" : ""}`}
                     type="submit"
-                    disabled={createReceivable.isPending || updateReceivable.isPending}
+                    disabled={isSavingReceivable}
                   >
-                    {modalMode === "edit" ? "Save" : "Add"}
+                    {isSavingReceivable ? (
+                      <>
+                        <span className="recv-save-spinner" aria-hidden="true" />
+                        {modalMode === "edit" ? "Saving..." : "Adding..."}
+                      </>
+                    ) : (
+                      modalMode === "edit" ? "Save" : "Add"
+                    )}
                   </button>
                 </div>
+                {isSavingReceivable && (
+                  <div className="modal-grid-span-2 recv-save-status" aria-live="polite">
+                    <div className="workspace-save-progress" aria-hidden="true">
+                      <div className="workspace-save-progress-bar" />
+                    </div>
+                    <div className="recv-save-status-text">
+                      {modalMode === "edit" ? "Saving receivable..." : "Creating receivable..."}
+                    </div>
+                  </div>
+                )}
                 {(createReceivable.isError || updateReceivable.isError || closeReceivable.isError || deleteReceivable.isError) && (
                   <div className="modal-grid-span-2" style={{ fontSize: "12px", color: "var(--danger)" }}>
                     {((createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error) as Error)?.message || "Action failed"}

@@ -707,18 +707,18 @@ export function TransactionsPage() {
               <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
               {b.receivableReservedCents && b.availableCents > 0 ? (
                 <div className="bm-target" style={{ marginTop: "4px" }}>
-                  ({formatCents(b.receivableReservedCents)} receivable)
+                  ({formatCents(b.receivableReservedCents)})
                 </div>
               ) : null}
               <span
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  bottom: "4px",
+                  bottom: "2px",
                   right: "4px",
-                  fontSize: "24px",
+                  fontSize: "28px",
                   lineHeight: 1,
-                  opacity: 0.5,
+                  opacity: 0.2,
                   pointerEvents: "none",
                 }}
               >

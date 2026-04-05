@@ -14,10 +14,19 @@ export async function GET(request: Request) {
 
     await requireWorkspaceAccess(workspaceId);
 
-    const summary = await prisma.receivable.aggregate({
+    const sourceSummary = await prisma.receivable.aggregate({
       where: {
-        workspaceId,
+        sourceWorkspaceId: workspaceId,
+        sourceBudgetId: budgetId,
+        status: { in: ["OPEN", "PARTIAL"] },
+      },
+      _sum: { amountCents: true },
+      _count: { id: true },
+    });
+    const legacySummary = await prisma.receivable.aggregate({
+      where: {
         budgetId,
+        sourceBudgetId: null,
         status: { in: ["OPEN", "PARTIAL"] },
       },
       _sum: { amountCents: true },
@@ -27,8 +36,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       workspaceId,
       budgetId,
-      receivableReservedCents: summary._sum.amountCents ?? 0,
-      count: summary._count.id ?? 0,
+      receivableReservedCents: (sourceSummary._sum.amountCents ?? 0) + (legacySummary._sum.amountCents ?? 0),
+      count: (sourceSummary._count.id ?? 0) + (legacySummary._count.id ?? 0),
     });
   } catch (error) {
     if (error instanceof ApiAuthError) {

@@ -51,8 +51,48 @@ export async function GET(request: Request) {
       orderBy: { date: "desc" },
       take: 100,
     });
+    const sourceAccountIds = [...new Set(receivables.map((item) => item.sourceAccountId).filter((value): value is string => Boolean(value)))];
+    const sourceBudgetIds = [...new Set(receivables.map((item) => item.sourceBudgetId).filter((value): value is string => Boolean(value)))];
+    const [sourceAccounts, sourceBudgets] = await Promise.all([
+      sourceAccountIds.length
+        ? prisma.financialAccount.findMany({
+            where: { id: { in: sourceAccountIds } },
+            select: {
+              id: true,
+              name: true,
+              workspaceId: true,
+              workspace: {
+                select: { id: true, name: true },
+              },
+            },
+          })
+        : Promise.resolve([]),
+      sourceBudgetIds.length
+        ? prisma.budgetEnvelope.findMany({
+            where: { id: { in: sourceBudgetIds } },
+            select: {
+              id: true,
+              name: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const sourceAccountById = new Map(sourceAccounts.map((account) => [account.id, account]));
+    const sourceBudgetById = new Map(sourceBudgets.map((budget) => [budget.id, budget]));
 
-    return NextResponse.json(receivables);
+    return NextResponse.json(
+      receivables.map((receivable) => ({
+        ...receivable,
+        accountId: receivable.sourceAccountId ?? receivable.accountId,
+        budgetId: receivable.sourceBudgetId ?? receivable.budgetId,
+        account:
+          (receivable.sourceAccountId ? sourceAccountById.get(receivable.sourceAccountId) : null) ??
+          receivable.account,
+        budget:
+          (receivable.sourceBudgetId ? sourceBudgetById.get(receivable.sourceBudgetId) : null) ??
+          receivable.budget,
+      })),
+    );
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -71,6 +111,7 @@ export async function POST(request: Request) {
 
     await requireWorkspaceAccess(parsed.data.workspaceId);
 
+    let sourceWorkspaceId: string | null = null;
     if (parsed.data.accountId) {
       const account = await prisma.financialAccount.findUnique({
         where: { id: parsed.data.accountId },
@@ -80,6 +121,25 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
       }
       await requireWorkspaceAccess(account.workspaceId);
+      sourceWorkspaceId = account.workspaceId;
+    }
+
+    if (parsed.data.budgetId) {
+      if (!parsed.data.accountId || !sourceWorkspaceId) {
+        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
+      }
+      const budget = await prisma.budgetEnvelope.findFirst({
+        where: {
+          id: parsed.data.budgetId,
+          workspaceId: sourceWorkspaceId,
+          accountId: parsed.data.accountId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!budget) {
+        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
+      }
     }
 
     const receivableDate = parsed.data.receivableDate ?? parsed.data.date;
@@ -98,6 +158,9 @@ export async function POST(request: Request) {
         notes: parsed.data.notes,
         accountId: parsed.data.accountId,
         budgetId: parsed.data.budgetId,
+        sourceWorkspaceId,
+        sourceAccountId: parsed.data.accountId,
+        sourceBudgetId: parsed.data.budgetId,
         fromUserId: parsed.data.fromUserId,
         status: parsed.data.status,
       },
