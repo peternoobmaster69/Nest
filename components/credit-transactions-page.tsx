@@ -64,6 +64,11 @@ type Budget = {
   availableCents: number;
 };
 
+type CreditTransactionsQueryData = {
+  transactions: CreditCardTransaction[];
+  cardCounts: CardCount[];
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -247,9 +252,17 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     const budget = budgets.data.find((b) => b.id === defaultReceivableBudgetId);
     return budget?.availableCents ?? 0;
   }, [budgets.data, defaultReceivableBudgetId]);
+  const creditTransactionsKeyPrefix = ["credit-transactions", context.data?.workspaceId] as const;
+  const currentCreditTransactionsKey = [
+    "credit-transactions",
+    context.data?.workspaceId,
+    selectedCardId,
+    selectedYear,
+    selectedMonth,
+  ] as const;
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["credit-transactions", selectedCardId, selectedYear, selectedMonth],
+    queryKey: currentCreditTransactionsKey,
     queryFn: () =>
       fetchJson<{
         transactions: CreditCardTransaction[];
@@ -259,9 +272,74 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         year: String(selectedYear),
         ...(selectedMonth >= 0 ? { month: String(selectedMonth + 1) } : {}),
       }).toString()}`),
-    enabled: sortedCards.length > 0,
+    enabled: Boolean(context.data?.workspaceId) && sortedCards.length > 0,
     refetchInterval: 5 * 60 * 1000,
   });
+
+  const matchesCreditTransactionsFilter = (
+    tx: CreditCardTransaction,
+    cardId: string,
+    year: number,
+    month: number,
+  ) => {
+    if (cardId !== "all" && tx.creditCardId !== cardId) return false;
+    if (tx.statementYear !== year) return false;
+    if (month >= 0 && tx.statementMonth !== month + 1) return false;
+    return true;
+  };
+
+  const getCachedCreditTransaction = (id: string) => {
+    const cached = queryClient.getQueriesData<CreditTransactionsQueryData>({ queryKey: creditTransactionsKeyPrefix });
+    for (const [, value] of cached) {
+      const found = value?.transactions.find((tx) => tx.id === id);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const updateCardCounts = (
+    cardCounts: CardCount[],
+    previousTx: CreditCardTransaction | null,
+    nextTx: CreditCardTransaction | null,
+  ) => {
+    const nextCounts = new Map(cardCounts.map((entry) => [entry.creditCardId, entry._count.id]));
+    if (previousTx && (!nextTx || previousTx.creditCardId !== nextTx.creditCardId)) {
+      nextCounts.set(previousTx.creditCardId, Math.max(0, (nextCounts.get(previousTx.creditCardId) ?? 0) - 1));
+    }
+    if (nextTx && (!previousTx || previousTx.creditCardId !== nextTx.creditCardId)) {
+      nextCounts.set(nextTx.creditCardId, (nextCounts.get(nextTx.creditCardId) ?? 0) + 1);
+    }
+    return Array.from(nextCounts.entries()).map(([creditCardId, count]) => ({
+      creditCardId,
+      _count: { id: count },
+    }));
+  };
+
+  const syncCreditTransactionCaches = ({
+    previousTx,
+    nextTx,
+  }: {
+    previousTx: CreditCardTransaction | null;
+    nextTx: CreditCardTransaction | null;
+  }) => {
+    const cached = queryClient.getQueriesData<CreditTransactionsQueryData>({ queryKey: creditTransactionsKeyPrefix });
+    for (const [queryKey, value] of cached) {
+      if (!value) continue;
+      const [, , cardId, year, month] = queryKey as [string, string | null | undefined, string, number, number];
+      const withoutPrevious = previousTx ? value.transactions.filter((tx) => tx.id !== previousTx.id) : value.transactions;
+      const shouldIncludeNext =
+        nextTx && matchesCreditTransactionsFilter(nextTx, cardId, year, month);
+      const nextTransactions = shouldIncludeNext
+        ? [...withoutPrevious, nextTx].sort(
+            (a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime(),
+          )
+        : withoutPrevious;
+      queryClient.setQueryData<CreditTransactionsQueryData>(queryKey, {
+        transactions: nextTransactions,
+        cardCounts: updateCardCounts(value.cardCounts, previousTx, nextTx),
+      });
+    }
+  };
 
   const transactions = data?.transactions || [];
   const cardCounts = data?.cardCounts || [];
@@ -300,6 +378,38 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     const expectedTotal = totalReceivableCents + defaultSubaccountBalance;
     return totals.total === expectedTotal && totals.total !== 0 && totals.unaccounted === 0;
   }, [totals.total, totalReceivableCents, defaultSubaccountBalance, totals.unaccounted]);
+  const balanceDelta = useMemo(
+    () => totalReceivableCents + defaultSubaccountBalance - totals.total,
+    [totalReceivableCents, defaultSubaccountBalance, totals.total],
+  );
+  const balanceStatus = useMemo(() => {
+    if (totals.total === 0 && totalReceivableCents === 0 && defaultSubaccountBalance === 0) return null;
+    if (isBalanced) {
+      return {
+        label: "Perfectly balanced as all things should be",
+        className: "cct-balanced-message",
+      };
+    }
+    if (balanceDelta > 0) {
+      return {
+        label: `Surplus ${formatCurrency(balanceDelta)}`,
+        className: "cct-balance-status cct-balance-status-surplus",
+      };
+    }
+    const deficitAmount = balanceDelta < 0 ? Math.abs(balanceDelta) : totals.unaccounted;
+    return {
+      label: `Deficit ${formatCurrency(deficitAmount)}`,
+      className: "cct-balance-status cct-balance-status-deficit",
+    };
+  }, [
+    totals.total,
+    totalReceivableCents,
+    defaultSubaccountBalance,
+    isBalanced,
+    balanceDelta,
+    totals.unaccounted,
+    formatCurrency,
+  ]);
 
   const earliestPaymentDue = useMemo(() => {
     const dueTransactions = transactions.filter((t) => t.paymentDueDate);
@@ -321,13 +431,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       amountCents: number;
       subject: string;
     }) =>
-      fetchJson("/api/credit-transactions", {
+      fetchJson<CreditCardTransaction>("/api/credit-transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+    onSuccess: (transaction: CreditCardTransaction) => {
+      syncCreditTransactionCaches({ previousTx: null, nextTx: transaction });
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
       closeModal();
     },
   });
@@ -345,20 +456,26 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         subject: string;
       };
     }) =>
-      fetchJson(`/api/credit-transactions/${id}`, {
+      fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+    onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
+    onSuccess: (transaction: CreditCardTransaction, _variables, context) => {
+      syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: transaction });
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
       closeModal();
     },
   });
 
   const deleteTransaction = useMutation({
     mutationFn: (id: string) => fetchJson(`/api/credit-transactions/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["credit-transactions"] }),
+    onMutate: (id) => ({ previousTx: getCachedCreditTransaction(id) }),
+    onSuccess: (_result, _id, context) => {
+      syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: null });
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+    },
     onError: (_error, id) => {
       setDeletingTransactionIds((current) => current.filter((item) => item !== id));
     },
@@ -366,12 +483,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   const toggleAllocated = useMutation({
     mutationFn: ({ id, isAllocated }: { id: string; isAllocated: boolean }) =>
-      fetchJson(`/api/credit-transactions/${id}`, {
+      fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isAllocated }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["credit-transactions"] }),
+    onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
+    onSuccess: (transaction: CreditCardTransaction, _variables, context) => {
+      syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: transaction });
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+    },
   });
 
   const importMaybankCsv = useMutation({
@@ -386,11 +507,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: (result) => {
+    onSuccess: (result, payload) => {
       setImportMessage(
         `Maybank CSV imported: ${result.imported} added, ${result.skippedDuplicates} duplicates skipped, ${result.skippedPayments} payment rows skipped.`,
       );
-      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
     },
     onError: (error) => {
       setImportMessage(error instanceof Error ? error.message : "Maybank CSV import failed.");
@@ -434,16 +555,24 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: (_result, variables) => {
+    onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
+    onSuccess: (_result, variables, mutationContext) => {
       setImportMessage(
         variables.action === "DEDUCT"
           ? "Credit transaction deducted and marked accounted."
           : "Receivable created and credit transaction marked accounted.",
       );
-      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      if (mutationContext?.previousTx) {
+        syncCreditTransactionCaches({
+          previousTx: mutationContext.previousTx,
+          nextTx: { ...mutationContext.previousTx, isAllocated: true },
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
       queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables-summary", context.data?.workspaceId] });
       if (variables.action === "DEDUCT") {
         closeAccountingModal();
       } else {
@@ -467,13 +596,32 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: (result) => {
+    onSuccess: (result, payload) => {
       setPaymentDueMessage(
         result.updatedCount > 0
           ? `Payment due updated for ${result.updatedCount} transaction${result.updatedCount === 1 ? "" : "s"}.`
           : "No transactions matched this statement month.",
       );
-      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      const cached = queryClient.getQueriesData<CreditTransactionsQueryData>({ queryKey: creditTransactionsKeyPrefix });
+      for (const [queryKey, value] of cached) {
+        if (!value) continue;
+        const [, , cardId, year, month] = queryKey as [string, string | null | undefined, string, number, number];
+        const nextTransactions = value.transactions.map((tx) => {
+          const cardMatches = cardId === "all" || tx.creditCardId === cardId;
+          const yearMatches = tx.statementYear === year;
+          const monthMatches = month < 0 || tx.statementMonth === month + 1;
+          if (!cardMatches || !yearMatches || !monthMatches) return tx;
+          return {
+            ...tx,
+            paymentDueDate: payload.paymentDueDate,
+          };
+        });
+        queryClient.setQueryData<CreditTransactionsQueryData>(queryKey, {
+          ...value,
+          transactions: nextTransactions,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
     },
     onError: (error) => {
       setPaymentDueMessage(error instanceof Error ? error.message : "Failed to update payment due date.");
@@ -796,9 +944,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         )}
       </div>
 
-      {isBalanced && (
-        <div className="cct-balanced-message">Perfectly balanced as all things should be</div>
-      )}
+      {balanceStatus ? <div className={balanceStatus.className}>{balanceStatus.label}</div> : null}
 
       {selectedCardId !== "all" && selectedMonth >= 0 && (
         <div className="cct-due-panel">

@@ -5224,6 +5224,26 @@ body {
   text-align: center;
 }
 
+.cct-balance-status {
+  padding: 8px 16px;
+  border-radius: var(--r-lg);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cct-balance-status-surplus {
+  background: var(--success-muted, rgba(34, 197, 94, 0.1));
+  border: 1px solid var(--success, #22c55e);
+  color: var(--success, #22c55e);
+}
+
+.cct-balance-status-deficit {
+  background: var(--danger-bg, rgba(239, 68, 68, 0.1));
+  border: 1px solid var(--danger, #ef4444);
+  color: var(--danger, #ef4444);
+}
+
 .cct-due-panel {
   display: flex;
   align-items: center;

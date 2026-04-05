@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -148,8 +149,8 @@ export function TransactionsPage() {
     (transactions.isFetching && !transactions.isLoading);
 
   useEffect(() => {
-    if (!txBankStorageKey || typeof window === "undefined") return;
-    const saved = window.sessionStorage.getItem(txBankStorageKey);
+    if (!txBankStorageKey) return;
+    const saved = getBrowserCookie(txBankStorageKey);
     if (saved) {
       setSelectedBankId(saved);
     }
@@ -171,8 +172,8 @@ export function TransactionsPage() {
   }, [bankAccounts.data, selectedBankId]);
 
   useEffect(() => {
-    if (!txBankStorageKey || typeof window === "undefined" || !selectedBankId || !bankFilterHydrated) return;
-    window.sessionStorage.setItem(txBankStorageKey, selectedBankId);
+    if (!txBankStorageKey || !selectedBankId || !bankFilterHydrated) return;
+    setBrowserCookie(txBankStorageKey, selectedBankId);
   }, [txBankStorageKey, selectedBankId, bankFilterHydrated]);
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
+import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { AppSidebar } from "./app-sidebar";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
@@ -796,8 +797,8 @@ export function DashboardShell({
       : bankAccountsQuery.data?.find((bank) => bank.id === selectedBankFilterId) ?? null;
 
   useEffect(() => {
-    if (!dashboardBankStorageKey || typeof window === "undefined") return;
-    const saved = window.sessionStorage.getItem(dashboardBankStorageKey);
+    if (!dashboardBankStorageKey) return;
+    const saved = getBrowserCookie(dashboardBankStorageKey);
     if (saved) {
       setSelectedBankFilterId(saved);
     }
@@ -805,8 +806,8 @@ export function DashboardShell({
   }, [dashboardBankStorageKey]);
 
   useEffect(() => {
-    if (!dashboardBankStorageKey || typeof window === "undefined" || !bankFilterHydrated) return;
-    window.sessionStorage.setItem(dashboardBankStorageKey, selectedBankFilterId);
+    if (!dashboardBankStorageKey || !bankFilterHydrated) return;
+    setBrowserCookie(dashboardBankStorageKey, selectedBankFilterId);
   }, [dashboardBankStorageKey, selectedBankFilterId, bankFilterHydrated]);
 
   useEffect(() => {
