@@ -2,6 +2,11 @@ import { getActiveWorkspaceCookie, setActiveWorkspaceCookie } from "@/lib/active
 import { prisma } from "@/lib/prisma";
 import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { authOptions } from "@/lib/auth";
+import {
+  DATABASE_UNAVAILABLE_CODE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+  isDatabaseUnavailableError,
+} from "@/lib/database-errors";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
@@ -268,6 +273,17 @@ export async function GET() {
         return NextResponse.json(emptyContextResponse());
       }
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
+    if (isDatabaseUnavailableError(error)) {
+      return NextResponse.json(
+        {
+          error: "Database unavailable",
+          code: DATABASE_UNAVAILABLE_CODE,
+          message: DATABASE_UNAVAILABLE_MESSAGE,
+        },
+        { status: 503 },
+      );
     }
 
     const message = error instanceof Error ? error.message : "Unknown error";

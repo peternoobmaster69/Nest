@@ -7,6 +7,11 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_OPTIONS,
 } from "@/lib/auth";
+import {
+  DATABASE_UNAVAILABLE_CODE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+  isDatabaseUnavailableError,
+} from "@/lib/database-errors";
 
 /**
  * @openapi
@@ -81,6 +86,16 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (err) {
     console.error("POST /api/auth/login error", err);
+    if (isDatabaseUnavailableError(err)) {
+      return NextResponse.json(
+        {
+          error: "database unavailable",
+          code: DATABASE_UNAVAILABLE_CODE,
+          message: DATABASE_UNAVAILABLE_MESSAGE,
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "internal server error" },
       { status: 500 }

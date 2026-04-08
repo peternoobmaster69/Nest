@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { DATABASE_UNAVAILABLE_CODE, DATABASE_UNAVAILABLE_MESSAGE } from "@/lib/database-errors";
 
-export default function LoginForm() {
+export default function LoginForm({ initialError }: { initialError?: string | null }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -25,7 +26,11 @@ export default function LoginForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        const nextError =
+          data?.code === DATABASE_UNAVAILABLE_CODE
+            ? data?.message || DATABASE_UNAVAILABLE_MESSAGE
+            : data.error || "Login failed";
+        setError(nextError);
         setLoading(false);
         return;
       }

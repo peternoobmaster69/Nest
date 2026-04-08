@@ -4,6 +4,10 @@ import { signIn } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  DATABASE_UNAVAILABLE_CODE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+} from "@/lib/database-errors";
 
 type ProviderMap = Record<
   string,
@@ -21,22 +25,36 @@ const providerIcons: Record<string, string> = {
   github: "⚡",
 };
 
-export function SignInPanel() {
+export function SignInPanel({ serviceMessage }: { serviceMessage?: string | null }) {
   const [providers, setProviders] = useState<ProviderMap>({});
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(serviceMessage ?? null);
+  const isBlockingError = errorMessage === DATABASE_UNAVAILABLE_MESSAGE;
 
   useEffect(() => {
     let mounted = true;
     fetch("/api/auth/providers")
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          const message =
+            data?.code === DATABASE_UNAVAILABLE_CODE
+              ? data?.message || DATABASE_UNAVAILABLE_MESSAGE
+              : "Unable to load sign-in options right now.";
+          throw new Error(message);
+        }
+        return data;
+      })
       .then((data) => {
         if (mounted) {
           setProviders(data || {});
+          setErrorMessage(serviceMessage ?? null);
           setLoading(false);
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (mounted) {
+          setErrorMessage(error instanceof Error ? error.message : "Unable to load sign-in options right now.");
           setLoading(false);
         }
       });
@@ -73,13 +91,19 @@ export function SignInPanel() {
             </div>
           )}
 
-          {!loading && !providerList.length && (
+          {!loading && errorMessage && (
+            <p className="signin-error">
+              {errorMessage}
+            </p>
+          )}
+
+          {!loading && !errorMessage && !providerList.length && (
             <p className="signin-error">
               No auth providers configured.
             </p>
           )}
 
-          {providerList.map((provider) => (
+          {!isBlockingError && providerList.map((provider) => (
             <button
               key={provider.id}
               className="signin-provider-btn"
