@@ -20,6 +20,15 @@ type RunnerSummary = {
   skipped: number;
 };
 
+function formatAutoReceivableGroupTitle(ruleName: string, transactionDate: Date) {
+  const monthLabel = transactionDate.toLocaleString("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return `${ruleName} (${monthLabel})`;
+}
+
 async function applyDeductRule(
   db: PrismaClient,
   transaction: {
@@ -132,21 +141,64 @@ async function applyReceivableRule(
   if (!budget) return false;
 
   await db.$transaction(async (tx) => {
-    await tx.receivable.create({
-      data: {
+    const groupTitle = formatAutoReceivableGroupTitle(rule.name, transaction.transactionDate);
+    const monthStart = new Date(
+      Date.UTC(transaction.transactionDate.getUTCFullYear(), transaction.transactionDate.getUTCMonth(), 1),
+    );
+    const nextMonthStart = new Date(
+      Date.UTC(transaction.transactionDate.getUTCFullYear(), transaction.transactionDate.getUTCMonth() + 1, 1),
+    );
+    const noteLine = `${transaction.transactionDate.toISOString().slice(0, 10)} - ${transaction.creditCard.cardName} ending ${transaction.creditCard.last4Digit} - ${transaction.subject} - ${(transaction.amountCents / 100).toFixed(2)}`;
+
+    const existingReceivable = await tx.receivable.findFirst({
+      where: {
         workspaceId: transaction.workspaceId,
-        title: transaction.subject,
-        amountCents: transaction.amountCents,
-        date: transaction.transactionDate,
-        transactionDate: transaction.transactionDate,
-        remarkTogether: `Auto-accounted by rule "${rule.name}" from ${transaction.creditCard.cardName} ••${transaction.creditCard.last4Digit}`,
+        title: groupTitle,
         sourceWorkspaceId: rule.sourceWorkspaceId,
         sourceAccountId: rule.sourceAccountId,
         sourceBudgetId: rule.sourceBudgetId,
-        status: "OPEN",
+        status: { in: ["OPEN", "PARTIAL"] },
+        date: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
       },
-      select: { id: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, notes: true },
     });
+
+    if (existingReceivable) {
+      await tx.receivable.update({
+        where: { id: existingReceivable.id },
+        data: {
+          amountCents: { increment: transaction.amountCents },
+          transactionDate: transaction.transactionDate,
+          remarkTogether: `Auto-accounted by rule "${rule.name}"`,
+          notes: existingReceivable.notes?.trim()
+            ? `${existingReceivable.notes.trim()}
+${noteLine}`
+            : noteLine,
+        },
+        select: { id: true },
+      });
+    } else {
+      await tx.receivable.create({
+        data: {
+          workspaceId: transaction.workspaceId,
+          title: groupTitle,
+          amountCents: transaction.amountCents,
+          date: transaction.transactionDate,
+          transactionDate: transaction.transactionDate,
+          remarkTogether: `Auto-accounted by rule "${rule.name}"`,
+          notes: noteLine,
+          sourceWorkspaceId: rule.sourceWorkspaceId,
+          sourceAccountId: rule.sourceAccountId,
+          sourceBudgetId: rule.sourceBudgetId,
+          status: "OPEN",
+        },
+        select: { id: true },
+      });
+    }
 
     await tx.creditCardTransaction.update({
       where: { id: transaction.id },

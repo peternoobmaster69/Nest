@@ -561,6 +561,24 @@ body {
   gap: 12px;
 }
 
+.confirm-dialog {
+  width: min(92vw, 520px);
+}
+
+.confirm-dialog-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .recv-modal,
 .txn-modal {
   width: min(96vw, 1100px);
@@ -5791,10 +5809,10 @@ body {
 .recv-month-chip {
   border: 1px solid var(--border-default);
   border-radius: var(--r-md);
-  padding: 8px 6px;
+  padding: 8px 10px;
   display: grid;
-  gap: 4px;
-  justify-items: center;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   background: var(--bg-elevated);
   transition: all var(--t);
   cursor: pointer;
@@ -5807,26 +5825,27 @@ body {
 }
 
 .recv-month-chip-label {
-  font-size: 11px;
+  grid-column: 2;
+  justify-self: center;
+  font-size: 12px;
   font-weight: 600;
-}
-
-.recv-month-chip-count {
-  font-size: 14px;
-  font-weight: 700;
   line-height: 1;
 }
 
-.recv-month-chip.is-empty {
-  background: var(--success-bg);
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 35%, var(--border-default));
-}
-
-.recv-month-chip.is-has-items {
-  background: var(--warning-bg);
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 35%, var(--border-default));
+.recv-month-chip-count {
+  grid-column: 3;
+  justify-self: end;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  border: 1px solid transparent;
 }
 
 .recv-month-chip.is-active {
@@ -5840,6 +5859,42 @@ body {
 
 .recv-month-chip.is-active .recv-month-chip-count {
   font-weight: 800;
+}
+
+.recv-month-chip.is-empty {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border-default));
+}
+
+.recv-month-chip.is-empty .recv-month-chip-count {
+  background: #166534;
+  color: #ffffff;
+  border-color: #166534;
+}
+
+.recv-month-chip.is-has-items {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border-default));
+}
+
+.recv-month-chip.is-has-items .recv-month-chip-count {
+  background: #92400e;
+  color: #ffffff;
+  border-color: #92400e;
+}
+
+[data-theme="dark"] .recv-month-chip.is-empty .recv-month-chip-count {
+  background: #86efac;
+  color: #052e16;
+  border-color: #86efac;
+}
+
+[data-theme="dark"] .recv-month-chip.is-has-items .recv-month-chip-count {
+  background: #fcd34d;
+  color: #451a03;
+  border-color: #fcd34d;
 }
 
 @media (max-width: 720px) {

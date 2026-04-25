@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { CollaborationBanner } from "@/components/collaboration-banner";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { NavigationLoader } from "@/components/navigation-loader";
+import { ConfirmDialogProvider } from "@/components/confirm-dialog";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -25,10 +26,12 @@ export function Providers({ children }: { children: ReactNode }) {
     <SessionProvider>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
-          {children}
-          <NavigationLoader />
-          <CollaborationBanner />
-          <CookieConsentBanner />
+          <ConfirmDialogProvider>
+            {children}
+            <NavigationLoader />
+            <CollaborationBanner />
+            <CookieConsentBanner />
+          </ConfirmDialogProvider>
         </QueryClientProvider>
       </ThemeProvider>
     </SessionProvider>

@@ -36,8 +36,7 @@ export default function LoginForm({ initialError }: { initialError?: string | nu
       }
 
       // login succeeded → redirect to accounts
-      router.push("/accounts");
-      router.refresh();
+      window.location.assign("/accounts");
     } catch (err) {
       setError("Something went wrong");
       console.error(err);

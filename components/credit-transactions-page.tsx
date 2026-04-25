@@ -8,6 +8,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 type CreditCard = {
   id: string;
@@ -69,6 +70,14 @@ type CreditTransactionsQueryData = {
   cardCounts: CardCount[];
 };
 
+type CreditCardPaymentResponse = {
+  ok: true;
+  paidAmountCents: number;
+  outstandingAmountCents: number;
+  bankTransactionId: string;
+  paymentTransaction: CreditCardTransaction;
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -125,6 +134,7 @@ function writeCookie(name: string, value: string) {
 
 export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
   const queryClient = useQueryClient();
+  const { confirm } = useConfirmDialog();
   const sortedCards = useMemo(() => {
     const list = [...initialCards];
     list.sort((a, b) => {
@@ -361,6 +371,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     const unaccounted = filteredTransactions.filter((t) => !t.isAllocated).reduce((sum, t) => sum + t.amountCents, 0);
     return { total, unaccounted };
   }, [filteredTransactions]);
+  const payableAmountCents = useMemo(
+    () => transactions.reduce((sum, t) => sum + t.amountCents, 0),
+    [transactions],
+  );
 
   const totalReceivableCents = receivablesSummary.data?.totalCents ?? 0;
   const workspacesForReceivableSource = useMemo(
@@ -629,6 +643,34 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     },
   });
 
+  const makePayment = useMutation({
+    mutationFn: (payload: {
+      cardId: string;
+      statementMonth: number;
+      statementYear: number;
+      amountCents: number;
+    }) =>
+      fetchJson<CreditCardPaymentResponse>("/api/credit-transactions/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (result) => {
+      setImportMessage(`Payment recorded for ${formatCurrency(result.paidAmountCents)}.`);
+      syncCreditTransactionCaches({
+        previousTx: null,
+        nextTx: result.paymentTransaction,
+      });
+      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+    onError: (error) => {
+      setImportMessage(error instanceof Error ? error.message : "Failed to make payment.");
+    },
+  });
+
   const openModal = () => {
     const now = new Date();
     setFormCardId(
@@ -856,6 +898,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const earliestDueIsOverdue = earliestDueDays !== null && earliestDueDays < 0;
   const earliestDueIsUrgent = earliestDueDays !== null && earliestDueDays >= 0 && earliestDueDays <= 3;
   const canEditSharedPaymentDue = selectedMonth >= 0;
+  const canMakePayment =
+    selectedCardId !== "all" &&
+    selectedMonth >= 0 &&
+    payableAmountCents > 0 &&
+    Boolean(defaultReceivableAccountId) &&
+    Boolean(defaultReceivableBudgetId);
   const saveSharedPaymentDue = () => {
     if (!canEditSharedPaymentDue) return;
     updateSharedPaymentDue.mutate({
@@ -863,6 +911,24 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       statementMonth: selectedMonth + 1,
       statementYear: selectedYear,
       paymentDueDate: sharedPaymentDueDate ? new Date(`${sharedPaymentDueDate}T00:00:00.000Z`).toISOString() : null,
+    });
+  };
+  const submitPayment = async () => {
+    if (!selectedCard || selectedMonth < 0 || payableAmountCents <= 0) return;
+    const confirmed = await confirm({
+      title: "Confirm Payment",
+      message: `Make payment for ${selectedCard.cardName} (${MONTHS[selectedMonth]} ${selectedYear}) for ${formatCurrency(payableAmountCents)}? This will deduct the amount from the Receivable Default Subaccount and create an offsetting payment entry for this credit card statement.`,
+      confirmLabel: "Make Payment",
+      cancelLabel: "Cancel",
+    });
+    if (!confirmed) {
+      return;
+    }
+    makePayment.mutate({
+      cardId: selectedCard.id,
+      statementMonth: selectedMonth + 1,
+      statementYear: selectedYear,
+      amountCents: payableAmountCents,
     });
   };
 
@@ -996,6 +1062,21 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             >
               {updateSharedPaymentDue.isPending ? "Saving..." : "Save Due Date"}
             </button>
+            {selectedCardId !== "all" && selectedMonth >= 0 && payableAmountCents > 0 ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-xs cct-due-save-btn"
+                onClick={submitPayment}
+                disabled={!canMakePayment || makePayment.isPending}
+                title={
+                  canMakePayment
+                    ? `Make payment of ${formatCurrency(payableAmountCents)}`
+                    : "Configure default receivable account and subaccount in Settings"
+                }
+              >
+                {makePayment.isPending ? "Processing..." : "Make Payment"}
+              </button>
+            ) : null}
           </div>
         </div>
       )}

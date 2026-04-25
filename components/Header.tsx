@@ -2,7 +2,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Landmark } from "lucide-react";
 
@@ -19,15 +18,13 @@ type HeaderProps = {
 };
 
 export default function Header({ user }: HeaderProps) {
-  const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
     try {
       setLoggingOut(true);
       await fetch("/api/auth/logout", { method: "POST" });
-      router.push("/login");
-      router.refresh();
+      window.location.assign("/login");
     } catch (e) {
       console.error("Logout failed", e);
     } finally {

@@ -344,6 +344,7 @@ export function ReceivablesPage() {
   const monthlyCounts = useMemo(() => {
     const counts = Array.from({ length: 12 }, () => 0);
     for (const item of receivables.data ?? []) {
+      if (item.status !== "OPEN" && item.status !== "PARTIAL") continue;
       const month = new Date(item.date).getMonth();
       counts[month] += 1;
     }
@@ -484,7 +485,7 @@ export function ReceivablesPage() {
                 type="button"
               >
                 <span className="recv-month-chip-label">{label}</span>
-                <span className="recv-month-chip-count">{count}</span>
+                {count > 0 ? <span className="recv-month-chip-count">{count}</span> : null}
               </button>
             );
           })}
