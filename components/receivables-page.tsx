@@ -100,6 +100,17 @@ function getMonthEndDateInputValue(value: string) {
   return `${year}-${month}-${day}`;
 }
 
+function formatDisplayDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -555,7 +566,7 @@ export function ReceivablesPage() {
                   </div>
 
                   <div className="recv-row-meta">
-                    {r.transactionDate ? new Date(r.transactionDate).toLocaleDateString() : "—"}
+                    {r.transactionDate ? formatDisplayDate(r.transactionDate) : "—"}
                     {r.account ? ` · 💰 ${r.account.workspace.name} - ${r.budget?.name ?? r.account.name}` : ""}
                   </div>
                 </div>
