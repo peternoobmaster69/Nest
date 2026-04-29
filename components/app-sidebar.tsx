@@ -16,6 +16,10 @@ type Workspace = {
   role: string;
 };
 
+type ReceivablesSummary = {
+  count: number;
+};
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -78,7 +82,17 @@ export function AppSidebar({
   });
 
   const resolvedContext = contextData ?? context.data;
+  const receivablesSummary = useQuery({
+    queryKey: ["receivables-summary", resolvedContext?.workspaceId],
+    queryFn: async () => {
+      const res = await fetch(`/api/receivables/summary?workspaceId=${resolvedContext?.workspaceId}`);
+      if (!res.ok) throw new Error("Failed to load receivables summary");
+      return res.json() as Promise<ReceivablesSummary>;
+    },
+    enabled: Boolean(resolvedContext?.workspaceId),
+  });
   const isContextLoading = contextLoading || (!contextData && context.isLoading);
+  const resolvedReceivablesCount = badgeCounts?.receivables ?? receivablesSummary.data?.count ?? 0;
 
   // Get sidebar visibility settings with defaults
   const sidebarMoneyPages = resolvedContext?.sidebarMoneyPages ?? {
@@ -301,7 +315,7 @@ export function AppSidebar({
         {sidebarMoneyPages.receivables !== false && (
           <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
             <span className="sb-ic">↩</span>Receivables
-            {badgeCounts?.receivables ? <span className="sb-badge">{badgeCounts.receivables}</span> : null}
+            {resolvedReceivablesCount ? <span className="sb-badge">{resolvedReceivablesCount}</span> : null}
           </Link>
         )}
         {sidebarMoneyPages.rewards !== false && (

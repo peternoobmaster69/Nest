@@ -1,6 +1,7 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { NextAuthOptions } from "next-auth";
 import NextAuth from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import AppleProvider from "next-auth/providers/apple";
 import FacebookProvider from "next-auth/providers/facebook";
 import GoogleProvider from "next-auth/providers/google";
@@ -41,12 +42,19 @@ if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "database" },
+  session: { strategy: "jwt" },
   providers,
   callbacks: {
-    async session({ session, user }) {
+    async jwt({ token, user }) {
+      if (user?.id) {
+        (token as JWT & { id?: string }).id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token, user }) {
       if (session.user) {
-        session.user.id = user.id;
+        session.user.id =
+          ((token as JWT & { id?: string }).id || token.sub || user?.id || "") as string;
       }
       return session;
     },

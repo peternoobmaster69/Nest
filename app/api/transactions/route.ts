@@ -21,8 +21,8 @@ const CreateTransactionSchema = z.object({
   date: z.string().datetime(),
   details: z.string().max(500).optional(),
   notes: z.string().optional(),
-  budgetId: z.string().min(1).optional(),
-  budgetOperation: z.enum(["DEDUCT", "ADD"]).optional(),
+  budgetId: z.string().min(1),
+  budgetOperation: z.enum(["DEDUCT", "ADD"]),
 });
 
 export async function GET(request: Request) {
@@ -38,8 +38,7 @@ export async function GET(request: Request) {
 
     const txs = await prisma.transaction.findMany({
       where: { workspaceId },
-      orderBy: { date: "desc" },
-      take: 100,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: {
         id: true,
         workspaceId: true,
@@ -100,10 +99,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid account for workspace." }, { status: 400 });
     }
 
-    if ((budgetId && !budgetOperation) || (!budgetId && budgetOperation)) {
-      return NextResponse.json({ error: "budgetId and budgetOperation must be provided together." }, { status: 400 });
-    }
-
     const normalizedDirection =
       budgetOperation === "ADD" ? "CREDIT" : budgetOperation === "DEDUCT" ? "DEBIT" : txPayload.direction;
     const normalizedKind =
@@ -121,21 +116,18 @@ export async function POST(request: Request) {
         },
       });
 
-      let updatedBudget = null;
-      if (budgetId && budgetOperation) {
-        const budget = await db.budgetEnvelope.findFirst({
-          where: { id: budgetId, workspaceId: txPayload.workspaceId, isActive: true },
-          select: { id: true, accountId: true },
-        });
-        if (!budget) {
-          throw new Error("Selected budget does not belong to workspace.");
-        }
-        if (budget.accountId !== txPayload.accountId) {
-          throw new Error("Selected budget is linked to a different bank account.");
-        }
-
-        updatedBudget = await recalculateBudgetAvailableCents(db, txPayload.workspaceId, budget.id);
+      const budget = await db.budgetEnvelope.findFirst({
+        where: { id: budgetId, workspaceId: txPayload.workspaceId, isActive: true },
+        select: { id: true, accountId: true },
+      });
+      if (!budget) {
+        throw new Error("Selected budget does not belong to workspace.");
       }
+      if (budget.accountId !== txPayload.accountId) {
+        throw new Error("Selected budget is linked to a different bank account.");
+      }
+
+      const updatedBudget = await recalculateBudgetAvailableCents(db, txPayload.workspaceId, budget.id);
 
       return { tx, updatedBudget };
     });

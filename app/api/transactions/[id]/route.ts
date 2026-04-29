@@ -14,7 +14,7 @@ const UpdateTransactionSchema = z.object({
   details: z.string().max(500).nullable().optional(),
   notes: z.string().nullable().optional(),
   date: z.string().datetime().optional(),
-  budgetId: z.string().nullable().optional(),
+  budgetId: z.string().min(1),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,13 +28,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const result = await prisma.$transaction(async (db) => {
       const existing = await db.transaction.findUnique({
         where: { id },
-        select: { id: true, workspaceId: true, budgetId: true },
+        select: { id: true, workspaceId: true, budgetId: true, accountId: true },
       });
       if (!existing) {
         throw new Error("Transaction not found");
       }
 
       await requireWorkspaceAccess(existing.workspaceId);
+
+      const budget = await db.budgetEnvelope.findFirst({
+        where: {
+          id: parsed.data.budgetId,
+          workspaceId: existing.workspaceId,
+          accountId: existing.accountId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!budget) {
+        throw new Error("Selected budget does not belong to this transaction account.");
+      }
 
       const updated = await db.transaction.update({
         where: { id },
@@ -44,6 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (existing.budgetId) {
         await recalculateBudgetAvailableCents(db, existing.workspaceId, existing.budgetId);
       }
+      await recalculateBudgetAvailableCents(db, existing.workspaceId, parsed.data.budgetId);
 
       return updated;
     });
@@ -56,6 +70,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const message = error instanceof Error ? error.message : "Unknown error";
     if (message === "Transaction not found") {
       return NextResponse.json({ error: message }, { status: 404 });
+    }
+    if (message === "Selected budget does not belong to this transaction account.") {
+      return NextResponse.json({ error: message }, { status: 400 });
     }
     return NextResponse.json({ error: "Failed to update transaction", message }, { status: 500 });
   }

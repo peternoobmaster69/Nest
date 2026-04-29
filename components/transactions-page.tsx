@@ -164,16 +164,9 @@ export function TransactionsPage() {
   }, [txBankStorageKey]);
 
   useEffect(() => {
-    const firstBankId = bankAccounts.data?.[0]?.id;
-    if (!selectedBankId && firstBankId) {
-      setSelectedBankId(firstBankId);
-    }
-  }, [bankAccounts.data, selectedBankId]);
-
-  useEffect(() => {
     if (!selectedBankId || !bankAccounts.data?.length) return;
     if (!bankAccounts.data.some((b) => b.id === selectedBankId)) {
-      setSelectedBankId(bankAccounts.data[0].id);
+      setSelectedBankId("");
     }
   }, [bankAccounts.data, selectedBankId]);
 
@@ -244,8 +237,8 @@ export function TransactionsPage() {
       accountId: string;
       operation: "DEDUCT" | "ADD";
       date: string;
-      budgetId?: string;
-      budgetOperation?: "DEDUCT" | "ADD";
+      budgetId: string;
+      budgetOperation: "DEDUCT" | "ADD";
     }) =>
       fetchJson("/api/transactions", {
         method: "POST",
@@ -264,9 +257,6 @@ export function TransactionsPage() {
         }),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
-      await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
       setSubject("");
       setNotes("");
       setAmount("");
@@ -274,6 +264,9 @@ export function TransactionsPage() {
       setOperation("ADD");
       setTransactionDate("");
       setIsCreateModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
 
@@ -296,20 +289,20 @@ export function TransactionsPage() {
         }),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
-      await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
-      await queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
       setIsTransferModalOpen(false);
       setTransferTitle("");
       setTransferAmount("");
       setTransferSourceBudgetId("");
       setTransferDestinationBudgetId("");
+      void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
 
   const updateTx = useMutation({
-    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId?: string }) =>
+    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId: string }) =>
       fetchJson(`/api/transactions/${payload.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -320,13 +313,10 @@ export function TransactionsPage() {
           direction: payload.operation === "ADD" ? "CREDIT" : "DEBIT",
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
           date: new Date(payload.date).toISOString(),
-          budgetId: payload.budgetId || null,
+          budgetId: payload.budgetId,
         }),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
-      await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
       setEditingTxId(null);
       setEditSubject("");
       setEditNotes("");
@@ -334,6 +324,9 @@ export function TransactionsPage() {
       setEditOperation("DEDUCT");
       setEditTransactionDate("");
       setEditBudgetId("");
+      void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
 
@@ -392,7 +385,7 @@ export function TransactionsPage() {
     event.preventDefault();
     const selectedBudget = budgets.data?.find((b) => b.id === budgetId);
     const accountId = selectedBudget?.accountId || selectedBankId;
-    if (!workspaceId || !accountId || !subject || !amount || !transactionDate) return;
+    if (!workspaceId || !accountId || !subject || !amount || !transactionDate || !budgetId) return;
     createTx.mutate({
       subject,
       notes: notes || undefined,
@@ -400,8 +393,8 @@ export function TransactionsPage() {
       accountId,
       operation,
       date: transactionDate,
-      budgetId: budgetId || undefined,
-      budgetOperation: budgetId ? operation : undefined,
+      budgetId,
+      budgetOperation: operation,
     });
   };
 
@@ -410,6 +403,15 @@ export function TransactionsPage() {
     if (!selectedBankId) return budgets.data;
     return budgets.data.filter((b) => b.accountId === selectedBankId);
   }, [budgets.data, selectedBankId]);
+  const editingTransaction = useMemo(
+    () => (transactions.data ?? []).find((tx) => tx.id === editingTxId) ?? null,
+    [transactions.data, editingTxId],
+  );
+  const editableBudgets = useMemo(() => {
+    if (!budgets.data?.length) return [];
+    if (!editingTransaction) return budgets.data;
+    return budgets.data.filter((budget) => budget.accountId === editingTransaction.accountId);
+  }, [budgets.data, editingTransaction]);
 
   const filteredTransactions = useMemo(() => {
     const all = transactions.data ?? [];
@@ -462,12 +464,29 @@ export function TransactionsPage() {
     setEditNotes("");
     setEditAmount("");
     setEditOperation("DEDUCT");
+    setEditTransactionDate("");
     setEditBudgetId("");
   };
 
+  useEffect(() => {
+    if (!isCreateModalOpen) return;
+    if (!visibleBudgets.length) return;
+    if (!budgetId || !visibleBudgets.some((budget) => budget.id === budgetId)) {
+      setBudgetId(visibleBudgets[0].id);
+    }
+  }, [isCreateModalOpen, visibleBudgets, budgetId]);
+
+  useEffect(() => {
+    if (!editingTxId) return;
+    if (!editableBudgets.length) return;
+    if (!editBudgetId || !editableBudgets.some((budget) => budget.id === editBudgetId)) {
+      setEditBudgetId(editableBudgets[0].id);
+    }
+  }, [editingTxId, editableBudgets, editBudgetId]);
+
   const onSubmitEdit = (event: FormEvent) => {
     event.preventDefault();
-    if (!editingTxId || !editSubject || !editAmount || !editTransactionDate) return;
+    if (!editingTxId || !editSubject || !editAmount || !editTransactionDate || !editBudgetId) return;
     updateTx.mutate({
       id: editingTxId,
       subject: editSubject,
@@ -484,7 +503,7 @@ export function TransactionsPage() {
     setNotes("");
     setAmount("");
     setOperation("ADD");
-    setBudgetId(activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "");
+    setBudgetId(activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : visibleBudgets[0]?.id ?? "");
     setTransactionDate(new Date().toISOString().split("T")[0]);
     setIsCreateModalOpen(true);
   };
@@ -517,6 +536,11 @@ export function TransactionsPage() {
     window.setTimeout(() => {
       deleteTx.mutate(transactionId);
     }, 180);
+  };
+  const confirmDeleteEditingTx = () => {
+    if (!editingTxId) return;
+    closeEditModal();
+    confirmDeleteTx(editingTxId);
   };
 
   const openEditBankBalance = (bank: BankAccount) => {
@@ -552,9 +576,9 @@ export function TransactionsPage() {
   return (
     <div className="txn-page" style={{ display: "grid", gap: "14px" }}>
       {isRefreshing ? (
-        <div className="tx-refresh-banner" aria-live="polite">
+        <div className="tx-refresh-indicator" aria-live="polite">
           <LoadingDots className="tx-refresh-dots" />
-          <span>Refreshing data...</span>
+          <span className="tx-refresh-label">Refreshing</span>
         </div>
       ) : null}
 
@@ -694,7 +718,7 @@ export function TransactionsPage() {
               }
             }}
             style={{
-              borderColor: activeBudgetFilterId === "ALL" ? "var(--brand-500)" : hasDisplayedDiscrepancy ? "var(--warning)" : undefined,
+              borderColor: activeBudgetFilterId === "ALL" ? "var(--brand-500)" : undefined,
               boxShadow: activeBudgetFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
             }}
           >
@@ -705,7 +729,6 @@ export function TransactionsPage() {
             <div className={`bm-amount ${getAmountToneClass(visibleBudgetTotalCents)}`}>
               {formatCents(visibleBudgetTotalCents)}
             </div>
-            {hasDisplayedDiscrepancy ? <div className="bm-target tx-discrepancy-note">⚠️</div> : null}
           </div>
           {visibleBudgets.map((b) => (
             <div
@@ -770,36 +793,29 @@ export function TransactionsPage() {
           {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) => {
             const isDeleting = deletingTransactionIds.includes(tx.id);
             return (
-            <div key={tx.id} className={`crud-row${isDeleting ? " crud-row-deleting" : ""}`}>
-              <div style={{ display: "grid", gap: "3px" }}>
-                <span className={getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}>
-                  {tx.subject} {formatCents(tx.amountCents)}
+            <div
+              key={tx.id}
+              className={`crud-row tx-recent-row${isDeleting ? " crud-row-deleting" : ""}`}
+              onClick={() => !isDeleting && beginEdit(tx)}
+              onKeyDown={(event) => {
+                if (isDeleting) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  beginEdit(tx);
+                }
+              }}
+              role="button"
+              tabIndex={isDeleting ? -1 : 0}
+              aria-label={`Edit transaction ${tx.subject}`}
+            >
+              <div className="tx-recent-main">
+                <span className="tx-recent-head">
+                  <span className="tx-recent-subject">{tx.subject}</span>
+                  <span className={`tx-recent-amount ${getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}`}>
+                    {formatCents(tx.amountCents)}
+                  </span>
                 </span>
-                <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(tx.date).toLocaleString()}</span>
-                {tx.notes || tx.details ? (
-                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.notes || tx.details}</span>
-                ) : null}
-              </div>
-              <div className="crud-actions" style={{ display: "flex", flexDirection: "column", gap: "4px", marginLeft: "auto" }}>
-                <button
-                  className="btn btn-ghost btn-icon"
-                  style={{ width: "32px", height: "32px" }}
-                  onClick={() => beginEdit(tx)}
-                  title="Edit"
-                  aria-label="Edit transaction"
-                >
-                  ✎
-                </button>
-                <button
-                  className="btn btn-ghost btn-icon"
-                  style={{ width: "32px", height: "32px", color: "var(--danger)" }}
-                  onClick={() => confirmDeleteTx(tx.id)}
-                  disabled={isDeleting}
-                  title={isDeleting ? "Deleting..." : "Delete"}
-                  aria-label="Delete transaction"
-                >
-                  {isDeleting ? "…" : "🗑"}
-                </button>
+                <span className="tx-recent-date">{new Date(tx.date).toLocaleString()}</span>
               </div>
             </div>
           )})}
@@ -851,8 +867,10 @@ export function TransactionsPage() {
                   </label>
                   <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                     Sub Account
-                    <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
-                      <option value="">No account</option>
+                    <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)} required>
+                      <option value="" disabled>
+                        Select sub account
+                      </option>
                       {visibleBudgets.map((b) => (
                         <option key={b.id} value={b.id}>
                           {b.name}
@@ -978,9 +996,11 @@ export function TransactionsPage() {
               </label>
               <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                 Sub Account
-                <select className="input" value={editBudgetId} onChange={(e) => setEditBudgetId(e.target.value)}>
-                  <option value="">No account</option>
-                  {budgets.data?.map((b) => (
+                <select className="input" value={editBudgetId} onChange={(e) => setEditBudgetId(e.target.value)} required>
+                  <option value="" disabled>
+                    Select sub account
+                  </option>
+                  {editableBudgets.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
                     </option>
@@ -999,13 +1019,24 @@ export function TransactionsPage() {
                 placeholder="Write notes in Markdown"
                 calculator
               />
-              <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                <button className="btn btn-ghost" type="button" onClick={closeEditModal}>
-                  Cancel
+              <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={confirmDeleteEditingTx}
+                  disabled={deleteTx.isPending || !editingTxId}
+                  style={{ color: "var(--danger)" }}
+                >
+                  {deleteTx.isPending && editingTxId && deletingTransactionIds.includes(editingTxId) ? "Deleting..." : "Delete"}
                 </button>
-                <button className="btn btn-primary" type="submit" disabled={updateTx.isPending}>
-                  {updateTx.isPending ? <LoadingDots /> : "Save"}
-                </button>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button className="btn btn-ghost" type="button" onClick={closeEditModal}>
+                    Cancel
+                  </button>
+                  <button className="btn btn-primary" type="submit" disabled={updateTx.isPending}>
+                    {updateTx.isPending ? <LoadingDots /> : "Save"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

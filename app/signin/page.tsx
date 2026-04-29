@@ -9,7 +9,7 @@ function getSignInErrorMessage(error: string | undefined) {
 
   switch (error) {
     case "Callback":
-      return "Sign-in could not be completed. The database is currently unavailable, so your session could not be created.";
+      return "Sign-in could not be completed. Please try again.";
     case "OAuthCallback":
     case "OAuthSignin":
     case "OAuthCreateAccount":
