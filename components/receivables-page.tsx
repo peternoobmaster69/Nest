@@ -6,7 +6,7 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
+import { SkeletonList, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
@@ -468,7 +468,10 @@ export function ReceivablesPage() {
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
           {isLoading ? (
-            <SkeletonMiniCard />
+            <>
+              <div className="skeleton-block skeleton-pulse" style={{ width: "140px", height: "26px", borderRadius: "8px" }} />
+              <div className="skeleton-block skeleton-pulse" style={{ width: "56px", height: "14px", borderRadius: "999px" }} />
+            </>
           ) : (
             <div className={getAmountToneClass(totalReceivableCents)} style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
               {formatCents(totalReceivableCents)}
@@ -582,6 +585,8 @@ export function ReceivablesPage() {
                     <button
                       className="btn btn-primary btn-xs"
                       onClick={() => {
+                        if (!confirmDestructiveAction("Close this receivable and mark it as paid?")) return;
+                        setCloseError(null);
                         setClosingReceivableId(r.id);
                         closeReceivable.mutate({ id: r.id });
                       }}

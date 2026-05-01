@@ -831,6 +831,12 @@ export function DashboardShell({
   }, [sidebarOpen]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    const workspaceName = contextQuery.data?.workspaceName?.trim();
+    document.title = workspaceName ? `${workspaceName} [Dashboard]` : "Dashboard";
+  }, [contextQuery.data?.workspaceName]);
+
+  useEffect(() => {
     if (!isBankPickerOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
       if (!bankPickerRef.current?.contains(event.target as Node)) {

@@ -86,6 +86,12 @@ export function PageFrame({
     window.sessionStorage.setItem("nest:ui:sidebarOpen", sidebarOpen ? "1" : "0");
   }, [sidebarOpen]);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const workspaceName = contextQuery.data?.workspaceName?.trim();
+    document.title = workspaceName ? `${workspaceName} [${title}]` : title;
+  }, [contextQuery.data?.workspaceName, title]);
+
   return (
     <div className="app-shell">
       <AppSidebar
