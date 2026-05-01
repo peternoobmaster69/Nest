@@ -41,6 +41,15 @@ type Transaction = {
   date: string;
 };
 
+type Receivable = {
+  id: string;
+  title: string;
+  amountCents: number;
+  date: string;
+  status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
+  budgetId?: string | null;
+};
+
 type BankAccount = {
   id: string;
   name: string;
@@ -120,6 +129,7 @@ export function TransactionsPage() {
   const [transferAmount, setTransferAmount] = useState("");
   const [transferSourceBudgetId, setTransferSourceBudgetId] = useState("");
   const [transferDestinationBudgetId, setTransferDestinationBudgetId] = useState("");
+  const [receivableInfoBudgetId, setReceivableInfoBudgetId] = useState<string | null>(null);
   const recentTransactionsRef = useRef<HTMLElement | null>(null);
   const subAccountsRef = useRef<HTMLElement | null>(null);
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
@@ -161,6 +171,13 @@ export function TransactionsPage() {
   const transactions = useQuery({
     queryKey: ["transactions", workspaceId],
     queryFn: () => fetchJson<Transaction[]>(`/api/transactions?workspaceId=${workspaceId}`),
+    enabled: Boolean(workspaceId),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+  const receivables = useQuery({
+    queryKey: ["receivables", workspaceId],
+    queryFn: () => fetchJson<Receivable[]>(`/api/receivables?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
     staleTime: 0,
     refetchOnWindowFocus: true,
@@ -464,6 +481,25 @@ export function TransactionsPage() {
   const displayedLinkedBudgetCents = selectedBank ? visibleBudgetTotalCents : totalLinkedBudgetCents;
   const displayedDiscrepancyCents = displayedBankBalanceCents - displayedLinkedBudgetCents;
   const hasDisplayedDiscrepancy = displayedDiscrepancyCents !== 0;
+  const receivableInfoBudget = useMemo(
+    () => visibleBudgets.find((budget) => budget.id === receivableInfoBudgetId) ?? null,
+    [visibleBudgets, receivableInfoBudgetId],
+  );
+  const receivableInfoItems = useMemo(
+    () =>
+      (receivables.data ?? [])
+        .filter(
+          (receivable) =>
+            receivable.budgetId === receivableInfoBudgetId &&
+            (receivable.status === "OPEN" || receivable.status === "PARTIAL"),
+        )
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [receivables.data, receivableInfoBudgetId],
+  );
+  const receivableInfoTotalCents = useMemo(
+    () => receivableInfoItems.reduce((sum, receivable) => sum + receivable.amountCents, 0),
+    [receivableInfoItems],
+  );
 
   const beginEdit = (tx: Transaction) => {
     updateTx.reset();
@@ -599,6 +635,15 @@ export function TransactionsPage() {
     });
   };
 
+  const syncSelectedBankBalance = () => {
+    if (!selectedBank) return;
+    if (!confirmDestructiveAction(`Update ${selectedBank.name} balance to match the sub-account total?`)) return;
+    updateBankBalance.mutate({
+      id: selectedBank.id,
+      startingCents: displayedLinkedBudgetCents,
+    });
+  };
+
   return (
     <div className="txn-page" style={{ display: "grid", gap: "14px" }}>
       {isRefreshing ? (
@@ -718,14 +763,37 @@ export function TransactionsPage() {
               fontWeight: hasDisplayedDiscrepancy ? 600 : 500,
             }}
           >
-            Total {formatCents(visibleBudgetTotalCents)} / Bank {formatCents(displayedBankBalanceCents)}
-            {hasDisplayedDiscrepancy ? ` · Discrepancy ${displayedDiscrepancyCents > 0 ? "+" : ""}${formatCents(displayedDiscrepancyCents)}` : ""}
+            📊 {formatCents(visibleBudgetTotalCents)}&emsp;&emsp;🏦 {formatCents(displayedBankBalanceCents)}&emsp;
           </div>
         </div>
         {hasDisplayedDiscrepancy ? (
           <div className="tx-discrepancy-banner">
-            Sub-Accounts total {formatCents(displayedLinkedBudgetCents)} does not match the selected bank balance {formatCents(displayedBankBalanceCents)}.
-            Current discrepancy: {displayedDiscrepancyCents > 0 ? "+" : ""}{formatCents(displayedDiscrepancyCents)}.
+            <span>⚠️ Mismatch: {formatCents(Math.abs(displayedDiscrepancyCents))}</span>
+            {selectedBank ? (
+              <button
+                type="button"
+                className="bm-edit-btn"
+                onClick={syncSelectedBankBalance}
+                disabled={updateBankBalance.isPending}
+                aria-label={`Update ${selectedBank.name} balance to match the sub-account total`}
+                title="Update bank balance to match sub-account total"
+                style={{
+                  position: "absolute",
+                  right: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "auto",
+                  height: "auto",
+                  fontSize: "18px",
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  boxShadow: "none",
+                }}
+              >
+                {updateBankBalance.isPending ? "…" : "↻"}
+              </button>
+            ) : null}
           </div>
         ) : null}
         <div className="account-cards-grid tx-account-grid">
@@ -748,12 +816,17 @@ export function TransactionsPage() {
               boxShadow: activeBudgetFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
             }}
           >
-            <div className="bm-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              <span aria-hidden="true">📁</span>
-              <span>All accounts</span>
-            </div>
-            <div className={`bm-amount ${getAmountToneClass(visibleBudgetTotalCents)}`}>
-              {formatCents(visibleBudgetTotalCents)}
+            <div className="tx-account-card-body">
+              <div className="bm-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <span aria-hidden="true">📁</span>
+                <span>All accounts</span>
+              </div>
+              <div className={`bm-amount ${getAmountToneClass(visibleBudgetTotalCents)}`}>
+                {formatCents(visibleBudgetTotalCents)}
+              </div>
+              <div className="bm-target tx-account-card-footer tx-account-card-footer-empty" aria-hidden="true">
+                —
+              </div>
             </div>
           </div>
           {visibleBudgets.map((b) => (
@@ -775,13 +848,49 @@ export function TransactionsPage() {
                 position: "relative",
               }}
             >
-              <div className="bm-name">{b.name}</div>
-              <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
-              {b.receivableReservedCents && b.availableCents > 0 ? (
-                <div className="bm-target" style={{ marginTop: "4px" }}>
-                  ({formatCents(b.receivableReservedCents)})
-                </div>
-              ) : null}
+              <div className="tx-account-card-body">
+                <div className="bm-name">{b.name}</div>
+                <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
+                {b.receivableReservedCents && b.availableCents > 0 ? (
+                  <div
+                    className="bm-target tx-account-card-footer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                  >
+                    <span>({formatCents(b.receivableReservedCents)})</span>
+                    <button
+                      type="button"
+                      aria-label={`Show receivable breakdown for ${b.name}`}
+                      title="Show receivable breakdown"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setReceivableInfoBudgetId(b.id);
+                      }}
+                      style={{
+                        width: "16px",
+                        height: "16px",
+                        borderRadius: "999px",
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--text-secondary)",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                    >
+                      i
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bm-target tx-account-card-footer tx-account-card-footer-empty" aria-hidden="true">
+                    —
+                  </div>
+                )}
+              </div>
               <span
                 aria-hidden="true"
                 style={{
@@ -1191,6 +1300,60 @@ export function TransactionsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {receivableInfoBudgetId && typeof document !== "undefined" && createPortal(
+        <div className="profile-modal-overlay" onClick={() => setReceivableInfoBudgetId(null)}>
+          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>{receivableInfoBudget?.name || "Receivable Breakdown"}</h3>
+              <button className="profile-modal-close" onClick={() => setReceivableInfoBudgetId(null)}>
+                Close
+              </button>
+            </div>
+            <div className="profile-modal-body" style={{ display: "grid", gap: "12px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                Open and partial receivables earmarked against this sub account.
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  background: "var(--bg-subtle)",
+                  border: "1px solid var(--border-subtle)",
+                }}
+              >
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Reserved total</span>
+                <strong className={getAmountToneClass(receivableInfoTotalCents)}>{formatCents(receivableInfoTotalCents)}</strong>
+              </div>
+              <div className="simple-list">
+                {receivables.isLoading ? (
+                  <SkeletonList count={3} type="transaction" />
+                ) : receivableInfoItems.length ? (
+                  receivableInfoItems.map((receivable) => (
+                    <div key={receivable.id} className="crud-row">
+                      <div style={{ display: "grid", gap: "3px" }}>
+                        <div style={{ fontWeight: 600 }}>{receivable.title || "Receivable"}</div>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          {new Date(receivable.date).toLocaleDateString()} · {receivable.status}
+                        </div>
+                      </div>
+                      <div className={getAmountToneClass(receivable.amountCents)}>{formatCents(receivable.amountCents)}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    No open receivables are currently linked to this sub account.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>,
         document.body
