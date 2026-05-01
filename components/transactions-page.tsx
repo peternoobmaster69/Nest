@@ -69,8 +69,25 @@ function getBudgetIcon(name: string, icon?: string | null) {
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return res.json();
+  const data = (await res.json().catch(() => null)) as
+    | T
+    | {
+        error?: string;
+        message?: string;
+      }
+    | null;
+
+  if (!res.ok) {
+    const errorMessage =
+      data && typeof data === "object" && "message" in data && typeof data.message === "string"
+        ? data.message
+        : data && typeof data === "object" && "error" in data && typeof data.error === "string"
+          ? data.error
+          : `Request failed (${res.status})`;
+    throw new Error(errorMessage);
+  }
+
+  return data as T;
 }
 
 export function TransactionsPage() {
@@ -449,6 +466,8 @@ export function TransactionsPage() {
   const hasDisplayedDiscrepancy = displayedDiscrepancyCents !== 0;
 
   const beginEdit = (tx: Transaction) => {
+    updateTx.reset();
+    deleteTx.reset();
     setEditingTxId(tx.id);
     setEditSubject(tx.subject);
     setEditNotes(tx.notes || tx.details || "");
@@ -459,6 +478,8 @@ export function TransactionsPage() {
   };
 
   const closeEditModal = () => {
+    updateTx.reset();
+    deleteTx.reset();
     setEditingTxId(null);
     setEditSubject("");
     setEditNotes("");
@@ -499,6 +520,7 @@ export function TransactionsPage() {
   };
 
   const openCreateModal = () => {
+    createTx.reset();
     setSubject("");
     setNotes("");
     setAmount("");
@@ -509,6 +531,7 @@ export function TransactionsPage() {
   };
 
   const openTransferModal = () => {
+    transferBetweenBudgets.reset();
     const firstBudgetId = visibleBudgets[0]?.id ?? budgets.data?.[0]?.id ?? "";
     const secondBudgetId =
       visibleBudgets.find((budget) => budget.id !== firstBudgetId)?.id ??
@@ -522,6 +545,7 @@ export function TransactionsPage() {
   };
 
   const closeTransferModal = () => {
+    transferBetweenBudgets.reset();
     setIsTransferModalOpen(false);
     setTransferTitle("");
     setTransferAmount("");
@@ -544,11 +568,13 @@ export function TransactionsPage() {
   };
 
   const openEditBankBalance = (bank: BankAccount) => {
+    updateBankBalance.reset();
     setEditingBankAccount(bank);
     setEditBankBalance((bank.currentBalanceCents / 100).toFixed(2));
   };
 
   const closeEditBankBalance = () => {
+    updateBankBalance.reset();
     setEditingBankAccount(null);
     setEditBankBalance("");
   };
@@ -929,6 +955,11 @@ export function TransactionsPage() {
                     placeholder="Write notes in Markdown"
                     calculator
                   />
+                  {createTx.isError ? (
+                    <div className="modal-grid-span-2" style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
+                      {(createTx.error as Error).message || "Failed to save transaction"}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="txn-modal-actions">
@@ -1019,6 +1050,11 @@ export function TransactionsPage() {
                 placeholder="Write notes in Markdown"
                 calculator
               />
+              {updateTx.isError ? (
+                <div className="modal-grid-span-2" style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
+                  {(updateTx.error as Error).message || "Failed to save transaction"}
+                </div>
+              ) : null}
               <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
                 <button
                   className="btn btn-ghost"
@@ -1066,6 +1102,11 @@ export function TransactionsPage() {
                   required
                 />
               </div>
+              {updateBankBalance.isError ? (
+                <div style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
+                  {(updateBankBalance.error as Error).message || "Failed to save bank balance"}
+                </div>
+              ) : null}
               <div className="profile-actions">
                 <button type="button" className="btn btn-ghost" onClick={closeEditBankBalance}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={updateBankBalance.isPending}>
@@ -1126,7 +1167,7 @@ export function TransactionsPage() {
                 </select>
               </label>
               {transferBetweenBudgets.isError ? (
-                <div className="modal-grid-span-2" style={{ color: "var(--danger)", fontSize: "12px" }}>
+                <div className="modal-grid-span-2" style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
                   {(transferBetweenBudgets.error as Error)?.message || "Transfer failed"}
                 </div>
               ) : null}

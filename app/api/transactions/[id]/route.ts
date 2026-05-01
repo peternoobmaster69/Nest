@@ -25,17 +25,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const result = await prisma.$transaction(async (db) => {
-      const existing = await db.transaction.findUnique({
-        where: { id },
-        select: { id: true, workspaceId: true, budgetId: true, accountId: true },
-      });
-      if (!existing) {
-        throw new Error("Transaction not found");
-      }
+    const existing = await prisma.transaction.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true, budgetId: true, accountId: true },
+    });
+    if (!existing) {
+      throw new Error("Transaction not found");
+    }
 
-      await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId);
 
+    const result = await prisma.$transaction(
+      async (db) => {
       const budget = await db.budgetEnvelope.findFirst({
         where: {
           id: parsed.data.budgetId,
@@ -54,13 +55,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         data: parsed.data,
       });
 
-      if (existing.budgetId) {
-        await recalculateBudgetAvailableCents(db, existing.workspaceId, existing.budgetId);
+      const budgetIdsToRecalculate = [existing.budgetId, parsed.data.budgetId].filter(
+        (budgetId, index, allBudgetIds): budgetId is string =>
+          typeof budgetId === "string" && allBudgetIds.indexOf(budgetId) === index,
+      );
+      for (const budgetId of budgetIdsToRecalculate) {
+        await recalculateBudgetAvailableCents(db, existing.workspaceId, budgetId);
       }
-      await recalculateBudgetAvailableCents(db, existing.workspaceId, parsed.data.budgetId);
 
       return updated;
-    });
+      },
+      { maxWait: 5000, timeout: 10000 },
+    );
 
     return NextResponse.json(result);
   } catch (error) {
@@ -82,22 +88,23 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
 
-    await prisma.$transaction(async (db) => {
-      const existing = await db.transaction.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          workspaceId: true,
-          budgetId: true,
-        },
-      });
+    const existing = await prisma.transaction.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        workspaceId: true,
+        budgetId: true,
+      },
+    });
 
-      if (!existing) {
-        throw new Error("Transaction not found");
-      }
+    if (!existing) {
+      throw new Error("Transaction not found");
+    }
 
-      await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId);
 
+    await prisma.$transaction(
+      async (db) => {
       // Find and reset any linked credit card transactions
       const creditCardLink = await db.creditCardTxnLink.findFirst({
         where: { transactionId: id },
@@ -119,7 +126,9 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       if (existing.budgetId) {
         await recalculateBudgetAvailableCents(db, existing.workspaceId, existing.budgetId);
       }
-    });
+      },
+      { maxWait: 5000, timeout: 10000 },
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error) {
