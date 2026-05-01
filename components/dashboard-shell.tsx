@@ -39,16 +39,17 @@ type DashboardSummary = {
     budgetName?: string | null;
   }>;
   creditCardSummary?: {
-    cards: Array<{
+    nextDueCards: Array<{
       cardId: string;
       cardName: string;
-      totalSpentCents: number;
-      accountedCents: number;
-      unaccountedCents: number;
+      statementMonth: number;
+      statementYear: number;
+      paymentDueDate: string;
+      outstandingCents: number;
     }>;
-    totalSpentCents: number;
-    totalAccountedCents: number;
-    totalUnaccountedCents: number;
+    totalOutstandingCents: number;
+    overdueCount: number;
+    dueSoonCount: number;
   };
 };
 
@@ -237,6 +238,21 @@ function getTxEmoji(subject: string) {
     if (lower.includes(key)) return emoji;
   }
   return txEmojis.default;
+}
+
+function getDaysUntil(dateStr: string) {
+  const now = new Date();
+  const target = new Date(dateStr);
+  const msPerDay = 1000 * 60 * 60 * 24;
+  return Math.ceil((target.getTime() - now.getTime()) / msPerDay);
+}
+
+function getDueCountdownLabel(dateStr: string) {
+  const days = getDaysUntil(dateStr);
+  if (days < 0) return `Overdue by ${Math.abs(days)}d`;
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due in 1d";
+  return `Due in ${days}d`;
 }
 
 export function DashboardShell({
@@ -1207,39 +1223,46 @@ export function DashboardShell({
                 </button>
               </div>
 
-              {data?.creditCardSummary && data.creditCardSummary.cards.length > 0 ? (
+              {data?.creditCardSummary && data.creditCardSummary.nextDueCards.length > 0 ? (
                 <>
-                  {/* Summary stats */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px", padding: "12px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)" }}>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Total Spent</div>
-                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)" }}>{formatCents(data.creditCardSummary.totalSpentCents)}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Total Due</div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)" }}>
+                        {formatCents(data.creditCardSummary.totalOutstandingCents)}
+                      </div>
                     </div>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Accounted</div>
-                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)", color: "var(--success)" }}>{formatCents(data.creditCardSummary.totalAccountedCents)}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Due Soon</div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)", color: data.creditCardSummary.dueSoonCount > 0 ? "var(--warning)" : "var(--text-primary)" }}>
+                        {data.creditCardSummary.dueSoonCount}
+                      </div>
                     </div>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Unaccounted</div>
-                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)", color: data.creditCardSummary.totalUnaccountedCents > 0 ? "var(--warning)" : "var(--success)" }}>{formatCents(data.creditCardSummary.totalUnaccountedCents)}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>Overdue</div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, fontFamily: "var(--font-display)", color: data.creditCardSummary.overdueCount > 0 ? "var(--danger)" : "var(--text-primary)" }}>
+                        {data.creditCardSummary.overdueCount}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Card breakdown */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {data.creditCardSummary.cards.map((card) => {
-                      const accountedPct = card.totalSpentCents > 0 ? Math.round((card.accountedCents / card.totalSpentCents) * 100) : 0;
+                    {data.creditCardSummary.nextDueCards.map((card) => {
+                      const dueCountdown = getDueCountdownLabel(card.paymentDueDate);
+                      const dueDays = getDaysUntil(card.paymentDueDate);
+                      const countdownColor =
+                        dueDays < 0 ? "var(--danger)" : dueDays <= 3 ? "var(--warning)" : "var(--text-secondary)";
                       return (
                         <div key={card.cardId} style={{ padding: "10px 12px", background: "var(--bg-subtle)", borderRadius: "var(--r-md)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                             <span style={{ fontSize: "12px", fontWeight: 600 }}>{card.cardName}</span>
-                            <span style={{ fontSize: "12px", fontWeight: 600, fontFamily: "var(--font-display)" }}>{formatCents(card.totalSpentCents)}</span>
+                            <span style={{ fontSize: "12px", fontWeight: 600, fontFamily: "var(--font-display)" }}>{formatCents(card.outstandingCents)}</span>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <div style={{ flex: 1, height: "6px", background: "var(--bg-surface)", borderRadius: "3px", overflow: "hidden" }}>
-                              <div style={{ width: `${accountedPct}%`, height: "100%", background: accountedPct === 100 ? "var(--success)" : "var(--warning)", transition: "width 0.3s ease" }} />
-                            </div>
-                            <span style={{ fontSize: "11px", color: accountedPct === 100 ? "var(--success)" : "var(--text-tertiary)", minWidth: "32px", textAlign: "right" }}>{accountedPct}%</span>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", fontSize: "11px" }}>
+                            <span style={{ color: "var(--text-tertiary)" }}>
+                              Statement {String(card.statementMonth).padStart(2, "0")}/{card.statementYear}
+                            </span>
+                            <span style={{ color: countdownColor, fontWeight: 700 }}>{dueCountdown}</span>
                           </div>
                         </div>
                       );

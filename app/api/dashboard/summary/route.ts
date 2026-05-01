@@ -80,45 +80,64 @@ export async function GET() {
     const bankConsistency = await getBankConsistency(prisma, workspaceId);
     const totalBankBalance = bankConsistency.reduce((sum, bank) => sum + bank.currentBalanceCents, 0);
 
-    // Credit card summary for current month
-    const creditCards = await prisma.creditCardAccount.findMany({
-      where: { workspaceId, isActive: true },
-      select: { id: true, cardName: true },
-    });
-
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1; // 1-12
-
     const creditCardTransactions = await prisma.creditCardTransaction.findMany({
       where: {
         workspaceId,
-        statementYear: currentYear,
-        statementMonth: currentMonth,
+        paymentDueDate: { not: null },
       },
-      select: {
-        amountCents: true,
-        isAllocated: true,
-        creditCardId: true,
+      include: {
+        creditCard: {
+          select: {
+            id: true,
+            cardName: true,
+          },
+        },
+      },
+      orderBy: {
+        paymentDueDate: "asc",
       },
     });
 
-    const creditCardSummary = creditCards.map((card) => {
-      const cardTxns = creditCardTransactions.filter((t) => t.creditCardId === card.id);
-      const totalSpentCents = cardTxns.reduce((sum, t) => sum + t.amountCents, 0);
-      const accountedCents = cardTxns
-        .filter((t) => t.isAllocated)
-        .reduce((sum, t) => sum + t.amountCents, 0);
-      return {
-        cardId: card.id,
-        cardName: card.cardName,
-        totalSpentCents,
-        accountedCents,
-        unaccountedCents: totalSpentCents - accountedCents,
-      };
-    }).filter((c) => c.totalSpentCents > 0); // Only show cards with transactions
+    const dueByStatement = new Map<string, {
+      cardId: string;
+      cardName: string;
+      statementMonth: number;
+      statementYear: number;
+      paymentDueDate: string;
+      outstandingCents: number;
+    }>();
 
-    const totalCreditSpent = creditCardSummary.reduce((sum, c) => sum + c.totalSpentCents, 0);
-    const totalCreditAccounted = creditCardSummary.reduce((sum, c) => sum + c.accountedCents, 0);
+    for (const tx of creditCardTransactions) {
+      if (!tx.paymentDueDate) continue;
+      const key = `${tx.creditCardId}:${tx.statementYear}:${tx.statementMonth}`;
+      const existing = dueByStatement.get(key);
+      if (existing) {
+        existing.outstandingCents += tx.amountCents;
+        if (tx.amountCents > 0) {
+          existing.paymentDueDate = tx.paymentDueDate.toISOString();
+        }
+        continue;
+      }
+      dueByStatement.set(key, {
+        cardId: tx.creditCardId,
+        cardName: tx.creditCard.cardName,
+        statementMonth: tx.statementMonth,
+        statementYear: tx.statementYear,
+        paymentDueDate: tx.paymentDueDate.toISOString(),
+        outstandingCents: tx.amountCents,
+      });
+    }
+
+    const nextDueCards = [...dueByStatement.values()]
+      .filter((item) => item.outstandingCents > 0)
+      .sort((a, b) => new Date(a.paymentDueDate).getTime() - new Date(b.paymentDueDate).getTime());
+
+    const totalOutstandingCents = nextDueCards.reduce((sum, item) => sum + item.outstandingCents, 0);
+    const overdueCount = nextDueCards.filter((item) => new Date(item.paymentDueDate).getTime() < now.getTime()).length;
+    const dueSoonCount = nextDueCards.filter((item) => {
+      const diffDays = Math.ceil((new Date(item.paymentDueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 7;
+    }).length;
 
     return NextResponse.json({
       totalBalanceCents: totalBankBalance,
@@ -142,10 +161,10 @@ export async function GET() {
         budgetName: t.budget?.name ?? null,
       })),
       creditCardSummary: {
-        cards: creditCardSummary,
-        totalSpentCents: totalCreditSpent,
-        totalAccountedCents: totalCreditAccounted,
-        totalUnaccountedCents: totalCreditSpent - totalCreditAccounted,
+        nextDueCards,
+        totalOutstandingCents,
+        overdueCount,
+        dueSoonCount,
       },
     });
   } catch (err) {
