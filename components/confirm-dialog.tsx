@@ -59,30 +59,30 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
       {children}
       {dialog.open && typeof document !== "undefined"
         ? createPortal(
-            <div className="profile-modal-overlay" onClick={() => closeDialog(false)}>
+            <div className="modal-overlay" onClick={() => closeDialog(false)}>
               <div
-                className="profile-modal confirm-dialog"
+                className="modal-container modal-md"
                 onClick={(event) => event.stopPropagation()}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="confirm-dialog-title"
               >
-                <div className="profile-modal-head">
-                  <h3 id="confirm-dialog-title">{dialog.title}</h3>
-                  <button className="profile-modal-close" onClick={() => closeDialog(false)} aria-label="Close confirmation dialog">
+                <div className="modal-header">
+                  <h3 className="modal-title" id="confirm-dialog-title">{dialog.title}</h3>
+                  <button className="modal-close" onClick={() => closeDialog(false)} aria-label="Close confirmation dialog">
                     Close
                   </button>
                 </div>
-                <div className="profile-modal-body">
-                  <p className="confirm-dialog-copy">{dialog.message}</p>
-                  <div className="confirm-dialog-actions">
-                    <button className="btn btn-ghost" onClick={() => closeDialog(false)}>
-                      {dialog.cancelLabel}
-                    </button>
-                    <button className="btn btn-primary" onClick={() => closeDialog(true)}>
-                      {dialog.confirmLabel}
-                    </button>
-                  </div>
+                <div className="modal-body">
+                  <p className="text-base" style={{ margin: 0, lineHeight: 'var(--leading-relaxed)' }}>{dialog.message}</p>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-md btn-ghost" onClick={() => closeDialog(false)}>
+                    {dialog.cancelLabel}
+                  </button>
+                  <button className="btn btn-md btn-primary" onClick={() => closeDialog(true)}>
+                    {dialog.confirmLabel}
+                  </button>
                 </div>
               </div>
             </div>,
