@@ -12,12 +12,12 @@ function SkeletonPulse({ children, className = "", style }: { children: React.Re
 }
 
 // Generic skeleton block
-export function SkeletonBlock({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
+export const SkeletonBlock = React.memo(function SkeletonBlock({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
   return <div className={`skeleton-block ${className}`} style={style} />;
-}
+});
 
 // Text line skeleton
-export function SkeletonText({ lines = 1, className = "" }: { lines?: number; className?: string }) {
+export const SkeletonText = React.memo(function SkeletonText({ lines = 1, className = "" }: { lines?: number; className?: string }) {
   return (
     <div className={`skeleton-text-group ${className}`}>
       {Array.from({ length: lines }).map((_, i) => (
@@ -25,10 +25,10 @@ export function SkeletonText({ lines = 1, className = "" }: { lines?: number; cl
       ))}
     </div>
   );
-}
+});
 
 // Card skeleton
-export function SkeletonCard({ className = "" }: { className?: string }) {
+export const SkeletonCard = React.memo(function SkeletonCard({ className = "" }: { className?: string }) {
   return (
     <SkeletonPulse className={`skeleton-card ${className}`}>
       <div className="skeleton-card-header">
@@ -40,10 +40,10 @@ export function SkeletonCard({ className = "" }: { className?: string }) {
       <SkeletonBlock className="skeleton-card-amount" />
     </SkeletonPulse>
   );
-}
+});
 
 // Bank account card skeleton
-export function SkeletonBankCard({ className = "" }: { className?: string }) {
+export const SkeletonBankCard = React.memo(function SkeletonBankCard({ className = "" }: { className?: string }) {
   return (
     <SkeletonPulse className={`skeleton-bank-card ${className}`}>
       <div className="skeleton-bank-header">
@@ -59,10 +59,10 @@ export function SkeletonBankCard({ className = "" }: { className?: string }) {
       </div>
     </SkeletonPulse>
   );
-}
+});
 
 // Credit card skeleton (Apple Wallet style)
-export function SkeletonCreditCard({ className = "" }: { className?: string }) {
+export const SkeletonCreditCard = React.memo(function SkeletonCreditCard({ className = "" }: { className?: string }) {
   return (
     <SkeletonPulse className={`skeleton-credit-card ${className}`}>
       <div className="skeleton-cc-header">
@@ -75,10 +75,10 @@ export function SkeletonCreditCard({ className = "" }: { className?: string }) {
       </div>
     </SkeletonPulse>
   );
-}
+});
 
 // Transaction row skeleton
-export function SkeletonTransactionRow({ className = "" }: { className?: string }) {
+export const SkeletonTransactionRow = React.memo(function SkeletonTransactionRow({ className = "" }: { className?: string }) {
   return (
     <SkeletonPulse className={`skeleton-tx-row ${className}`}>
       <SkeletonBlock className="skeleton-tx-icon" />
@@ -88,10 +88,10 @@ export function SkeletonTransactionRow({ className = "" }: { className?: string 
       <SkeletonBlock className="skeleton-tx-amount" />
     </SkeletonPulse>
   );
-}
+});
 
 // Table row skeleton
-export function SkeletonTableRow({ cols = 4, className = "" }: { cols?: number; className?: string }) {
+export const SkeletonTableRow = React.memo(function SkeletonTableRow({ cols = 4, className = "" }: { cols?: number; className?: string }) {
   return (
     <SkeletonPulse className={`skeleton-table-row ${className}`}>
       {Array.from({ length: cols }).map((_, i) => (
@@ -99,10 +99,10 @@ export function SkeletonTableRow({ cols = 4, className = "" }: { cols?: number; 
       ))}
     </SkeletonPulse>
   );
-}
+});
 
 // Hero card skeleton
-export function SkeletonHeroCard({ className = "" }: { className?: string }) {
+export const SkeletonHeroCard = React.memo(function SkeletonHeroCard({ className = "" }: { className?: string }) {
   return (
     <SkeletonPulse className={`skeleton-hero ${className}`}>
       <SkeletonText lines={2} />
@@ -113,30 +113,30 @@ export function SkeletonHeroCard({ className = "" }: { className?: string }) {
       </div>
     </SkeletonPulse>
   );
-}
+});
 
 // Mini stat card skeleton - matches bank selector row content (no card wrapper since parent already has styles)
-export function SkeletonMiniCard({ className = "" }: { className?: string }) {
+export const SkeletonMiniCard = React.memo(function SkeletonMiniCard({ className = "" }: { className?: string }) {
   return (
     <div className={`skeleton-pulse ${className}`} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
       <SkeletonBlock style={{ width: "44px", height: "24px", borderRadius: "4px", flexShrink: 0 }} />
       <SkeletonBlock style={{ height: "18px", width: "100px" }} />
     </div>
   );
-}
+});
 
 // Full page loading state
-export function PageLoadingState({ children }: { children?: React.ReactNode }) {
+export const PageLoadingState = React.memo(function PageLoadingState({ children }: { children?: React.ReactNode }) {
   return (
     <div className="page-loading">
       <div className="page-loading-spinner" />
       {children}
     </div>
   );
-}
+});
 
 // Grid of skeleton cards
-export function SkeletonGrid({ count = 4, type = "card" }: { count?: number; type?: "card" | "bank" | "credit" | "mini" }) {
+export const SkeletonGrid = React.memo(function SkeletonGrid({ count = 4, type = "card" }: { count?: number; type?: "card" | "bank" | "credit" | "mini" }) {
   const Component = type === "bank" ? SkeletonBankCard : type === "credit" ? SkeletonCreditCard : type === "mini" ? SkeletonMiniCard : SkeletonCard;
   return (
     <div className={`skeleton-grid skeleton-grid-${type}`}>
@@ -145,10 +145,10 @@ export function SkeletonGrid({ count = 4, type = "card" }: { count?: number; typ
       ))}
     </div>
   );
-}
+});
 
 // List of skeleton rows
-export function SkeletonList({ count = 5, type = "transaction" }: { count?: number; type?: "transaction" | "table" }) {
+export const SkeletonList = React.memo(function SkeletonList({ count = 5, type = "transaction" }: { count?: number; type?: "transaction" | "table" }) {
   const Component = type === "table" ? SkeletonTableRow : SkeletonTransactionRow;
   return (
     <div className="skeleton-list">
@@ -157,9 +157,9 @@ export function SkeletonList({ count = 5, type = "transaction" }: { count?: numb
       ))}
     </div>
   );
-}
+});
 
-export function SidebarSkeleton() {
+export const SidebarSkeleton = React.memo(function SidebarSkeleton() {
   return (
     <>
       <div className="sb-scroll sb-skeleton-scroll">
@@ -187,10 +187,10 @@ export function SidebarSkeleton() {
       </div>
     </>
   );
-}
+});
 
 // Dashboard-specific skeleton that matches actual layout
-export function DashboardSkeleton() {
+export const DashboardSkeleton = React.memo(function DashboardSkeleton() {
   return (
     <div style={{ display: "grid", gap: "14px" }}>
       {/* Bank selector - use actual bank-selector-row container, only skeleton content inside */}
@@ -247,10 +247,10 @@ export function DashboardSkeleton() {
       </div>
     </div>
   );
-}
+});
 
 // Transactions page specific skeleton
-export function TransactionsSkeleton() {
+export const TransactionsSkeleton = React.memo(function TransactionsSkeleton() {
   return (
     <div style={{ display: "grid", gap: "14px" }}>
       {/* Bank selector - matches bank-selector-row */}
@@ -302,15 +302,15 @@ export function TransactionsSkeleton() {
       </div>
     </div>
   );
-}
+});
 
-export function AppBodySkeleton() {
+export const AppBodySkeleton = React.memo(function AppBodySkeleton() {
   return (
     <DashboardSkeleton />
   );
-}
+});
 
-export function AppShellSkeleton({ title = "Loading" }: { title?: string }) {
+export const AppShellSkeleton = React.memo(function AppShellSkeleton({ title = "Loading" }: { title?: string }) {
   return (
     <div className="app-shell" aria-busy="true" aria-live="polite">
       <aside className="sidebar">
@@ -338,10 +338,10 @@ export function AppShellSkeleton({ title = "Loading" }: { title?: string }) {
       </main>
     </div>
   );
-}
+});
 
 // Empty state component with icon and action
-export function EmptyState({
+export const EmptyState = React.memo(function EmptyState({
   icon,
   title,
   description,
@@ -360,10 +360,10 @@ export function EmptyState({
       {action && <div className="empty-state-action">{action}</div>}
     </div>
   );
-}
+});
 
 // Loading overlay for buttons/actions
-export function LoadingDots({ className = "" }: { className?: string }) {
+export const LoadingDots = React.memo(function LoadingDots({ className = "" }: { className?: string }) {
   return (
     <span className={`loading-dots ${className}`}>
       <span />
@@ -371,10 +371,10 @@ export function LoadingDots({ className = "" }: { className?: string }) {
       <span />
     </span>
   );
-}
+});
 
 // Progress bar with animation for long-running operations
-export function ProgressBar({
+export const ProgressBar = React.memo(function ProgressBar({
   progress,
   label,
   className = "",
@@ -395,10 +395,10 @@ export function ProgressBar({
       </div>
     </div>
   );
-}
+});
 
 // Animated generating state with spinner and progress
-export function GeneratingState({
+export const GeneratingState = React.memo(function GeneratingState({
   title = "Generating...",
   progress,
   current,
@@ -425,4 +425,4 @@ export function GeneratingState({
       </div>
     </div>
   );
-}
+});

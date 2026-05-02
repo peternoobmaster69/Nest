@@ -1,12 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots, TransactionsSkeleton } from "@/components/ui-skeleton";
@@ -39,6 +40,15 @@ type Transaction = {
   direction: "DEBIT" | "CREDIT";
   kind: string;
   date: string;
+};
+
+type TransactionsPageResponse = {
+  transactions: Transaction[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextCursor: string | null;
 };
 
 type Receivable = {
@@ -133,6 +143,7 @@ export function TransactionsPage() {
   const recentTransactionsRef = useRef<HTMLElement | null>(null);
   const subAccountsRef = useRef<HTMLElement | null>(null);
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreTransactionsRef = useRef<HTMLDivElement | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
 
   // Budget (sub-account) management modals
@@ -193,13 +204,33 @@ export function TransactionsPage() {
     enabled: Boolean(workspaceId),
   });
 
-  const transactions = useQuery({
-    queryKey: ["transactions", workspaceId],
-    queryFn: () => fetchJson<Transaction[]>(`/api/transactions?workspaceId=${workspaceId}`),
+  const transactionAccountFilter = selectedBankId || "";
+  const transactionBudgetFilter = activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "";
+  const transactions = useInfiniteQuery({
+    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        workspaceId: workspaceId ?? "",
+        paginated: "1",
+        limit: "50",
+      });
+      if (pageParam) params.set("cursor", pageParam);
+      if (transactionAccountFilter) params.set("accountId", transactionAccountFilter);
+      if (transactionBudgetFilter) params.set("budgetId", transactionBudgetFilter);
+      return fetchJson<TransactionsPageResponse>(`/api/transactions?${params.toString()}`);
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: Boolean(workspaceId),
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
+  const transactionPages = transactions.data?.pages ?? [];
+  const transactionList = useMemo(
+    () => transactionPages.flatMap((page) => page.transactions),
+    [transactionPages],
+  );
+  const transactionTotal = transactionPages[0]?.total ?? 0;
   const receivables = useQuery({
     queryKey: ["receivables", workspaceId],
     queryFn: () => fetchJson<Receivable[]>(`/api/receivables?workspaceId=${workspaceId}`),
@@ -212,6 +243,21 @@ export function TransactionsPage() {
     (bankAccounts.isFetching && !bankAccounts.isLoading) ||
     (budgets.isFetching && !budgets.isLoading) ||
     (transactions.isFetching && !transactions.isLoading);
+
+  useEffect(() => {
+    const target = loadMoreTransactionsRef.current;
+    if (!target || !transactions.hasNextPage) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && transactions.hasNextPage && !transactions.isFetchingNextPage) {
+          void transactions.fetchNextPage();
+        }
+      },
+      { rootMargin: "320px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [transactions.hasNextPage, transactions.isFetchingNextPage, transactions.fetchNextPage]);
 
   useEffect(() => {
     if (!txBankStorageKey) return;
@@ -325,6 +371,7 @@ export function TransactionsPage() {
       setIsCreateModalOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
@@ -380,6 +427,7 @@ export function TransactionsPage() {
       setCreateBudgetTarget("");
       setCreateBudgetAccountId("");
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
@@ -402,6 +450,7 @@ export function TransactionsPage() {
       setEditingBudgetIsSavings(false);
       setEditingBudgetTarget("");
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
@@ -415,6 +464,7 @@ export function TransactionsPage() {
       setEditingBudgetIsSavings(false);
       setEditingBudgetTarget("");
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
@@ -444,6 +494,7 @@ export function TransactionsPage() {
       setEditBudgetId("");
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
@@ -462,6 +513,7 @@ export function TransactionsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
     onError: (_error, id, context) => {
@@ -484,6 +536,7 @@ export function TransactionsPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
       setEditingBankAccount(null);
       setEditBankBalance("");
     },
@@ -522,8 +575,8 @@ export function TransactionsPage() {
     return budgets.data.filter((b) => b.accountId === selectedBankId);
   }, [budgets.data, selectedBankId]);
   const editingTransaction = useMemo(
-    () => (transactions.data ?? []).find((tx) => tx.id === editingTxId) ?? null,
-    [transactions.data, editingTxId],
+    () => transactionList.find((tx) => tx.id === editingTxId) ?? null,
+    [transactionList, editingTxId],
   );
   const editableBudgets = useMemo(() => {
     if (!budgets.data?.length) return [];
@@ -532,18 +585,8 @@ export function TransactionsPage() {
   }, [budgets.data, editingTransaction]);
 
   const filteredTransactions = useMemo(() => {
-    const all = transactions.data ?? [];
-    return all.filter((tx) => {
-      if (selectedBankId && tx.accountId !== selectedBankId) return false;
-      if (activeBudgetFilterId !== "ALL" && tx.budgetId !== activeBudgetFilterId) return false;
-      return true;
-    });
-  }, [transactions.data, selectedBankId, activeBudgetFilterId]);
-
-  const bankScopedTransactions = useMemo(() => {
-    const all = transactions.data ?? [];
-    return all.filter((tx) => (selectedBankId ? tx.accountId === selectedBankId : true));
-  }, [transactions.data, selectedBankId]);
+    return transactionList;
+  }, [transactionList]);
 
   const totalBankBalanceCents = useMemo(
     () => (bankAccounts.data ?? []).reduce((sum, b) => sum + b.currentBalanceCents, 0),
@@ -811,10 +854,13 @@ export function TransactionsPage() {
                   const bankMeta = getSingaporeBankByName(selectedBank.bankName || selectedBank.name);
                   const logo = getBankLogoUrl(bankMeta);
                   return logo && !failedBankLogos[selectedBank.id] ? (
-                    <img
+                    <Image
                       src={logo}
                       alt={bankMeta?.name || "Bank"}
-                      className="bank-logo-img"
+                      width={44}
+                      height={24}
+                      sizes="44px"
+                      className={`bank-logo-img ${bankMeta?.code === "DBS" ? "bank-logo-img-dbs" : ""}`}
                       loading="lazy"
                       onError={() => setFailedBankLogos((prev) => ({ ...prev, [selectedBank.id]: true }))}
                     />
@@ -1083,7 +1129,14 @@ export function TransactionsPage() {
       </section>
 
       <section ref={recentTransactionsRef} className="card">
-        <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Recent Transactions</div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", marginBottom: "10px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 600 }}>Recent Transactions</div>
+          {transactionTotal > 0 ? (
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+              {filteredTransactions.length} of {transactionTotal}
+            </div>
+          ) : null}
+        </div>
         <div className="simple-list">
           {transactions.isLoading && <SkeletonList count={5} type="transaction" />}
 
@@ -1126,6 +1179,18 @@ export function TransactionsPage() {
               </div>
             </div>
           )})}
+          {!transactions.isLoading && !transactions.isError && transactions.hasNextPage ? (
+            <div ref={loadMoreTransactionsRef} style={{ display: "flex", justifyContent: "center", padding: "10px 0" }}>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() => transactions.fetchNextPage()}
+                disabled={transactions.isFetchingNextPage}
+              >
+                {transactions.isFetchingNextPage ? <LoadingDots /> : "Load more"}
+              </button>
+            </div>
+          ) : null}
           {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
             <EmptyState
               icon="📑"
@@ -1656,4 +1721,3 @@ export function TransactionsPage() {
     </div>
   );
 }
-

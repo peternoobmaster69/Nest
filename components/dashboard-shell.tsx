@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
@@ -105,6 +106,15 @@ type Transaction = {
   budgetId?: string | null;
 };
 
+type TransactionsSummaryResponse = {
+  transactions: Transaction[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
 type Receivable = {
   id: string;
   title: string;
@@ -146,7 +156,7 @@ function getAmountToneClass(valueCents: number) {
 }
 
 async function getSummary(): Promise<DashboardSummary> {
-  const res = await fetch("/api/dashboard/summary", { cache: "no-store" });
+  const res = await fetch("/api/dashboard/summary", { cache: "no-cache" });
   if (!res.ok) {
     throw new Error("Unable to load dashboard");
   }
@@ -335,6 +345,45 @@ function getDueToneColor(tone: CreditCardDueTone) {
   return "var(--success)";
 }
 
+const DashboardTransactionRow = memo(function DashboardTransactionRow({
+  tx,
+  showBudgetIcon,
+  budgetIcon,
+  budgetName,
+  amountClassName,
+  amountPrefix,
+  formattedAmount,
+  formattedDate,
+}: {
+  tx: Transaction;
+  showBudgetIcon: boolean;
+  budgetIcon: string | null;
+  budgetName: string;
+  amountClassName: string;
+  amountPrefix: string;
+  formattedAmount: string;
+  formattedDate: string;
+}) {
+  return (
+    <div className="tx-item">
+      <div className="tx-icon">{getTxEmoji(tx.subject)}</div>
+      <div className="tx-meta" style={{ flex: 1, minWidth: 0 }}>
+        <div className="tx-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          {showBudgetIcon && budgetIcon ? <span aria-hidden="true">{budgetIcon}</span> : null}
+          <span>{tx.subject}</span>
+        </div>
+        <div className="tx-date">
+          {formattedDate} · {budgetName}
+        </div>
+      </div>
+      <div className={`tx-amount ${amountClassName}`}>
+        {amountPrefix}
+        {formattedAmount}
+      </div>
+    </div>
+  );
+});
+
 export function DashboardShell({
   userName,
   userEmail,
@@ -389,24 +438,32 @@ export function DashboardShell({
     queryKey: ["dashboard-summary", workspaceId],
     queryFn: getSummary,
     enabled: Boolean(workspaceId),
+    staleTime: 60_000,
   });
 
   const isDataReady = !isPending && data !== undefined;
 
   const baseCurrency = normalizeCurrency(contextQuery.data?.baseCurrency);
-  const formatCents = (value: number) => formatMoney(value, baseCurrency);
-  const formatCentsShort = (value: number) => formatMoneyShort(value, baseCurrency);
+  const formatCents = useCallback((value: number) => formatMoney(value, baseCurrency), [baseCurrency]);
+  const formatCentsShort = useCallback((value: number) => formatMoneyShort(value, baseCurrency), [baseCurrency]);
   const defaultUserId = contextQuery.data?.defaultUserId;
   const dashboardBankStorageKey = workspaceId ? `nest:selectedBank:${workspaceId}` : null;
   const creditCardDueGroups = useMemo(
     () => getCreditCardDueGroups(data?.creditCardSummary?.nextDueCards ?? []),
     [data?.creditCardSummary?.nextDueCards],
   );
-  const urgentCreditCardGroupCount = creditCardDueGroups.filter((group) => {
-    const days = getDaysUntil(group.paymentDueDate);
-    return days >= 0 && days < 10;
-  }).length;
-  const overdueCreditCardGroupCount = creditCardDueGroups.filter((group) => getDaysUntil(group.paymentDueDate) < 0).length;
+  const urgentCreditCardGroupCount = useMemo(
+    () =>
+      creditCardDueGroups.filter((group) => {
+        const days = getDaysUntil(group.paymentDueDate);
+        return days >= 0 && days < 10;
+      }).length,
+    [creditCardDueGroups],
+  );
+  const overdueCreditCardGroupCount = useMemo(
+    () => creditCardDueGroups.filter((group) => getDaysUntil(group.paymentDueDate) < 0).length,
+    [creditCardDueGroups],
+  );
 
   const budgetsQuery = useQuery({
     queryKey: ["budgets", workspaceId],
@@ -415,8 +472,18 @@ export function DashboardShell({
   });
 
   const transactionsQuery = useQuery({
-    queryKey: ["transactions", workspaceId],
-    queryFn: () => fetchJson<Transaction[]>(`/api/transactions?workspaceId=${workspaceId}`),
+    queryKey: ["transactions", workspaceId, selectedBankFilterId],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        workspaceId: workspaceId ?? "",
+        paginated: "1",
+        limit: "10",
+      });
+      if (selectedBankFilterId !== "ALL") {
+        params.set("accountId", selectedBankFilterId);
+      }
+      return fetchJson<TransactionsSummaryResponse>(`/api/transactions?${params.toString()}`);
+    },
     enabled: Boolean(workspaceId),
   });
 
@@ -464,6 +531,7 @@ export function DashboardShell({
         queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] }),
       ]),
     [queryClient, workspaceId]
   );
@@ -846,25 +914,24 @@ export function DashboardShell({
     [budgetsQuery.data, selectedBankFilterId],
   );
   const filteredTransactions = useMemo(
-    () =>
-      (transactionsQuery.data ?? []).filter((t) => selectedBankFilterId === "ALL" || t.accountId === selectedBankFilterId),
-    [transactionsQuery.data, selectedBankFilterId],
+    () => transactionsQuery.data?.transactions ?? [],
+    [transactionsQuery.data],
   );
-  const goToTransactionsForSubAccount = (budgetId: string, accountId: string) => {
+  const goToTransactionsForSubAccount = useCallback((budgetId: string, accountId: string) => {
     const params = new URLSearchParams({
       budgetId,
       accountId,
     });
     router.push(`/transactions?${params.toString()}`);
-  };
-  const goToCreditCardStatement = (card: CreditCardDueCard) => {
+  }, [router]);
+  const goToCreditCardStatement = useCallback((card: CreditCardDueCard) => {
     const params = new URLSearchParams({
       cardId: card.cardId,
       month: String(card.statementMonth),
       year: String(card.statementYear),
     });
     router.push(`/credit-transactions?${params.toString()}`);
-  };
+  }, [router]);
   const budgetNameById = useMemo(
     () => new Map((budgetsQuery.data ?? []).map((b) => [b.id, b.name])),
     [budgetsQuery.data],
@@ -883,8 +950,31 @@ export function DashboardShell({
       ? summary.totalBalanceCents
       : bankAccountsQuery.data?.find((b) => b.id === selectedBankFilterId)?.currentBalanceCents ?? 0;
 
-  const totalBudgeted = filteredBudgets.reduce((sum, b) => sum + b.availableCents, 0);
-  const freeAmount = Math.max(0, filteredBankBalance - totalBudgeted);
+  const totalBudgeted = useMemo(
+    () => filteredBudgets.reduce((sum, b) => sum + b.availableCents, 0),
+    [filteredBudgets],
+  );
+  const freeAmount = useMemo(
+    () => Math.max(0, filteredBankBalance - totalBudgeted),
+    [filteredBankBalance, totalBudgeted],
+  );
+  const recentTransactionRows = useMemo(
+    () =>
+      filteredTransactions.slice(0, 10).map((tx) => {
+        const budget = tx.budgetId ? budgetById.get(tx.budgetId) : undefined;
+        return {
+          tx,
+          showBudgetIcon: selectedBankFilterId === "ALL" && Boolean(budget),
+          budgetIcon: budget ? getBudgetIcon(budget.name, budget.icon) : null,
+          budgetName: (tx.budgetId && budgetNameById.get(tx.budgetId)) || "Unassigned",
+          amountClassName: getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents),
+          amountPrefix: tx.direction === "DEBIT" ? "−" : "+",
+          formattedAmount: formatCents(tx.amountCents),
+          formattedDate: new Date(tx.date).toLocaleDateString(),
+        };
+      }),
+    [budgetById, budgetNameById, filteredTransactions, formatCents, selectedBankFilterId],
+  );
 
   const pendingReceivables = receivablesQuery.data?.filter((r) => r.status === "OPEN") || [];
   const investmentTotals = useMemo(() => {
@@ -1007,10 +1097,13 @@ export function DashboardShell({
                         const bankMeta = getSingaporeBankByName(selectedBank.bankName || selectedBank.name);
                         const logo = getBankLogoUrl(bankMeta);
                         return logo && !failedBankLogos[selectedBank.id] ? (
-                          <img
+                          <Image
                             src={logo}
                             alt={bankMeta?.name || "Bank"}
-                            className="bank-logo-img"
+                            width={44}
+                            height={24}
+                            sizes="44px"
+                            className={`bank-logo-img ${bankMeta?.code === "DBS" ? "bank-logo-img-dbs" : ""}`}
                             loading="lazy"
                             onError={() => setFailedBankLogos((prev) => ({ ...prev, [selectedBank.id]: true }))}
                           />
@@ -1284,9 +1377,12 @@ export function DashboardShell({
                           <div className="cc-home-group-head">
                             <div className="cc-home-bank">
                               {logo && !failedCreditCardBankLogos[logoKey] ? (
-                                <img
+                                <Image
                                   src={logo}
                                   alt={bankMeta?.name || "Bank"}
+                                  width={34}
+                                  height={34}
+                                  sizes="34px"
                                   className="cc-home-bank-logo"
                                   loading="lazy"
                                   onError={() => setFailedCreditCardBankLogos((prev) => ({ ...prev, [logoKey]: true }))}
@@ -1369,31 +1465,8 @@ export function DashboardShell({
               </div>
 
               <div>
-                {filteredTransactions.slice(0, 10).map((tx) => (
-                  <div key={tx.id} className="tx-item">
-                    <div className="tx-icon">{getTxEmoji(tx.subject)}</div>
-                    <div className="tx-meta" style={{ flex: 1, minWidth: 0 }}>
-                      <div className="tx-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        {selectedBankFilterId === "ALL" && tx.budgetId && budgetById.get(tx.budgetId) ? (
-                          <span aria-hidden="true">
-                            {getBudgetIcon(
-                              budgetById.get(tx.budgetId)?.name || "",
-                              budgetById.get(tx.budgetId)?.icon,
-                            )}
-                          </span>
-                        ) : null}
-                        <span>{tx.subject}</span>
-                      </div>
-                      <div className="tx-date">
-                        {new Date(tx.date).toLocaleDateString()} ·{" "}
-                        {(tx.budgetId && budgetNameById.get(tx.budgetId)) || "Unassigned"}
-                      </div>
-                    </div>
-                    <div className={`tx-amount ${getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}`}>
-                      {tx.direction === "DEBIT" ? "−" : "+"}
-                      {formatCents(tx.amountCents)}
-                    </div>
-                  </div>
+                {recentTransactionRows.map((row) => (
+                  <DashboardTransactionRow key={row.tx.id} {...row} />
                 ))}
                 {transactionsQuery.isLoading && <SkeletonList count={3} type="transaction" />}
                 {!transactionsQuery.isLoading && !filteredTransactions.length && (

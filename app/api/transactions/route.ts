@@ -25,10 +25,25 @@ const CreateTransactionSchema = z.object({
   budgetOperation: z.enum(["DEDUCT", "ADD"]),
 });
 
+const MAX_TRANSACTION_PAGE_LIMIT = 100;
+const DEFAULT_TRANSACTION_PAGE_LIMIT = 50;
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get("workspaceId");
+    const pageParam = searchParams.get("page");
+    const limitParam = searchParams.get("limit");
+    const cursor = searchParams.get("cursor");
+    const accountId = searchParams.get("accountId");
+    const budgetId = searchParams.get("budgetId");
+    const wantsPaginatedResponse =
+      searchParams.get("paginated") === "1" ||
+      pageParam !== null ||
+      limitParam !== null ||
+      cursor !== null ||
+      accountId !== null ||
+      budgetId !== null;
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
@@ -36,27 +51,71 @@ export async function GET(request: Request) {
 
     await requireWorkspaceAccess(workspaceId);
 
+    const limit = Math.min(
+      Math.max(Number.parseInt(limitParam || String(DEFAULT_TRANSACTION_PAGE_LIMIT), 10) || DEFAULT_TRANSACTION_PAGE_LIMIT, 1),
+      MAX_TRANSACTION_PAGE_LIMIT,
+    );
+    const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
+    const where = {
+      workspaceId,
+      ...(accountId ? { accountId } : {}),
+      ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
+    };
+    const select = {
+      id: true,
+      workspaceId: true,
+      accountId: true,
+      budgetId: true,
+      kind: true,
+      direction: true,
+      date: true,
+      amountCents: true,
+      subject: true,
+      details: true,
+      notes: true,
+      isSynced: true,
+      isFromFamily: true,
+      externalRef: true,
+      createdAt: true,
+      updatedAt: true,
+    } as const;
+
+    if (wantsPaginatedResponse) {
+      const txs = await prisma.transaction.findMany({
+        where,
+        ...(cursor
+          ? {
+              cursor: { id: cursor },
+              skip: 1,
+            }
+          : { skip: (page - 1) * limit }),
+        take: limit + 1,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        select,
+      });
+      const hasMore = txs.length > limit;
+      const pageItems = hasMore ? txs.slice(0, limit) : txs;
+      const [total] = await Promise.all([prisma.transaction.count({ where })]);
+
+      return NextResponse.json({
+        transactions: pageItems.map((t) => ({
+          ...t,
+          date: t.date.toISOString(),
+          createdAt: t.createdAt.toISOString(),
+          updatedAt: t.updatedAt.toISOString(),
+        })),
+        total,
+        page,
+        limit,
+        hasMore,
+        nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+      });
+    }
+
     const txs = await prisma.transaction.findMany({
-      where: { workspaceId },
+      where,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        workspaceId: true,
-        accountId: true,
-        budgetId: true,
-        kind: true,
-        direction: true,
-        date: true,
-        amountCents: true,
-        subject: true,
-        details: true,
-        notes: true,
-        isSynced: true,
-        isFromFamily: true,
-        externalRef: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select,
     });
 
     return NextResponse.json(

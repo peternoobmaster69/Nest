@@ -249,6 +249,7 @@ export function AppSidebar({
       void queryClient.removeQueries({ queryKey: ["budgets"] });
       void queryClient.invalidateQueries({ queryKey: ["transactions"] });
       void queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      void queryClient.invalidateQueries({ queryKey: ["receivables-summary"] });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
       void queryClient.invalidateQueries({ queryKey: ["investments"] });
       void queryClient.invalidateQueries({ queryKey: ["credit-cards"] });

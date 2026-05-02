@@ -218,6 +218,15 @@ export function ReceivablesPage() {
 
   const { isLoading, isError, refetch } = receivables;
 
+  const invalidateReceivableDependencies = () => {
+    void queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["receivables-summary"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["budgets"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["bank-accounts"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["transactions"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+  };
+
   const createReceivable = useMutation({
     mutationFn: (payload: {
       title: string;
@@ -244,7 +253,7 @@ export function ReceivablesPage() {
         }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
+      invalidateReceivableDependencies();
       closeModal();
     },
   });
@@ -276,7 +285,7 @@ export function ReceivablesPage() {
         }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
+      invalidateReceivableDependencies();
       closeModal();
     },
   });
@@ -291,9 +300,7 @@ export function ReceivablesPage() {
     onSuccess: () => {
       setCloseError(null);
       setClosingReceivableId(null);
-      queryClient.invalidateQueries({ queryKey: ["receivables", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      invalidateReceivableDependencies();
     },
     onError: (error) => {
       setClosingReceivableId(null);
@@ -312,7 +319,7 @@ export function ReceivablesPage() {
         ["receivables", workspaceId],
         (current) => (current ?? []).filter((receivable) => receivable.id !== id),
       );
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      invalidateReceivableDependencies();
     },
     onError: (_error, id) => {
       setDeletingReceivableIds((current) => current.filter((item) => item !== id));

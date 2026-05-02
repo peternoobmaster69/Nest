@@ -11,15 +11,29 @@ import { ConfirmDialogProvider } from "@/components/confirm-dialog";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
-    () =>
-      new QueryClient({
+    () => {
+      const client = new QueryClient({
         defaultOptions: {
           queries: {
             staleTime: 30_000,
+            gcTime: 10 * 60_000,
             refetchOnWindowFocus: false,
           },
         },
-      }),
+      });
+
+      client.setQueryDefaults(["app-context"], {
+        staleTime: 5 * 60_000,
+        gcTime: 30 * 60_000,
+      });
+
+      client.setQueryDefaults(["dashboard-summary"], {
+        staleTime: 60_000,
+        gcTime: 5 * 60_000,
+      });
+
+      return client;
+    },
   );
 
   return (

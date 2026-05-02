@@ -5,6 +5,7 @@ import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -291,6 +292,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     selectedMonth,
   ] as const;
 
+  const invalidateCreditTransactionDependencies = () => {
+    void queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+  };
+
+  const invalidateCreditAccountingDependencies = () => {
+    invalidateCreditTransactionDependencies();
+    void queryClient.invalidateQueries({ queryKey: ["transactions"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["receivables"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["budgets"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["bank-accounts"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["receivables-summary"], refetchType: "active" });
+  };
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: currentCreditTransactionsKey,
     queryFn: () =>
@@ -472,7 +487,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       }),
     onSuccess: (transaction: CreditCardTransaction) => {
       syncCreditTransactionCaches({ previousTx: null, nextTx: transaction });
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+      invalidateCreditTransactionDependencies();
       closeModal();
     },
   });
@@ -498,7 +513,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
     onSuccess: (transaction: CreditCardTransaction, _variables, context) => {
       syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: transaction });
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+      invalidateCreditTransactionDependencies();
       closeModal();
     },
   });
@@ -508,7 +523,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     onMutate: (id) => ({ previousTx: getCachedCreditTransaction(id) }),
     onSuccess: (_result, _id, context) => {
       syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: null });
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+      invalidateCreditTransactionDependencies();
     },
     onError: (_error, id) => {
       setDeletingTransactionIds((current) => current.filter((item) => item !== id));
@@ -525,7 +540,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
     onSuccess: (transaction: CreditCardTransaction, _variables, context) => {
       syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: transaction });
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+      invalidateCreditTransactionDependencies();
     },
   });
 
@@ -545,7 +560,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       setImportMessage(
         `Maybank CSV imported: ${result.imported} added, ${result.skippedDuplicates} duplicates skipped, ${result.skippedPayments} payment rows skipped.`,
       );
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+      invalidateCreditTransactionDependencies();
     },
     onError: (error) => {
       setImportMessage(error instanceof Error ? error.message : "Maybank CSV import failed.");
@@ -602,11 +617,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           nextTx: { ...mutationContext.previousTx, isAllocated: true },
         });
       }
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["receivables"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["receivables-summary", context.data?.workspaceId] });
+      invalidateCreditAccountingDependencies();
       if (variables.action === "DEDUCT") {
         closeAccountingModal();
       } else {
@@ -655,7 +666,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           transactions: nextTransactions,
         });
       }
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+      invalidateCreditTransactionDependencies();
     },
     onError: (error) => {
       setPaymentDueMessage(error instanceof Error ? error.message : "Failed to update payment due date.");
@@ -680,10 +691,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         previousTx: null,
         nextTx: result.paymentTransaction,
       });
-      queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      invalidateCreditAccountingDependencies();
     },
     onError: (error) => {
       setImportMessage(error instanceof Error ? error.message : "Failed to make payment.");
@@ -974,10 +982,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               onClick={() => setSelectedCardId(card.id)}
             >
               {logo && !failedLogos[card.id] ? (
-                <img
+                <Image
                   src={logo}
                   alt={card.bankName || ""}
+                  width={24}
+                  height={16}
+                  sizes="24px"
                   className="cct-card-chip-logo"
+                  loading="lazy"
                   onError={() => setFailedLogos((prev) => ({ ...prev, [card.id]: true }))}
                 />
               ) : (

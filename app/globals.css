@@ -4921,7 +4921,7 @@ body {
   padding: 2px;
 }
 
-.bank-logo-img[src*="/DBS"] {
+.bank-logo-img-dbs {
   object-fit: cover;
   object-position: 22% center;
 }

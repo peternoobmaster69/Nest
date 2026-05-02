@@ -122,6 +122,7 @@ export function CollaboratorsPage() {
       setNewWorkspaceName("");
       await queryClient.invalidateQueries({ queryKey: ["app-context"] });
       await queryClient.invalidateQueries({ queryKey: ["collaborators"] });
+      await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to create workspace."),
   });
@@ -145,6 +146,12 @@ export function CollaboratorsPage() {
       await queryClient.invalidateQueries({ queryKey: ["budgets"] });
       await queryClient.invalidateQueries({ queryKey: ["transactions"] });
       await queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      await queryClient.invalidateQueries({ queryKey: ["receivables-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+      await queryClient.invalidateQueries({ queryKey: ["investments"] });
+      await queryClient.invalidateQueries({ queryKey: ["credit-cards"] });
+      await queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      await queryClient.invalidateQueries({ queryKey: ["rewards"] });
       setMessage("Workspace switched.");
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to switch workspace."),

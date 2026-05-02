@@ -425,6 +425,9 @@ export function BudgetPlanPage() {
     }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       setIsPreviewMode(false);
       setPreviewAllocations(null);
     },

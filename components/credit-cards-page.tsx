@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { SkeletonCreditCard, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
@@ -188,6 +189,11 @@ export function CreditCardsPage() {
     queryFn: () => fetchJson<CreditCard[]>(`/api/credit-cards?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
+  const invalidateCreditCardDependencies = () => {
+    void queryClient.invalidateQueries({ queryKey: ["credit-cards", workspaceId], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["credit-transactions"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+  };
   const sortedCards = useMemo(() => {
     const list = [...(cards.data ?? [])];
     list.sort((a, b) => {
@@ -227,7 +233,7 @@ export function CreditCardsPage() {
         }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["credit-cards", workspaceId] });
+      invalidateCreditCardDependencies();
       closeModal();
     },
   });
@@ -251,14 +257,14 @@ export function CreditCardsPage() {
         }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["credit-cards", workspaceId] });
+      invalidateCreditCardDependencies();
       closeModal();
     },
   });
 
   const deleteCard = useMutation({
     mutationFn: (id: string) => fetchJson(`/api/credit-cards/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["credit-cards", workspaceId] }),
+    onSuccess: invalidateCreditCardDependencies,
   });
 
   const copyFullCard = useMutation({
@@ -524,9 +530,12 @@ export function CreditCardsPage() {
                       const bank = getSingaporeBankByName(card.bankName);
                       const logo = getBankLogoUrl(bank);
                       return logo && !failedLogos[card.id] ? (
-                        <img
+                        <Image
                           src={logo}
                           alt={bank?.name || "Bank"}
+                          width={100}
+                          height={36}
+                          sizes="100px"
                           className="cc-bank-img"
                           loading="lazy"
                           onError={() => setFailedLogos((prev) => ({ ...prev, [card.id]: true }))}

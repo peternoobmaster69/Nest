@@ -7,6 +7,7 @@ import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/curr
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { SkeletonBankCard, SkeletonGrid, EmptyState, PageLoadingState } from "@/components/ui-skeleton";
 
 type Context = {
@@ -286,6 +287,7 @@ export function SettingsPage() {
       );
       queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
       queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : "Gmail sync failed.";
@@ -439,8 +441,11 @@ export function SettingsPage() {
         `Auto-accounted ${data.accounted} transaction${data.accounted === 1 ? "" : "s"} from ${data.matched} matched rule hits.`,
       );
       queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
       queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables-summary"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
     onError: (error) => {
@@ -465,6 +470,8 @@ export function SettingsPage() {
       closeAddModal();
       queryClient.invalidateQueries({ queryKey: ["app-context"] });
       queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 
@@ -491,6 +498,7 @@ export function SettingsPage() {
     onSuccess: () => {
       closeEditModal();
       queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
@@ -1055,9 +1063,12 @@ export function SettingsPage() {
               <div className="st-card-header">
                 <div className="st-card-bank">
                   {logo && !failedLogos[account.id] ? (
-                    <img
+                    <Image
                       src={logo}
                       alt={bank?.name || "Bank"}
+                      width={40}
+                      height={24}
+                      sizes="40px"
                       className="st-bank-logo"
                       loading="lazy"
                       onError={() => setFailedLogos((prev) => ({ ...prev, [account.id]: true }))}
