@@ -9,7 +9,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots } from "@/components/ui-skeleton";
+import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots, TransactionsSkeleton } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
@@ -134,6 +134,31 @@ export function TransactionsPage() {
   const subAccountsRef = useRef<HTMLElement | null>(null);
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+
+  // Budget (sub-account) management modals
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [editingBudgetName, setEditingBudgetName] = useState("");
+  const [editingBudgetIcon, setEditingBudgetIcon] = useState("");
+  const [editingBudgetIsSavings, setEditingBudgetIsSavings] = useState(false);
+  const [editingBudgetTarget, setEditingBudgetTarget] = useState("");
+  const [createBudgetName, setCreateBudgetName] = useState("");
+  const [createBudgetTarget, setCreateBudgetTarget] = useState("");
+  const [createBudgetAccountId, setCreateBudgetAccountId] = useState("");
+
+  // Icon options for budgets
+  const budgetIconOptions = [
+    "💰", "🏠", "🛡️", "✈️", "🍔", "🥬", "🚌", "🛍️", "💪", "💊", "🎬", "💡", "📚", "📈", "🚗", "📱", "🎯",
+    "🧾", "🏦", "💳", "🧮", "👶", "🎓", "🐶", "🎁", "🛠️", "💼", "🏥", "🚴", "🍜", "☕",
+    // Family/Parents & Religious
+    "👴", "👵", "👪", "👨‍👩‍👧‍👦", "⛪",
+    // Home & Cleaning
+    "🧹", "🧽", "🧼", "🪣", "🧺", "🛋️", "🛏️", "🚿", "🚽", "🪟", "🪴",
+    // Nature
+    "🍃", "🌿", "🌱",
+    // Globe/World
+    "🌍", "🗺️", "🧭",
+  ];
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -331,6 +356,65 @@ export function TransactionsPage() {
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+    },
+  });
+
+  // Budget management mutations
+  const createBudget = useMutation({
+    mutationFn: (payload: { name: string; targetCents: number; accountId: string; icon?: string }) =>
+      fetchJson("/api/budgets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          name: payload.name,
+          targetCents: payload.targetCents,
+          accountId: payload.accountId,
+          icon: payload.icon || undefined,
+        }),
+      }),
+    onSuccess: () => {
+      setIsBudgetModalOpen(false);
+      setCreateBudgetName("");
+      setCreateBudgetTarget("");
+      setCreateBudgetAccountId("");
+      void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+    },
+  });
+
+  const updateBudget = useMutation({
+    mutationFn: (payload: { id: string; name: string; targetCents: number; icon?: string }) =>
+      fetchJson(`/api/budgets/${payload.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: payload.name,
+          targetCents: payload.targetCents,
+          icon: payload.icon || undefined,
+        }),
+      }),
+    onSuccess: () => {
+      setEditingBudgetId(null);
+      setEditingBudgetName("");
+      setEditingBudgetIcon("");
+      setEditingBudgetIsSavings(false);
+      setEditingBudgetTarget("");
+      void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+    },
+  });
+
+  const deleteBudget = useMutation({
+    mutationFn: (id: string) => fetchJson(`/api/budgets/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setEditingBudgetId(null);
+      setEditingBudgetName("");
+      setEditingBudgetIcon("");
+      setEditingBudgetIsSavings(false);
+      setEditingBudgetTarget("");
+      void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
     },
   });
@@ -644,6 +728,66 @@ export function TransactionsPage() {
     });
   };
 
+  // Budget (sub-account) management handlers
+  const openCreateBudgetModal = () => {
+    createBudget.reset();
+    setCreateBudgetName("");
+    setCreateBudgetTarget("");
+    setCreateBudgetAccountId(selectedBankId || bankAccounts.data?.[0]?.id || "");
+    setIsBudgetModalOpen(true);
+  };
+
+  const openEditBudgetModal = (budget: Budget) => {
+    updateBudget.reset();
+    const resolvedIcon = budget.icon || getBudgetIcon(budget.name);
+    setEditingBudgetId(budget.id);
+    setEditingBudgetName(budget.name);
+    setEditingBudgetIcon(resolvedIcon);
+    setEditingBudgetIsSavings(resolvedIcon === "🛡️");
+    setEditingBudgetTarget(budget.targetCents > 0 ? String((budget.targetCents / 100).toFixed(2)) : "");
+    setIsBudgetModalOpen(true);
+  };
+
+  const closeBudgetModal = () => {
+    setIsBudgetModalOpen(false);
+    setEditingBudgetId(null);
+    setEditingBudgetName("");
+    setEditingBudgetIcon("");
+    setEditingBudgetIsSavings(false);
+    setEditingBudgetTarget("");
+    setCreateBudgetName("");
+    setCreateBudgetTarget("");
+    setCreateBudgetAccountId("");
+  };
+
+  const onCreateBudget = (event: FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId || !createBudgetAccountId || !createBudgetName.trim()) return;
+    const parsedTarget = createBudgetTarget.trim() ? Number(createBudgetTarget) : 0;
+    createBudget.mutate({
+      name: createBudgetName.trim(),
+      targetCents: Math.round(parsedTarget * 100),
+      accountId: createBudgetAccountId,
+    });
+  };
+
+  const onUpdateBudget = () => {
+    if (!editingBudgetId || !editingBudgetName.trim()) return;
+    const parsedTarget = editingBudgetTarget.trim() ? Number(editingBudgetTarget) : 0;
+    updateBudget.mutate({
+      id: editingBudgetId,
+      name: editingBudgetName.trim(),
+      targetCents: Math.round(parsedTarget * 100),
+      icon: editingBudgetIsSavings ? "🛡️" : editingBudgetIcon || undefined,
+    });
+  };
+
+  const confirmDeleteBudget = () => {
+    if (!editingBudgetId) return;
+    if (!confirmDestructiveAction(`This will delete the sub-account and remove all transaction links. Continue?`)) return;
+    deleteBudget.mutate(editingBudgetId);
+  };
+
   return (
     <div className="txn-page" style={{ display: "grid", gap: "14px" }}>
       {isRefreshing ? (
@@ -653,10 +797,12 @@ export function TransactionsPage() {
         </div>
       ) : null}
 
-      {/* Compact Bank Selector */}
-      {bankAccounts.isLoading ? (
-        <SkeletonMiniCard />
+      {/* Show full skeleton while initial loading */}
+      {bankAccounts.isLoading || budgets.isLoading ? (
+        <TransactionsSkeleton />
       ) : (
+        <>
+          {/* Compact Bank Selector */}
         <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
           <div className="bank-selector-summary">
             <div className="bank-selector-main">
@@ -738,7 +884,6 @@ export function TransactionsPage() {
             </div>
           </div>
         </div>
-      )}
 
       {/* Action Buttons */}
       <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
@@ -751,19 +896,31 @@ export function TransactionsPage() {
       </div>
 
       <section ref={subAccountsRef} className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
             <span aria-hidden="true">📁</span>
             <span>Sub-Accounts</span>
           </div>
-          <div
-            style={{
-              fontSize: "12px",
-              color: hasDisplayedDiscrepancy ? "var(--warning)" : "var(--text-secondary)",
-              fontWeight: hasDisplayedDiscrepancy ? 600 : 500,
-            }}
-          >
-            📊 {formatCents(visibleBudgetTotalCents)}&emsp;&emsp;🏦 {formatCents(displayedBankBalanceCents)}&emsp;
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div
+              style={{
+                fontSize: "12px",
+                color: hasDisplayedDiscrepancy ? "var(--warning)" : "var(--text-secondary)",
+                fontWeight: hasDisplayedDiscrepancy ? 600 : 500,
+              }}
+            >
+              📊 {formatCents(visibleBudgetTotalCents)}&emsp;&emsp;🏦 {formatCents(displayedBankBalanceCents)}&emsp;
+            </div>
+            <button
+              type="button"
+              className="bm-edit-btn"
+              onClick={openCreateBudgetModal}
+              aria-label="Add new sub-account"
+              title="Add new sub-account"
+              style={{ width: "26px", height: "26px", fontSize: "14px" }}
+            >
+              +
+            </button>
           </div>
         </div>
         {hasDisplayedDiscrepancy ? (
@@ -849,7 +1006,22 @@ export function TransactionsPage() {
               }}
             >
               <div className="tx-account-card-body">
-                <div className="bm-name">{b.name}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "4px" }}>
+                  <div className="bm-name">{b.name}</div>
+                  <button
+                    type="button"
+                    className="bm-edit-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openEditBudgetModal(b);
+                    }}
+                    aria-label={`Edit ${b.name}`}
+                    title="Edit sub-account"
+                    style={{ width: "18px", height: "18px", fontSize: "10px", flexShrink: 0 }}
+                  >
+                    ✎
+                  </button>
+                </div>
                 <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
                 {b.receivableReservedCents && b.availableCents > 0 ? (
                   <div
@@ -1358,6 +1530,130 @@ export function TransactionsPage() {
         </div>,
         document.body
       )}
+
+      {isBudgetModalOpen && typeof document !== "undefined" && createPortal(
+        <div className="profile-modal-overlay" onClick={closeBudgetModal}>
+          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>{editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}</h3>
+              <button className="profile-modal-close" onClick={closeBudgetModal}>
+                Close
+              </button>
+            </div>
+            <div className="profile-modal-body txn-modal-body" style={{ display: "grid", gap: "12px" }}>
+              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                Name
+                <input
+                  className="input"
+                  placeholder="Sub-account name"
+                  value={editingBudgetId ? editingBudgetName : createBudgetName}
+                  onChange={(e) => editingBudgetId ? setEditingBudgetName(e.target.value) : setCreateBudgetName(e.target.value)}
+                />
+              </label>
+              {!editingBudgetId && bankAccounts.data && bankAccounts.data.length > 1 ? (
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Bank Account
+                  <select
+                    className="input"
+                    value={createBudgetAccountId}
+                    onChange={(e) => setCreateBudgetAccountId(e.target.value)}
+                  >
+                    <option value="" disabled>Select bank account</option>
+                    {(bankAccounts.data ?? []).map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                Monthly Limit (optional)
+                <NumericCalculatorInput
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={editingBudgetId ? editingBudgetTarget : createBudgetTarget}
+                  onValueChange={(v) => editingBudgetId ? setEditingBudgetTarget(v) : setCreateBudgetTarget(v)}
+                />
+              </label>
+              {editingBudgetId ? (
+                <>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    <input
+                      type="checkbox"
+                      checked={editingBudgetIsSavings}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditingBudgetIsSavings(checked);
+                        if (checked) {
+                          setEditingBudgetIcon("🛡️");
+                        }
+                      }}
+                    />
+                    <span>Is this a savings sub-account?</span>
+                  </label>
+                  {!editingBudgetIsSavings && (
+                    <div>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>Icon</div>
+                      <div className="icon-picker">
+                        {budgetIconOptions.map((icon) => (
+                          <button
+                            key={icon}
+                            type="button"
+                            className={`icon-chip${editingBudgetIcon === icon ? " on" : ""}`}
+                            onClick={() => setEditingBudgetIcon(icon)}
+                            aria-label={`Select icon ${icon}`}
+                          >
+                            {icon}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+            <div className="profile-modal-body" style={{ display: "flex", justifyContent: "space-between", gap: "8px", borderTop: "1px solid var(--border-subtle)", paddingTop: "12px" }}>
+              {editingBudgetId ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={confirmDeleteBudget}
+                  disabled={deleteBudget.isPending}
+                >
+                  {deleteBudget.isPending ? "Deleting..." : "Delete"}
+                </button>
+              ) : (
+                <span />
+              )}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button type="button" className="btn btn-ghost" onClick={closeBudgetModal}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={editingBudgetId ? onUpdateBudget : onCreateBudget}
+                  disabled={
+                    (editingBudgetId
+                      ? updateBudget.isPending || !editingBudgetName.trim()
+                      : createBudget.isPending || !createBudgetName.trim() || !createBudgetAccountId)
+                  }
+                >
+                  {editingBudgetId
+                    ? (updateBudget.isPending ? "Saving..." : "Save")
+                    : (createBudget.isPending ? "Creating..." : "Create")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+        </>
+      )}
     </div>
   );
 }
+

@@ -90,6 +90,7 @@ export async function GET() {
           select: {
             id: true,
             cardName: true,
+            bankName: true,
           },
         },
       },
@@ -101,6 +102,7 @@ export async function GET() {
     const dueByStatement = new Map<string, {
       cardId: string;
       cardName: string;
+      bankName: string | null;
       statementMonth: number;
       statementYear: number;
       paymentDueDate: string;
@@ -121,6 +123,7 @@ export async function GET() {
       dueByStatement.set(key, {
         cardId: tx.creditCardId,
         cardName: tx.creditCard.cardName,
+        bankName: tx.creditCard.bankName,
         statementMonth: tx.statementMonth,
         statementYear: tx.statementYear,
         paymentDueDate: tx.paymentDueDate.toISOString(),

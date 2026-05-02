@@ -9,6 +9,7 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { useConfirmDialog } from "@/components/confirm-dialog";
+import { useSearchParams } from "next/navigation";
 
 type CreditCard = {
   id: string;
@@ -133,6 +134,7 @@ function writeCookie(name: string, value: string) {
 }
 
 export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
   const sortedCards = useMemo(() => {
@@ -187,22 +189,39 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [filtersReady, setFiltersReady] = useState(false);
 
   useEffect(() => {
+    const queryCardId = searchParams.get("cardId");
+    const queryMonth = searchParams.get("month");
+    const queryYear = searchParams.get("year");
     const savedMonth = readCookie(CREDIT_TX_MONTH_COOKIE);
     const savedCard = readCookie(CREDIT_TX_CARD_COOKIE);
 
-    if (savedMonth !== null) {
-      const parsedMonth = parseInt(savedMonth, 10);
-      if (parsedMonth >= -1 && parsedMonth <= 11) {
-        setSelectedMonth(parsedMonth);
+    if (queryMonth !== null) {
+      const parsedMonth = parseInt(queryMonth, 10);
+      if (parsedMonth >= 1 && parsedMonth <= 12) {
+        setSelectedMonth(parsedMonth - 1);
+      }
+    } else if (savedMonth !== null) {
+      const parsedSavedMonth = parseInt(savedMonth, 10);
+      if (parsedSavedMonth >= -1 && parsedSavedMonth <= 11) {
+        setSelectedMonth(parsedSavedMonth);
       }
     }
 
-    if (savedCard) {
+    if (queryYear !== null) {
+      const parsedYear = parseInt(queryYear, 10);
+      if (parsedYear >= 2020 && parsedYear <= 2100) {
+        setSelectedYear(parsedYear);
+      }
+    }
+
+    if (queryCardId) {
+      setSelectedCardId(queryCardId);
+    } else if (savedCard) {
       setSelectedCardId(savedCard);
     }
 
     setFiltersReady(true);
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!filtersReady) return;

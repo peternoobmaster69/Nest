@@ -3,17 +3,17 @@
 import React from "react";
 
 // Skeleton pulse animation wrapper
-function SkeletonPulse({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function SkeletonPulse({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={`skeleton-pulse ${className}`}>
+    <div className={`skeleton-pulse ${className}`} style={style}>
       {children}
     </div>
   );
 }
 
 // Generic skeleton block
-export function SkeletonBlock({ className = "" }: { className?: string }) {
-  return <div className={`skeleton-block ${className}`} />;
+export function SkeletonBlock({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`skeleton-block ${className}`} style={style} />;
 }
 
 // Text line skeleton
@@ -115,13 +115,13 @@ export function SkeletonHeroCard({ className = "" }: { className?: string }) {
   );
 }
 
-// Mini stat card skeleton
+// Mini stat card skeleton - matches bank selector row content (no card wrapper since parent already has styles)
 export function SkeletonMiniCard({ className = "" }: { className?: string }) {
   return (
-    <SkeletonPulse className={`skeleton-mini ${className}`}>
-      <SkeletonBlock className="skeleton-mini-icon" />
-      <SkeletonText lines={2} />
-    </SkeletonPulse>
+    <div className={`skeleton-pulse ${className}`} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <SkeletonBlock style={{ width: "44px", height: "24px", borderRadius: "4px", flexShrink: 0 }} />
+      <SkeletonBlock style={{ height: "18px", width: "100px" }} />
+    </div>
   );
 }
 
@@ -189,20 +189,124 @@ export function SidebarSkeleton() {
   );
 }
 
-export function AppBodySkeleton() {
+// Dashboard-specific skeleton that matches actual layout
+export function DashboardSkeleton() {
   return (
     <div style={{ display: "grid", gap: "14px" }}>
-      <SkeletonHeroCard />
-      <div className="grid-4">
-        <SkeletonMiniCard />
-        <SkeletonMiniCard />
-        <SkeletonMiniCard />
-        <SkeletonMiniCard />
+      {/* Bank selector - use actual bank-selector-row container, only skeleton content inside */}
+      <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
+        <SkeletonPulse style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <SkeletonBlock style={{ width: "44px", height: "24px", borderRadius: "4px", flexShrink: 0 }} />
+          <SkeletonBlock style={{ height: "18px", width: "100px" }} />
+        </SkeletonPulse>
       </div>
-      <div className="card">
-        <SkeletonList count={4} type="transaction" />
+
+      {/* Net Worth strip */}
+      <SkeletonPulse className="skeleton-dashboard-strip">
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", width: "100%" }}>
+          <div style={{ flex: 1 }}>
+            <div className="skeleton-block" style={{ height: "11px", width: "70px", marginBottom: "2px" }} />
+            <div className="skeleton-block" style={{ height: "22px", width: "140px", marginBottom: "4px" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "12px" }}>📈</span>
+              <div className="skeleton-block" style={{ height: "13px", width: "80px" }} />
+              <span style={{ color: "var(--text-tertiary)" }}>+</span>
+              <span style={{ fontSize: "12px" }}>🐷</span>
+              <div className="skeleton-block" style={{ height: "13px", width: "60px" }} />
+            </div>
+          </div>
+          <div style={{ paddingLeft: "16px", borderLeft: "1px solid var(--border-subtle)", textAlign: "center", minWidth: "80px" }}>
+            <div className="skeleton-block" style={{ height: "11px", width: "60px", marginBottom: "2px" }} />
+            <div className="skeleton-block" style={{ height: "16px", width: "70px", marginBottom: "2px" }} />
+            <div className="skeleton-block" style={{ height: "11px", width: "40px" }} />
+          </div>
+        </div>
+      </SkeletonPulse>
+
+      {/* Hero Card */}
+      <SkeletonPulse className="skeleton-hero-card">
+        <SkeletonText lines={2} />
+        <SkeletonBlock className="skeleton-hero-amount" />
+      </SkeletonPulse>
+
+      {/* Credit Cards + Recent Transactions grid */}
+      <div className="grid-2">
+        <div className="card" style={{ padding: "18px 20px" }}>
+          <SkeletonBlock className="skeleton-card-header" style={{ height: "18px", width: "100px", marginBottom: "14px" }} />
+          <div className="skeleton-credit-card">
+            <div className="skeleton-cc-header">
+              <SkeletonBlock className="skeleton-cc-bank" />
+            </div>
+            <SkeletonBlock className="skeleton-cc-number" />
+          </div>
+        </div>
+        <div className="card" style={{ padding: "18px 20px" }}>
+          <SkeletonBlock className="skeleton-card-header" style={{ height: "18px", width: "120px", marginBottom: "14px" }} />
+          <SkeletonList count={3} type="transaction" />
+        </div>
       </div>
     </div>
+  );
+}
+
+// Transactions page specific skeleton
+export function TransactionsSkeleton() {
+  return (
+    <div style={{ display: "grid", gap: "14px" }}>
+      {/* Bank selector - matches bank-selector-row */}
+      <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
+        <div className="skeleton-pulse" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <SkeletonBlock style={{ width: "44px", height: "24px", borderRadius: "4px", flexShrink: 0 }} />
+          <SkeletonBlock style={{ height: "18px", width: "100px" }} />
+        </div>
+      </div>
+
+      {/* Action Buttons - Transfer + Add Transaction */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+        <SkeletonBlock style={{ flex: 1, height: "40px", borderRadius: "var(--r-md)" }} />
+        <SkeletonBlock style={{ flex: 1, height: "40px", borderRadius: "var(--r-md)" }} />
+      </div>
+
+      {/* Sub-Accounts section */}
+      <div className="card" style={{ padding: "18px 20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+          <SkeletonBlock style={{ height: "16px", width: "100px" }} />
+          <SkeletonBlock style={{ height: "16px", width: "60px" }} />
+        </div>
+        <div className="account-cards-grid tx-account-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+          <div className="budget-mini budget-mini-compact" style={{ minHeight: "68px", padding: "10px 12px" }}>
+            <div className="skeleton-pulse" style={{ height: "100%" }}>
+              <SkeletonBlock style={{ height: "12px", width: "70px", marginBottom: "4px" }} />
+              <SkeletonBlock style={{ height: "16px", width: "50px" }} />
+            </div>
+          </div>
+          <div className="budget-mini budget-mini-compact" style={{ minHeight: "68px", padding: "10px 12px" }}>
+            <div className="skeleton-pulse" style={{ height: "100%" }}>
+              <SkeletonBlock style={{ height: "12px", width: "70px", marginBottom: "4px" }} />
+              <SkeletonBlock style={{ height: "16px", width: "50px" }} />
+            </div>
+          </div>
+          <div className="budget-mini budget-mini-compact" style={{ minHeight: "68px", padding: "10px 12px" }}>
+            <div className="skeleton-pulse" style={{ height: "100%" }}>
+              <SkeletonBlock style={{ height: "12px", width: "70px", marginBottom: "4px" }} />
+              <SkeletonBlock style={{ height: "16px", width: "50px" }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Transactions section */}
+      <div className="card" style={{ padding: "18px 20px" }}>
+        <SkeletonBlock style={{ height: "16px", width: "140px", marginBottom: "10px" }} />
+        <SkeletonList count={5} type="transaction" />
+      </div>
+    </div>
+  );
+}
+
+export function AppBodySkeleton() {
+  return (
+    <DashboardSkeleton />
   );
 }
 
