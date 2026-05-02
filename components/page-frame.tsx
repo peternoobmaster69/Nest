@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ReactNode } from "react";
 import { AppSidebar } from "./app-sidebar";
-import { AppBodySkeleton } from "./ui-skeleton";
 import {
   DATABASE_UNAVAILABLE_CODE,
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -118,9 +117,7 @@ export function PageFrame({
         </header>
 
         <div className="body">
-          {isContextLoading ? (
-            <AppBodySkeleton />
-          ) : isDatabaseUnavailable ? (
+          {isDatabaseUnavailable ? (
             <section className="service-state" role="alert" aria-live="assertive">
               <div className="service-state-eyebrow">Service interruption</div>
               <h2 className="service-state-title">Database unavailable</h2>
