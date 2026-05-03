@@ -740,7 +740,10 @@ export function InvestmentsPage() {
                   onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}
                   title="Add Update"
                 >
-                  🔄
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13.5 8A5.5 5.5 0 1 1 10 3.07" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <polygon points="10,1 14,4 10,5.5" fill="currentColor"/>
+              </svg>
                 </button>
               </div>
             </article>
