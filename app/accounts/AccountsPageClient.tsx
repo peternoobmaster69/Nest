@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AccountsGridSkeleton } from "@/components/skeletons/AccountsSkeleton";
 
 type Account = {
   Id: string;
@@ -98,11 +99,7 @@ export default function AccountsPageClient() {
         </div>
 
         {/* Loading / error */}
-        {loading && (
-          <div className="rounded-2xl bg-white p-6 text-sm text-slate-500 shadow-sm">
-            Loading accounts…
-          </div>
-        )}
+        {loading && <AccountsGridSkeleton />}
 
         {error && !loading && (
           <div className="rounded-2xl bg-white p-6 text-sm text-red-600 shadow-sm">

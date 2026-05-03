@@ -7,7 +7,8 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { SkeletonTableRow, EmptyState } from "@/components/ui-skeleton";
+import { EmptyState } from "@/components/ui-skeleton";
+import { CreditTransactionsTableRowsSkeleton } from "@/components/skeletons/CreditTransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
@@ -1181,15 +1182,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             </tr>
           </thead>
           <tbody>
-            {isLoading && (
-              <>
-                <SkeletonTableRow cols={5} />
-                <SkeletonTableRow cols={5} />
-                <SkeletonTableRow cols={5} />
-                <SkeletonTableRow cols={5} />
-                <SkeletonTableRow cols={5} />
-              </>
-            )}
+            {isLoading && <CreditTransactionsTableRowsSkeleton />}
 
             {isError && (
               <tr>

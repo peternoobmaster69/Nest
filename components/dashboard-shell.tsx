@@ -10,7 +10,13 @@ import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { AppSidebar } from "./app-sidebar";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { SkeletonCard, SkeletonMiniCard, SkeletonList, EmptyState } from "@/components/ui-skeleton";
+import { EmptyState } from "@/components/ui-skeleton";
+import {
+  DashboardBankSelectorSkeleton,
+  DashboardHeroSkeleton,
+  DashboardNetWorthSkeleton,
+  DashboardRecentTransactionsSkeleton,
+} from "@/components/skeletons/DashboardSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type DashboardSummary = {
@@ -1085,11 +1091,10 @@ export function DashboardShell({
 
         {/* Body */}
         <div className="body">
-          <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
-            {bankAccountsQuery.isLoading || !isDataReady ? (
-              <SkeletonMiniCard />
-            ) : (
-              <>
+          {bankAccountsQuery.isLoading || !isDataReady ? (
+            <DashboardBankSelectorSkeleton />
+          ) : (
+            <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
                 <div className="bank-selector-summary">
                   <div className="bank-selector-main">
                     {selectedBank ? (
@@ -1172,14 +1177,13 @@ export function DashboardShell({
                     ) : null}
                   </div>
                 </div>
-              </>
-            )}
-          </div>
+            </div>
+          )}
 
-          <div style={{ marginBottom: "10px" }}>
-            {!isDataReady ? (
-              <SkeletonMiniCard />
-            ) : (
+          {!isDataReady ? (
+            <DashboardNetWorthSkeleton />
+          ) : (
+            <div style={{ marginBottom: "10px" }}>
               <div className="bank-selector-row dashboard-mini-card">
                 <div className="dashboard-mini-card-stack dashboard-mini-card-strip">
                   <div className="dashboard-mini-card-primary">
@@ -1218,18 +1222,15 @@ export function DashboardShell({
                   </div>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Hero Card */}
-          <div className="hero-card">
-            <div className="hero-content">
-              {!isDataReady ? (
-                <div style={{ width: "100%" }}>
-                  <SkeletonMiniCard />
-                </div>
-              ) : (
-                <>
+          {!isDataReady ? (
+            <DashboardHeroSkeleton />
+          ) : (
+            <div className="hero-card">
+              <div className="hero-content">
                   <div className="hero-main">
                     <div className="hero-label">Total in record</div>
                     <div className={`hero-amount ${getAmountToneClass(totalBudgeted)}`}>{formatCents(totalBudgeted)}</div>
@@ -1246,53 +1247,52 @@ export function DashboardShell({
                       </div>
                     </div>
                   )}
-                </>
+              </div>
+
+              {filteredBudgets.length > 0 && (
+                <div className="hero-chips">
+                  {filteredBudgets.slice(0, 5).map((budget) => (
+                    <div
+                      key={budget.id}
+                      className="hero-chip"
+                      onClick={() => router.push(`/transactions?budgetId=${budget.id}&accountId=${budget.accountId}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          router.push(`/transactions?budgetId=${budget.id}&accountId=${budget.accountId}`);
+                        }
+                      }}
+                    >
+                      <span className={`hero-chip-dot ${budget.availableCents < 0 ? "is-negative" : ""}`} aria-hidden="true" />
+                      <div className="hero-chip-label">{budget.name}</div>
+                      <div className="hero-chip-value">{formatCentsShort(budget.availableCents)}</div>
+                    </div>
+                  ))}
+                  {filteredBudgets.length > 5 && (
+                    <div
+                      className="hero-chip"
+                      onClick={() => router.push("/transactions")}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          router.push("/transactions");
+                        }
+                      }}
+                    >
+                      <div className="hero-chip-label">+{filteredBudgets.length - 5} more</div>
+                      <div className="hero-chip-value">
+                        {formatCentsShort(filteredBudgets.slice(5).reduce((sum, b) => sum + b.availableCents, 0))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-
-            {filteredBudgets.length > 0 && (
-              <div className="hero-chips">
-                {filteredBudgets.slice(0, 5).map((budget) => (
-                  <div
-                    key={budget.id}
-                    className="hero-chip"
-                    onClick={() => router.push(`/transactions?budgetId=${budget.id}&accountId=${budget.accountId}`)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        router.push(`/transactions?budgetId=${budget.id}&accountId=${budget.accountId}`);
-                      }
-                    }}
-                  >
-                    <span className={`hero-chip-dot ${budget.availableCents < 0 ? "is-negative" : ""}`} aria-hidden="true" />
-                    <div className="hero-chip-label">{budget.name}</div>
-                    <div className="hero-chip-value">{formatCentsShort(budget.availableCents)}</div>
-                  </div>
-                ))}
-                {filteredBudgets.length > 5 && (
-                  <div
-                    className="hero-chip"
-                    onClick={() => router.push("/transactions")}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        router.push("/transactions");
-                      }
-                    }}
-                  >
-                    <div className="hero-chip-label">+{filteredBudgets.length - 5} more</div>
-                    <div className="hero-chip-value">
-                      {formatCentsShort(filteredBudgets.slice(5).reduce((sum, b) => sum + b.availableCents, 0))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          )}
 
           {filteredBankDiscrepancies.length > 0 && (
             <div
@@ -1468,7 +1468,7 @@ export function DashboardShell({
                 {recentTransactionRows.map((row) => (
                   <DashboardTransactionRow key={row.tx.id} {...row} />
                 ))}
-                {transactionsQuery.isLoading && <SkeletonList count={3} type="transaction" />}
+                {transactionsQuery.isLoading && <DashboardRecentTransactionsSkeleton />}
                 {!transactionsQuery.isLoading && !filteredTransactions.length && (
                   <EmptyState
                     icon="📑"

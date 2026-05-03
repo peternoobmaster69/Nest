@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { EmptyState, LoadingDots, SkeletonText } from "@/components/ui-skeleton";
+import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
+import { CollaboratorsAuditSkeleton, CollaboratorsInvitesSkeleton, CollaboratorsRowsSkeleton } from "@/components/skeletons/CollaboratorsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 // Default visibility for Money section pages
@@ -437,10 +438,7 @@ export function CollaboratorsPage() {
         <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Collaborators</div>
         <div className="simple-list">
           {isCollabLoading && (
-            <>
-              <div className="crud-row"><SkeletonText lines={1} /></div>
-              <div className="crud-row"><SkeletonText lines={1} /></div>
-            </>
+            <CollaboratorsRowsSkeleton />
           )}
 
           {isCollabError && (
@@ -478,7 +476,7 @@ export function CollaboratorsPage() {
         <section className="card">
           <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Pending Invites</div>
           <div className="simple-list">
-            {isCollabLoading && <div className="crud-row"><SkeletonText lines={1} /></div>}
+            {isCollabLoading && <CollaboratorsInvitesSkeleton />}
             {!isCollabLoading && !isCollabError && (collab.data?.invites ?? []).map((invite) => (
               <div key={invite.id} className="crud-row">
                 <span>{invite.invitedEmail}</span>
@@ -501,10 +499,7 @@ export function CollaboratorsPage() {
           <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Audit Logs</div>
           <div className="audit-timeline">
             {isCollabLoading && (
-              <>
-                <div className="audit-item"><SkeletonText lines={2} /></div>
-                <div className="audit-item"><SkeletonText lines={2} /></div>
-              </>
+              <CollaboratorsAuditSkeleton />
             )}
             {!isCollabLoading && !isCollabError && (collab.data?.auditLogs ?? []).map((log) => (
               <article key={log.id} className="audit-item">

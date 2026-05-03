@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base) 25%,
+    var(--skeleton-shimmer) 50%,
+    var(--skeleton-base) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
 /* ============================================================
    NEST DESIGN SYSTEM — From sample-screens.html
    ============================================================ */
@@ -9,6 +26,8 @@
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "DM Sans", sans-serif;
   --font-mono: "DM Mono", monospace;
+  --skeleton-base: #E8E8E8;
+  --skeleton-shimmer: #F5F5F5;
 
   /* Brand Colors */
   --brand-50: #edfaf3;
@@ -5857,6 +5876,8 @@ body {
 }
 
 [data-theme="dark"] {
+  --skeleton-base: #2A2A2A;
+  --skeleton-shimmer: #3A3A3A;
   --bg-base: #0a0908;
   --bg-surface: #141210;
   --bg-elevated: #1e1c19;
@@ -8761,6 +8782,8 @@ body {
     /* Dark Mode Borders */
     --border-subtle: #3a3630;
     --border-default: #4a4540;
+    --skeleton-base: #2A2A2A;
+    --skeleton-shimmer: #3A3A3A;
 
     /* Dark Mode Semantic Colors */
     --success: #4ade80;

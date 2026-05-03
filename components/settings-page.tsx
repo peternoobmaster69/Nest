@@ -8,7 +8,8 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { SkeletonBankCard, SkeletonGrid, EmptyState, PageLoadingState } from "@/components/ui-skeleton";
+import { EmptyState } from "@/components/ui-skeleton";
+import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 
 type Context = {
   workspaceId: string | null;
@@ -762,7 +763,7 @@ export function SettingsPage() {
         </div>
 
         {autoRules.isLoading ? (
-          <PageLoadingState>Loading auto-accounting rules...</PageLoadingState>
+          <SettingsAutoRulesSkeleton />
         ) : autoRules.isError ? (
           <EmptyState
             icon="⚠️"
@@ -1039,9 +1040,7 @@ export function SettingsPage() {
 
       {/* Accounts Grid */}
       <div className="st-grid">
-        {accounts.isLoading && (
-          <SkeletonGrid count={4} type="bank" />
-        )}
+        {accounts.isLoading && <SettingsBankAccountsSkeleton />}
 
         {accounts.isError && (
           <div className="st-empty">

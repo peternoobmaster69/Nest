@@ -10,7 +10,8 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { SkeletonMiniCard, SkeletonList, EmptyState, LoadingDots, TransactionsSkeleton } from "@/components/ui-skeleton";
+import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
+import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
@@ -842,7 +843,7 @@ export function TransactionsPage() {
 
       {/* Show full skeleton while initial loading */}
       {bankAccounts.isLoading || budgets.isLoading ? (
-        <TransactionsSkeleton />
+        <TransactionsInitialSkeleton />
       ) : (
         <>
           {/* Compact Bank Selector */}
@@ -1138,7 +1139,7 @@ export function TransactionsPage() {
           ) : null}
         </div>
         <div className="simple-list">
-          {transactions.isLoading && <SkeletonList count={5} type="transaction" />}
+          {transactions.isLoading && <TransactionsListSkeleton />}
 
           {transactions.isError && (
             <div className="empty-state" style={{ padding: "40px 20px" }}>
@@ -1571,7 +1572,7 @@ export function TransactionsPage() {
               </div>
               <div className="simple-list">
                 {receivables.isLoading ? (
-                  <SkeletonList count={3} type="transaction" />
+                  <TransactionsReceivablesListSkeleton />
                 ) : receivableInfoItems.length ? (
                   receivableInfoItems.map((receivable) => (
                     <div key={receivable.id} className="crud-row">

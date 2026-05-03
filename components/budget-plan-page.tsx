@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState, GeneratingState, SkeletonCard, SkeletonGrid } from "@/components/ui-skeleton";
+import { EmptyState, GeneratingState } from "@/components/ui-skeleton";
+import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPlanSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type BudgetItem = {
@@ -1304,7 +1305,7 @@ export function BudgetPlanPage() {
               </div>
 
               <div className="st-grid">
-                {budgetData.isLoading && <SkeletonGrid count={2} type="card" />}
+                {budgetData.isLoading && <BudgetPlanCompactCardsSkeleton />}
 
                 {!budgetData.isLoading && !budgetData.isError && budgetSources.map((source) => (
                   <div key={source.id} className="st-card bp-compact-card" onClick={() => openEditSourceModal(source)} style={{ cursor: 'pointer' }}>
@@ -1350,7 +1351,7 @@ export function BudgetPlanPage() {
               </div>
 
               <div className="st-grid">
-                {budgetData.isLoading && <SkeletonGrid count={2} type="card" />}
+                {budgetData.isLoading && <BudgetPlanCompactCardsSkeleton />}
 
                 {/* Debug info */}
                 {!budgetData.isLoading && !budgetData.isError && budgetItems.length === 0 && (

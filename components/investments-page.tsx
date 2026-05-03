@@ -5,7 +5,8 @@ import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
+import { EmptyState } from "@/components/ui-skeleton";
+import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
@@ -577,14 +578,10 @@ export function InvestmentsPage() {
       )}
 
       {/* Modern Fintech-Style Dashboard Header */}
-      <section className="card" style={{ padding: "24px" }}>
-        {accountsLoading ? (
-          <div style={{ display: "flex", gap: "32px" }}>
-            <div style={{ flex: 1 }}><SkeletonMiniCard /></div>
-            <div style={{ flex: 1 }}><SkeletonMiniCard /></div>
-            <div style={{ flex: 1 }}><SkeletonMiniCard /></div>
-          </div>
-        ) : (
+      {accountsLoading ? (
+        <InvestmentsPortfolioHeaderSkeleton />
+      ) : (
+        <section className="card" style={{ padding: "24px" }}>
           <div className="inv-portfolio-header">
               {/* Total Portfolio Value - Primary */}
               <div style={{ flex: "1 1 200px" }}>
@@ -637,8 +634,8 @@ export function InvestmentsPage() {
                 </div>
               </div>
             </div>
-          )}
         </section>
+      )}
 
       {/* View Toggle */}
       <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
@@ -664,14 +661,10 @@ export function InvestmentsPage() {
         </div>
       </section>
 
-      <section className="inv-account-grid">
-        {accountsLoading && (
-          <>
-            <SkeletonCard />
-            <SkeletonCard />
-          </>
-        )}
-
+      {accountsLoading ? (
+        <InvestmentsAccountGridSkeleton />
+      ) : (
+        <section className="inv-account-grid">
         {accountsError && (
           <div style={{ gridColumn: "1 / -1" }}>
             <EmptyState
@@ -686,7 +679,7 @@ export function InvestmentsPage() {
           </div>
         )}
 
-        {!accountsLoading && !accountsError && (accounts.data ?? []).length === 0 && (
+        {!accountsError && (accounts.data ?? []).length === 0 && (
           <div style={{ gridColumn: "1 / -1" }}>
             <EmptyState
               icon="📈"
@@ -701,7 +694,7 @@ export function InvestmentsPage() {
           </div>
         )}
 
-        {!accountsLoading && [...(accounts.data ?? [])]
+        {!accountsError && [...(accounts.data ?? [])]
           .sort((a, b) => (a.displayName || a.productName).localeCompare(b.displayName || b.productName))
           .map((account) => {
           const entries = [...account.entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -753,7 +746,8 @@ export function InvestmentsPage() {
             </article>
           );
         })}
-      </section>
+        </section>
+      )}
 
       {/* Chart Section - Show for All Accounts or Selected Account */}
       {(showAllAccounts || selectedAccount) ? (

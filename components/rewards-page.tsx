@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useState } from "react";
-import { SkeletonCard, SkeletonMiniCard, EmptyState } from "@/components/ui-skeleton";
+import { EmptyState } from "@/components/ui-skeleton";
+import { RewardsCardGridSkeleton, RewardsRowsSkeleton, RewardsSummarySkeleton } from "@/components/skeletons/RewardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type CreditCardReward = {
@@ -641,15 +642,7 @@ export function RewardsPage({
       {/* Summary Stats */}
       <section className="stat-card" style={{ marginBottom: "20px", display: "grid", gap: "12px" }}>
         {isLoading ? (
-          <>
-            <div style={{ display: "grid", gap: "8px" }}>
-              <SkeletonMiniCard />
-            </div>
-            <div className="grid-2" style={{ gap: "10px" }}>
-              <SkeletonMiniCard />
-              <SkeletonMiniCard />
-            </div>
-          </>
+          <RewardsSummarySkeleton />
         ) : (
           <>
             <div>
@@ -717,12 +710,7 @@ export function RewardsPage({
       {activeTab === "credit-cards" && (
         <div>
           <div className="rewards-cc-grid" style={{ marginBottom: "20px" }}>
-            {isLoading && (
-              <>
-                <SkeletonCard />
-                <SkeletonCard />
-              </>
-            )}
+            {isLoading && <RewardsCardGridSkeleton />}
             {!isLoading && !isError && data?.creditCards.length === 0 && (
               <EmptyState
                 icon="💳"
@@ -882,12 +870,7 @@ export function RewardsPage({
       {activeTab === "frequent-flyers" && (
         <div>
           <div className="grid-2" style={{ marginBottom: "20px" }}>
-            {isLoading && (
-              <>
-                <SkeletonCard />
-                <SkeletonCard />
-              </>
-            )}
+            {isLoading && <RewardsCardGridSkeleton />}
             {!isLoading && !isError && data?.frequentFlyers.length === 0 && (
               <div style={{ gridColumn: "1 / -1" }}>
                 <EmptyState
@@ -995,8 +978,7 @@ export function RewardsPage({
 
               {historyQuery.isLoading && (
                 <div className="grid-2">
-                  <SkeletonCard />
-                  <SkeletonCard />
+                  <RewardsRowsSkeleton />
                 </div>
               )}
 
@@ -1215,12 +1197,7 @@ export function RewardsPage({
       {activeTab === "conversions" && (
         <div>
           <div style={{ marginBottom: "20px" }}>
-            {isLoading && (
-              <>
-                <SkeletonCard />
-                <SkeletonCard />
-              </>
-            )}
+            {isLoading && <RewardsRowsSkeleton />}
             {!isLoading && !isError && data?.conversions.map((conv) => (
               <div key={conv.id} className="card" style={{ marginBottom: "8px" }}>
                 {editingConversionId === conv.id ? (

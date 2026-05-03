@@ -6,7 +6,8 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { SkeletonList, EmptyState } from "@/components/ui-skeleton";
+import { EmptyState } from "@/components/ui-skeleton";
+import { ReceivablesListSkeleton, ReceivablesSummarySkeleton } from "@/components/skeletons/ReceivablesSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
@@ -475,10 +476,7 @@ export function ReceivablesPage() {
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
           {isLoading ? (
-            <>
-              <div className="skeleton-block skeleton-pulse" style={{ width: "140px", height: "26px", borderRadius: "8px" }} />
-              <div className="skeleton-block skeleton-pulse" style={{ width: "56px", height: "14px", borderRadius: "999px" }} />
-            </>
+            <ReceivablesSummarySkeleton />
           ) : (
             <div className={getAmountToneClass(totalReceivableCents)} style={{ fontSize: "20px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
               {formatCents(totalReceivableCents)}
@@ -550,22 +548,23 @@ export function ReceivablesPage() {
             Add Receivable
           </button>
         </div>
-        <div className="simple-list">
-          {isLoading && <SkeletonList count={4} type="transaction" />}
+        {isLoading ? (
+          <ReceivablesListSkeleton />
+        ) : (
+          <div className="simple-list">
+            {isError && (
+              <EmptyState
+                icon="⚠️"
+                title="Failed to load receivables"
+                action={
+                  <button className="btn btn-primary" onClick={() => refetch()}>
+                    Retry
+                  </button>
+                }
+              />
+            )}
 
-          {isError && (
-            <EmptyState
-              icon="⚠️"
-              title="Failed to load receivables"
-              action={
-                <button className="btn btn-primary" onClick={() => refetch()}>
-                  Retry
-                </button>
-              }
-            />
-          )}
-
-          {!isLoading && !isError && monthFilteredReceivables.map((r) => {
+            {!isError && monthFilteredReceivables.map((r) => {
             const isClosing = closingReceivableId === r.id;
             const isDeleting = deletingReceivableIds.includes(r.id);
             return (
@@ -638,20 +637,21 @@ export function ReceivablesPage() {
                 </div>
               </div>
             );
-          })}
-          {!isLoading && !isError && monthFilteredReceivables.length === 0 && (
-            <EmptyState
-              icon="📥"
-              title={hideClosed ? "No open receivables for this month" : "No receivables for this month"}
-              description={hideClosed ? "All receivables are closed. Uncheck 'Hide closed' to see them." : "Add a receivable to track money owed to you and expected payment dates."}
-              action={
-                <button className="btn btn-primary" onClick={openCreateModal}>
-                  + Add Receivable
-                </button>
-              }
-            />
-          )}
-        </div>
+            })}
+            {!isError && monthFilteredReceivables.length === 0 && (
+              <EmptyState
+                icon="📥"
+                title={hideClosed ? "No open receivables for this month" : "No receivables for this month"}
+                description={hideClosed ? "All receivables are closed. Uncheck 'Hide closed' to see them." : "Add a receivable to track money owed to you and expected payment dates."}
+                action={
+                  <button className="btn btn-primary" onClick={openCreateModal}>
+                    + Add Receivable
+                  </button>
+                }
+              />
+            )}
+          </div>
+        )}
       </section>
 
       {isModalOpen && typeof document !== "undefined" && createPortal(

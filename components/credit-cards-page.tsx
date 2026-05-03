@@ -5,7 +5,8 @@ import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/s
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { SkeletonCreditCard, EmptyState } from "@/components/ui-skeleton";
+import { EmptyState } from "@/components/ui-skeleton";
+import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 type AppContext = {
@@ -473,13 +474,7 @@ export function CreditCardsPage() {
 
       {/* Cards Grid - Apple Wallet Style (mobile only) */}
       <div className={`cc-grid${isMobileView && sortedCards.length > 1 && !isStackExpanded ? " cc-grid-stacked" : ""}`}>
-        {cards.isLoading && (
-          <>
-            <SkeletonCreditCard />
-            <SkeletonCreditCard />
-            <SkeletonCreditCard />
-          </>
-        )}
+        {cards.isLoading && <CreditCardsSkeleton />}
 
         {cards.isError && (
           <div className="cc-empty">
