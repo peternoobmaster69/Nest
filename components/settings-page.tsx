@@ -8,6 +8,7 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { ArrowRight, ChevronDown, ChevronUp, Pencil, Play, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 
@@ -109,17 +110,6 @@ function createEmptyAutoRule(): AutoRule {
   };
 }
 
-function serializeRuleFilters(filters: string[]) {
-  return filters.join("\n");
-}
-
-function parseRuleFilters(raw: string) {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -131,7 +121,8 @@ export function SettingsPage() {
   const [autoRuleMessage, setAutoRuleMessage] = useState("");
   const [ruleDrafts, setRuleDrafts] = useState<AutoRule[]>([]);
   const [ruleDraftWorkspaceId, setRuleDraftWorkspaceId] = useState<string | null>(null);
-  const [ruleFilterDrafts, setRuleFilterDrafts] = useState<Record<string, string>>({});
+  const [ruleKeywordInputs, setRuleKeywordInputs] = useState<Record<string, string>>({});
+  const [editingAutoRuleId, setEditingAutoRuleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -199,9 +190,6 @@ export function SettingsPage() {
     if (ruleDraftWorkspaceId === workspaceId) return;
     setRuleDrafts(autoRules.data.rules);
     setRuleDraftWorkspaceId(workspaceId);
-    setRuleFilterDrafts(
-      Object.fromEntries(autoRules.data.rules.map((rule) => [rule.id, serializeRuleFilters(rule.filters)])),
-    );
   }, [autoRules.data, ruleDraftWorkspaceId, workspaceId]);
 
   const workspaces = context.data?.workspaces ?? [];
@@ -421,9 +409,7 @@ export function SettingsPage() {
     onSuccess: (data) => {
       setRuleDrafts(data.rules);
       setRuleDraftWorkspaceId(data.workspaceId);
-      setRuleFilterDrafts(
-        Object.fromEntries(data.rules.map((rule) => [rule.id, serializeRuleFilters(rule.filters)])),
-      );
+      setEditingAutoRuleId(null);
       setAutoRuleMessage(`Rules saved. Auto-accounting runs every ${Math.round(CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS / 60000)} minutes.`);
       queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", workspaceId] });
     },
@@ -563,6 +549,26 @@ export function SettingsPage() {
     setRuleDrafts((current) => current.map((rule) => (rule.id === id ? updater(rule) : rule)));
   };
 
+  const setRuleFilters = (id: string, filters: string[]) => {
+    const nextFilters = filters.map((filter) => filter.trim()).filter(Boolean);
+    updateDraftRule(id, (current) => ({ ...current, filters: nextFilters }));
+  };
+
+  const addRuleFilter = (id: string) => {
+    const keyword = (ruleKeywordInputs[id] ?? "").trim();
+    if (!keyword) return;
+    const rule = ruleDrafts.find((item) => item.id === id);
+    if (!rule) return;
+    setRuleFilters(id, [...rule.filters, keyword]);
+    setRuleKeywordInputs((current) => ({ ...current, [id]: "" }));
+  };
+
+  const removeRuleFilter = (id: string, filterIndex: number) => {
+    const rule = ruleDrafts.find((item) => item.id === id);
+    if (!rule) return;
+    setRuleFilters(id, rule.filters.filter((_, index) => index !== filterIndex));
+  };
+
   const moveRule = (id: string, direction: -1 | 1) => {
     setRuleDrafts((current) => {
       const index = current.findIndex((rule) => rule.id === id);
@@ -577,8 +583,9 @@ export function SettingsPage() {
   };
 
   const removeRule = (id: string) => {
+    if (editingAutoRuleId === id) setEditingAutoRuleId(null);
     setRuleDrafts((current) => current.filter((rule) => rule.id !== id));
-    setRuleFilterDrafts((current) => {
+    setRuleKeywordInputs((current) => {
       const next = { ...current };
       delete next[id];
       return next;
@@ -588,13 +595,55 @@ export function SettingsPage() {
   const addRule = () => {
     const nextRule = createEmptyAutoRule();
     setRuleDrafts((current) => [...current, nextRule]);
-    setRuleFilterDrafts((current) => ({ ...current, [nextRule.id]: "" }));
+    setEditingAutoRuleId(nextRule.id);
   };
 
   const onSaveAutoRules = () => {
     if (!workspaceId) return;
     saveAutoRules.mutate(ruleDrafts);
   };
+
+  const getWorkspaceName = (id: string) => workspaces.find((workspace) => workspace.id === id)?.name || "Workspace";
+
+  const getAccountName = (id: string, sourceWorkspaceId?: string) => {
+    if (sourceWorkspaceId) {
+      return crossWorkspaceAccountsById.get(sourceWorkspaceId)?.find((account) => account.id === id)?.name || "Bank account";
+    }
+    return accounts.data?.find((account) => account.id === id)?.name || "Bank account";
+  };
+
+  const getBudgetName = (id: string, sourceWorkspaceId?: string) => {
+    if (sourceWorkspaceId) {
+      return crossWorkspaceBudgetsById.get(sourceWorkspaceId)?.find((budget) => budget.id === id)?.name || "Sub account";
+    }
+    return budgets.data?.find((budget) => budget.id === id)?.name || "Sub account";
+  };
+
+  const getRuleActionLabel = (rule: AutoRule) =>
+    rule.action === "DEDUCT_SAME_WORKSPACE"
+      ? "Deduct same workspace"
+      : "Create receivable";
+
+  const getRuleTargetLabel = (rule: AutoRule) => {
+    if (rule.action === "DEDUCT_SAME_WORKSPACE") {
+      return `${getAccountName(rule.destinationAccountId)} · ${getBudgetName(rule.destinationBudgetId)}`;
+    }
+    return `${getWorkspaceName(rule.sourceWorkspaceId)} · ${getAccountName(rule.sourceAccountId, rule.sourceWorkspaceId)} · ${getBudgetName(rule.sourceBudgetId, rule.sourceWorkspaceId)}`;
+  };
+
+  const editingAutoRule = editingAutoRuleId ? ruleDrafts.find((rule) => rule.id === editingAutoRuleId) ?? null : null;
+  const editingAutoRuleIndex = editingAutoRule ? ruleDrafts.findIndex((rule) => rule.id === editingAutoRule.id) : -1;
+  const editingSameWorkspaceBudgets = editingAutoRule?.action === "DEDUCT_SAME_WORKSPACE"
+    ? (budgets.data ?? []).filter((budget) => budget.isActive && budget.accountId === editingAutoRule.destinationAccountId)
+    : [];
+  const editingSourceAccounts = editingAutoRule?.action === "RECEIVABLE_OTHER_WORKSPACE"
+    ? (crossWorkspaceAccountsById.get(editingAutoRule.sourceWorkspaceId) ?? []).filter((account) => account.isActive)
+    : [];
+  const editingSourceBudgets = editingAutoRule?.action === "RECEIVABLE_OTHER_WORKSPACE"
+    ? (crossWorkspaceBudgetsById.get(editingAutoRule.sourceWorkspaceId) ?? []).filter(
+        (budget) => budget.isActive && budget.accountId === editingAutoRule.sourceAccountId,
+      )
+    : [];
 
   return (
     <div className="st-container">
@@ -751,12 +800,15 @@ export function SettingsPage() {
           </div>
           <div style={{ display: "inline-flex", gap: "8px", flexWrap: "wrap", marginLeft: "auto", justifyContent: "flex-end" }}>
             <button className="btn btn-ghost btn-xs" type="button" onClick={() => setRuleDrafts(autoRules.data?.rules ?? [])} disabled={saveAutoRules.isPending || runAutoRules.isPending || !hasAutoRuleChanges}>
+              <RotateCcw size={14} aria-hidden="true" />
               Reset
             </button>
             <button className="btn btn-ghost btn-xs" type="button" onClick={() => runAutoRules.mutate()} disabled={!workspaceId || runAutoRules.isPending}>
+              <Play size={14} aria-hidden="true" />
               {runAutoRules.isPending ? "Running..." : "Run Now"}
             </button>
             <button className="btn btn-primary btn-xs" type="button" onClick={onSaveAutoRules} disabled={!workspaceId || saveAutoRules.isPending || !hasAutoRuleChanges}>
+              <Save size={14} aria-hidden="true" />
               {saveAutoRules.isPending ? "Saving..." : "Save Rules"}
             </button>
           </div>
@@ -771,256 +823,51 @@ export function SettingsPage() {
             description="Refresh the page and try again."
           />
         ) : (
-          <div style={{ display: "grid", gap: "12px" }}>
-            {ruleDrafts.map((rule, index) => {
-              const sameWorkspaceBudgets = (budgets.data ?? []).filter(
-                (budget) => budget.isActive && rule.action === "DEDUCT_SAME_WORKSPACE" && budget.accountId === rule.destinationAccountId,
-              );
-              const sourceAccounts =
-                rule.action === "RECEIVABLE_OTHER_WORKSPACE"
-                  ? (crossWorkspaceAccountsById.get(rule.sourceWorkspaceId) ?? []).filter((account) => account.isActive)
-                  : [];
-              const sourceBudgets =
-                rule.action === "RECEIVABLE_OTHER_WORKSPACE"
-                  ? (crossWorkspaceBudgetsById.get(rule.sourceWorkspaceId) ?? []).filter(
-                      (budget) => budget.isActive && budget.accountId === rule.sourceAccountId,
-                    )
-                  : [];
-
-              return (
-                <div key={rule.id} style={{ border: "1px solid var(--border)", borderRadius: "14px", padding: "14px", background: "var(--surface)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", marginBottom: "12px", flexWrap: "wrap" }}>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontWeight: 600 }}>Rule {index + 1}</span>
-                      <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>
+          <div className="auto-rules-shell">
+            <div className="auto-rules-stack">
+              {ruleDrafts.map((rule, index) => (
+                <div key={rule.id} className={`auto-rule-card ${rule.enabled ? "" : "is-disabled"}`}>
+                  <button className="auto-rule-summary" type="button" onClick={() => setEditingAutoRuleId(rule.id)}>
+                    <span className="auto-rule-number">{index + 1}</span>
+                    <span className="auto-rule-main">
+                      <span className="auto-rule-title-row">
+                        <span className="auto-rule-title">{rule.name || `Rule ${index + 1}`}</span>
+                        {!rule.enabled ? <span className="auto-rule-muted-pill">Paused</span> : null}
+                      </span>
+                      <span className="auto-rule-flow" aria-label="Rule summary">
+                        <span className="auto-rule-chip auto-rule-chip-filter">
+                          {rule.filters[0] || "No keyword"}
+                        </span>
+                        {rule.filters.length > 1 ? (
+                          <span className="auto-rule-more">+{rule.filters.length - 1}</span>
+                        ) : null}
+                        <ArrowRight size={16} aria-hidden="true" />
+                        <span className="auto-rule-chip auto-rule-chip-action">{getRuleActionLabel(rule)}</span>
+                        <span className="auto-rule-separator">·</span>
+                        <span className="auto-rule-chip auto-rule-chip-target">{getRuleTargetLabel(rule)}</span>
+                      </span>
+                    </span>
+                    <span className="auto-rule-summary-actions" onClick={(event) => event.stopPropagation()}>
+                      <label className="auto-rule-switch" aria-label={`${rule.name} enabled`}>
                         <input
                           type="checkbox"
                           checked={rule.enabled}
                           onChange={(event) => updateDraftRule(rule.id, (current) => ({ ...current, enabled: event.target.checked }))}
                         />
-                        Enabled
+                        <span />
                       </label>
-                    </div>
-                    <div style={{ display: "inline-flex", gap: "8px" }}>
-                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => moveRule(rule.id, -1)} disabled={index === 0}>
-                        ↑
-                      </button>
-                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => moveRule(rule.id, 1)} disabled={index === ruleDrafts.length - 1}>
-                        ↓
-                      </button>
-                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => removeRule(rule.id)}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-                    <div>
-                      <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Rule name</div>
-                      <input
-                        className="input"
-                        type="text"
-                        value={rule.name}
-                        onChange={(event) => updateDraftRule(rule.id, (current) => ({ ...current, name: event.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Action</div>
-                      <select
-                        className="input"
-                        value={rule.action}
-                        onChange={(event) =>
-                          updateDraftRule(rule.id, (current) =>
-                            event.target.value === "DEDUCT_SAME_WORKSPACE"
-                              ? {
-                                  id: current.id,
-                                  name: current.name,
-                                  enabled: current.enabled,
-                                  action: "DEDUCT_SAME_WORKSPACE",
-                                  filters: current.filters,
-                                  destinationAccountId: accounts.data?.find((account) => account.isActive)?.id ?? "",
-                                  destinationBudgetId: "",
-                                }
-                              : {
-                                  id: current.id,
-                                  name: current.name,
-                                  enabled: current.enabled,
-                                  action: "RECEIVABLE_OTHER_WORKSPACE",
-                                  filters: current.filters,
-                                  sourceWorkspaceId: workspaces.find((workspace) => workspace.id !== workspaceId)?.id ?? "",
-                                  sourceAccountId: "",
-                                  sourceBudgetId: "",
-                                },
-                          )
-                        }
-                      >
-                        <option value="DEDUCT_SAME_WORKSPACE">Deduct from same-workspace sub account</option>
-                        <option value="RECEIVABLE_OTHER_WORKSPACE">Create receivable from another workspace</option>
-                      </select>
-                    </div>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Subject filters</div>
-                      <textarea
-                        className="input"
-                        rows={4}
-                        value={ruleFilterDrafts[rule.id] ?? serializeRuleFilters(rule.filters)}
-                        onChange={(event) => {
-                          const raw = event.target.value;
-                          setRuleFilterDrafts((current) => ({ ...current, [rule.id]: raw }));
-                          updateDraftRule(rule.id, (current) => ({ ...current, filters: parseRuleFilters(raw) }));
-                        }}
-                        placeholder={"One contains filter per line\nnetflix\nfairprice\njohn"}
-                      />
-                      <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-tertiary)" }}>
-                        Any line can match. Matching is case-insensitive.
-                      </div>
-                    </div>
-
-                    {rule.action === "DEDUCT_SAME_WORKSPACE" ? (
-                      <>
-                        <div>
-                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Bank account</div>
-                          <select
-                            className="input"
-                            value={rule.destinationAccountId}
-                            onChange={(event) =>
-                              updateDraftRule(rule.id, (current) => {
-                                if (current.action !== "DEDUCT_SAME_WORKSPACE") return current;
-                                const nextAccountId = event.target.value;
-                                const nextBudgetId =
-                                  (budgets.data ?? []).find((budget) => budget.accountId === nextAccountId && budget.isActive)?.id ?? "";
-                                return {
-                                  ...current,
-                                  destinationAccountId: nextAccountId,
-                                  destinationBudgetId: nextBudgetId,
-                                };
-                              })
-                            }
-                          >
-                            <option value="">Select bank account</option>
-                            {(accounts.data ?? []).filter((account) => account.isActive).map((account) => (
-                              <option key={account.id} value={account.id}>
-                                {account.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Sub account</div>
-                          <select
-                            className="input"
-                            value={rule.destinationBudgetId}
-                            onChange={(event) =>
-                              updateDraftRule(rule.id, (current) =>
-                                current.action === "DEDUCT_SAME_WORKSPACE"
-                                  ? { ...current, destinationBudgetId: event.target.value }
-                                  : current,
-                              )
-                            }
-                          >
-                            <option value="">Select sub account</option>
-                            {sameWorkspaceBudgets.map((budget) => (
-                              <option key={budget.id} value={budget.id}>
-                                {budget.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Source workspace</div>
-                          <select
-                            className="input"
-                            value={rule.sourceWorkspaceId}
-                            onChange={(event) =>
-                              updateDraftRule(rule.id, (current) =>
-                                current.action === "RECEIVABLE_OTHER_WORKSPACE"
-                                  ? {
-                                      ...current,
-                                      sourceWorkspaceId: event.target.value,
-                                      sourceAccountId: "",
-                                      sourceBudgetId: "",
-                                    }
-                                  : current,
-                              )
-                            }
-                          >
-                            <option value="">Select workspace</option>
-                            {workspaces.filter((workspace) => workspace.id !== workspaceId).map((workspace) => (
-                              <option key={workspace.id} value={workspace.id}>
-                                {workspace.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Source bank account</div>
-                          <select
-                            className="input"
-                            value={rule.sourceAccountId}
-                            onChange={(event) =>
-                              updateDraftRule(rule.id, (current) => {
-                                if (current.action !== "RECEIVABLE_OTHER_WORKSPACE") return current;
-                                const nextAccountId = event.target.value;
-                                const nextBudgetId =
-                                  (crossWorkspaceBudgetsById.get(current.sourceWorkspaceId) ?? []).find(
-                                    (budget) => budget.isActive && budget.accountId === nextAccountId,
-                                  )?.id ?? "";
-                                return {
-                                  ...current,
-                                  sourceAccountId: nextAccountId,
-                                  sourceBudgetId: nextBudgetId,
-                                };
-                              })
-                            }
-                          >
-                            <option value="">Select bank account</option>
-                            {sourceAccounts.map((account) => (
-                              <option key={account.id} value={account.id}>
-                                {account.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Source sub account</div>
-                          <select
-                            className="input"
-                            value={rule.sourceBudgetId}
-                            onChange={(event) =>
-                              updateDraftRule(rule.id, (current) =>
-                                current.action === "RECEIVABLE_OTHER_WORKSPACE"
-                                  ? { ...current, sourceBudgetId: event.target.value }
-                                  : current,
-                              )
-                            }
-                          >
-                            <option value="">Select sub account</option>
-                            {sourceBudgets.map((budget) => (
-                              <option key={budget.id} value={budget.id}>
-                                {budget.name}
-                                {budget.receivableReservedCents ? ` (${formatMoney(budget.receivableReservedCents, baseCurrency)})` : ""}
-                              </option>
-                            ))}
-                          </select>
-                          <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-tertiary)" }}>
-                            Open receivables earmarked against the selected source sub account are shown in brackets.
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                    </span>
+                  </button>
                 </div>
-              );
-            })}
+              ))}
+            </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <div className="auto-rule-footer">
               <button className="btn btn-ghost btn-xs" type="button" onClick={addRule}>
+                <Plus size={14} aria-hidden="true" />
                 Add Rule
               </button>
-              <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+              <div className="auto-rule-footnote">
                 Rules are checked top to bottom. Only unaccounted credit card transactions are affected.
               </div>
             </div>
@@ -1029,6 +876,319 @@ export function SettingsPage() {
 
         {autoRuleMessage ? <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-secondary)" }}>{autoRuleMessage}</div> : null}
       </div>
+
+      {editingAutoRule && (
+        <div className="auto-rule-modal-overlay" onClick={() => setEditingAutoRuleId(null)}>
+          <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title" onClick={(event) => event.stopPropagation()}>
+            <div className="auto-rule-modal-header">
+              <div className="auto-rule-modal-title-wrap">
+                <span className="auto-rule-number">{editingAutoRuleIndex + 1}</span>
+                <div>
+                  <h3 id="auto-rule-modal-title">Edit Auto Accounting Rule</h3>
+                  <p>{editingAutoRule.name || `Rule ${editingAutoRuleIndex + 1}`}</p>
+                </div>
+              </div>
+              <button className="auto-rule-icon-btn" type="button" onClick={() => setEditingAutoRuleId(null)} aria-label="Close editor">
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="auto-rule-modal-body">
+              <div className="auto-rule-editor-hero">
+                <div className="auto-rule-hero-step">
+                  <span>Subject</span>
+                  <strong>{editingAutoRule.filters[0] || "Add keyword"}</strong>
+                </div>
+                <ArrowRight className="auto-rule-hero-arrow" size={22} aria-hidden="true" />
+                <div className="auto-rule-hero-step">
+                  <span>Action</span>
+                  <strong>{getRuleActionLabel(editingAutoRule)}</strong>
+                </div>
+                <ArrowRight className="auto-rule-hero-arrow" size={22} aria-hidden="true" />
+                <div className="auto-rule-hero-step">
+                  <span>Destination</span>
+                  <strong>{getRuleTargetLabel(editingAutoRule)}</strong>
+                </div>
+              </div>
+
+              <div className="auto-rule-editor-grid">
+                <section className="auto-rule-edit-section">
+                  <div className="auto-rule-section-label">Rule Name</div>
+                  <input
+                    className="input"
+                    type="text"
+                    value={editingAutoRule.name}
+                    onChange={(event) => updateDraftRule(editingAutoRule.id, (current) => ({ ...current, name: event.target.value }))}
+                  />
+                </section>
+
+                <section className="auto-rule-edit-section">
+                  <div className="auto-rule-section-label">Status</div>
+                  <label className="auto-rule-enable-row">
+                    <span>Rule is active</span>
+                    <span className="auto-rule-switch">
+                      <input
+                        type="checkbox"
+                        checked={editingAutoRule.enabled}
+                        onChange={(event) => updateDraftRule(editingAutoRule.id, (current) => ({ ...current, enabled: event.target.checked }))}
+                      />
+                      <span />
+                    </span>
+                  </label>
+                </section>
+
+                <section className="auto-rule-edit-section auto-rule-span">
+                  <div className="auto-rule-section-label">Action</div>
+                  <div className="auto-rule-action-row">
+                    <span className="auto-rule-action-cue">
+                      <ArrowRight size={17} aria-hidden="true" />
+                      When matched
+                      <ArrowRight size={17} aria-hidden="true" />
+                    </span>
+                    <select
+                      className="input"
+                      value={editingAutoRule.action}
+                      onChange={(event) =>
+                        updateDraftRule(editingAutoRule.id, (current) =>
+                          event.target.value === "DEDUCT_SAME_WORKSPACE"
+                            ? {
+                                id: current.id,
+                                name: current.name,
+                                enabled: current.enabled,
+                                action: "DEDUCT_SAME_WORKSPACE",
+                                filters: current.filters,
+                                destinationAccountId: accounts.data?.find((account) => account.isActive)?.id ?? "",
+                                destinationBudgetId: "",
+                              }
+                            : {
+                                id: current.id,
+                                name: current.name,
+                                enabled: current.enabled,
+                                action: "RECEIVABLE_OTHER_WORKSPACE",
+                                filters: current.filters,
+                                sourceWorkspaceId: workspaces.find((workspace) => workspace.id !== workspaceId)?.id ?? "",
+                                sourceAccountId: "",
+                                sourceBudgetId: "",
+                              },
+                        )
+                      }
+                    >
+                      <option value="DEDUCT_SAME_WORKSPACE">Deduct from same-workspace sub account</option>
+                      <option value="RECEIVABLE_OTHER_WORKSPACE">Create receivable from another workspace</option>
+                    </select>
+                  </div>
+                </section>
+
+                <section className="auto-rule-edit-section auto-rule-span">
+                  <div className="auto-rule-section-divider">
+                    <span>Subject Filters</span>
+                  </div>
+                  <div className="auto-rule-keyword-box">
+                    <div className="auto-rule-keywords">
+                      {editingAutoRule.filters.map((filter, index) => (
+                        <span key={`${filter}-${index}`} className="auto-rule-keyword">
+                          {filter}
+                          <button type="button" onClick={() => removeRuleFilter(editingAutoRule.id, index)} aria-label={`Remove ${filter}`}>
+                            <X size={14} aria-hidden="true" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="auto-rule-add-keyword">
+                      <input
+                        className="input"
+                        type="text"
+                        value={ruleKeywordInputs[editingAutoRule.id] ?? ""}
+                        onChange={(event) => setRuleKeywordInputs((current) => ({ ...current, [editingAutoRule.id]: event.target.value }))}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          addRuleFilter(editingAutoRule.id);
+                        }}
+                        placeholder="Add keyword..."
+                      />
+                      <button className="btn btn-ghost" type="button" onClick={() => addRuleFilter(editingAutoRule.id)}>
+                        <Plus size={15} aria-hidden="true" />
+                        Add
+                      </button>
+                    </div>
+                    <div className="auto-rule-helper">Any line can match · case-insensitive</div>
+                  </div>
+                </section>
+
+                {editingAutoRule.action === "DEDUCT_SAME_WORKSPACE" ? (
+                  <section className="auto-rule-edit-section auto-rule-span">
+                    <div className="auto-rule-section-divider">
+                      <span>Destination</span>
+                    </div>
+                    <div className="auto-rule-field-grid">
+                      <label>
+                        <span>Bank Account</span>
+                        <select
+                          className="input"
+                          value={editingAutoRule.destinationAccountId}
+                          onChange={(event) =>
+                            updateDraftRule(editingAutoRule.id, (current) => {
+                              if (current.action !== "DEDUCT_SAME_WORKSPACE") return current;
+                              const nextAccountId = event.target.value;
+                              const nextBudgetId =
+                                (budgets.data ?? []).find((budget) => budget.accountId === nextAccountId && budget.isActive)?.id ?? "";
+                              return {
+                                ...current,
+                                destinationAccountId: nextAccountId,
+                                destinationBudgetId: nextBudgetId,
+                              };
+                            })
+                          }
+                        >
+                          <option value="">Select bank account</option>
+                          {(accounts.data ?? []).filter((account) => account.isActive).map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Sub Account</span>
+                        <select
+                          className="input"
+                          value={editingAutoRule.destinationBudgetId}
+                          onChange={(event) =>
+                            updateDraftRule(editingAutoRule.id, (current) =>
+                              current.action === "DEDUCT_SAME_WORKSPACE"
+                                ? { ...current, destinationBudgetId: event.target.value }
+                                : current,
+                            )
+                          }
+                        >
+                          <option value="">Select sub account</option>
+                          {editingSameWorkspaceBudgets.map((budget) => (
+                            <option key={budget.id} value={budget.id}>
+                              {budget.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </section>
+                ) : (
+                  <section className="auto-rule-edit-section auto-rule-span">
+                    <div className="auto-rule-section-divider">
+                      <span>Source</span>
+                    </div>
+                    <div className="auto-rule-field-grid auto-rule-field-grid-three">
+                      <label>
+                        <span>Workspace</span>
+                        <select
+                          className="input"
+                          value={editingAutoRule.sourceWorkspaceId}
+                          onChange={(event) =>
+                            updateDraftRule(editingAutoRule.id, (current) =>
+                              current.action === "RECEIVABLE_OTHER_WORKSPACE"
+                                ? {
+                                    ...current,
+                                    sourceWorkspaceId: event.target.value,
+                                    sourceAccountId: "",
+                                    sourceBudgetId: "",
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          <option value="">Select workspace</option>
+                          {workspaces.filter((workspace) => workspace.id !== workspaceId).map((workspace) => (
+                            <option key={workspace.id} value={workspace.id}>
+                              {workspace.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Bank Account</span>
+                        <select
+                          className="input"
+                          value={editingAutoRule.sourceAccountId}
+                          onChange={(event) =>
+                            updateDraftRule(editingAutoRule.id, (current) => {
+                              if (current.action !== "RECEIVABLE_OTHER_WORKSPACE") return current;
+                              const nextAccountId = event.target.value;
+                              const nextBudgetId =
+                                (crossWorkspaceBudgetsById.get(current.sourceWorkspaceId) ?? []).find(
+                                  (budget) => budget.isActive && budget.accountId === nextAccountId,
+                                )?.id ?? "";
+                              return {
+                                ...current,
+                                sourceAccountId: nextAccountId,
+                                sourceBudgetId: nextBudgetId,
+                              };
+                            })
+                          }
+                        >
+                          <option value="">Select bank account</option>
+                          {editingSourceAccounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Sub Account</span>
+                        <select
+                          className="input"
+                          value={editingAutoRule.sourceBudgetId}
+                          onChange={(event) =>
+                            updateDraftRule(editingAutoRule.id, (current) =>
+                              current.action === "RECEIVABLE_OTHER_WORKSPACE"
+                                ? { ...current, sourceBudgetId: event.target.value }
+                                : current,
+                            )
+                          }
+                        >
+                          <option value="">Select sub account</option>
+                          {editingSourceBudgets.map((budget) => (
+                            <option key={budget.id} value={budget.id}>
+                              {budget.name}
+                              {budget.receivableReservedCents ? ` (${formatMoney(budget.receivableReservedCents, baseCurrency)})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="auto-rule-helper">Open receivables earmarked against the selected source sub account are shown in brackets.</div>
+                  </section>
+                )}
+              </div>
+            </div>
+
+            <div className="auto-rule-modal-footer">
+              <div className="auto-rule-order-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, -1)} disabled={editingAutoRuleIndex <= 0}>
+                  <ChevronUp size={15} aria-hidden="true" />
+                  Move up
+                </button>
+                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, 1)} disabled={editingAutoRuleIndex < 0 || editingAutoRuleIndex >= ruleDrafts.length - 1}>
+                  <ChevronDown size={15} aria-hidden="true" />
+                  Move down
+                </button>
+                <button className="btn btn-ghost" type="button" onClick={() => removeRule(editingAutoRule.id)}>
+                  <Trash2 size={15} aria-hidden="true" />
+                  Delete rule
+                </button>
+              </div>
+              <div className="auto-rule-modal-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => setEditingAutoRuleId(null)}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" type="button" onClick={onSaveAutoRules} disabled={!workspaceId || saveAutoRules.isPending || !hasAutoRuleChanges}>
+                  {saveAutoRules.isPending ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header with Add Button */}
       <div className="st-header">

@@ -926,10 +926,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const earliestDueIsOverdue = earliestDueDays !== null && earliestDueDays < 0;
   const earliestDueIsUrgent = earliestDueDays !== null && earliestDueDays >= 0 && earliestDueDays <= 3;
   const canEditSharedPaymentDue = selectedMonth >= 0;
-  const canMakePayment =
+  const hasMonthlyPaymentBalance =
     selectedCardId !== "all" &&
     selectedMonth >= 0 &&
-    payableAmountCents > 0 &&
+    payableAmountCents > 0;
+  const canMakePayment =
+    hasMonthlyPaymentBalance &&
     Boolean(defaultReceivableAccountId) &&
     Boolean(defaultReceivableBudgetId);
   const saveSharedPaymentDue = () => {
@@ -1065,7 +1067,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {balanceStatus ? <div className={balanceStatus.className}>{balanceStatus.label}</div> : null}
 
-      {selectedCardId !== "all" && selectedMonth >= 0 && (
+      {hasMonthlyPaymentBalance && (
         <div className="cct-due-panel">
           <div className="cct-due-panel-meta">
             <span className="cct-summary-label">Payment Due</span>
@@ -1094,7 +1096,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             >
               {updateSharedPaymentDue.isPending ? "Saving..." : "Save Due Date"}
             </button>
-            {selectedCardId !== "all" && selectedMonth >= 0 && payableAmountCents > 0 ? (
+            {hasMonthlyPaymentBalance ? (
               <button
                 type="button"
                 className="btn btn-primary btn-xs cct-due-save-btn"
