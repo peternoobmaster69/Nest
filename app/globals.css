@@ -1127,6 +1127,54 @@ body {
   letter-spacing: -0.01em;
 }
 
+.tb-breadcrumb {
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumb-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumb-link {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  transition: color var(--t), background-color var(--t);
+}
+
+.breadcrumb-link:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-subtle);
+}
+
+.breadcrumb-separator {
+  color: var(--text-tertiary);
+  font-size: 14px;
+  user-select: none;
+}
+
+.breadcrumb-current {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
 .tb-actions {
   display: flex;
   align-items: center;
@@ -4476,6 +4524,101 @@ body {
 .tx-recent-arrow.expense {
   background: var(--warning-100);
   color: var(--warning);
+}
+
+.tx-global-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+
+/* Transaction month grouping (bank app style) */
+.tx-month-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.tx-month-group {
+  margin-bottom: 20px;
+}
+
+.tx-month-group:last-child {
+  margin-bottom: 0;
+}
+
+.tx-month-select-inline {
+  font-size: 12px;
+  padding: 4px 10px;
+  min-width: auto;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tx-month-select-inline:hover {
+  border-color: var(--border-default);
+}
+
+.tx-month-select-inline:focus {
+  outline: none;
+  border-color: var(--brand-400);
+}
+
+.tx-month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tx-month-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.tx-month-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tx-month-income {
+  color: var(--success);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.tx-month-expense {
+  color: var(--warning);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.tx-month-count {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  background: var(--bg-subtle);
+  border-radius: var(--r-pill);
+}
+
+.tx-month-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .inv-history-card {
