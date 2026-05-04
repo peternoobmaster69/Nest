@@ -4405,25 +4405,32 @@ body {
   font-size: 12px;
 }
 
+/* Compact transaction list (matches screenshot design) */
 .tx-recent-row {
+  display: flex;
   align-items: center;
   gap: 10px;
   overflow: visible;
   cursor: pointer;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  min-height: 54px;
+}
+
+.tx-recent-row:hover {
+  border-color: var(--border-default);
 }
 
 .tx-recent-main {
   display: grid;
-  gap: 2px;
   min-width: 0;
-  overflow: visible;
+  flex: 1;
+  grid-template-columns: 1fr auto;
+  align-items: center;
 }
 
 .tx-recent-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  display: contents;
 }
 
 .tx-recent-subject {
@@ -4431,16 +4438,52 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .tx-recent-amount {
   font-weight: 600;
   white-space: nowrap;
+  font-size: 15px;
+  text-align: right;
+}
+
+.tx-recent-amount.positive {
+  color: var(--amount-positive);
+}
+
+.tx-recent-amount.negative {
+  color: var(--amount-negative);
 }
 
 .tx-recent-date {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
+  grid-column: 1;
+}
+
+/* Direction arrow indicator - green for income, amber for expense */
+.tx-recent-arrow {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.tx-recent-arrow.income {
+  background: var(--success-100);
+  color: var(--success-600);
+}
+
+.tx-recent-arrow.expense {
+  background: var(--warning-100);
+  color: var(--warning);
 }
 
 .inv-history-card {
@@ -4787,7 +4830,7 @@ body {
 
 .simple-list {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .recv-row {
@@ -6419,8 +6462,11 @@ body {
 
 .cct-subject-wrapper {
   display: -webkit-box;
+  display: box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
+  box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.4;

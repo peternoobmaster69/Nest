@@ -76,6 +76,18 @@ function getAmountToneClass(valueCents: number) {
   return "zero";
 }
 
+function formatTransactionDate(dateString: string): string {
+  const date = new Date(dateString);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const seconds = date.getSeconds();
+  // Hide time if time is midnight (00:00:00) or top of any hour (XX:00:00)
+  if (minutes === 0 && seconds === 0) {
+    return date.toLocaleDateString();
+  }
+  return date.toLocaleString();
+}
+
 function getBudgetIcon(name: string, icon?: string | null) {
   if (icon) return icon;
   const key = name.toLowerCase();
@@ -1130,7 +1142,7 @@ export function TransactionsPage() {
       </section>
 
       <section ref={recentTransactionsRef} className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", marginBottom: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", marginBottom: "6px" }}>
           <div style={{ fontSize: "13px", fontWeight: 600 }}>Recent Transactions</div>
           {transactionTotal > 0 ? (
             <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
@@ -1153,6 +1165,8 @@ export function TransactionsPage() {
 
           {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) => {
             const isDeleting = deletingTransactionIds.includes(tx.id);
+            const isIncome = tx.direction === "CREDIT";
+            const signedAmount = isIncome ? tx.amountCents : -tx.amountCents;
             return (
             <div
               key={tx.id}
@@ -1169,19 +1183,20 @@ export function TransactionsPage() {
               tabIndex={isDeleting ? -1 : 0}
               aria-label={`Edit transaction ${tx.subject}`}
             >
+              <div className={`tx-recent-arrow ${isIncome ? "income" : "expense"}`}>
+                {isIncome ? "→" : "←"}
+              </div>
               <div className="tx-recent-main">
-                <span className="tx-recent-head">
-                  <span className="tx-recent-subject">{tx.subject}</span>
-                  <span className={`tx-recent-amount ${getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents)}`}>
-                    {formatCents(tx.amountCents)}
-                  </span>
+                <span className="tx-recent-subject">{tx.subject}</span>
+                <span className={`tx-recent-amount ${getAmountToneClass(signedAmount)}`}>
+                  {isIncome ? "+" : "−"}{formatCents(tx.amountCents)}
                 </span>
-                <span className="tx-recent-date">{new Date(tx.date).toLocaleString()}</span>
+                <span className="tx-recent-date">{formatTransactionDate(tx.date)}</span>
               </div>
             </div>
           )})}
           {!transactions.isLoading && !transactions.isError && transactions.hasNextPage ? (
-            <div ref={loadMoreTransactionsRef} style={{ display: "flex", justifyContent: "center", padding: "10px 0" }}>
+            <div ref={loadMoreTransactionsRef} style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
               <button
                 className="btn btn-ghost"
                 type="button"
