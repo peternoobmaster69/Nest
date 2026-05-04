@@ -6,7 +6,6 @@ import { z } from "zod";
 const CreateBudgetSchema = z.object({
   workspaceId: z.string().min(1),
   accountId: z.string().min(1),
-  createdById: z.string().min(1),
   name: z.string().min(1).max(80),
   icon: z.string().max(8).optional(),
   targetCents: z.number().int().min(0).optional().default(0),

@@ -579,7 +579,6 @@ export function DashboardShell({
         body: JSON.stringify({
           workspaceId,
           accountId: payload.accountId,
-          createdById: defaultUserId,
           name: payload.name,
           icon: payload.icon,
           targetCents: payload.targetCents,
