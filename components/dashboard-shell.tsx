@@ -19,6 +19,8 @@ import {
 } from "@/components/skeletons/DashboardSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
+const ALL_BANKS_FILTER = "ALL";
+
 type DashboardSummary = {
   totalBalanceCents: number;
   bankDiscrepancies: Array<{
@@ -421,7 +423,7 @@ export function DashboardShell({
   const [editingReceivableId, setEditingReceivableId] = useState<string | null>(null);
   const [editingReceivableTitle, setEditingReceivableTitle] = useState("");
   const [editingReceivableAmount, setEditingReceivableAmount] = useState("");
-  const [selectedBankFilterId, setSelectedBankFilterId] = useState<string>("ALL");
+  const [selectedBankFilterId, setSelectedBankFilterId] = useState<string>(ALL_BANKS_FILTER);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [failedCreditCardBankLogos, setFailedCreditCardBankLogos] = useState<Record<string, boolean>>({});
@@ -1010,19 +1012,22 @@ export function DashboardShell({
   useEffect(() => {
     if (!dashboardBankStorageKey) return;
     const saved = getBrowserCookie(dashboardBankStorageKey);
-    if (saved) {
+    if (saved && saved !== ALL_BANKS_FILTER) {
       setSelectedBankFilterId(saved);
+    } else {
+      setSelectedBankFilterId(ALL_BANKS_FILTER);
     }
     setBankFilterHydrated(true);
   }, [dashboardBankStorageKey]);
 
   useEffect(() => {
     if (!dashboardBankStorageKey || !bankFilterHydrated) return;
-    setBrowserCookie(dashboardBankStorageKey, selectedBankFilterId);
+    setBrowserCookie(dashboardBankStorageKey, selectedBankFilterId || ALL_BANKS_FILTER);
   }, [dashboardBankStorageKey, selectedBankFilterId, bankFilterHydrated]);
 
   useEffect(() => {
     if (selectedBankFilterId === "ALL") return;
+    if (!bankAccountsQuery.data?.length) return;
     if (!bankAccountsQuery.data?.some((b) => b.id === selectedBankFilterId)) {
       setSelectedBankFilterId("ALL");
     }

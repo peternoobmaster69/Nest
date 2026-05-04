@@ -14,6 +14,8 @@ import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
+const ALL_BANKS_FILTER = "ALL";
+
 type AppContext = {
   workspaceId: string | null;
   baseCurrency?: string | null;
@@ -275,8 +277,10 @@ export function TransactionsPage() {
   useEffect(() => {
     if (!txBankStorageKey) return;
     const saved = getBrowserCookie(txBankStorageKey);
-    if (saved) {
+    if (saved && saved !== ALL_BANKS_FILTER) {
       setSelectedBankId(saved);
+    } else {
+      setSelectedBankId("");
     }
     setBankFilterHydrated(true);
   }, [txBankStorageKey]);
@@ -289,8 +293,8 @@ export function TransactionsPage() {
   }, [bankAccounts.data, selectedBankId]);
 
   useEffect(() => {
-    if (!txBankStorageKey || !selectedBankId || !bankFilterHydrated) return;
-    setBrowserCookie(txBankStorageKey, selectedBankId);
+    if (!txBankStorageKey || !bankFilterHydrated) return;
+    setBrowserCookie(txBankStorageKey, selectedBankId || ALL_BANKS_FILTER);
   }, [txBankStorageKey, selectedBankId, bankFilterHydrated]);
 
   useEffect(() => {

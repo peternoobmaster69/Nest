@@ -755,7 +755,7 @@ export async function POST(request: Request) {
                 date: monthDate(year, month),
                 amountCents: row.allocatedCents,
                 subject: `Monthly budget allocation: ${row.budgetItemTitle ?? "Budget item"}`,
-                details: `Approved budget for ${month}/${year} funded by ${row.budgetSourceTitle ?? "source"}`,
+                details: `Approved budget for ${month}/${year}`,
               };
             }),
           });
@@ -828,6 +828,41 @@ export async function DELETE(request: Request) {
         where: { id },
         data: { isActive: false },
       });
+      return NextResponse.json({ success: true });
+    }
+
+    if (type === "monthlySource") {
+      const workspaceId = searchParams.get("workspaceId");
+      if (!workspaceId) {
+        return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+      }
+
+      await requireWorkspaceAccess(workspaceId);
+
+      const monthlySource = await prisma.monthlyBudgetSource.findUnique({
+        where: { id },
+        select: { workspaceId: true, budgetSourceId: true, year: true, month: true, isDraft: true },
+      });
+      if (!monthlySource || monthlySource.workspaceId !== workspaceId) {
+        return NextResponse.json({ error: "Monthly budget source not found" }, { status: 404 });
+      }
+      if (!monthlySource.isDraft) {
+        return NextResponse.json({ error: "Approved monthly sources cannot be removed." }, { status: 409 });
+      }
+
+      await prisma.$transaction([
+        prisma.monthlyBudget.deleteMany({
+          where: {
+            workspaceId,
+            year: monthlySource.year,
+            month: monthlySource.month,
+            budgetSourceId: monthlySource.budgetSourceId,
+          },
+        }),
+        prisma.monthlyBudgetSource.delete({
+          where: { id },
+        }),
+      ]);
       return NextResponse.json({ success: true });
     }
 

@@ -22,6 +22,8 @@
    ============================================================ */
 
 :root {
+  color-scheme: light;
+
   /* Typography */
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "DM Sans", sans-serif;
@@ -558,19 +560,6 @@ body {
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  @keyframes workspaceSwitchPulse {
-    0%, 100% {
-      opacity: 1;
-      background: transparent;
-    }
-    50% {
-      opacity: 0.8;
-      background: var(--brand-900);
-    }
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .sb-workspace-spinner,
   .sb-user-menu-workspace.switching,
@@ -594,10 +583,8 @@ body {
   animation: workspaceFadeIn 0.2s ease-out;
 }
 
-@media (prefers-color-scheme: dark) {
-  .workspace-transition-overlay {
-    background: rgba(24, 22, 20, 0.85);
-  }
+[data-theme="dark"] .workspace-transition-overlay {
+  background: rgba(24, 22, 20, 0.85);
 }
 
 .workspace-transition-content {
@@ -1919,16 +1906,14 @@ body {
   filter: invert(0.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  .input[type="date"]::-webkit-calendar-picker-indicator,
-  .input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.7);
-  }
+[data-theme="dark"] .input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] .input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
 
-  .input[type="date"]::-webkit-calendar-picker-indicator:hover,
-  .input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
-    filter: invert(0.9);
-  }
+[data-theme="dark"] .input[type="date"]::-webkit-calendar-picker-indicator:hover,
+[data-theme="dark"] .input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  filter: invert(0.9);
 }
 
 .label {
@@ -2046,15 +2031,28 @@ body {
    ============================================================ */
 
 .hero-card {
+  --hero-card-bg:
+    radial-gradient(circle at 92% 28%, rgba(26, 143, 88, 0.08) 0 128px, transparent 129px),
+    linear-gradient(135deg, #fdfcfa, #eef8f1);
+  --hero-card-border: rgba(26, 143, 88, 0.16);
+  --hero-card-ring: rgba(26, 143, 88, 0.08);
+  --hero-text: var(--text-primary);
+  --hero-label: var(--text-tertiary);
+  --hero-muted: var(--text-secondary);
+  --hero-side: var(--text-tertiary);
+  --hero-chip-bg: rgba(26, 143, 88, 0.08);
+  --hero-chip-bg-hover: rgba(26, 143, 88, 0.14);
+  --hero-chip-text: var(--text-secondary);
   background:
-    radial-gradient(circle at 92% 28%, rgba(255, 255, 255, 0.075) 0 128px, transparent 129px),
-    linear-gradient(135deg, #173f2b, #123621);
-  color: #fff;
+    var(--hero-card-bg);
+  color: var(--hero-text);
+  border: 1px solid var(--hero-card-border);
   border-radius: 14px;
   padding: 18px 20px;
   position: relative;
   overflow: hidden;
   margin-bottom: 14px;
+  box-shadow: 0 1px 0 var(--hero-card-ring) inset;
 }
 
 .hero-card::before {
@@ -2065,7 +2063,7 @@ body {
   width: 240px;
   height: 240px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--hero-card-ring);
 }
 
 .hero-card::after {
@@ -2090,7 +2088,7 @@ body {
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.56);
+  color: var(--hero-label);
   margin-bottom: 6px;
 }
 
@@ -2104,7 +2102,7 @@ body {
 }
 
  .hero-sub {
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--hero-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2112,7 +2110,7 @@ body {
 .hero-side {
   min-width: 210px;
   text-align: right;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--hero-side);
 }
 
  .hero-side-label {
@@ -2122,7 +2120,7 @@ body {
 }
 
 .hero-side-amount {
-  color: rgba(255, 255, 255, 0.46);
+  color: var(--hero-side);
   font-family: var(--font-body);
   font-size: 14px;
   font-weight: 800;
@@ -2132,7 +2130,7 @@ body {
   font-size: 11px;
   font-weight: 600;
   margin-top: 4px;
-  color: rgba(255, 255, 255, 0.42);
+  color: var(--hero-side);
 }
 
   .hero-chips {
@@ -2151,14 +2149,14 @@ body {
   min-height: 22px;
   padding: 2px 8px;
   border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.68);
+  background: var(--hero-chip-bg);
+  color: var(--hero-chip-text);
   cursor: pointer !important;
   transition: background var(--t), transform var(--t);
 }
 
 .hero-chip:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--hero-chip-bg-hover);
   transform: translateY(-1px);
 }
 
@@ -2189,16 +2187,6 @@ body {
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
-}
-
-/* Keep amount text readable inside the green hero card in both themes. */
-.hero-card .positive,
-.hero-card .zero {
-  color: rgba(255, 255, 255, 0.98);
-}
-
-.hero-card .negative {
-  color: #ffe5a6;
 }
 
 /* ============================================================
@@ -2345,6 +2333,10 @@ body {
   font-weight: 700;
   letter-spacing: -0.02em;
   margin-bottom: 0;
+}
+
+.bm-amount.zero {
+  color: #d8d5cf;
 }
 
 .bm-target {
@@ -5919,6 +5911,7 @@ body {
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --skeleton-base: #2A2A2A;
   --skeleton-shimmer: #3A3A3A;
   --bg-base: #0a0908;
@@ -5953,9 +5946,27 @@ body {
 }
 
 [data-theme="dark"] .hero-card {
-  background:
+  --hero-card-bg:
     radial-gradient(circle at 92% 28%, rgba(255, 255, 255, 0.08) 0 128px, transparent 129px),
     linear-gradient(135deg, #173f2b, #0b2819);
+  --hero-card-border: rgba(74, 222, 128, 0.14);
+  --hero-card-ring: rgba(255, 255, 255, 0.04);
+  --hero-text: #fff;
+  --hero-label: rgba(255, 255, 255, 0.56);
+  --hero-muted: rgba(255, 255, 255, 0.62);
+  --hero-side: rgba(255, 255, 255, 0.5);
+  --hero-chip-bg: rgba(255, 255, 255, 0.1);
+  --hero-chip-bg-hover: rgba(255, 255, 255, 0.2);
+  --hero-chip-text: rgba(255, 255, 255, 0.68);
+}
+
+[data-theme="dark"] .hero-card .positive,
+[data-theme="dark"] .hero-card .zero {
+  color: rgba(255, 255, 255, 0.98);
+}
+
+[data-theme="dark"] .hero-card .negative {
+  color: #ffe5a6;
 }
 
 /* Dark Mode Table Styles */
@@ -8728,12 +8739,10 @@ body {
 }
 
 /* Dark mode adjustments */
-@media (prefers-color-scheme: dark) {
-  .navigation-loader-bar {
-    box-shadow:
-      0 0 8px color-mix(in srgb, var(--brand-400) 50%, transparent),
-      0 0 16px color-mix(in srgb, var(--brand-400) 25%, transparent);
-  }
+[data-theme="dark"] .navigation-loader-bar {
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--brand-400) 50%, transparent),
+    0 0 16px color-mix(in srgb, var(--brand-400) 25%, transparent);
 }
 
 /* Mobile: move spinner to bottom for thumb accessibility */
@@ -9405,45 +9414,43 @@ body {
    DARK MODE THEME TOKENS
    ============================================================ */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Dark Mode Backgrounds */
-    --bg-base: #1a1815;
-    --bg-surface: #22201c;
-    --bg-elevated: #2a2723;
-    --bg-subtle: #161412;
+[data-theme="dark"] {
+  /* Dark Mode Backgrounds */
+  --bg-base: #1a1815;
+  --bg-surface: #22201c;
+  --bg-elevated: #2a2723;
+  --bg-subtle: #161412;
 
-    /* Dark Mode Text */
-    --text-primary: #f5f2ed;
-    --text-secondary: #b8b2a8;
-    --text-tertiary: #8a8278;
-    --text-disabled: #5c564e;
+  /* Dark Mode Text */
+  --text-primary: #f5f2ed;
+  --text-secondary: #b8b2a8;
+  --text-tertiary: #8a8278;
+  --text-disabled: #5c564e;
 
-    /* Dark Mode Borders */
-    --border-subtle: #3a3630;
-    --border-default: #4a4540;
-    --skeleton-base: #2A2A2A;
-    --skeleton-shimmer: #3A3A3A;
+  /* Dark Mode Borders */
+  --border-subtle: #3a3630;
+  --border-default: #4a4540;
+  --skeleton-base: #2A2A2A;
+  --skeleton-shimmer: #3A3A3A;
 
-    /* Dark Mode Semantic Colors */
-    --success: #4ade80;
-    --success-bg: #14532d;
-    --warning: #fbbf24;
-    --warning-bg: #713f12;
-    --danger: #f87171;
-    --danger-bg: #7f1d1d;
+  /* Dark Mode Semantic Colors */
+  --success: #4ade80;
+  --success-bg: #14532d;
+  --warning: #fbbf24;
+  --warning-bg: #713f12;
+  --danger: #f87171;
+  --danger-bg: #7f1d1d;
 
-    /* Dark Mode Surface Colors */
-    --color-overlay: rgba(0, 0, 0, 0.65);
-    --color-surface: var(--bg-surface);
-    --color-surface-raised: var(--bg-elevated);
-    --color-surface-subtle: var(--bg-subtle);
-    --color-border: var(--border-subtle);
-    --color-border-strong: var(--border-default);
+  /* Dark Mode Surface Colors */
+  --color-overlay: rgba(0, 0, 0, 0.65);
+  --color-surface: var(--bg-surface);
+  --color-surface-raised: var(--bg-elevated);
+  --color-surface-subtle: var(--bg-subtle);
+  --color-border: var(--border-subtle);
+  --color-border-strong: var(--border-default);
 
-    /* Dark Mode Focus */
-    --focus-ring-color: var(--brand-400);
-  }
+  /* Dark Mode Focus */
+  --focus-ring-color: var(--brand-400);
 }
 
 /* ============================================================
