@@ -8,7 +8,8 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, ChevronDown, ChevronUp, Pencil, Play, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, Pencil, Play, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
+import { DataImportSection } from "@/components/data-import-section";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 
@@ -1189,6 +1190,9 @@ export function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Data Import Section */}
+      <DataImportSection workspaceId={workspaceId} baseCurrency={baseCurrency} />
 
       {/* Header with Add Button */}
       <div className="st-header">
