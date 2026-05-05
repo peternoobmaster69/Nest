@@ -4486,6 +4486,296 @@ body {
   color: var(--warning);
 }
 
+/* Date Filter Bar - Compact pill-style */
+.tx-filter-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+@media (min-width: 768px) {
+  .tx-filter-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+}
+
+.tx-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .tx-filter-pills {
+    width: auto;
+  }
+}
+
+.tx-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--t);
+  white-space: nowrap;
+}
+
+.tx-filter-pill:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+/* This Month is active with OUTLINED green border */
+.tx-filter-pill.is-active {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+  background: var(--bg-elevated);
+}
+
+.tx-filter-pill-custom {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tx-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--t);
+  flex-shrink: 0;
+}
+
+.tx-filter-btn:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+/* Search Box */
+.tx-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .tx-search-box {
+    flex: 1;
+    max-width: 280px;
+    min-width: 160px;
+    width: auto;
+  }
+}
+
+.tx-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.tx-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 28px 0 32px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 400;
+  outline: none;
+  transition: all var(--t);
+}
+
+.tx-search-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.tx-search-input:focus {
+  border-color: var(--brand-400);
+  box-shadow: 0 0 0 3px var(--brand-100);
+}
+
+.tx-search-clear {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--t);
+  padding: 0 0 2px 0;
+}
+
+.tx-search-clear:hover {
+  background: var(--border-default);
+  color: var(--text-primary);
+}
+
+/* Custom Month Popover */
+.tx-popover-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+}
+
+.tx-month-popover {
+  position: fixed;
+  z-index: 999;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  min-width: 280px;
+  max-width: 320px;
+}
+
+.tx-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tx-popover-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.tx-popover-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.tx-popover-close:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.tx-popover-body {
+  padding: 12px 16px 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.tx-popover-year {
+  margin-bottom: 16px;
+}
+
+.tx-popover-year:last-child {
+  margin-bottom: 0;
+}
+
+.tx-popover-year-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.tx-popover-months {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.tx-popover-month {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.tx-popover-month:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* Current month has green dot indicator */
+.tx-popover-month.is-current {
+  position: relative;
+  padding-bottom: 8px;
+}
+
+.tx-popover-month.is-current::after {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-500);
+}
+
+/* Selected month has SOLID forest green background */
+.tx-popover-month.is-active {
+  background: var(--brand-500);
+  color: white;
+}
+
+.tx-popover-month.is-active.is-current::after {
+  display: none;
+}
+
 .inv-history-card {
   display: grid;
   gap: 10px;

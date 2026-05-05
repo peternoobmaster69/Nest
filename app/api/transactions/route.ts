@@ -37,6 +37,8 @@ export async function GET(request: Request) {
     const cursor = searchParams.get("cursor");
     const accountId = searchParams.get("accountId");
     const budgetId = searchParams.get("budgetId");
+    const fromDate = searchParams.get("from");
+    const toDate = searchParams.get("to");
     const wantsPaginatedResponse =
       searchParams.get("paginated") === "1" ||
       pageParam !== null ||
@@ -56,11 +58,23 @@ export async function GET(request: Request) {
       MAX_TRANSACTION_PAGE_LIMIT,
     );
     const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
-    const where = {
+    const where: Record<string, unknown> = {
       workspaceId,
       ...(accountId ? { accountId } : {}),
       ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
     };
+
+    if (fromDate || toDate) {
+      where.date = {};
+      if (fromDate) {
+        (where.date as Record<string, Date>).gte = new Date(fromDate);
+      }
+      if (toDate) {
+        const to = new Date(toDate);
+        to.setHours(23, 59, 59, 999);
+        (where.date as Record<string, Date>).lte = to;
+      }
+    }
     const select = {
       id: true,
       workspaceId: true,
@@ -95,7 +109,17 @@ export async function GET(request: Request) {
       });
       const hasMore = txs.length > limit;
       const pageItems = hasMore ? txs.slice(0, limit) : txs;
-      const [total] = await Promise.all([prisma.transaction.count({ where })]);
+      const [total, summary] = await Promise.all([
+        prisma.transaction.count({ where }),
+        prisma.transaction.groupBy({
+          by: ["direction"],
+          where,
+          _sum: { amountCents: true },
+        }),
+      ]);
+
+      const incomeCents = summary.find((s) => s.direction === "CREDIT")?._sum.amountCents ?? 0;
+      const expenseCents = summary.find((s) => s.direction === "DEBIT")?._sum.amountCents ?? 0;
 
       return NextResponse.json({
         transactions: pageItems.map((t) => ({
@@ -109,6 +133,10 @@ export async function GET(request: Request) {
         limit,
         hasMore,
         nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+        summary: {
+          incomeCents,
+          expenseCents,
+        },
       });
     }
 

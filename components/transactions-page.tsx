@@ -50,6 +50,10 @@ type TransactionsPageResponse = {
   limit: number;
   hasMore: boolean;
   nextCursor: string | null;
+  summary?: {
+    incomeCents: number;
+    expenseCents: number;
+  };
 };
 
 type Receivable = {
@@ -219,8 +223,104 @@ export function TransactionsPage() {
 
   const transactionAccountFilter = selectedBankId || "";
   const transactionBudgetFilter = activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "";
+
+  // Month/Year filter state
+  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>({});
+  const [activeQuickSelect, setActiveQuickSelect] = useState<string | null>("thisMonth");
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [isCustomMonthOpen, setIsCustomMonthOpen] = useState(false);
+  const customMonthBtnRef = useRef<HTMLDivElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // Initialize with "This Month" active
+  useEffect(() => {
+    if (activeQuickSelect === "thisMonth" && !dateFilter.from) {
+      setDateFilter(getDateRangeForQuickSelect("thisMonth"));
+    }
+  }, []);
+
+  const getDateRangeForQuickSelect = (type: string) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    switch (type) {
+      case "thisMonth": {
+        return {
+          from: new Date(year, month, 1).toISOString().split("T")[0],
+          to: new Date(year, month + 1, 0).toISOString().split("T")[0],
+        };
+      }
+      case "lastMonth": {
+        return {
+          from: new Date(year, month - 1, 1).toISOString().split("T")[0],
+          to: new Date(year, month, 0).toISOString().split("T")[0],
+        };
+      }
+      case "last3M": {
+        return {
+          from: new Date(year, month - 2, 1).toISOString().split("T")[0],
+          to: new Date(year, month + 1, 0).toISOString().split("T")[0],
+        };
+      }
+      case "thisYear": {
+        return {
+          from: new Date(year, 0, 1).toISOString().split("T")[0],
+          to: new Date(year, 11, 31).toISOString().split("T")[0],
+        };
+      }
+      default:
+        return {};
+    }
+  };
+
+  const handleQuickSelect = (type: string) => {
+    setActiveQuickSelect(type);
+    setSelectedMonth(null);
+    setDateFilter(getDateRangeForQuickSelect(type));
+  };
+
+  const handleCustomMonthSelect = (monthIndex: number, year: number) => {
+    setActiveQuickSelect("custom");
+    setSelectedMonth(monthIndex);
+    setSelectedYear(year);
+    setDateFilter({
+      from: new Date(year, monthIndex, 1).toISOString().split("T")[0],
+      to: new Date(year, monthIndex + 1, 0).toISOString().split("T")[0],
+    });
+    setIsCustomMonthOpen(false);
+  };
+
+  const handleMonthSelect = (monthIndex: number) => {
+    setActiveQuickSelect(null);
+    setSelectedMonth(monthIndex);
+    setDateFilter({
+      from: new Date(selectedYear, monthIndex, 1).toISOString().split("T")[0],
+      to: new Date(selectedYear, monthIndex + 1, 0).toISOString().split("T")[0],
+    });
+  };
+
+  const handleYearChange = (year: number) => {
+    setSelectedYear(year);
+    if (selectedMonth !== null) {
+      setDateFilter({
+        from: new Date(year, selectedMonth, 1).toISOString().split("T")[0],
+        to: new Date(year, selectedMonth + 1, 0).toISOString().split("T")[0],
+      });
+    }
+  };
+
+  const clearDateFilter = () => {
+    setActiveQuickSelect(null);
+    setSelectedMonth(null);
+    setDateFilter({});
+  };
+
   const transactions = useInfiniteQuery({
-    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter],
+    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, dateFilter.from, dateFilter.to],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
@@ -230,6 +330,8 @@ export function TransactionsPage() {
       if (pageParam) params.set("cursor", pageParam);
       if (transactionAccountFilter) params.set("accountId", transactionAccountFilter);
       if (transactionBudgetFilter) params.set("budgetId", transactionBudgetFilter);
+      if (dateFilter.from) params.set("from", dateFilter.from);
+      if (dateFilter.to) params.set("to", dateFilter.to);
       return fetchJson<TransactionsPageResponse>(`/api/transactions?${params.toString()}`);
     },
     initialPageParam: null as string | null,
@@ -598,8 +700,32 @@ export function TransactionsPage() {
   }, [budgets.data, editingTransaction]);
 
   const filteredTransactions = useMemo(() => {
-    return transactionList;
-  }, [transactionList]);
+    let result = transactionList;
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((tx) => tx.subject.toLowerCase().includes(query));
+    }
+    return result;
+  }, [transactionList, searchQuery]);
+
+  // Get summary from API response (first page has totals for all matching records)
+  const transactionSummary = transactionPages[0]?.summary ?? { incomeCents: 0, expenseCents: 0 };
+  const transactionStats = useMemo(() => {
+    const income = transactionSummary.incomeCents;
+    const expense = transactionSummary.expenseCents;
+    return { income, expense, net: income - expense };
+  }, [transactionSummary]);
+
+  const getPeriodLabel = () => {
+    if (activeQuickSelect === "thisMonth") return "This Month";
+    if (activeQuickSelect === "lastMonth") return "Last Month";
+    if (activeQuickSelect === "thisYear") return "This Year";
+    if (activeQuickSelect === "custom" && selectedMonth !== null) {
+      return `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
+    }
+    if (activeQuickSelect === "custom") return "Custom";
+    return "All Transactions";
+  };
 
   const totalBankBalanceCents = useMemo(
     () => (bankAccounts.data ?? []).reduce((sum, b) => sum + b.currentBalanceCents, 0),
@@ -1141,12 +1267,127 @@ export function TransactionsPage() {
         </div>
       </section>
 
+      {/* Month/Year Filter Bar */}
+      <div className="tx-filter-bar" ref={customMonthBtnRef}>
+        <div className="tx-filter-pills">
+          <button
+            type="button"
+            className={`tx-filter-pill ${activeQuickSelect === "thisMonth" ? "is-active" : ""}`}
+            onClick={() => handleQuickSelect("thisMonth")}
+          >
+            This Month
+          </button>
+          <button
+            type="button"
+            className={`tx-filter-pill ${activeQuickSelect === "lastMonth" ? "is-active" : ""}`}
+            onClick={() => handleQuickSelect("lastMonth")}
+          >
+            Last Month
+          </button>
+          <button
+            type="button"
+            className={`tx-filter-pill ${activeQuickSelect === null && !dateFilter.from ? "is-active" : ""}`}
+            onClick={() => {
+              setActiveQuickSelect(null);
+              setSelectedMonth(null);
+              setDateFilter({});
+            }}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            className={`tx-filter-pill tx-filter-pill-custom ${activeQuickSelect === "custom" ? "is-active" : ""}`}
+            onClick={() => setIsCustomMonthOpen(!isCustomMonthOpen)}
+          >
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style={{ marginRight: "4px" }}>
+              <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+            </svg>
+            Custom
+          </button>
+        </div>
+        <div className="tx-search-box">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" className="tx-search-icon">
+            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search transactions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="tx-search-input"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="tx-search-clear"
+              onClick={() => setSearchQuery("")}
+            >
+              ×
+            </button>
+          )}
+        </div>
+
+        {/* Custom Month Popover */}
+        {isCustomMonthOpen && typeof document !== "undefined" && createPortal(
+          <>
+            <div className="tx-popover-overlay" onClick={() => setIsCustomMonthOpen(false)} />
+            <div className="tx-month-popover">
+              <div className="tx-popover-header">
+                <h4>Select Month</h4>
+                <button type="button" className="tx-popover-close" onClick={() => setIsCustomMonthOpen(false)}>×</button>
+              </div>
+              <div className="tx-popover-body">
+                {/* Generate years from current year down to earliest transaction year (or 2020 as default) */}
+                {(() => {
+                  const currentYear = new Date().getFullYear();
+                  const earliestYear = transactionList.length > 0
+                    ? Math.min(2020, ...transactionList.map((tx) => new Date(tx.date).getFullYear()))
+                    : 2020;
+                  const yearsToShow = [];
+                  for (let year = currentYear; year >= earliestYear; year--) {
+                    yearsToShow.push(year);
+                  }
+                  return yearsToShow.map((year) => (
+                    <div key={year} className="tx-popover-year">
+                      <div className="tx-popover-year-label">{year}</div>
+                      <div className="tx-popover-months">
+                        {MONTH_NAMES.map((month, idx) => {
+                          const isCurrentMonth = year === new Date().getFullYear() && idx === new Date().getMonth();
+                          return (
+                            <button
+                              key={`${year}-${month}`}
+                              type="button"
+                              className={`tx-popover-month ${selectedMonth === idx && selectedYear === year && activeQuickSelect === "custom" ? "is-active" : ""} ${isCurrentMonth ? "is-current" : ""}`}
+                              onClick={() => handleCustomMonthSelect(idx, year)}
+                            >
+                              {month}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+      </div>
+
       <section ref={recentTransactionsRef} className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", marginBottom: "6px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 600 }}>Recent Transactions</div>
-          {transactionTotal > 0 ? (
-            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-              {filteredTransactions.length} of {transactionTotal}
+          <div style={{ fontSize: "13px", fontWeight: 600 }}>{getPeriodLabel()}</div>
+          {filteredTransactions.length > 0 ? (
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ color: "var(--amount-positive)" }}>{formatCents(transactionStats.income)}</span>
+              <span>-</span>
+              <span style={{ color: "var(--amount-negative)" }}>{formatCents(transactionStats.expense)}</span>
+              <span>=</span>
+              <span className={getAmountToneClass(transactionStats.net)}>
+                {transactionStats.net >= 0 ? "+" : ""}{formatCents(Math.abs(transactionStats.net))}
+              </span>
             </div>
           ) : null}
         </div>
