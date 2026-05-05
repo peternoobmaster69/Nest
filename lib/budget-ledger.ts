@@ -1,7 +1,7 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 export async function recalculateBudgetAvailableCents(
-  db: Prisma.TransactionClient,
+  db: Prisma.TransactionClient | PrismaClient,
   workspaceId: string,
   budgetId: string,
 ) {
@@ -19,9 +19,12 @@ export async function recalculateBudgetAvailableCents(
   let debitCents = 0;
   let creditCents = 0;
   for (const row of grouped) {
-    if (row.direction === "DEBIT") {
+    // Handle both naming conventions:
+    // "DEBIT" / "Outgoing" = money leaving (subtract)
+    // "CREDIT" / "Incoming" = money arriving (add)
+    if (row.direction === "DEBIT" || row.direction === "Outgoing") {
       debitCents += row._sum.amountCents ?? 0;
-    } else if (row.direction === "CREDIT") {
+    } else if (row.direction === "CREDIT" || row.direction === "Incoming") {
       creditCents += row._sum.amountCents ?? 0;
     }
   }
