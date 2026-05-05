@@ -29,6 +29,21 @@ export const viewport: Viewport = {
   themeColor: "#f5f2ed",
 };
 
+const themeScript = `
+(() => {
+  try {
+    const storageKey = "nest-theme";
+    const savedTheme = window.localStorage.getItem(storageKey);
+    const theme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch {
+    document.documentElement.setAttribute("data-theme", "light");
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -38,8 +53,9 @@ export default function RootLayout({
   startCreditTxnAutoAccountScheduler();
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

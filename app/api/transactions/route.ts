@@ -1,6 +1,7 @@
 import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -27,6 +28,17 @@ const CreateTransactionSchema = z.object({
 
 const MAX_TRANSACTION_PAGE_LIMIT = 100;
 const DEFAULT_TRANSACTION_PAGE_LIMIT = 50;
+const MONTH_FILTER_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function getMonthDateRange(monthKey: string) {
+  if (!MONTH_FILTER_PATTERN.test(monthKey)) return null;
+
+  const [year, month] = monthKey.split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+
+  return { start, end };
+}
 
 export async function GET(request: Request) {
   try {
@@ -39,13 +51,17 @@ export async function GET(request: Request) {
     const budgetId = searchParams.get("budgetId");
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
+    const monthKey = searchParams.get("month");
     const wantsPaginatedResponse =
       searchParams.get("paginated") === "1" ||
       pageParam !== null ||
       limitParam !== null ||
       cursor !== null ||
       accountId !== null ||
-      budgetId !== null;
+      budgetId !== null ||
+      monthKey !== null ||
+      fromDate !== null ||
+      toDate !== null;
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
@@ -53,15 +69,21 @@ export async function GET(request: Request) {
 
     await requireWorkspaceAccess(workspaceId);
 
+    const monthRange = monthKey && monthKey !== "ALL" ? getMonthDateRange(monthKey) : null;
+    if (monthKey && monthKey !== "ALL" && !monthRange) {
+      return NextResponse.json({ error: "month must be in YYYY-MM format" }, { status: 400 });
+    }
+
     const limit = Math.min(
       Math.max(Number.parseInt(limitParam || String(DEFAULT_TRANSACTION_PAGE_LIMIT), 10) || DEFAULT_TRANSACTION_PAGE_LIMIT, 1),
       MAX_TRANSACTION_PAGE_LIMIT,
     );
     const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
-    const where: Record<string, unknown> = {
+    const where: Prisma.TransactionWhereInput = {
       workspaceId,
       ...(accountId ? { accountId } : {}),
       ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
+      ...(monthRange ? { date: { gte: monthRange.start, lt: monthRange.end } } : {}),
     };
 
     if (fromDate || toDate) {

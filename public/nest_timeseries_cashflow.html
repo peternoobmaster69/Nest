@@ -1,0 +1,141 @@
+
+<style>
+  .root { padding: 1rem 0; font-family: var(--font-sans); }
+  .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px; }
+  .title { font-size: 15px; font-weight: 500; color: var(--color-text-primary); }
+  .filter-scroll { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 1.25rem; scrollbar-width: none; }
+  .filter-scroll::-webkit-scrollbar { display: none; }
+  .pill { flex-shrink: 0; font-size: 12px; padding: 5px 12px; border-radius: 99px; border: 0.5px solid var(--color-border-secondary); background: none; cursor: pointer; color: var(--color-text-secondary); transition: all 0.15s; }
+  .pill.active { background: #0F6E56; border-color: #0F6E56; color: #fff; }
+  .summary-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 1.25rem; }
+  .metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+  .metric-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .metric-val { font-size: 18px; font-weight: 500; }
+  .c-in { color: #1D9E75; }
+  .c-out { color: #E24B4A; }
+  .c-net-pos { color: #1D9E75; }
+  .c-net-neg { color: #E24B4A; }
+  .chart-wrap { position: relative; width: 100%; height: 280px; }
+  .legend { display: flex; gap: 14px; margin-bottom: 10px; font-size: 12px; color: var(--color-text-secondary); }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .leg-dot { width: 8px; height: 8px; border-radius: 2px; }
+</style>
+
+<div class="root">
+  <div class="top">
+    <div class="title">Cash flow over time</div>
+    <div class="legend">
+      <span><span class="leg-dot" style="background:#1D9E75"></span>In</span>
+      <span><span class="leg-dot" style="background:#E24B4A"></span>Out</span>
+      <span><span class="leg-dot" style="background:#378ADD;border-radius:50%"></span>Net</span>
+    </div>
+  </div>
+
+  <div class="filter-scroll" id="pills"></div>
+
+  <div class="summary-row">
+    <div class="metric"><div class="metric-label">Avg in</div><div class="metric-val c-in" id="avgIn"></div></div>
+    <div class="metric"><div class="metric-label">Avg out</div><div class="metric-val c-out" id="avgOut"></div></div>
+    <div class="metric"><div class="metric-label">Avg net</div><div class="metric-val" id="avgNet"></div></div>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="chart" role="img" aria-label="Time series line chart showing monthly cash flow in, out, and net for selected sub-account">Monthly cash flow chart.</canvas>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const accounts = ['All accounts','Business','Credit Cards','Expense','Global Savings','Housing Loan','Insurance','Loan','Media Team','Mom','Phone','Savings'];
+const MONTHS = ['Jun 25','Jul 25','Aug 25','Sep 25','Oct 25','Nov 25','Dec 25','Jan 26','Feb 26','Mar 26','Apr 26','May 26'];
+
+function seeded(s){ let x=Math.sin(s)*10000; return x-Math.floor(x); }
+function gen(acctIdx){
+  return MONTHS.map((_,mi)=>({
+    in:  Math.round(seeded(acctIdx*97+mi*13)*3800+300),
+    out: Math.round(seeded(acctIdx*53+mi*17)*3200+200)
+  }));
+}
+
+const rawData = {};
+accounts.forEach((a,i)=>{ rawData[a] = gen(i+1); });
+
+rawData['All accounts'] = MONTHS.map((_,mi)=>({
+  in:  accounts.slice(1).reduce((s,a)=>s+rawData[a][mi].in,0),
+  out: accounts.slice(1).reduce((s,a)=>s+rawData[a][mi].out,0)
+}));
+
+rawData['Credit Cards'][10] = {in:0,out:4530};
+rawData['Expense'][10] = {in:500,out:3200};
+rawData['Global Savings'][10] = {in:2000,out:300};
+
+let selected = 'All accounts';
+
+function fmt(n){ return '$'+(Math.abs(n)>=1000?(Math.abs(n)/1000).toFixed(1)+'k':Math.abs(n).toLocaleString()); }
+
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: MONTHS,
+    datasets: [
+      { label: 'In',  data: [], backgroundColor: 'rgba(29,158,117,0.7)', borderRadius: 3, order: 2 },
+      { label: 'Out', data: [], backgroundColor: 'rgba(226,75,74,0.7)',  borderRadius: 3, order: 2 },
+      { label: 'Net', data: [], type: 'line', borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.08)', pointBackgroundColor: '#378ADD', pointRadius: 4, pointHoverRadius: 6, tension: 0.35, fill: true, borderWidth: 2, order: 1 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: c => ` ${c.dataset.label}: ${c.raw<0?'-':''}${fmt(c.raw)}`
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { font:{size:11}, maxRotation:0 }, grid:{display:false} },
+      y: { ticks: { callback: v => (v<0?'-':'')+fmt(v), font:{size:11} }, grid:{color:'rgba(128,128,128,0.1)'} }
+    }
+  }
+});
+
+function updateChart(){
+  const d = rawData[selected];
+  const inVals  = d.map(m=>m.in);
+  const outVals = d.map(m=>-m.out);
+  const netVals = d.map(m=>m.in-m.out);
+
+  chart.data.datasets[0].data = inVals;
+  chart.data.datasets[1].data = outVals;
+  chart.data.datasets[2].data = netVals;
+  chart.update('active');
+
+  const avgIn  = Math.round(inVals.reduce((s,v)=>s+v,0)/inVals.length);
+  const avgOut = Math.round(d.map(m=>m.out).reduce((s,v)=>s+v,0)/d.length);
+  const avgNet = avgIn - avgOut;
+  document.getElementById('avgIn').textContent  = fmt(avgIn);
+  document.getElementById('avgOut').textContent = fmt(avgOut);
+  const el = document.getElementById('avgNet');
+  el.textContent = (avgNet>=0?'+':'-')+fmt(avgNet);
+  el.className = 'metric-val '+(avgNet>=0?'c-net-pos':'c-net-neg');
+}
+
+const pillContainer = document.getElementById('pills');
+accounts.forEach(a=>{
+  const btn = document.createElement('button');
+  btn.className = 'pill'+(a===selected?' active':'');
+  btn.textContent = a;
+  btn.onclick = ()=>{
+    selected = a;
+    document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    updateChart();
+  };
+  pillContainer.appendChild(btn);
+});
+
+updateChart();
+</script>

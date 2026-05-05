@@ -14,6 +14,8 @@ import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
+const ALL_BANKS_FILTER = "ALL";
+
 type AppContext = {
   workspaceId: string | null;
   baseCurrency?: string | null;
@@ -56,6 +58,14 @@ type TransactionsPageResponse = {
   };
 };
 
+type TransactionMonthSummary = {
+  monthKey: string;
+  monthLabel: string;
+  count: number;
+  incomeCents: number;
+  expenseCents: number;
+};
+
 type Receivable = {
   id: string;
   title: string;
@@ -90,6 +100,59 @@ function formatTransactionDate(dateString: string): string {
     return date.toLocaleDateString();
   }
   return date.toLocaleString();
+}
+
+// Month filter helpers - use UTC to avoid timezone shifts
+function formatMonthYear(year: number, month: number): string {
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function getMonthKey(dateString: string): string {
+  const date = new Date(dateString);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+type TransactionsByMonth = {
+  monthKey: string;
+  monthLabel: string;
+  transactions: Transaction[];
+  totalIncome: number;
+  totalExpense: number;
+};
+
+function groupTransactionsByMonth(transactions: Transaction[]): TransactionsByMonth[] {
+  const groups = new Map<string, TransactionsByMonth>();
+
+  transactions.forEach((tx) => {
+    const monthKey = getMonthKey(tx.date);
+    const [year, month] = monthKey.split("-").map(Number);
+
+    if (!groups.has(monthKey)) {
+      groups.set(monthKey, {
+        monthKey,
+        monthLabel: formatMonthYear(year, month),
+        transactions: [],
+        totalIncome: 0,
+        totalExpense: 0,
+      });
+    }
+
+    const group = groups.get(monthKey)!;
+    group.transactions.push(tx);
+    if (tx.direction === "CREDIT") {
+      group.totalIncome += tx.amountCents;
+    } else {
+      group.totalExpense += tx.amountCents;
+    }
+  });
+
+  return Array.from(groups.values()).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
 }
 
 function getBudgetIcon(name: string, icon?: string | null) {
@@ -162,6 +225,7 @@ export function TransactionsPage() {
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTransactionsRef = useRef<HTMLDivElement | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>("ALL"); // Format: "YYYY-MM" or "ALL"
 
   // Budget (sub-account) management modals
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
@@ -221,6 +285,19 @@ export function TransactionsPage() {
     enabled: Boolean(workspaceId),
   });
 
+  // Query for accurate month aggregation data (not paginated)
+  const transactionMonths = useQuery({
+    queryKey: ["transaction-months", workspaceId, selectedBankId, activeBudgetFilterId],
+    queryFn: () =>
+      fetchJson<{
+        months: TransactionMonthSummary[];
+        total: number;
+      }>(
+        `/api/transactions/months?workspaceId=${workspaceId}${selectedBankId ? `&accountId=${selectedBankId}` : ""}${activeBudgetFilterId !== "ALL" ? `&budgetId=${activeBudgetFilterId}` : ""}`,
+      ),
+    enabled: Boolean(workspaceId),
+  });
+
   const transactionAccountFilter = selectedBankId || "";
   const transactionBudgetFilter = activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "";
 
@@ -234,6 +311,13 @@ export function TransactionsPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // Convert dateFilter to month key format for API compatibility
+  const transactionMonthFilter = useMemo(() => {
+    if (!dateFilter.from) return "";
+    const date = new Date(dateFilter.from);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }, [dateFilter.from]);
 
   // Initialize with "This Month" active
   useEffect(() => {
@@ -258,12 +342,6 @@ export function TransactionsPage() {
         return {
           from: new Date(year, month - 1, 1).toISOString().split("T")[0],
           to: new Date(year, month, 0).toISOString().split("T")[0],
-        };
-      }
-      case "last3M": {
-        return {
-          from: new Date(year, month - 2, 1).toISOString().split("T")[0],
-          to: new Date(year, month + 1, 0).toISOString().split("T")[0],
         };
       }
       case "thisYear": {
@@ -294,25 +372,6 @@ export function TransactionsPage() {
     setIsCustomMonthOpen(false);
   };
 
-  const handleMonthSelect = (monthIndex: number) => {
-    setActiveQuickSelect(null);
-    setSelectedMonth(monthIndex);
-    setDateFilter({
-      from: new Date(selectedYear, monthIndex, 1).toISOString().split("T")[0],
-      to: new Date(selectedYear, monthIndex + 1, 0).toISOString().split("T")[0],
-    });
-  };
-
-  const handleYearChange = (year: number) => {
-    setSelectedYear(year);
-    if (selectedMonth !== null) {
-      setDateFilter({
-        from: new Date(year, selectedMonth, 1).toISOString().split("T")[0],
-        to: new Date(year, selectedMonth + 1, 0).toISOString().split("T")[0],
-      });
-    }
-  };
-
   const clearDateFilter = () => {
     setActiveQuickSelect(null);
     setSelectedMonth(null);
@@ -320,7 +379,7 @@ export function TransactionsPage() {
   };
 
   const transactions = useInfiniteQuery({
-    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, dateFilter.from, dateFilter.to],
+    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionMonthFilter],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
@@ -332,6 +391,7 @@ export function TransactionsPage() {
       if (transactionBudgetFilter) params.set("budgetId", transactionBudgetFilter);
       if (dateFilter.from) params.set("from", dateFilter.from);
       if (dateFilter.to) params.set("to", dateFilter.to);
+      if (transactionMonthFilter) params.set("month", transactionMonthFilter);
       return fetchJson<TransactionsPageResponse>(`/api/transactions?${params.toString()}`);
     },
     initialPageParam: null as string | null,
@@ -345,7 +405,6 @@ export function TransactionsPage() {
     () => transactionPages.flatMap((page) => page.transactions),
     [transactionPages],
   );
-  const transactionTotal = transactionPages[0]?.total ?? 0;
   const receivables = useQuery({
     queryKey: ["receivables", workspaceId],
     queryFn: () => fetchJson<Receivable[]>(`/api/receivables?workspaceId=${workspaceId}`),
@@ -377,8 +436,10 @@ export function TransactionsPage() {
   useEffect(() => {
     if (!txBankStorageKey) return;
     const saved = getBrowserCookie(txBankStorageKey);
-    if (saved) {
+    if (saved && saved !== ALL_BANKS_FILTER) {
       setSelectedBankId(saved);
+    } else {
+      setSelectedBankId("");
     }
     setBankFilterHydrated(true);
   }, [txBankStorageKey]);
@@ -391,8 +452,8 @@ export function TransactionsPage() {
   }, [bankAccounts.data, selectedBankId]);
 
   useEffect(() => {
-    if (!txBankStorageKey || !selectedBankId || !bankFilterHydrated) return;
-    setBrowserCookie(txBankStorageKey, selectedBankId);
+    if (!txBankStorageKey || !bankFilterHydrated) return;
+    setBrowserCookie(txBankStorageKey, selectedBankId || ALL_BANKS_FILTER);
   }, [txBankStorageKey, selectedBankId, bankFilterHydrated]);
 
   useEffect(() => {
@@ -485,6 +546,7 @@ export function TransactionsPage() {
       setTransactionDate("");
       setIsCreateModalOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
@@ -516,6 +578,7 @@ export function TransactionsPage() {
       setTransferSourceBudgetId("");
       setTransferDestinationBudgetId("");
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
@@ -608,6 +671,7 @@ export function TransactionsPage() {
       setEditTransactionDate("");
       setEditBudgetId("");
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
@@ -627,6 +691,7 @@ export function TransactionsPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
@@ -726,6 +791,22 @@ export function TransactionsPage() {
     if (activeQuickSelect === "custom") return "Custom";
     return "All Transactions";
   };
+
+  const transactionsByMonth = useMemo(() => {
+    return groupTransactionsByMonth(transactionList);
+  }, [transactionList]);
+
+  const transactionMonthSummaryByKey = useMemo(() => {
+    return new Map((transactionMonths.data?.months ?? []).map((month) => [month.monthKey, month]));
+  }, [transactionMonths.data?.months]);
+
+  useEffect(() => {
+    if (selectedMonthFilter === "ALL" || transactionMonths.isLoading) return;
+    const monthStillAvailable = transactionMonths.data?.months.some((month) => month.monthKey === selectedMonthFilter);
+    if (!monthStillAvailable) {
+      setSelectedMonthFilter("ALL");
+    }
+  }, [selectedMonthFilter, transactionMonths.data?.months, transactionMonths.isLoading]);
 
   const totalBankBalanceCents = useMemo(
     () => (bankAccounts.data ?? []).reduce((sum, b) => sum + b.currentBalanceCents, 0),
@@ -1391,7 +1472,7 @@ export function TransactionsPage() {
             </div>
           ) : null}
         </div>
-        <div className="simple-list">
+        <div className="simple-list tx-month-groups">
           {transactions.isLoading && <TransactionsListSkeleton />}
 
           {transactions.isError && (
@@ -1404,38 +1485,63 @@ export function TransactionsPage() {
             </div>
           )}
 
-          {!transactions.isLoading && !transactions.isError && filteredTransactions.map((tx) => {
-            const isDeleting = deletingTransactionIds.includes(tx.id);
-            const isIncome = tx.direction === "CREDIT";
-            const signedAmount = isIncome ? tx.amountCents : -tx.amountCents;
+          {!transactions.isLoading && !transactions.isError && transactionsByMonth.map((monthGroup) => {
+            const monthSummary = transactionMonthSummaryByKey.get(monthGroup.monthKey);
+            const totalIncome = monthSummary?.incomeCents ?? monthGroup.totalIncome;
+            const totalExpense = monthSummary?.expenseCents ?? monthGroup.totalExpense;
+            const transactionCount = monthSummary?.count ?? monthGroup.transactions.length;
+
             return (
-            <div
-              key={tx.id}
-              className={`crud-row tx-recent-row${isDeleting ? " crud-row-deleting" : ""}`}
-              onClick={() => !isDeleting && beginEdit(tx)}
-              onKeyDown={(event) => {
-                if (isDeleting) return;
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  beginEdit(tx);
-                }
-              }}
-              role="button"
-              tabIndex={isDeleting ? -1 : 0}
-              aria-label={`Edit transaction ${tx.subject}`}
-            >
-              <div className={`tx-recent-arrow ${isIncome ? "income" : "expense"}`}>
-                {isIncome ? "→" : "←"}
+            <div key={monthGroup.monthKey} className="tx-month-group">
+              <div className="tx-month-header">
+                <span className="tx-month-label">{monthGroup.monthLabel}</span>
+                <div className="tx-month-summary">
+                  {totalIncome > 0 && (
+                    <span className="tx-month-income">+{formatCents(totalIncome)}</span>
+                  )}
+                  {totalExpense > 0 && (
+                    <span className="tx-month-expense">−{formatCents(totalExpense)}</span>
+                  )}
+                </div>
               </div>
-              <div className="tx-recent-main">
-                <span className="tx-recent-subject">{tx.subject}</span>
-                <span className={`tx-recent-amount ${getAmountToneClass(signedAmount)}`}>
-                  {isIncome ? "+" : "−"}{formatCents(tx.amountCents)}
-                </span>
-                <span className="tx-recent-date">{formatTransactionDate(tx.date)}</span>
+              <div className="tx-month-list">
+                {monthGroup.transactions.map((tx) => {
+                  const isDeleting = deletingTransactionIds.includes(tx.id);
+                  const isIncome = tx.direction === "CREDIT";
+                  const signedAmount = isIncome ? tx.amountCents : -tx.amountCents;
+                  return (
+                    <div
+                      key={tx.id}
+                      className={`crud-row tx-recent-row${isDeleting ? " crud-row-deleting" : ""}`}
+                      onClick={() => !isDeleting && beginEdit(tx)}
+                      onKeyDown={(event) => {
+                        if (isDeleting) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          beginEdit(tx);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={isDeleting ? -1 : 0}
+                      aria-label={`Edit transaction ${tx.subject}`}
+                    >
+                      <div className={`tx-recent-arrow ${isIncome ? "income" : "expense"}`}>
+                        {isIncome ? "→" : "←"}
+                      </div>
+                      <div className="tx-recent-main">
+                        <span className="tx-recent-subject">{tx.subject}</span>
+                        <span className={`tx-recent-amount ${getAmountToneClass(signedAmount)}`}>
+                          {isIncome ? "+" : "−"}{formatCents(tx.amountCents)}
+                        </span>
+                        <span className="tx-recent-date">{formatTransactionDate(tx.date)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          )})}
+            );
+          })}
           {!transactions.isLoading && !transactions.isError && transactions.hasNextPage ? (
             <div ref={loadMoreTransactionsRef} style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
               <button
@@ -1448,11 +1554,11 @@ export function TransactionsPage() {
               </button>
             </div>
           ) : null}
-          {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
+          {!transactions.isLoading && !transactions.isError && transactionList.length === 0 && (
             <EmptyState
               icon="📑"
-              title="No transactions yet"
-              description={selectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
+              title="No transactions"
+              description={selectedMonthFilter !== "ALL" ? "No transactions for this month." : selectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
               action={
                 <button className="btn btn-primary" onClick={openCreateModal}>
                   + Add Transaction

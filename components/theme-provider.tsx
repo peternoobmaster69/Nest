@@ -3,6 +3,7 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
+const THEME_STORAGE_KEY = "nest-theme";
 
 interface ThemeContextType {
   theme: Theme;
@@ -14,33 +15,50 @@ const ThemeContext = createContext<ThemeContextType>({
   toggleTheme: () => {},
 });
 
+function getStoredTheme(): Theme | null {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY);
+  if (saved === "light" || saved === "dark") return saved;
+  localStorage.removeItem(THEME_STORAGE_KEY);
+  return null;
+}
+
+function getSystemTheme(): Theme {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem("nest-theme") as Theme | null;
-    if (saved) {
-      setTheme(saved);
-      document.documentElement.setAttribute("data-theme", saved);
-    } else {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const initialTheme = prefersDark ? "dark" : "light";
-      setTheme(initialTheme);
-      document.documentElement.setAttribute("data-theme", initialTheme);
-    }
+    const saved = getStoredTheme();
+    const initialTheme = saved ?? getSystemTheme();
+    setTheme(initialTheme);
+    applyTheme(initialTheme);
+
+    if (saved) return;
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleSystemThemeChange = () => {
+      const nextTheme = getSystemTheme();
+      setTheme(nextTheme);
+      applyTheme(nextTheme);
+    };
+
+    media.addEventListener("change", handleSystemThemeChange);
+    return () => media.removeEventListener("change", handleSystemThemeChange);
   }, []);
 
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.setAttribute("data-theme", theme);
-      localStorage.setItem("nest-theme", theme);
-    }
-  }, [theme, mounted]);
-
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+    setTheme((prev) => {
+      const nextTheme = prev === "light" ? "dark" : "light";
+      applyTheme(nextTheme);
+      localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+      return nextTheme;
+    });
   };
 
   return (

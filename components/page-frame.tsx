@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ReactNode } from "react";
+import Link from "next/link";
+import { Home } from "lucide-react";
 import { AppSidebar } from "./app-sidebar";
 import {
   DATABASE_UNAVAILABLE_CODE,
@@ -112,7 +114,23 @@ export function PageFrame({
               <span></span>
               <span></span>
             </button>
-            <div className="tb-title">{title}</div>
+            {current === "/" ? (
+              <div className="tb-title">{title}</div>
+            ) : (
+              <nav className="tb-breadcrumb" aria-label="Breadcrumb">
+                <ol className="breadcrumb-list">
+                  <li className="breadcrumb-item">
+                    <Link href="/" className="breadcrumb-link" aria-label="Home">
+                      <Home size={16} strokeWidth={1.5} />
+                    </Link>
+                  </li>
+                  <li className="breadcrumb-separator" aria-hidden="true">/</li>
+                  <li className="breadcrumb-item">
+                    <span className="breadcrumb-current">{title}</span>
+                  </li>
+                </ol>
+              </nav>
+            )}
           </div>
         </header>
 
