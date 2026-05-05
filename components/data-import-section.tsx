@@ -39,6 +39,7 @@ type ChunkResult = {
   processedCount: number;
   remainingCount: number;
   isComplete: boolean;
+  recalculated?: boolean;
 };
 
 interface ImportPreview {
@@ -48,6 +49,17 @@ interface ImportPreview {
   errors: string[];
   transactions: unknown[];
 }
+
+type RecalculateResult = {
+  recalculated: number;
+  budgets: Array<{
+    id: string;
+    name: string;
+    previousCents: number;
+    newCents: number;
+    difference: number;
+  }>;
+};
 
 const CHUNK_SIZE = 25; // Process 25 records at a time
 
@@ -87,19 +99,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
 
   // Recalculate state
   const [isRecalculating, setIsRecalculating] = useState(false);
-  const [recalcResult, setRecalcResult] = useState<
-    | null
-    | {
-        recalculated: number;
-        budgets: Array<{
-          id: string;
-          name: string;
-          previousCents: number;
-          newCents: number;
-          difference: number;
-        }>;
-      }
-  >(null);
+  const [recalcResult, setRecalcResult] = useState<RecalculateResult | null>(null);
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -187,6 +187,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     setJsonInput(value);
     setPreview(validateJson(value));
     setMessage("");
+    setRecalcResult(null);
   };
 
   const importChunk = useCallback(async (
@@ -205,9 +206,30 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         transactions,
         chunkIndex,
         chunkSize,
+        recalculate: false,
       }),
     });
   }, [activeWorkspaceId, selectedAccountId, selectedBudgetId, kind]);
+
+  const invalidateFinancialQueries = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["budgets"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+  }, [queryClient]);
+
+  const recalculateBudget = useCallback(
+    (budgetId: string) =>
+      fetchJson<RecalculateResult & { success: boolean }>("/api/budgets/recalculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: activeWorkspaceId,
+          budgetId,
+        }),
+      }),
+    [activeWorkspaceId],
+  );
 
   const handleImport = async () => {
     if (!activeWorkspaceId || !selectedAccountId || !selectedBudgetId) {
@@ -221,6 +243,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
 
     setIsImporting(true);
     setMessage("");
+    setRecalcResult(null);
     setProgress({
       current: 0,
       total: preview.transactions.length,
@@ -237,6 +260,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       let totalDuplicates = 0;
       let totalFailed = 0;
       const allErrors: string[] = [];
+      const targetBudgetId = selectedBudgetId;
 
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
         const startIndex = chunkIndex * CHUNK_SIZE;
@@ -265,17 +289,24 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         });
       }
 
-      setMessage(`Import complete! Imported ${totalImported} transactions. ${totalDuplicates} duplicates skipped. ${totalFailed} failed.`);
+      let recalculationMessage = "";
+      if (totalImported > 0) {
+        setIsRecalculating(true);
+        try {
+          const recalculated = await recalculateBudget(targetBudgetId);
+          setRecalcResult(recalculated);
+          recalculationMessage = ` Budget recalculated (${recalculated.budgets.length} updated).`;
+        } catch (error) {
+          recalculationMessage = ` Recalculation failed: ${error instanceof Error ? error.message : "Unknown error"}`;
+        } finally {
+          setIsRecalculating(false);
+        }
+      }
+
+      setMessage(`Import complete! Imported ${totalImported} transactions. ${totalDuplicates} duplicates skipped. ${totalFailed} failed.${recalculationMessage}`);
       setJsonInput("");
       setPreview(null);
-      setSelectedAccountId("");
-      setSelectedBudgetId("");
-
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      invalidateFinancialQueries();
     } catch (error) {
       setMessage(`Import failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
@@ -294,10 +325,11 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     selectedBudgetId &&
     preview &&
     preview.valid > 0 &&
-    !isImporting;
+    !isImporting &&
+    !isRecalculating;
 
   // Determine if recalculate button should be enabled
-  const canRecalculate = activeWorkspaceId && selectedBudgetId && !isRecalculating;
+  const canRecalculate = activeWorkspaceId && selectedBudgetId && !isImporting && !isRecalculating;
 
   // Calculate progress percentage
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
@@ -314,32 +346,12 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     setRecalcResult(null);
 
     try {
-      const result = await fetchJson<{
-        success: boolean;
-        recalculated: number;
-        budgets: Array<{
-          id: string;
-          name: string;
-          previousCents: number;
-          newCents: number;
-          difference: number;
-        }>;
-      }>("/api/budgets/recalculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
-          budgetId: selectedBudgetId,
-        }),
-      });
+      const result = await recalculateBudget(selectedBudgetId);
 
       setRecalcResult(result);
       setMessage(`Budget recalculated! ${result.budgets.length} budget(s) updated.`);
 
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      invalidateFinancialQueries();
     } catch (error) {
       setMessage(`Recalculation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
@@ -377,6 +389,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
                 setSelectedWorkspaceId(e.target.value);
                 setSelectedAccountId("");
                 setSelectedBudgetId("");
+                setRecalcResult(null);
               }}
               disabled={!!workspaceId && workspaces.length === 1}
             >
@@ -407,8 +420,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
             onChange={(e) => {
               setSelectedAccountId(e.target.value);
               setSelectedBudgetId("");
+              setRecalcResult(null);
             }}
-            disabled={!activeWorkspaceId || accounts.isLoading || isImporting}
+            disabled={!activeWorkspaceId || accounts.isLoading || isImporting || isRecalculating}
           >
             <option value="">Select bank account</option>
             {activeAccounts.map((account) => (
@@ -427,8 +441,11 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
           <select
             className="input"
             value={selectedBudgetId}
-            onChange={(e) => setSelectedBudgetId(e.target.value)}
-            disabled={!selectedAccountId || budgets.isLoading || isImporting}
+            onChange={(e) => {
+              setSelectedBudgetId(e.target.value);
+              setRecalcResult(null);
+            }}
+            disabled={!selectedAccountId || budgets.isLoading || isImporting || isRecalculating}
           >
             <option value="">Select sub account</option>
             {activeBudgets.map((budget) => (
@@ -607,12 +624,16 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
             borderRadius: "6px",
             fontSize: "12px",
             backgroundColor: message.includes("complete")
-              ? "var(--success-50)"
+              ? message.includes("failed")
+                ? "var(--danger-50)"
+                : "var(--success-50)"
               : message.includes("failed")
               ? "var(--danger-50)"
               : "var(--bg-secondary)",
             color: message.includes("complete")
-              ? "var(--success-700)"
+              ? message.includes("failed")
+                ? "var(--danger-700)"
+                : "var(--success-700)"
               : message.includes("failed")
               ? "var(--danger-700)"
               : "var(--text-secondary)",
@@ -684,7 +705,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         <strong>Expected JSON format:</strong>
         <ul style={{ margin: "8px 0 0 0", paddingLeft: "16px" }}>
           <li>
-            <code>Direction</code>: "DEBIT" (outgoing) or "CREDIT" (incoming)
+            <code>Direction</code>: &quot;DEBIT&quot; (outgoing) or &quot;CREDIT&quot; (incoming)
           </li>
           <li>
             <code>Subject</code>: Transaction description

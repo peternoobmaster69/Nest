@@ -1,12 +1,13 @@
 import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 // Schema for a single imported transaction
 const ImportedTransactionSchema = z.object({
-  AccountName: z.string().min(1),
+  AccountName: z.string().min(1).optional(),
   Direction: z.enum(["DEBIT", "CREDIT"]),
   Subject: z.string().min(1),
   Date: z.string(), // Accepts various date formats (YYYY-MM-DD or ISO)
@@ -22,8 +23,9 @@ const BulkImportSchema = z.object({
   budgetId: z.string().min(1),
   kind: z.string().default("Migration"),
   transactions: z.array(ImportedTransactionSchema).min(1).max(1000), // Max 1000 at a time
-  chunkIndex: z.number().int().min(0).optional(), // For chunked processing
-  chunkSize: z.number().int().min(1).max(100).optional(), // Max 100 per chunk
+  chunkIndex: z.number().int().min(0).optional(),
+  chunkSize: z.number().int().min(1).max(1000).optional(),
+  recalculate: z.boolean().default(true),
 });
 
 type ImportedTransaction = z.infer<typeof ImportedTransactionSchema>;
@@ -44,41 +46,55 @@ function normalizeDate(dateInput: string): Date {
   return new Date(trimmed);
 }
 
+function getUtcDayRange(date: Date) {
+  const start = new Date(date);
+  start.setUTCHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  return { start, end };
+}
+
+function getDuplicateKey(date: Date, subject: string, amountCents: number) {
+  return `${getUtcDayRange(date).start.toISOString().slice(0, 10)}|${subject.trim()}|${amountCents}`;
+}
+
 function normalizeDirection(direction: string): "DEBIT" | "CREDIT" {
   // DEBIT = money going out, CREDIT = money coming in
   // Store as DEBIT/CREDIT to match existing transaction pattern
   return direction === "DEBIT" ? "DEBIT" : "CREDIT";
 }
 
-async function checkDuplicate(
+async function getExistingDuplicateKeys(
   workspaceId: string,
   accountId: string,
   budgetId: string,
-  tx: ImportedTransaction,
-): Promise<boolean> {
-  const normalizedDate = normalizeDate(tx.Date);
-  // Check for duplicate: same date (day), subject, and amount
-  const startOfDay = new Date(normalizedDate);
-  startOfDay.setUTCHours(0, 0, 0, 0);
-  const endOfDay = new Date(normalizedDate);
-  endOfDay.setUTCHours(23, 59, 59, 999);
+  transactions: Array<{ date: Date; subject: string; amountCents: number }>,
+) {
+  if (transactions.length === 0) return new Set<string>();
 
-  const existing = await prisma.transaction.findFirst({
+  const existing = await prisma.transaction.findMany({
     where: {
       workspaceId,
       accountId,
       budgetId,
-      date: {
-        gte: startOfDay,
-        lte: endOfDay,
-      },
-      subject: tx.Subject.trim(),
-      amountCents: tx.AmountCents,
+      OR: transactions.map((tx) => {
+        const { start, end } = getUtcDayRange(tx.date);
+        return {
+          date: {
+            gte: start,
+            lt: end,
+          },
+          subject: tx.subject,
+          amountCents: tx.amountCents,
+        };
+      }),
     },
-    select: { id: true },
+    select: { date: true, subject: true, amountCents: true },
   });
 
-  return existing !== null;
+  return new Set(existing.map((tx) => getDuplicateKey(tx.date, tx.subject, tx.amountCents)));
 }
 
 export async function POST(request: Request) {
@@ -90,20 +106,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { workspaceId, accountId, budgetId, kind, transactions, chunkIndex, chunkSize } = parsed.data;
+    const { workspaceId, accountId, budgetId, kind, transactions, chunkIndex, chunkSize, recalculate } = parsed.data;
 
     await requireWorkspaceAccess(workspaceId);
-
-    // Handle chunked processing
-    const totalTransactions = transactions.length;
-    const actualChunkSize = chunkSize || totalTransactions;
-    const actualChunkIndex = chunkIndex ?? 0;
-    const startIndex = actualChunkIndex * actualChunkSize;
-    const endIndex = Math.min(startIndex + actualChunkSize, totalTransactions);
-    const isChunked = chunkSize !== undefined && chunkSize < totalTransactions;
-
-    // Get the slice to process
-    const transactionsToProcess = isChunked ? transactions.slice(startIndex, endIndex) : transactions;
 
     // Validate account belongs to workspace
     const account = await prisma.financialAccount.findFirst({
@@ -137,15 +142,15 @@ export async function POST(request: Request) {
       errors: [],
     };
 
-    // Process each transaction - checking duplicates first
+    // Process exactly the transactions in this request. The client owns chunking.
     const toImport: Array<{
       tx: ImportedTransaction;
       direction: "DEBIT" | "CREDIT";
       date: Date;
-      isDuplicate: boolean;
+      subject: string;
     }> = [];
 
-    for (const tx of transactionsToProcess) {
+    for (const tx of transactions) {
       try {
         const date = normalizeDate(tx.Date);
         if (isNaN(date.getTime())) {
@@ -153,89 +158,78 @@ export async function POST(request: Request) {
         }
 
         const direction = normalizeDirection(tx.Direction);
-        const isDuplicate = await checkDuplicate(workspaceId, accountId, budgetId, tx);
+        const subject = tx.Subject.trim();
 
-        toImport.push({ tx, direction, date, isDuplicate });
-        if (isDuplicate) {
-          result.duplicates++;
-        }
+        toImport.push({ tx, direction, date, subject });
       } catch (error) {
         result.failed++;
         result.errors.push(`${tx.Subject}: ${error instanceof Error ? error.message : "Unknown error"}`);
       }
     }
 
-    // Now import non-duplicate transactions one by one to track success
-    const nonDuplicates = toImport.filter((item) => !item.isDuplicate);
+    const existingDuplicateKeys = await getExistingDuplicateKeys(
+      workspaceId,
+      accountId,
+      budgetId,
+      toImport.map((item) => ({
+        date: item.date,
+        subject: item.subject,
+        amountCents: item.tx.AmountCents,
+      })),
+    );
+    const seenImportKeys = new Set<string>();
+    const nonDuplicates = toImport.filter((item) => {
+      const duplicateKey = getDuplicateKey(item.date, item.subject, item.tx.AmountCents);
+      if (existingDuplicateKeys.has(duplicateKey) || seenImportKeys.has(duplicateKey)) {
+        result.duplicates++;
+        return false;
+      }
+      seenImportKeys.add(duplicateKey);
+      return true;
+    });
 
     if (nonDuplicates.length > 0) {
-      // Generate IDs and create transactions individually to track success/failure
-      const createPromises = nonDuplicates.map((item) => {
-        const id = crypto.randomUUID?.() || `tx-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        return prisma.transaction
-          .create({
-            data: {
-              id,
-              workspaceId,
-              accountId,
-              budgetId,
-              kind,
-              direction: item.direction,
-              date: item.date,
-              amountCents: item.tx.AmountCents,
-              subject: item.tx.Subject.trim(),
-              details: item.tx.Details?.trim() || null,
-              notes: item.tx.Notes?.trim() || null,
-              isSynced: false,
-              isFromFamily: false,
-            },
-          })
-          .then(() => ({ success: true, subject: item.tx.Subject }))
-          .catch((error) => ({ success: false, subject: item.tx.Subject, error: error instanceof Error ? error.message : "Unknown error" }));
-      });
+      const data: Prisma.TransactionCreateManyInput[] = nonDuplicates.map((item) => ({
+        workspaceId,
+        accountId,
+        budgetId,
+        kind,
+        direction: item.direction,
+        date: item.date,
+        amountCents: item.tx.AmountCents,
+        subject: item.subject,
+        details: item.tx.Details?.trim() || null,
+        notes: item.tx.Notes?.trim() || null,
+        isSynced: false,
+        isFromFamily: false,
+      }));
 
-      // Type guard for failed result
-      const isFailedResult = (r: { success: boolean; subject: string; error?: string }): r is { success: false; subject: string; error: string } =>
-        !r.success;
-
-      const results = await Promise.allSettled(createPromises);
-
-      // Count successful imports
-      let importedCount = 0;
-      for (const resultItem of results) {
-        if (resultItem.status === "fulfilled") {
-          if (resultItem.value.success) {
-            importedCount++;
-          } else if (isFailedResult(resultItem.value)) {
-            result.failed++;
-            result.errors.push(`${resultItem.value.subject}: ${resultItem.value.error}`);
+      try {
+        const createResult = await prisma.$transaction(async (db) => {
+          const created = await db.transaction.createMany({ data });
+          if (recalculate && created.count > 0) {
+            await recalculateBudgetAvailableCents(db, workspaceId, budgetId);
           }
-        } else {
-          result.failed++;
-          result.errors.push("Transaction creation failed: " + String(resultItem.reason));
-        }
+          return created;
+        });
+        result.imported = createResult.count;
+      } catch (error) {
+        result.failed += nonDuplicates.length;
+        result.errors.push(`Transaction creation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
       }
-
-      result.imported = importedCount;
-    }
-
-    // Only recalculate budget on the last chunk or when there are imports
-    const isLastChunk = !isChunked || endIndex >= totalTransactions;
-
-    if (result.imported > 0 && isLastChunk) {
-      await recalculateBudgetAvailableCents(prisma, workspaceId, budgetId);
     }
 
     return NextResponse.json({
       success: true,
       ...result,
       total: transactions.length,
-      chunked: isChunked,
-      chunkIndex: actualChunkIndex,
-      chunkSize: actualChunkSize,
-      processedCount: endIndex,
-      remainingCount: Math.max(0, totalTransactions - endIndex),
-      isComplete: isLastChunk,
+      chunked: chunkIndex !== undefined || chunkSize !== undefined,
+      chunkIndex: chunkIndex ?? 0,
+      chunkSize: chunkSize ?? transactions.length,
+      processedCount: transactions.length,
+      remainingCount: 0,
+      isComplete: true,
+      recalculated: recalculate && result.imported > 0,
     }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
