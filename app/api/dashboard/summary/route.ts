@@ -7,6 +7,14 @@ const DASHBOARD_CACHE_HEADERS = {
   "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
 };
 
+function getMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getMonthLabel(date: Date) {
+  return date.toLocaleDateString("en-SG", { month: "short", year: "2-digit" });
+}
+
 export async function GET() {
   try {
     const { workspaceId } = await requireWorkspaceAccess();
@@ -14,6 +22,11 @@ export async function GET() {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const cashFlowMonthStarts = Array.from(
+      { length: 12 },
+      (_, index) => new Date(now.getFullYear(), now.getMonth() - index, 1),
+    );
+    const cashFlowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
     const [
       budgets,
@@ -22,6 +35,7 @@ export async function GET() {
       transactions,
       bankConsistency,
       creditCardTransactions,
+      cashFlowTransactions,
     ] = await Promise.all([
       prisma.budgetEnvelope.findMany({
         where: { workspaceId },
@@ -78,6 +92,22 @@ export async function GET() {
         },
         orderBy: {
           paymentDueDate: "asc",
+        },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          workspaceId,
+          date: {
+            gte: cashFlowStart,
+            lt: nextMonthStart,
+          },
+        },
+        select: {
+          accountId: true,
+          budgetId: true,
+          direction: true,
+          date: true,
+          amountCents: true,
         },
       }),
     ]);
@@ -154,6 +184,78 @@ export async function GET() {
       return diffDays >= 0 && diffDays <= 7;
     }).length;
 
+    const cashFlowByMonth = new Map<string, {
+      inflowCents: number;
+      outflowCents: number;
+      accounts: Map<string, { inflowCents: number; outflowCents: number }>;
+      budgets: Map<string, { inflowCents: number; outflowCents: number }>;
+    }>();
+    for (const month of cashFlowMonthStarts) {
+      cashFlowByMonth.set(getMonthKey(month), {
+        inflowCents: 0,
+        outflowCents: 0,
+        accounts: new Map(),
+        budgets: new Map(),
+      });
+    }
+    for (const tx of cashFlowTransactions) {
+      const month = cashFlowByMonth.get(getMonthKey(tx.date));
+      if (!month) continue;
+
+      const account = month.accounts.get(tx.accountId) ?? { inflowCents: 0, outflowCents: 0 };
+      const budget = tx.budgetId
+        ? month.budgets.get(tx.budgetId) ?? { inflowCents: 0, outflowCents: 0 }
+        : null;
+      if (tx.direction === "CREDIT") {
+        month.inflowCents += tx.amountCents;
+        account.inflowCents += tx.amountCents;
+        if (budget) budget.inflowCents += tx.amountCents;
+      } else {
+        month.outflowCents += tx.amountCents;
+        account.outflowCents += tx.amountCents;
+        if (budget) budget.outflowCents += tx.amountCents;
+      }
+      month.accounts.set(tx.accountId, account);
+      if (tx.budgetId && budget) month.budgets.set(tx.budgetId, budget);
+    }
+
+    const cashFlow = cashFlowMonthStarts.map((month) => {
+      const key = getMonthKey(month);
+      const data = cashFlowByMonth.get(key) ?? {
+        inflowCents: 0,
+        outflowCents: 0,
+        accounts: new Map(),
+        budgets: new Map(),
+      };
+      return {
+        key,
+        label: getMonthLabel(month),
+        inflowCents: data.inflowCents,
+        outflowCents: data.outflowCents,
+        netCents: data.inflowCents - data.outflowCents,
+        accounts: Object.fromEntries(
+          [...data.accounts.entries()].map(([accountId, account]) => [
+            accountId,
+            {
+              inflowCents: account.inflowCents,
+              outflowCents: account.outflowCents,
+              netCents: account.inflowCents - account.outflowCents,
+            },
+          ]),
+        ),
+        budgets: Object.fromEntries(
+          [...data.budgets.entries()].map(([budgetId, budget]) => [
+            budgetId,
+            {
+              inflowCents: budget.inflowCents,
+              outflowCents: budget.outflowCents,
+              netCents: budget.inflowCents - budget.outflowCents,
+            },
+          ]),
+        ),
+      };
+    });
+
     return NextResponse.json(
       {
         totalBalanceCents: totalBankBalance,
@@ -182,6 +284,7 @@ export async function GET() {
           overdueCount,
           dueSoonCount,
         },
+        cashFlow,
       },
       { headers: DASHBOARD_CACHE_HEADERS },
     );
@@ -193,6 +296,7 @@ export async function GET() {
           bankDiscrepancies: [],
           budgets: [],
           recentTransactions: [],
+          cashFlow: [],
         });
       }
       return NextResponse.json({ error: err.message }, { status: err.status });
@@ -203,6 +307,7 @@ export async function GET() {
         bankDiscrepancies: [],
         budgets: [],
         recentTransactions: [],
+        cashFlow: [],
         error: err instanceof Error ? err.message : "Unknown error",
       },
       { status: 500 },

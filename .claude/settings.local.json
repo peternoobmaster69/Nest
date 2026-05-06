@@ -4,6 +4,7 @@
       "Bash(git stash *)",
       "Bash(git pull *)",
       "Bash(npm run *)",
+      "Bash(npx next *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)"

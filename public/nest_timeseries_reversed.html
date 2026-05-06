@@ -15,8 +15,8 @@
   .c-out { color: #E24B4A; }
   .c-net-pos { color: #1D9E75; }
   .c-net-neg { color: #E24B4A; }
-  .chart-wrap { position: relative; width: 100%; height: 280px; }
-  .legend { display: flex; gap: 14px; margin-bottom: 10px; font-size: 12px; color: var(--color-text-secondary); }
+  .chart-wrap { position: relative; width: 100%; height: 320px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--color-text-secondary); }
   .legend span { display: flex; align-items: center; gap: 5px; }
   .leg-dot { width: 8px; height: 8px; border-radius: 2px; }
 </style>
@@ -40,82 +40,136 @@
   </div>
 
   <div class="chart-wrap">
-    <canvas id="chart" role="img" aria-label="Time series line chart showing monthly cash flow in, out, and net for selected sub-account">Monthly cash flow chart.</canvas>
+    <canvas id="chart"></canvas>
   </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 const accounts = ['All accounts','Business','Credit Cards','Expense','Global Savings','Housing Loan','Insurance','Loan','Media Team','Mom','Phone','Savings'];
-const MONTHS = ['Jun 25','Jul 25','Aug 25','Sep 25','Oct 25','Nov 25','Dec 25','Jan 26','Feb 26','Mar 26','Apr 26','May 26'];
+// Newest first (left to right = recent to old)
+const MONTHS = ['May 26','Apr 26','Mar 26','Feb 26','Jan 26','Dec 25','Nov 25','Oct 25','Sep 25','Aug 25','Jul 25','Jun 25'];
 
 function seeded(s){ let x=Math.sin(s)*10000; return x-Math.floor(x); }
-function gen(acctIdx){
-  return MONTHS.map((_,mi)=>({
-    in:  Math.round(seeded(acctIdx*97+mi*13)*3800+300),
-    out: Math.round(seeded(acctIdx*53+mi*17)*3200+200)
-  }));
-}
+function gen(i){ return MONTHS.map((_,mi)=>({ in: Math.round(seeded(i*97+mi*13)*3800+300), out: Math.round(seeded(i*53+mi*17)*3200+200) })); }
 
 const rawData = {};
 accounts.forEach((a,i)=>{ rawData[a] = gen(i+1); });
+rawData['All accounts'] = MONTHS.map((_,mi)=>({ in: accounts.slice(1).reduce((s,a)=>s+rawData[a][mi].in,0), out: accounts.slice(1).reduce((s,a)=>s+rawData[a][mi].out,0) }));
+// May 26 = index 0
+rawData['Credit Cards'][0]={in:0,out:4530};
+rawData['Expense'][0]={in:500,out:3200};
+rawData['Global Savings'][0]={in:2000,out:300};
 
-rawData['All accounts'] = MONTHS.map((_,mi)=>({
-  in:  accounts.slice(1).reduce((s,a)=>s+rawData[a][mi].in,0),
-  out: accounts.slice(1).reduce((s,a)=>s+rawData[a][mi].out,0)
-}));
-
-rawData['Credit Cards'][10] = {in:0,out:4530};
-rawData['Expense'][10] = {in:500,out:3200};
-rawData['Global Savings'][10] = {in:2000,out:300};
-
-let selected = 'All accounts';
-
+let selected='All accounts';
 function fmt(n){ return '$'+(Math.abs(n)>=1000?(Math.abs(n)/1000).toFixed(1)+'k':Math.abs(n).toLocaleString()); }
 
 const ctx = document.getElementById('chart').getContext('2d');
+
+const splitBarPlugin = {
+  id: 'splitBar',
+  beforeDatasetsDraw(chart) {
+    const { ctx, scales: { x, y } } = chart;
+    const zero = y.getPixelForValue(0);
+    const inData  = chart.data.datasets[0].data;
+    const outData = chart.data.datasets[1].data;
+    const meta0 = chart.getDatasetMeta(0);
+
+    ctx.save();
+    inData.forEach((inVal, i) => {
+      const outVal = outData[i];
+      const bar = meta0.data[i];
+      const bw = bar.width;
+      const bx = bar.x - bw/2;
+
+      if(inVal > 0){
+        const top_ = y.getPixelForValue(inVal);
+        ctx.fillStyle = 'rgba(29,158,117,0.75)';
+        ctx.beginPath();
+        ctx.roundRect(bx, top_, bw, zero-top_, [3,3,0,0]);
+        ctx.fill();
+      }
+      if(outVal > 0){
+        const bot = y.getPixelForValue(-outVal);
+        ctx.fillStyle = 'rgba(226,75,74,0.75)';
+        ctx.beginPath();
+        ctx.roundRect(bx, zero, bw, bot-zero, [0,0,3,3]);
+        ctx.fill();
+      }
+    });
+    ctx.restore();
+  }
+};
+
 const chart = new Chart(ctx, {
   type: 'bar',
+  plugins: [splitBarPlugin],
   data: {
     labels: MONTHS,
     datasets: [
-      { label: 'In',  data: [], backgroundColor: 'rgba(29,158,117,0.7)', borderRadius: 3, order: 2 },
-      { label: 'Out', data: [], backgroundColor: 'rgba(226,75,74,0.7)',  borderRadius: 3, order: 2 },
-      { label: 'Net', data: [], type: 'line', borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.08)', pointBackgroundColor: '#378ADD', pointRadius: 4, pointHoverRadius: 6, tension: 0.35, fill: true, borderWidth: 2, order: 1 }
+      { label: 'In',  data: [], backgroundColor: 'transparent', borderColor: 'transparent', borderWidth: 0 },
+      { label: 'Out', data: [], backgroundColor: 'transparent', borderColor: 'transparent', borderWidth: 0 },
+      { label: 'Net', data: [], type: 'line', borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.06)', pointBackgroundColor: '#378ADD', pointRadius: 4, pointHoverRadius: 6, tension: 0.35, fill: true, borderWidth: 2, order: 0 }
     ]
   },
   options: {
-    responsive: true, maintainAspectRatio: false,
+    responsive: true,
+    maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: c => ` ${c.dataset.label}: ${c.raw<0?'-':''}${fmt(c.raw)}`
+          label: c => {
+            if(c.datasetIndex===0) return ` In: ${fmt(c.raw)}`;
+            if(c.datasetIndex===1) return ` Out: ${fmt(Math.abs(c.raw))}`;
+            return ` Net: ${c.raw>=0?'+':''}${fmt(c.raw)}`;
+          }
         }
       }
     },
+    layout: { padding: { bottom: 4 } },
     scales: {
-      x: { ticks: { font:{size:11}, maxRotation:0 }, grid:{display:false} },
-      y: { ticks: { callback: v => (v<0?'-':'')+fmt(v), font:{size:11} }, grid:{color:'rgba(128,128,128,0.1)'} }
+      x: {
+        ticks: {
+          font: { size: 11 },
+          color: '#888',
+          maxRotation: 90,
+          minRotation: 90,
+          autoSkip: false,
+          padding: 4
+        },
+        grid: { display: false },
+        border: { display: false }
+      },
+      y: {
+        ticks: {
+          callback: v => (v<0?'-':'')+fmt(v),
+          font: { size: 11 },
+          color: '#888',
+          padding: 6
+        },
+        grid: { color: 'rgba(128,128,128,0.1)' },
+        border: { display: false }
+      }
     }
   }
 });
 
 function updateChart(){
   const d = rawData[selected];
-  const inVals  = d.map(m=>m.in);
-  const outVals = d.map(m=>-m.out);
-  const netVals = d.map(m=>m.in-m.out);
+  const inV  = d.map(m=>m.in);
+  const outV = d.map(m=>m.out);
+  const netV = d.map(m=>m.in-m.out);
 
-  chart.data.datasets[0].data = inVals;
-  chart.data.datasets[1].data = outVals;
-  chart.data.datasets[2].data = netVals;
+  chart.data.datasets[0].data = inV;
+  chart.data.datasets[1].data = outV;
+  chart.data.datasets[2].data = netV;
   chart.update('active');
 
-  const avgIn  = Math.round(inVals.reduce((s,v)=>s+v,0)/inVals.length);
-  const avgOut = Math.round(d.map(m=>m.out).reduce((s,v)=>s+v,0)/d.length);
-  const avgNet = avgIn - avgOut;
+  const avgIn  = Math.round(inV.reduce((s,v)=>s+v,0)/inV.length);
+  const avgOut = Math.round(outV.reduce((s,v)=>s+v,0)/outV.length);
+  const avgNet = avgIn-avgOut;
   document.getElementById('avgIn').textContent  = fmt(avgIn);
   document.getElementById('avgOut').textContent = fmt(avgOut);
   const el = document.getElementById('avgNet');
@@ -126,10 +180,10 @@ function updateChart(){
 const pillContainer = document.getElementById('pills');
 accounts.forEach(a=>{
   const btn = document.createElement('button');
-  btn.className = 'pill'+(a===selected?' active':'');
-  btn.textContent = a;
-  btn.onclick = ()=>{
-    selected = a;
+  btn.className='pill'+(a===selected?' active':'');
+  btn.textContent=a;
+  btn.onclick=()=>{
+    selected=a;
     document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
     updateChart();

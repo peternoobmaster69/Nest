@@ -20,6 +20,28 @@ import {
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 const ALL_BANKS_FILTER = "ALL";
+const RECENT_TRANSACTION_LIMIT = 5;
+const CASH_FLOW_ALL_ACCOUNTS = "ALL";
+const CASH_FLOW_CHART_HEIGHT = 220;
+const CASH_FLOW_CHART_PADDING = { top: 14, right: 14, bottom: 34, left: 42 };
+
+type CashFlowAccountMonth = {
+  inflowCents: number;
+  outflowCents: number;
+  netCents: number;
+};
+
+type CashFlowMonth = CashFlowAccountMonth & {
+  key: string;
+  label: string;
+  accounts: Record<string, CashFlowAccountMonth>;
+  budgets: Record<string, CashFlowAccountMonth>;
+};
+
+type CashFlowPoint = CashFlowAccountMonth & {
+  key: string;
+  label: string;
+};
 
 type DashboardSummary = {
   totalBalanceCents: number;
@@ -47,6 +69,7 @@ type DashboardSummary = {
     date: string;
     budgetName?: string | null;
   }>;
+  cashFlow: CashFlowMonth[];
   creditCardSummary?: {
     nextDueCards: CreditCardDueCard[];
     totalOutstandingCents: number;
@@ -353,6 +376,140 @@ function getDueToneColor(tone: CreditCardDueTone) {
   return "var(--success)";
 }
 
+function CashFlowChart({
+  points,
+  formatShort,
+}: {
+  points: CashFlowPoint[];
+  formatShort: (value: number) => string;
+}) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+
+  useEffect(() => {
+    const chartElement = chartRef.current;
+    if (!chartElement) return;
+
+    const updateWidth = () => {
+      setMeasuredWidth(Math.floor(chartElement.getBoundingClientRect().width));
+    };
+
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(chartElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  const minChartWidth = 520;
+  const chartWidth = Math.max(minChartWidth, measuredWidth);
+  const left = Math.min(CASH_FLOW_CHART_PADDING.left, Math.max(28, chartWidth * 0.16));
+  const right = Math.min(CASH_FLOW_CHART_PADDING.right, Math.max(8, chartWidth * 0.04));
+  const { top, bottom } = CASH_FLOW_CHART_PADDING;
+  const plotWidth = Math.max(1, chartWidth - left - right);
+  const plotHeight = CASH_FLOW_CHART_HEIGHT - top - bottom;
+  const zeroY = top + plotHeight / 2;
+  const maxAbs = Math.max(
+    1,
+    ...points.flatMap((point) => [point.inflowCents, point.outflowCents, Math.abs(point.netCents)]),
+  );
+  const xFor = (index: number) =>
+    left + (plotWidth / Math.max(points.length, 1)) * (index + 0.5);
+  const yFor = (value: number) => zeroY - (value / maxAbs) * (plotHeight / 2);
+  const barWidth = Math.min(22, plotWidth / Math.max(points.length * 1.8, 1));
+  const monthLabelStride = Math.max(1, Math.ceil(points.length / Math.max(1, Math.floor(plotWidth / 34))));
+  const netPath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${xFor(index).toFixed(1)} ${yFor(point.netCents).toFixed(1)}`)
+    .join(" ");
+
+  return (
+    <div ref={chartRef} className="cash-flow-chart-wrap">
+      <svg
+        className="cash-flow-chart"
+        viewBox={`0 0 ${chartWidth} ${CASH_FLOW_CHART_HEIGHT}`}
+        role="img"
+        aria-label="Cash flow over the last 12 months"
+      >
+        {[top, zeroY, top + plotHeight].map((y, index) => (
+          <line
+            key={index}
+            className={index === 1 ? "cash-flow-zero-line" : "cash-flow-grid-line"}
+            x1={left}
+            x2={chartWidth - right}
+            y1={y}
+            y2={y}
+          />
+        ))}
+        <text className="cash-flow-axis-label" x={8} y={top + 4}>
+          {formatShort(maxAbs)}
+        </text>
+        <text className="cash-flow-axis-label" x={8} y={zeroY + 4}>
+          0
+        </text>
+        <text className="cash-flow-axis-label" x={8} y={top + plotHeight + 4}>
+          -{formatShort(maxAbs)}
+        </text>
+
+        {points.map((point, index) => {
+          const x = xFor(index) - barWidth / 2;
+          const inflowY = yFor(point.inflowCents);
+          const outflowY = yFor(-point.outflowCents);
+          const showMonthLabel = index % monthLabelStride === 0 || index === points.length - 1;
+
+          return (
+            <g key={point.key}>
+              <rect
+                className="cash-flow-bar cash-flow-bar-in"
+                x={x}
+                y={inflowY}
+                width={barWidth}
+                height={Math.max(0, zeroY - inflowY)}
+                rx="4"
+              />
+              <rect
+                className="cash-flow-bar cash-flow-bar-out"
+                x={x}
+                y={zeroY}
+                width={barWidth}
+                height={Math.max(0, outflowY - zeroY)}
+                rx="4"
+              />
+              {showMonthLabel ? (
+                <text
+                  className="cash-flow-month-label"
+                  x={xFor(index)}
+                  y={CASH_FLOW_CHART_HEIGHT - 7}
+                  textAnchor="middle"
+                >
+                  {point.label}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+
+        {points.length > 0 ? (
+          <>
+            <path className="cash-flow-net-line" d={netPath} />
+            {points.map((point, index) => (
+              <circle
+                key={point.key}
+                className="cash-flow-net-point"
+                cx={xFor(index)}
+                cy={yFor(point.netCents)}
+                r="3.5"
+              />
+            ))}
+          </>
+        ) : null}
+      </svg>
+    </div>
+  );
+}
+
 const DashboardTransactionRow = memo(function DashboardTransactionRow({
   tx,
   showBudgetIcon,
@@ -424,6 +581,7 @@ export function DashboardShell({
   const [editingReceivableTitle, setEditingReceivableTitle] = useState("");
   const [editingReceivableAmount, setEditingReceivableAmount] = useState("");
   const [selectedBankFilterId, setSelectedBankFilterId] = useState<string>(ALL_BANKS_FILTER);
+  const [selectedCashFlowAccountId, setSelectedCashFlowAccountId] = useState<string>(CASH_FLOW_ALL_ACCOUNTS);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [failedCreditCardBankLogos, setFailedCreditCardBankLogos] = useState<Record<string, boolean>>({});
@@ -485,7 +643,7 @@ export function DashboardShell({
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
         paginated: "1",
-        limit: "10",
+        limit: String(RECENT_TRANSACTION_LIMIT),
       });
       if (selectedBankFilterId !== "ALL") {
         params.set("accountId", selectedBankFilterId);
@@ -914,6 +1072,7 @@ export function DashboardShell({
     bankDiscrepancies: [],
     budgets: [],
     recentTransactions: [],
+    cashFlow: [],
   };
   const filteredBudgets = useMemo(
     () =>
@@ -967,7 +1126,7 @@ export function DashboardShell({
   );
   const recentTransactionRows = useMemo(
     () =>
-      filteredTransactions.slice(0, 10).map((tx) => {
+      filteredTransactions.slice(0, RECENT_TRANSACTION_LIMIT).map((tx) => {
         const budget = tx.budgetId ? budgetById.get(tx.budgetId) : undefined;
         return {
           tx,
@@ -982,6 +1141,82 @@ export function DashboardShell({
       }),
     [budgetById, budgetNameById, filteredTransactions, formatCents, selectedBankFilterId],
   );
+  const formatSignedShort = useCallback(
+    (value: number) => (value >= 0 ? `+${formatCentsShort(value)}` : `-${formatCentsShort(Math.abs(value))}`),
+    [formatCentsShort],
+  );
+  const cashFlowAccountOptions = useMemo(
+    () => [
+      { id: CASH_FLOW_ALL_ACCOUNTS, name: "All sub-accounts" },
+      ...filteredBudgets.map((budget) => ({ id: budget.id, name: budget.name })),
+    ],
+    [filteredBudgets],
+  );
+  useEffect(() => {
+    if (
+      selectedCashFlowAccountId !== CASH_FLOW_ALL_ACCOUNTS &&
+      !cashFlowAccountOptions.some((account) => account.id === selectedCashFlowAccountId)
+    ) {
+      setSelectedCashFlowAccountId(CASH_FLOW_ALL_ACCOUNTS);
+    }
+  }, [cashFlowAccountOptions, selectedCashFlowAccountId]);
+  const selectedCashFlowAccountName =
+    cashFlowAccountOptions.find((account) => account.id === selectedCashFlowAccountId)?.name ?? "All sub-accounts";
+  const cashFlowScopeName =
+    selectedBankFilterId === ALL_BANKS_FILTER
+      ? "all accounts"
+      : bankAccountsQuery.data?.find((account) => account.id === selectedBankFilterId)?.name ?? "selected account";
+  const cashFlowPoints = useMemo<CashFlowPoint[]>(
+    () =>
+      (summary.cashFlow ?? []).map((month) => {
+        if (selectedCashFlowAccountId === CASH_FLOW_ALL_ACCOUNTS) {
+          const accountMonth = selectedBankFilterId === ALL_BANKS_FILTER
+            ? month
+            : month.accounts?.[selectedBankFilterId] ?? {
+                inflowCents: 0,
+                outflowCents: 0,
+                netCents: 0,
+              };
+          return {
+            key: month.key,
+            label: month.label,
+            inflowCents: accountMonth.inflowCents,
+            outflowCents: accountMonth.outflowCents,
+            netCents: accountMonth.netCents,
+          };
+        }
+        const budgetMonth = month.budgets?.[selectedCashFlowAccountId] ?? {
+          inflowCents: 0,
+          outflowCents: 0,
+          netCents: 0,
+        };
+        return {
+          key: month.key,
+          label: month.label,
+          inflowCents: budgetMonth.inflowCents,
+          outflowCents: budgetMonth.outflowCents,
+          netCents: budgetMonth.netCents,
+        };
+      }),
+    [selectedBankFilterId, selectedCashFlowAccountId, summary.cashFlow],
+  );
+  const cashFlowAverages = useMemo(() => {
+    if (!cashFlowPoints.length) return { inflowCents: 0, outflowCents: 0, netCents: 0 };
+    const totals = cashFlowPoints.reduce(
+      (acc, point) => ({
+        inflowCents: acc.inflowCents + point.inflowCents,
+        outflowCents: acc.outflowCents + point.outflowCents,
+        netCents: acc.netCents + point.netCents,
+      }),
+      { inflowCents: 0, outflowCents: 0, netCents: 0 },
+    );
+    return {
+      inflowCents: Math.round(totals.inflowCents / cashFlowPoints.length),
+      outflowCents: Math.round(totals.outflowCents / cashFlowPoints.length),
+      netCents: Math.round(totals.netCents / cashFlowPoints.length),
+    };
+  }, [cashFlowPoints]);
+  const hasCashFlowData = cashFlowPoints.some((point) => point.inflowCents > 0 || point.outflowCents > 0);
 
   const pendingReceivables = receivablesQuery.data?.filter((r) => r.status === "OPEN") || [];
   const investmentTotals = useMemo(() => {
@@ -1326,7 +1561,7 @@ export function DashboardShell({
           )}
 
           {/* Two Column Layout */}
-          <div className="grid-2" style={{ marginTop: "14px" }}>
+          <div className="grid-2 dashboard-home-grid" style={{ marginTop: "14px" }}>
             {/* Credit Card Summary */}
             <div className="card cc-home-panel">
               <div className="cc-home-header">
@@ -1459,6 +1694,7 @@ export function DashboardShell({
               )}
             </div>
 
+            <div className="dashboard-home-side-stack">
             {/* Recent Transactions */}
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
@@ -1481,6 +1717,63 @@ export function DashboardShell({
                   />
                 )}
               </div>
+            </div>
+
+            <div className="card cash-flow-card">
+              <div className="cash-flow-head">
+                  <div>
+                    <div className="cash-flow-title">📈 Cash flow</div>
+                  <div className="cash-flow-subtitle">{selectedCashFlowAccountName} in {cashFlowScopeName} - last 12 months</div>
+                  </div>
+                <div className="cash-flow-legend" aria-label="Cash flow legend">
+                  <span><span className="cash-flow-dot cash-flow-dot-in" />In</span>
+                  <span><span className="cash-flow-dot cash-flow-dot-out" />Out</span>
+                  <span><span className="cash-flow-dot cash-flow-dot-net" />Net</span>
+                </div>
+              </div>
+
+              <div className="cash-flow-pills" aria-label="Cash flow account filter">
+                {cashFlowAccountOptions.map((account) => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    className={`cash-flow-pill${selectedCashFlowAccountId === account.id ? " active" : ""}`}
+                    onClick={() => setSelectedCashFlowAccountId(account.id)}
+                  >
+                    {account.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="cash-flow-metrics">
+                <div className="cash-flow-metric">
+                  <div className="cash-flow-metric-label">Avg in</div>
+                  <div className="cash-flow-metric-value cash-flow-in">{formatCentsShort(cashFlowAverages.inflowCents)}</div>
+                </div>
+                <div className="cash-flow-metric">
+                  <div className="cash-flow-metric-label">Avg out</div>
+                  <div className="cash-flow-metric-value cash-flow-out">{formatCentsShort(cashFlowAverages.outflowCents)}</div>
+                </div>
+                <div className="cash-flow-metric">
+                  <div className="cash-flow-metric-label">Avg net</div>
+                  <div className={`cash-flow-metric-value ${cashFlowAverages.netCents >= 0 ? "cash-flow-in" : "cash-flow-out"}`}>
+                    {formatSignedShort(cashFlowAverages.netCents)}
+                  </div>
+                </div>
+              </div>
+
+              {isLoading || !isDataReady ? (
+                <div className="cash-flow-chart-skeleton skeleton" />
+              ) : hasCashFlowData ? (
+                <CashFlowChart points={cashFlowPoints} formatShort={formatCentsShort} />
+              ) : (
+                <EmptyState
+                  icon="$"
+                  title="No cash flow yet"
+                  description="Add income and expense transactions to see your monthly flow."
+                />
+              )}
+            </div>
             </div>
           </div>
 
