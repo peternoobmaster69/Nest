@@ -1452,45 +1452,6 @@ body {
   font-weight: 600;
 }
 
-.cc-home-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.cc-home-stat {
-  min-height: 68px;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--bg-subtle) 42%, var(--bg-surface));
-}
-
-.cc-home-stat-label {
-  margin-bottom: 5px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.cc-home-stat-value {
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-}
-
-.cc-home-stat-value.is-warning {
-  color: color-mix(in srgb, var(--warning) 72%, var(--text-primary));
-}
-
-.cc-home-stat-value.is-danger {
-  color: var(--danger);
-}
-
 .cc-home-list {
   display: flex;
   flex-direction: column;
@@ -1611,13 +1572,14 @@ body {
   min-height: 20px;
   padding: 3px 8px;
   border-radius: var(--r-pill);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 1000;
   line-height: 1;
 }
 
 .cc-home-due-badge-danger {
   background: var(--danger-bg);
+  font-size: 14px;
 }
 
 .cc-home-due-badge-warning {
@@ -1718,26 +1680,6 @@ body {
     margin-bottom: 12px;
   }
 
-  .cc-home-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .cc-home-stat {
-    min-height: auto;
-    padding: 10px 8px;
-  }
-
-  .cc-home-stat-label {
-    font-size: 9px;
-    margin-bottom: 4px;
-  }
-
-  .cc-home-stat-value {
-    font-size: 13px;
-  }
-
   .cc-home-group-head {
     align-items: center;
     padding: 10px 12px;
@@ -1768,10 +1710,11 @@ body {
   }
 
   .cc-home-due-badge {
-    font-size: 10px;
-    min-height: 18px;
-    padding: 2px 6px;
-    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .cc-home-due-badge-danger {
+    font-size: 13px;
   }
 
   .cc-home-card-list {
@@ -2013,7 +1956,6 @@ body {
   --cash-flow-out: var(--amount-negative);
   --cash-flow-net: #378add;
   --cash-flow-grid: color-mix(in srgb, var(--border-subtle) 70%, transparent);
-  --cash-flow-metric-bg: color-mix(in srgb, var(--bg-subtle) 62%, var(--bg-surface) 38%);
   min-width: 0;
   overflow: hidden;
 }
@@ -2109,36 +2051,6 @@ body {
   color: #fff;
 }
 
-.cash-flow-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.cash-flow-metric {
-  background: var(--cash-flow-metric-bg);
-  border-radius: var(--r-md);
-  padding: 10px 12px;
-  min-width: 0;
-}
-
-.cash-flow-metric-label {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.2;
-  margin-bottom: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.cash-flow-metric-value {
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
 .cash-flow-in {
   color: var(--cash-flow-in);
 }
@@ -2147,17 +2059,54 @@ body {
   color: var(--cash-flow-out);
 }
 
+.cash-flow-chart-shell {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cash-flow-chart-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+}
+
+.cash-flow-chart-tool {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: var(--r-sm);
+}
+
+.cash-flow-chart-tool:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.cash-flow-zoom-value {
+  min-width: 42px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
 .cash-flow-chart-wrap {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-tertiary) 35%, transparent) transparent;
+  touch-action: pan-x pan-y;
 }
 
 .cash-flow-chart {
   display: block;
-  width: 100%;
   height: 260px;
   overflow: visible;
 }
@@ -2178,8 +2127,14 @@ body {
   font-size: 11px;
 }
 
+.cash-flow-month-label {
+  pointer-events: none;
+}
+
 .cash-flow-bar {
   opacity: 0.76;
+  pointer-events: none;
+  transition: opacity var(--t), filter var(--t);
 }
 
 .cash-flow-bar-in {
@@ -2196,12 +2151,82 @@ body {
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .cash-flow-net-point {
   fill: var(--cash-flow-net);
   stroke: var(--bg-surface);
   stroke-width: 1.5;
+  pointer-events: none;
+  transition: r var(--t), stroke-width var(--t);
+}
+
+.cash-flow-net-point.active {
+  stroke-width: 2;
+}
+
+.cash-flow-hit-area {
+  fill: transparent;
+  outline: none;
+  cursor: crosshair;
+}
+
+.cash-flow-hover-line {
+  opacity: 0;
+  stroke: color-mix(in srgb, var(--text-primary) 30%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+  transition: opacity var(--t);
+}
+
+.cash-flow-point-group.active .cash-flow-hover-line {
+  opacity: 1;
+}
+
+.cash-flow-point-group.active .cash-flow-bar {
+  opacity: 0.95;
+  filter: drop-shadow(0 5px 8px color-mix(in srgb, var(--text-primary) 12%, transparent));
+}
+
+.cash-flow-hit-area:focus-visible {
+  stroke: var(--brand-500);
+  stroke-width: 1.5;
+}
+
+.cash-flow-tooltip {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  display: grid;
+  gap: 3px;
+  min-width: 148px;
+  max-width: min(220px, calc(100% - 16px));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  transform: translate(12px, -50%);
+}
+
+.cash-flow-tooltip.left {
+  transform: translate(calc(-100% - 12px), -50%);
+}
+
+.cash-flow-tooltip strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.cash-flow-tooltip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .cash-flow-chart-skeleton {
@@ -3371,10 +3396,6 @@ body {
 
   .cash-flow-legend {
     justify-content: flex-start;
-  }
-
-  .cash-flow-metrics {
-    grid-template-columns: 1fr;
   }
 
   .account-cards-grid,
@@ -6667,7 +6688,6 @@ body {
 [data-theme="dark"] .cash-flow-card {
   --cash-flow-net: #60a5fa;
   --cash-flow-grid: color-mix(in srgb, var(--border-subtle) 78%, transparent);
-  --cash-flow-metric-bg: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-surface) 30%);
 }
 
 [data-theme="dark"] .inv-chart-wrap {
