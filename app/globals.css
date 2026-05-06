@@ -2542,6 +2542,40 @@ body {
   margin-top: 2px;
 }
 
+.transaction-stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.period-label-desktop {
+  color: var(--text-secondary);
+  font-weight: 800;
+  white-space: nowrap;
+  text-align: left;
+  margin-right: auto;
+}
+
+.transaction-stats-summary {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+@media (max-width: 767px) {
+  .transaction-stats-row {
+    justify-content: center;
+  }
+
+  .period-label-desktop {
+    display: none;
+  }
+}
+
 /* ============================================================
    BUDGET MINI CARD
    ============================================================ */
@@ -5115,6 +5149,7 @@ body {
   padding: 8px 0;
   margin-bottom: 8px;
   border-bottom: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .tx-month-label {
@@ -5133,14 +5168,14 @@ body {
 
 .tx-month-income {
   color: var(--success);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 400;
 }
 
 .tx-month-expense {
   color: var(--warning);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 400;
 }
 
 .tx-month-count {
@@ -7644,6 +7679,9 @@ body {
 
 .calc-input-field {
   width: 100%;
+}
+
+.calc-input-field-with-button {
   padding-right: 42px;
 }
 

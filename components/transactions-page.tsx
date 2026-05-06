@@ -11,7 +11,7 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
-import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton } from "@/components/skeletons/TransactionsSkeleton";
+import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 
 const ALL_BANKS_FILTER = "ALL";
@@ -789,7 +789,7 @@ export function TransactionsPage() {
       return `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
     }
     if (activeQuickSelect === "custom") return "Custom";
-    return "All Transactions";
+    return "All Time";
   };
 
   const transactionsByMonth = useMemo(() => {
@@ -1456,19 +1456,30 @@ export function TransactionsPage() {
           document.body
         )}
       </div>
-
+      {/* Recent Transactions List */}
       <section ref={recentTransactionsRef} className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", marginBottom: "6px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 600 }}>{getPeriodLabel()}</div>
-          {filteredTransactions.length > 0 ? (
-            <div style={{ fontSize: "12px", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ color: "var(--amount-positive)" }}>{formatCents(transactionStats.income)}</span>
-              <span>-</span>
-              <span style={{ color: "var(--amount-negative)" }}>{formatCents(transactionStats.expense)}</span>
-              <span>=</span>
-              <span className={getAmountToneClass(transactionStats.net)}>
-                {transactionStats.net >= 0 ? "+" : ""}{formatCents(Math.abs(transactionStats.net))}
-              </span>
+        <div style={{ display: "flex", justifyContent: "center", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
+          {transactions.isLoading ? (
+            <TransactionsStatsSkeleton />
+          ) : filteredTransactions.length > 0 ? (
+            <div className="transaction-stats-row">
+              <span className="period-label-desktop">{getPeriodLabel()}</span>
+              {filteredTransactions.length > 0 && (
+                <div className="transaction-stats-summary">
+                  <span style={{ color: "var(--amount-positive)" }}>
+                    {formatCents(transactionStats.income)}
+                  </span>
+                  <span>-</span>
+                  <span style={{ color: "var(--amount-negative)" }}>
+                    {formatCents(transactionStats.expense)}
+                  </span>
+                  <span>=</span>
+                  <span className={getAmountToneClass(transactionStats.net)}>
+                    {transactionStats.net >= 0 ? "+" : ""}
+                    {formatCents(Math.abs(transactionStats.net))}
+                  </span>
+                </div>
+              )}
             </div>
           ) : null}
         </div>

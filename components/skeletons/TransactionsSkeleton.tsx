@@ -1,16 +1,5 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 
-/*
-Structural inventory: Transactions page initial data regions
-Route: /transactions
-Layout regions: PageFrame sidebar/topbar are static chrome; .txn-page body is a grid with 14px gap.
-Content blocks:
-- Bank selector: .bank-selector-row, 10px 12px padding, 44x24 logo, 15px amount, 22px action buttons.
-- Action row: flex row, gap 10px, two .btn elements at flex:1 with 40px control height.
-- Sub-accounts card: .card with header flex, optional totals text, .account-cards-grid.tx-account-grid repeating .budget-mini.budget-mini-compact cards, min-height 68px.
-- Recent transactions card: .card with static heading/count, .simple-list of .crud-row rows.
-Do not skeletonize: PageFrame chrome, static button labels when parent data is already available, section headings.
-*/
 export function TransactionsInitialSkeleton() {
   return (
     <>
@@ -29,21 +18,19 @@ export function TransactionsInitialSkeleton() {
         </div>
         <TransactionsAccountGridSkeleton />
       </section>
+      <TransactionsFilterBarSkeleton />
       <section className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", marginBottom: "10px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 600 }}>Recent Transactions</div>
-          <Skeleton width={42} height={15} borderRadius="4px" />
+        <div style={{ display: "flex", justifyContent: "center", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
+          <TransactionsStatsSkeleton />
         </div>
-        <TransactionsListSkeleton />
+        <div className="simple-list tx-month-groups">
+          <TransactionsListSkeleton />
+        </div>
       </section>
     </>
   );
 }
 
-/*
-Structural inventory: Transactions bank selector
-Matches .bank-selector-summary loaded DOM and element sizes: 44x24 logo, amount line, 22px action buttons.
-*/
 export function TransactionsBankSelectorSkeleton() {
   return (
     <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
@@ -61,53 +48,118 @@ export function TransactionsBankSelectorSkeleton() {
   );
 }
 
-/*
-Structural inventory: Transactions sub-account grid
-Repeats loaded .budget-mini.budget-mini-compact.tx-account-card cards; each has 12px label, 16px amount, 9px footer line.
-*/
 export function TransactionsAccountGridSkeleton() {
   return (
     <div className="account-cards-grid tx-account-grid">
       {Array.from({ length: 6 }).map((_, index) => (
-        <div className="budget-mini budget-mini-compact tx-account-card" key={index}>
+        <div
+          className="budget-mini budget-mini-compact tx-account-card"
+          key={index}
+          style={index === 0 ? { borderColor: "var(--brand-500)", boxShadow: "var(--shadow-sm)" } : { position: "relative" }}
+        >
           <div className="tx-account-card-body">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "4px" }}>
-              <Skeleton width={index === 0 ? 92 : 74} height={15} borderRadius="4px" />
+            <div
+              className="bm-name"
+              style={index === 0 ? { display: "inline-flex", alignItems: "center", gap: "6px" } : { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "4px" }}
+            >
+              {index === 0 ? <Skeleton width={14} height={14} borderRadius="4px" /> : null}
+              <Skeleton width={index === 0 ? 78 : 74} height={13} borderRadius="4px" />
               {index === 0 ? null : <Skeleton width={18} height={18} borderRadius="6px" />}
             </div>
-            <Skeleton width={88} height={19} borderRadius="4px" />
-            <Skeleton width={54} height={11} borderRadius="4px" />
+            <div className="bm-amount">
+              <Skeleton width={88} height={17} borderRadius="4px" />
+            </div>
+            <div className="bm-target tx-account-card-footer">
+              <Skeleton width={index % 3 === 1 ? 62 : 16} height={10} borderRadius="4px" />
+            </div>
           </div>
+          {index === 0 ? null : (
+            <span
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                bottom: "2px",
+                right: "4px",
+                opacity: 0.2,
+                pointerEvents: "none",
+              }}
+            >
+              <Skeleton width={28} height={28} borderRadius="999px" />
+            </span>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-/*
-Structural inventory: Transactions recent transaction rows
-Maps to .simple-list > .crud-row.tx-recent-row: row padding 12px 14px, 12px gap, left copy stack, right amount/action affordance.
-*/
+export function TransactionsFilterBarSkeleton() {
+  return (
+    <div className="tx-filter-bar">
+      <div className="tx-filter-pills">
+        <Skeleton width={92} height={31} borderRadius="var(--r-pill)" />
+        <Skeleton width={86} height={31} borderRadius="var(--r-pill)" />
+        <Skeleton width={48} height={31} borderRadius="var(--r-pill)" />
+        <Skeleton width={86} height={31} borderRadius="var(--r-pill)" />
+      </div>
+      <div className="tx-search-box">
+        <Skeleton width="100%" height={32} borderRadius="var(--r-pill)" />
+      </div>
+    </div>
+  );
+}
+
+export function TransactionsStatsSkeleton() {
+  return (
+    <div className="transaction-stats-row">
+      <span className="period-label-desktop">
+        <Skeleton width={78} height={16} borderRadius="4px" />
+      </span>
+      <div className="transaction-stats-summary">
+        <Skeleton width={82} height={16} borderRadius="4px" />
+        <Skeleton width={7} height={16} borderRadius="4px" />
+        <Skeleton width={82} height={16} borderRadius="4px" />
+        <Skeleton width={9} height={16} borderRadius="4px" />
+        <Skeleton width={86} height={16} borderRadius="4px" />
+      </div>
+    </div>
+  );
+}
+
 export function TransactionsListSkeleton() {
   return (
-    <div className="simple-list">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <div className="crud-row tx-recent-row" key={index}>
-          <div style={{ display: "grid", gap: "5px", minWidth: 0 }}>
-            <Skeleton width={index % 2 ? 168 : 126} height={17} borderRadius="4px" />
-            <Skeleton width={index % 2 ? 104 : 132} height={13} borderRadius="4px" />
+    <>
+      {Array.from({ length: 2 }).map((_, groupIndex) => (
+        <div className="tx-month-group" key={groupIndex}>
+          <div className="tx-month-header">
+            <span className="tx-month-label">
+              <Skeleton width={groupIndex === 0 ? 96 : 118} height={12} borderRadius="4px" />
+            </span>
+            <div className="tx-month-summary">
+              <Skeleton width={78} height={18} borderRadius="4px" />
+              <Skeleton width={82} height={18} borderRadius="4px" />
+            </div>
           </div>
-          <Skeleton width={82} height={17} borderRadius="4px" />
+          <div className="tx-month-list">
+            {Array.from({ length: groupIndex === 0 ? 4 : 3 }).map((_, rowIndex) => (
+              <div className="crud-row tx-recent-row" key={rowIndex}>
+                <Skeleton width={32} height={32} borderRadius="8px" />
+                <div className="tx-recent-main">
+                  <Skeleton width={rowIndex % 2 ? "72%" : "54%"} height={17} borderRadius="4px" />
+                  <Skeleton width={rowIndex % 2 ? 86 : 72} height={18} borderRadius="4px" />
+                  <span className="tx-recent-date">
+                    <Skeleton width={rowIndex % 2 ? 112 : 86} height={13} borderRadius="4px" />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ))}
-    </div>
+    </>
   );
 }
 
-/*
-Structural inventory: Transactions receivable picker rows
-Used in the receivable link modal; maps to the same transaction row rhythm but fewer rows inside the modal content.
-*/
 export function TransactionsReceivablesListSkeleton() {
   return (
     <div className="simple-list">
