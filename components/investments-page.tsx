@@ -3,11 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 
 type AppContext = {
   workspaceId: string | null;
@@ -33,6 +34,16 @@ type InvestmentAccount = {
 };
 
 type TimeRange = "90D" | "180D" | "1Y" | "ALL";
+
+type InvestmentChartPoint = {
+  id: string;
+  x: number;
+  yInvested: number;
+  yCurrent: number;
+  label: string;
+  invested: number;
+  current: number;
+};
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -69,33 +80,17 @@ function formatInceptionBadge(value: string) {
   return `Since ${year}`;
 }
 
-function buildSmoothPath(points: Array<{ x: number; y: number }>, tension = 0.3) {
+function buildLinePath(points: Array<{ x: number; y: number }>) {
   if (!points.length) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
 
-  let path = `M ${points[0].x} ${points[0].y}`;
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const current = points[index];
-    const next = points[index + 1];
-
-    // For smoother curves, use tension-based control points
-    const prev = index > 0 ? points[index - 1] : current;
-    const nextNext = index < points.length - 2 ? points[index + 2] : next;
-
-    const cp1x = current.x + (next.x - prev.x) * tension / 2;
-    const cp1y = current.y + (next.y - prev.y) * tension / 2;
-    const cp2x = next.x - (nextNext.x - current.x) * tension / 2;
-    const cp2y = next.y - (nextNext.y - current.y) * tension / 2;
-
-    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`;
-  }
-  return path;
+  const [first, ...rest] = points;
+  return rest.reduce((path, point) => `${path} L ${point.x} ${point.y}`, `M ${first.x} ${first.y}`);
 }
 
 function buildAreaPath(points: Array<{ x: number; y: number }>, baselineY: number) {
   if (!points.length) return "";
-  const linePath = buildSmoothPath(points);
+  const linePath = buildLinePath(points);
   const first = points[0];
   const last = points[points.length - 1];
   return `${linePath} L ${last.x} ${baselineY} L ${first.x} ${baselineY} Z`;
@@ -103,10 +98,11 @@ function buildAreaPath(points: Array<{ x: number; y: number }>, baselineY: numbe
 
 export function InvestmentsPage() {
   const queryClient = useQueryClient();
+  const chartWrapRef = useRef<HTMLDivElement>(null);
+  const tooltip = useChartCursorTooltip<InvestmentChartPoint>(chartWrapRef);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>("ALL");
   const [showAllAccounts, setShowAllAccounts] = useState(false);
-  const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
   const [accountError, setAccountError] = useState("");
   const [entryError, setEntryError] = useState("");
 
@@ -515,7 +511,7 @@ export function InvestmentsPage() {
         currentAreaPath: "",
         currentTone: "gain" as "gain" | "loss",
         gridLines: [] as Array<{ id: string; y: number; value: number }>,
-        points: [] as Array<{ id: string; x: number; yInvested: number; yCurrent: number; label: string; invested: number; current: number }>,
+        points: [] as InvestmentChartPoint[],
       };
     }
 
@@ -541,8 +537,8 @@ export function InvestmentsPage() {
       return { id: row.id, x, yInvested, yCurrent, label, invested: row.invested, current: row.current };
     });
 
-    const investedPath = buildSmoothPath(points.map((point) => ({ x: point.x, y: point.yInvested })));
-    const currentPath = buildSmoothPath(points.map((point) => ({ x: point.x, y: point.yCurrent })));
+    const investedPath = buildLinePath(points.map((point) => ({ x: point.x, y: point.yInvested })));
+    const currentPath = buildLinePath(points.map((point) => ({ x: point.x, y: point.yCurrent })));
     const baselineY = height - pad;
     const currentAreaPath = buildAreaPath(points.map((point) => ({ x: point.x, y: point.yCurrent })), baselineY);
     const latestPoint = points[points.length - 1];
@@ -557,7 +553,7 @@ export function InvestmentsPage() {
     return { width, height, low, high, baselineY, investedPath, currentPath, currentAreaPath, currentTone, gridLines, points };
   }, [chartRows]);
 
-  const hoveredPoint = chart.points.find((point) => point.id === hoveredPointId) ?? null;
+  const activePoint = tooltip.item;
 
   return (
     <div className="inv-page">
@@ -786,8 +782,14 @@ export function InvestmentsPage() {
               </div>
             </div>
             {chart.points.length ? (
-              <div className="inv-chart-wrap">
-                <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="inv-chart" role="img" aria-label="Investment time series chart">
+              <div ref={chartWrapRef} className="inv-chart-wrap">
+                <svg
+                  viewBox={`0 0 ${chart.width} ${chart.height}`}
+                  className="inv-chart"
+                  role="img"
+                  aria-label="Investment time series chart"
+                  onPointerLeave={tooltip.clear}
+                >
                   <defs>
                     <linearGradient id="invCurrentGainFill" x1="0" x2="0" y1="0" y2="1">
                       <stop offset="0%" stopColor="var(--amount-positive)" stopOpacity="0.22" />
@@ -813,35 +815,66 @@ export function InvestmentsPage() {
                   />
                   <path d={chart.investedPath} className="inv-line invested" />
                   <path d={chart.currentPath} className={`inv-line current ${chart.currentTone}`} />
-                  {chart.points.map((point) => (
-                    <g key={point.id}>
-                      <circle
-                        cx={point.x}
-                        cy={point.yInvested}
-                        r={hoveredPointId === point.id ? 4 : 3}
-                        className="inv-dot invested"
-                        onMouseEnter={() => setHoveredPointId(point.id)}
-                      />
-                      <circle
-                        cx={point.x}
-                        cy={point.yCurrent}
-                        r={hoveredPointId === point.id ? 4 : 3}
-                        className={`inv-dot current ${chart.currentTone}`}
-                        onMouseEnter={() => setHoveredPointId(point.id)}
-                      />
-                    </g>
-                  ))}
+                  {chart.points.map((point, index) => {
+                    const previousPoint = chart.points[index - 1] ?? null;
+                    const nextPoint = chart.points[index + 1] ?? null;
+                    const hitX = previousPoint ? (previousPoint.x + point.x) / 2 : 36;
+                    const hitRight = nextPoint ? (point.x + nextPoint.x) / 2 : chart.width - 36;
+                    const isActive = activePoint?.id === point.id;
+
+                    return (
+                      <g key={point.id}>
+                        <rect
+                          className="inv-hit-area"
+                          x={hitX}
+                          y={36}
+                          width={Math.max(16, hitRight - hitX)}
+                          height={chart.height - 72}
+                          rx="8"
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`${point.label}: Invested ${formatCents(point.invested)}, current ${formatCents(point.current)}`}
+                          onPointerEnter={(event) => tooltip.showAtPointer(event, point)}
+                          onPointerMove={(event) => tooltip.showAtPointer(event, point)}
+                          onFocus={(event) => {
+                            const wrapper = chartWrapRef.current;
+                            const targetRect = event.currentTarget.getBoundingClientRect();
+                            const wrapperRect = wrapper?.getBoundingClientRect();
+                            if (!wrapperRect) return;
+                            tooltip.showAtLocalPoint(
+                              targetRect.left - wrapperRect.left + targetRect.width / 2,
+                              targetRect.top - wrapperRect.top + targetRect.height / 2,
+                              point,
+                            );
+                          }}
+                          onBlur={tooltip.clear}
+                        />
+                        <circle
+                          cx={point.x}
+                          cy={point.yInvested}
+                          r={isActive ? 4 : 3}
+                          className="inv-dot invested"
+                        />
+                        <circle
+                          cx={point.x}
+                          cy={point.yCurrent}
+                          r={isActive ? 4 : 3}
+                          className={`inv-dot current ${chart.currentTone}`}
+                        />
+                      </g>
+                    );
+                  })}
                 </svg>
                 <div className="inv-chart-legend">
                   <span><i className="inv-legend-dot invested" /> Invested Amount</span>
                   <span><i className={`inv-legend-dot current ${chart.currentTone}`} /> Current Value</span>
                 </div>
-                {hoveredPoint ? (
-                  <div className="inv-tooltip">
-                    <strong>{hoveredPoint.label}</strong>
-                    <span>Invested: {formatCents(hoveredPoint.invested)}</span>
-                    <span>Current: {formatCents(hoveredPoint.current)}</span>
-                  </div>
+                {activePoint && tooltip.position ? (
+                  <ChartCursorTooltip position={tooltip.position}>
+                    <strong>{activePoint.label}</strong>
+                    <span>Invested: {formatCents(activePoint.invested)}</span>
+                    <span>Current: {formatCents(activePoint.current)}</span>
+                  </ChartCursorTooltip>
                 ) : null}
               </div>
             ) : (

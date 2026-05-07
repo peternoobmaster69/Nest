@@ -19,6 +19,7 @@ import {
   DashboardRecentTransactionsSkeleton,
 } from "@/components/skeletons/DashboardSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 
 const ALL_BANKS_FILTER = "ALL";
 const RECENT_TRANSACTION_LIMIT = 5;
@@ -394,11 +395,7 @@ function CashFlowChart({
   const [measuredWidth, setMeasuredWidth] = useState(0);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState<{
-    x: number;
-    y: number;
-    side: "left" | "right";
-  } | null>(null);
+  const tooltip = useChartCursorTooltip<CashFlowPoint>(shellRef);
 
   useEffect(() => {
     const chartElement = chartRef.current;
@@ -421,8 +418,9 @@ function CashFlowChart({
   useEffect(() => {
     if (activeIndex !== null && activeIndex >= points.length) {
       setActiveIndex(null);
+      tooltip.clear();
     }
-  }, [activeIndex, points.length]);
+  }, [activeIndex, points.length, tooltip]);
 
   const minChartWidth = 520;
   const baseChartWidth = Math.max(minChartWidth, measuredWidth);
@@ -453,19 +451,6 @@ function CashFlowChart({
   const zoomOut = () => setZoomLevel((current) => Math.max(CASH_FLOW_MIN_ZOOM, current - CASH_FLOW_ZOOM_STEP));
   const zoomIn = () => setZoomLevel((current) => Math.min(CASH_FLOW_MAX_ZOOM, current + CASH_FLOW_ZOOM_STEP));
   const resetZoom = () => setZoomLevel(CASH_FLOW_MIN_ZOOM);
-  const setTooltipFromClientPoint = (clientX: number, clientY: number) => {
-    const shellElement = shellRef.current;
-    if (!shellElement) return;
-
-    const shellRect = shellElement.getBoundingClientRect();
-    const x = clientX - shellRect.left;
-    const y = clientY - shellRect.top;
-    setTooltipPosition({
-      x,
-      y,
-      side: x > shellRect.width - 180 ? "left" : "right",
-    });
-  };
   const setTooltipFromFocus = (index: number) => {
     const shellElement = shellRef.current;
     const chartElement = chartRef.current;
@@ -475,15 +460,11 @@ function CashFlowChart({
     const chartRect = chartElement.getBoundingClientRect();
     const x = chartRect.left - shellRect.left + xFor(index) - chartElement.scrollLeft;
     const y = chartRect.top - shellRect.top + top + plotHeight / 2;
-    setTooltipPosition({
-      x,
-      y,
-      side: x > shellRect.width - 180 ? "left" : "right",
-    });
+    tooltip.showAtLocalPoint(x, y, points[index]);
   };
   const clearActivePoint = () => {
     setActiveIndex(null);
-    setTooltipPosition(null);
+    tooltip.clear();
   };
 
   return (
@@ -574,11 +555,11 @@ function CashFlowChart({
                   aria-label={`${point.label}: In ${formatFull(point.inflowCents)}, out ${formatFull(point.outflowCents)}, net ${formatSignedFull(point.netCents)}`}
                   onPointerEnter={(event) => {
                     setActiveIndex(index);
-                    setTooltipFromClientPoint(event.clientX, event.clientY);
+                    tooltip.showAtPointer(event, point);
                   }}
                   onPointerMove={(event) => {
                     setActiveIndex(index);
-                    setTooltipFromClientPoint(event.clientX, event.clientY);
+                    tooltip.showAtPointer(event, point);
                   }}
                   onFocus={() => {
                     setActiveIndex(index);
@@ -587,7 +568,7 @@ function CashFlowChart({
                   onBlur={clearActivePoint}
                   onClick={(event) => {
                     setActiveIndex(index);
-                    setTooltipFromClientPoint(event.clientX, event.clientY);
+                    tooltip.showAtPointer(event, point);
                   }}
                 />
                 <line
@@ -645,17 +626,13 @@ function CashFlowChart({
         </svg>
       </div>
 
-      {activePoint && tooltipPosition ? (
-        <div
-          className={`cash-flow-tooltip ${tooltipPosition.side}`}
-          style={{ left: `${tooltipPosition.x}px`, top: `${tooltipPosition.y}px` }}
-          aria-live="polite"
-        >
+      {activePoint && tooltip.position ? (
+        <ChartCursorTooltip position={tooltip.position}>
           <strong>{activePoint.label}</strong>
           <span><i className="cash-flow-dot cash-flow-dot-in" />In {formatFull(activePoint.inflowCents)}</span>
           <span><i className="cash-flow-dot cash-flow-dot-out" />Out {formatFull(activePoint.outflowCents)}</span>
           <span><i className="cash-flow-dot cash-flow-dot-net" />Net {formatSignedFull(activePoint.netCents)}</span>
-        </div>
+        </ChartCursorTooltip>
       ) : null}
     </div>
   );
@@ -765,6 +742,9 @@ export function DashboardShell({
   const formatCentsShort = useCallback((value: number) => formatMoneyShort(value, baseCurrency), [baseCurrency]);
   const defaultUserId = contextQuery.data?.defaultUserId;
   const dashboardBankStorageKey = workspaceId ? `nest:selectedBank:${workspaceId}` : null;
+  const sidebarMoneyPages = contextQuery.data?.sidebarMoneyPages;
+  const showCreditCardDashboardSection =
+    sidebarMoneyPages?.creditCards !== false || sidebarMoneyPages?.creditTransactions !== false;
   const creditCardDueGroups = useMemo(
     () => getCreditCardDueGroups(data?.creditCardSummary?.nextDueCards ?? []),
     [data?.creditCardSummary?.nextDueCards],
@@ -1679,180 +1659,185 @@ export function DashboardShell({
           )}
 
           {/* Two Column Layout */}
-          <div className="grid-2 dashboard-home-grid" style={{ marginTop: "14px" }}>
+          <div
+            className={`dashboard-home-grid${showCreditCardDashboardSection ? " grid-2" : " dashboard-home-grid-no-credit"}`}
+            style={{ marginTop: "14px" }}
+          >
             {/* Credit Card Summary */}
-            <div className="card cc-home-panel">
-              <div className="cc-home-header">
-                <div className="cc-home-title">
-                  <span aria-hidden="true">💳</span>
-                  <span>Credit Cards</span>
-                </div>
-                <button className="btn btn-ghost btn-xs" onClick={() => router.push("/credit-transactions")}>
-                  View all →
-                </button>
-              </div>
-
-              {data?.creditCardSummary && creditCardDueGroups.length > 0 ? (
-                <>
-                  <div className="cc-home-list">
-                    {creditCardDueGroups.map((group) => {
-                      const dueCountdown = getDueCountdownLabel(group.paymentDueDate);
-                      const dueDate = getPaymentDueDateLabel(group.paymentDueDate);
-                      const dueDays = getDaysUntil(group.paymentDueDate);
-                      const dueTone = getDueTone(dueDays);
-                      const dueColor = getDueToneColor(dueTone);
-                      const showDueBadge = dueDays <= 20;
-                      const bankMeta = getSingaporeBankByName(group.bankName);
-                      const logo = getBankLogoUrl(bankMeta);
-                      const logoKey = group.bankName ?? group.key;
-                      return (
-                        <div key={group.key} className={`cc-home-group cc-home-group-${dueTone}`}>
-                          <div className="cc-home-group-head">
-                            <div className="cc-home-bank">
-                              {logo && !failedCreditCardBankLogos[logoKey] ? (
-                                <Image
-                                  src={logo}
-                                  alt={bankMeta?.name || "Bank"}
-                                  width={34}
-                                  height={34}
-                                  sizes="34px"
-                                  className="cc-home-bank-logo"
-                                  loading="lazy"
-                                  onError={() => setFailedCreditCardBankLogos((prev) => ({ ...prev, [logoKey]: true }))}
-                                />
-                              ) : bankMeta ? (
-                                <span className="cc-home-bank-fallback" style={{ backgroundColor: bankMeta.color }}>
-                                  {bankMeta.short}
-                                </span>
-                              ) : (
-                                <span className="cc-home-bank-fallback cc-home-bank-fallback-default">CC</span>
-                              )}
-                              <div className="cc-home-bank-copy">
-                                <div className="cc-home-bank-name">{bankMeta?.name || group.bankName || "Credit Cards"}</div>
-                                <div className="cc-home-bank-meta">
-                                  {group.cards.length} {group.cards.length === 1 ? "card" : "cards"}
-                                </div>
-                                <div className="cc-home-bank-due">Due {dueDate}</div>
-                              </div>
-                            </div>
-                            <div className="cc-home-group-total">
-                              <div className="cc-home-total-amount">{formatCents(group.outstandingCents)}</div>
-                              {showDueBadge ? (
-                                <div
-                                  className={`cc-home-due-badge cc-home-due-badge-${dueTone}`}
-                                  title={`Payment due ${dueDate}`}
-                                  style={{ color: dueColor }}
-                                >
-                                  {dueCountdown}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                          <div className="cc-home-card-list">
-                            {group.cards.map((card) => (
-                              <div
-                                key={`${card.cardId}:${card.statementYear}:${card.statementMonth}`}
-                                className="cc-home-card-row"
-                              >
-                                <div className="cc-home-card-copy">
-                                  <div className="cc-home-card-name">{card.cardName}</div>
-                                  <div className="cc-home-card-statement">{getStatementLabel(card.statementMonth, card.statementYear)}</div>
-                                </div>
-                                <div className="cc-home-card-actions">
-                                  <div className="cc-home-card-amount">{formatCents(card.outstandingCents)}</div>
-                                  <button
-                                    type="button"
-                                    className="cc-home-view-statement"
-                                    title={`View ${card.cardName} ${getStatementLabel(card.statementMonth, card.statementYear)} transactions`}
-                                    aria-label={`View ${card.cardName} ${getStatementLabel(card.statementMonth, card.statementYear)} transactions`}
-                                    onClick={() => goToCreditCardStatement(card)}
-                                  >
-                                    <svg className="eye-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: "14px", height: "14px" }}>
-                                      <path d="M1 8C1 8 3.5 3 8 3C12.5 3 15 8 15 8C15 8 12.5 13 8 13C3.5 13 1 8 1 8Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-                                      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2"/>
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
+            {showCreditCardDashboardSection ? (
+              <div className="card cc-home-panel">
+                <div className="cc-home-header">
+                  <div className="cc-home-title">
+                    <span aria-hidden="true">💳</span>
+                    <span>Credit Cards</span>
                   </div>
-                </>
-              ) : (
-                <EmptyState
-                  icon="💳"
-                  title="No credit card transactions"
-                  description="Add credit card transactions to track your spending and accounting."
-                />
-              )}
-            </div>
+                  <button className="btn btn-ghost btn-xs" onClick={() => router.push("/credit-transactions")}>
+                    View all →
+                  </button>
+                </div>
 
-            <div className="dashboard-home-side-stack">
-            {/* Recent Transactions */}
-            <div className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600 }}>🆕 Recent transactions</div>
-                <button className="btn btn-ghost btn-xs" onClick={() => router.push("/transactions")}>
-                  View all →
-                </button>
-              </div>
-
-              <div>
-                {recentTransactionRows.map((row) => (
-                  <DashboardTransactionRow key={row.tx.id} {...row} />
-                ))}
-                {transactionsQuery.isLoading && <DashboardRecentTransactionsSkeleton />}
-                {!transactionsQuery.isLoading && !filteredTransactions.length && (
+                {data?.creditCardSummary && creditCardDueGroups.length > 0 ? (
+                  <>
+                    <div className="cc-home-list">
+                      {creditCardDueGroups.map((group) => {
+                        const dueCountdown = getDueCountdownLabel(group.paymentDueDate);
+                        const dueDate = getPaymentDueDateLabel(group.paymentDueDate);
+                        const dueDays = getDaysUntil(group.paymentDueDate);
+                        const dueTone = getDueTone(dueDays);
+                        const dueColor = getDueToneColor(dueTone);
+                        const showDueBadge = dueDays <= 20;
+                        const bankMeta = getSingaporeBankByName(group.bankName);
+                        const logo = getBankLogoUrl(bankMeta);
+                        const logoKey = group.bankName ?? group.key;
+                        return (
+                          <div key={group.key} className={`cc-home-group cc-home-group-${dueTone}`}>
+                            <div className="cc-home-group-head">
+                              <div className="cc-home-bank">
+                                {logo && !failedCreditCardBankLogos[logoKey] ? (
+                                  <Image
+                                    src={logo}
+                                    alt={bankMeta?.name || "Bank"}
+                                    width={34}
+                                    height={34}
+                                    sizes="34px"
+                                    className="cc-home-bank-logo"
+                                    loading="lazy"
+                                    onError={() => setFailedCreditCardBankLogos((prev) => ({ ...prev, [logoKey]: true }))}
+                                  />
+                                ) : bankMeta ? (
+                                  <span className="cc-home-bank-fallback" style={{ backgroundColor: bankMeta.color }}>
+                                    {bankMeta.short}
+                                  </span>
+                                ) : (
+                                  <span className="cc-home-bank-fallback cc-home-bank-fallback-default">CC</span>
+                                )}
+                                <div className="cc-home-bank-copy">
+                                  <div className="cc-home-bank-name">{bankMeta?.name || group.bankName || "Credit Cards"}</div>
+                                  <div className="cc-home-bank-meta">
+                                    {group.cards.length} {group.cards.length === 1 ? "card" : "cards"}
+                                  </div>
+                                  <div className="cc-home-bank-due">Due {dueDate}</div>
+                                </div>
+                              </div>
+                              <div className="cc-home-group-total">
+                                <div className="cc-home-total-amount">{formatCents(group.outstandingCents)}</div>
+                                {showDueBadge ? (
+                                  <div
+                                    className={`cc-home-due-badge cc-home-due-badge-${dueTone}`}
+                                    title={`Payment due ${dueDate}`}
+                                    style={{ color: dueColor }}
+                                  >
+                                    {dueCountdown}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="cc-home-card-list">
+                              {group.cards.map((card) => (
+                                <div
+                                  key={`${card.cardId}:${card.statementYear}:${card.statementMonth}`}
+                                  className="cc-home-card-row"
+                                >
+                                  <div className="cc-home-card-copy">
+                                    <div className="cc-home-card-name">{card.cardName}</div>
+                                    <div className="cc-home-card-statement">{getStatementLabel(card.statementMonth, card.statementYear)}</div>
+                                  </div>
+                                  <div className="cc-home-card-actions">
+                                    <div className="cc-home-card-amount">{formatCents(card.outstandingCents)}</div>
+                                    <button
+                                      type="button"
+                                      className="cc-home-view-statement"
+                                      title={`View ${card.cardName} ${getStatementLabel(card.statementMonth, card.statementYear)} transactions`}
+                                      aria-label={`View ${card.cardName} ${getStatementLabel(card.statementMonth, card.statementYear)} transactions`}
+                                      onClick={() => goToCreditCardStatement(card)}
+                                    >
+                                      <svg className="eye-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: "14px", height: "14px" }}>
+                                        <path d="M1 8C1 8 3.5 3 8 3C12.5 3 15 8 15 8C15 8 12.5 13 8 13C3.5 13 1 8 1 8Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                                        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2"/>
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
                   <EmptyState
-                    icon="📑"
-                    title="No transactions yet"
-                    description="Add your first transaction to start tracking your spending."
+                    icon="💳"
+                    title="No credit card transactions"
+                    description="Add credit card transactions to track your spending and accounting."
                   />
                 )}
               </div>
-            </div>
+            ) : null}
 
-            <div className="card cash-flow-card">
-              <div className="cash-flow-head">
+            <div className="dashboard-home-side-stack">
+              <div className="card cash-flow-card">
+                <div className="cash-flow-head">
                   <div>
                     <div className="cash-flow-title">📈 Cash flow</div>
-                  <div className="cash-flow-subtitle">{selectedCashFlowAccountName} in {cashFlowScopeName} - last 12 months</div>
+                    <div className="cash-flow-subtitle">{selectedCashFlowAccountName} in {cashFlowScopeName} - last 12 months</div>
                   </div>
-                <div className="cash-flow-legend" aria-label="Cash flow legend">
-                  <span><span className="cash-flow-dot cash-flow-dot-in" />In</span>
-                  <span><span className="cash-flow-dot cash-flow-dot-out" />Out</span>
-                  <span><span className="cash-flow-dot cash-flow-dot-net" />Net</span>
+                  <div className="cash-flow-legend" aria-label="Cash flow legend">
+                    <span><span className="cash-flow-dot cash-flow-dot-in" />In</span>
+                    <span><span className="cash-flow-dot cash-flow-dot-out" />Out</span>
+                    <span><span className="cash-flow-dot cash-flow-dot-net" />Net</span>
+                  </div>
+                </div>
+
+                <div className="cash-flow-pills" aria-label="Cash flow account filter">
+                  {cashFlowAccountOptions.map((account) => (
+                    <button
+                      key={account.id}
+                      type="button"
+                      className={`cash-flow-pill${selectedCashFlowAccountId === account.id ? " active" : ""}`}
+                      onClick={() => setSelectedCashFlowAccountId(account.id)}
+                    >
+                      {account.name}
+                    </button>
+                  ))}
+                </div>
+
+                {isLoading || !isDataReady ? (
+                  <div className="cash-flow-chart-skeleton skeleton" />
+                ) : hasCashFlowData ? (
+                  <CashFlowChart points={cashFlowPoints} formatShort={formatCentsShort} formatFull={formatCents} />
+                ) : (
+                  <EmptyState
+                    icon="$"
+                    title="No cash flow yet"
+                    description="Add income and expense transactions to see your monthly flow."
+                  />
+                )}
+              </div>
+
+              {/* Recent Transactions */}
+              <div className="card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600 }}>🆕 Recent transactions</div>
+                  <button className="btn btn-ghost btn-xs" onClick={() => router.push("/transactions")}>
+                    View all →
+                  </button>
+                </div>
+
+                <div>
+                  {recentTransactionRows.map((row) => (
+                    <DashboardTransactionRow key={row.tx.id} {...row} />
+                  ))}
+                  {transactionsQuery.isLoading && <DashboardRecentTransactionsSkeleton />}
+                  {!transactionsQuery.isLoading && !filteredTransactions.length && (
+                    <EmptyState
+                      icon="📑"
+                      title="No transactions yet"
+                      description="Add your first transaction to start tracking your spending."
+                    />
+                  )}
                 </div>
               </div>
-
-              <div className="cash-flow-pills" aria-label="Cash flow account filter">
-                {cashFlowAccountOptions.map((account) => (
-                  <button
-                    key={account.id}
-                    type="button"
-                    className={`cash-flow-pill${selectedCashFlowAccountId === account.id ? " active" : ""}`}
-                    onClick={() => setSelectedCashFlowAccountId(account.id)}
-                  >
-                    {account.name}
-                  </button>
-                ))}
-              </div>
-
-              {isLoading || !isDataReady ? (
-                <div className="cash-flow-chart-skeleton skeleton" />
-              ) : hasCashFlowData ? (
-                <CashFlowChart points={cashFlowPoints} formatShort={formatCentsShort} formatFull={formatCents} />
-              ) : (
-                <EmptyState
-                  icon="$"
-                  title="No cash flow yet"
-                  description="Add income and expense transactions to see your monthly flow."
-                />
-              )}
-            </div>
             </div>
           </div>
 

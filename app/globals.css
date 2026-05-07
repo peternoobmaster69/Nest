@@ -1945,6 +1945,12 @@ body {
   align-items: start;
 }
 
+.dashboard-home-grid-no-credit {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
 .dashboard-home-side-stack {
   display: grid;
   gap: 14px;
@@ -2195,7 +2201,7 @@ body {
   stroke-width: 1.5;
 }
 
-.cash-flow-tooltip {
+.chart-cursor-tooltip {
   position: absolute;
   z-index: var(--z-tooltip);
   display: grid;
@@ -2213,16 +2219,16 @@ body {
   transform: translate(12px, -50%);
 }
 
-.cash-flow-tooltip.left {
+.chart-cursor-tooltip.left {
   transform: translate(calc(-100% - 12px), -50%);
 }
 
-.cash-flow-tooltip strong {
+.chart-cursor-tooltip strong {
   color: var(--text-primary);
   font-size: 12px;
 }
 
-.cash-flow-tooltip span {
+.chart-cursor-tooltip span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -4647,6 +4653,7 @@ body {
 .inv-dot {
   cursor: pointer;
   transition: r 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
 }
 
 .inv-dot.invested {
@@ -4677,6 +4684,18 @@ body {
 
 .inv-area {
   stroke: none;
+}
+
+.inv-hit-area {
+  fill: transparent;
+  outline: none;
+  cursor: crosshair;
+  pointer-events: all;
+}
+
+.inv-hit-area:focus-visible {
+  stroke: var(--brand-500);
+  stroke-width: 1.5;
 }
 
 .inv-grid-line {
@@ -4712,17 +4731,6 @@ body {
 
 .inv-legend-dot.current.loss {
   background: var(--amount-negative);
-}
-
-.inv-tooltip {
-  margin-top: 8px;
-  display: inline-grid;
-  gap: 2px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: var(--bg-elevated);
-  font-size: 12px;
 }
 
 /* Compact transaction list (matches screenshot design) */
