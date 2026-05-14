@@ -648,27 +648,27 @@ export function SettingsPage() {
 
   return (
     <div className="st-container">
-      <div className="card" style={{ marginBottom: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              <div style={{ fontSize: "13px", fontWeight: 600 }}>Gmail Card Alerts</div>
+      <div className="card settings-card-block gmail-alerts-card">
+        <div className="gmail-alerts-header">
+          <div className="gmail-alerts-copy">
+            <div className="gmail-alerts-title-row">
+              <div className="settings-section-title">Gmail Card Alerts</div>
               <a
                 href="/credit-alerts"
                 target="_blank"
                 rel="noreferrer"
-                style={{ fontSize: "12px", color: "var(--brand-500)", textDecoration: "none", fontWeight: 500 }}
+                className="settings-inline-link"
               >
                 Open Staging Table
               </a>
             </div>
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+            <div className="settings-section-copy">
               Authorize once for read-only Gmail access. Nest only scans card transaction alert emails, extracts transaction details,
               and auto-adds them to Credit Card Transactions for tracking. Nest does not send, delete, or modify your emails.
             </div>
           </div>
           {gmailStatus.data?.connected ? (
-            <div style={{ display: "inline-flex", gap: "8px" }}>
+            <div className="gmail-alerts-actions">
               <button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending}>
                 {syncGmail.isPending ? "Syncing..." : "Sync Inbox"}
               </button>
@@ -683,39 +683,36 @@ export function SettingsPage() {
           )}
         </div>
         {gmailStatus.data?.connected && gmailStatus.data.integration ? (
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+          <div className="settings-message">
             Connected: <strong>{gmailStatus.data.integration.email}</strong>
             {gmailStatus.data.integration.lastSyncedAt
               ? ` · Last sync: ${new Date(gmailStatus.data.integration.lastSyncedAt).toLocaleString()}`
               : " · Never synced"}
           </div>
         ) : (
-          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Not connected.</div>
+          <div className="settings-muted-message">Not connected.</div>
         )}
         {gmailSyncProgress ? (
           <div className="gmail-sync-progress-wrap" aria-label="Gmail inbox sync progress" aria-live="polite">
-            <div className="gmail-sync-progress">
-              <div className="gmail-sync-progress-bar" style={{ width: `${Math.min(gmailSyncProgress.progress, 100)}%` }} />
-            </div>
+            <progress className="gmail-sync-progress" value={Math.min(gmailSyncProgress.progress, 100)} max={100} />
             <div className="gmail-sync-progress-text">
               {gmailSyncProgress.message || `Syncing inbox ${Math.round(gmailSyncProgress.progress)}%`}
             </div>
           </div>
         ) : null}
-        {gmailMessage ? <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>{gmailMessage}</div> : null}
+        {gmailMessage ? <div className="settings-message settings-message-spaced">{gmailMessage}</div> : null}
       </div>
 
-      <div className="card" style={{ marginBottom: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+      <div className="card settings-card-block">
+        <div className="settings-row">
           <div>
-            <div style={{ fontSize: "13px", fontWeight: 600 }}>Currency Display</div>
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+            <div className="settings-section-title">Currency Display</div>
+            <div className="settings-section-copy">
               Set currency display across your workspace. Default is SGD.
             </div>
           </div>
           <select
-            className="input"
-            style={{ maxWidth: "140px" }}
+            className="input settings-select-sm"
             value={baseCurrency}
             onChange={(event) => updateCurrency.mutate(event.target.value)}
             disabled={!workspaceId || updateCurrency.isPending}
@@ -727,20 +724,19 @@ export function SettingsPage() {
             ))}
           </select>
         </div>
-        {currencyMessage ? <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{currencyMessage}</div> : null}
+        {currencyMessage ? <div className="settings-message">{currencyMessage}</div> : null}
       </div>
 
-      <div className="card" style={{ marginBottom: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+      <div className="card settings-card-block">
+        <div className="settings-row">
           <div>
-            <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivable Default Account</div>
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+            <div className="settings-section-title">Receivable Default Account</div>
+            <div className="settings-section-copy">
               Closed receivables are credited into this account automatically.
             </div>
           </div>
           <select
-            className="input"
-            style={{ maxWidth: "260px" }}
+            className="input settings-select-md"
             value={defaultReceivableAccountId ?? ""}
             onChange={(event) =>
               updateReceivableDefaults.mutate({
@@ -758,16 +754,15 @@ export function SettingsPage() {
             ))}
           </select>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "10px" }}>
+        <div className="settings-row settings-row-spaced">
           <div>
-            <div style={{ fontSize: "13px", fontWeight: 600 }}>Receivable Default Subaccount</div>
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+            <div className="settings-section-title">Receivable Default Subaccount</div>
+            <div className="settings-section-copy">
               Closed receivables are posted into this subaccount under the default account.
             </div>
           </div>
           <select
-            className="input"
-            style={{ maxWidth: "260px" }}
+            className="input settings-select-md"
             value={defaultReceivableBudgetId ?? ""}
             onChange={(event) =>
               updateReceivableDefaults.mutate({
@@ -787,19 +782,19 @@ export function SettingsPage() {
               ))}
           </select>
         </div>
-        {receivableAccountMessage ? <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{receivableAccountMessage}</div> : null}
+        {receivableAccountMessage ? <div className="settings-message">{receivableAccountMessage}</div> : null}
       </div>
 
-      <div className="card" style={{ marginBottom: "12px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
-          <div style={{ flex: "1 1 auto" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600 }}>Credit Card Auto Accounting</div>
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)", maxWidth: "720px" }}>
+      <div className="card settings-card-block">
+        <div className="settings-auto-header">
+          <div className="settings-auto-copy">
+            <div className="settings-section-title">Credit Card Auto Accounting</div>
+            <div className="settings-section-copy settings-auto-description">
               Ordered rules match unaccounted credit card transaction subjects using case-insensitive contains filters. First match wins.
               Matching transactions are auto-accounted every 5 minutes.
             </div>
           </div>
-          <div style={{ display: "inline-flex", gap: "8px", flexWrap: "wrap", marginLeft: "auto", justifyContent: "flex-end" }}>
+          <div className="settings-auto-actions">
             <button className="btn btn-ghost btn-xs" type="button" onClick={() => setRuleDrafts(autoRules.data?.rules ?? [])} disabled={saveAutoRules.isPending || runAutoRules.isPending || !hasAutoRuleChanges}>
               <RotateCcw size={14} aria-hidden="true" />
               Reset
@@ -875,7 +870,7 @@ export function SettingsPage() {
           </div>
         )}
 
-        {autoRuleMessage ? <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-secondary)" }}>{autoRuleMessage}</div> : null}
+        {autoRuleMessage ? <div className="settings-message settings-message-auto">{autoRuleMessage}</div> : null}
       </div>
 
       {editingAutoRule && (
@@ -1237,11 +1232,11 @@ export function SettingsPage() {
                       onError={() => setFailedLogos((prev) => ({ ...prev, [account.id]: true }))}
                     />
                   ) : bank ? (
-                    <span className="st-bank-fallback" style={{ backgroundColor: bank.color }}>
+                    <span className={`st-bank-fallback st-bank-fallback-${bank.code.toLowerCase()}`}>
                       {bank.short}
                     </span>
                   ) : (
-                    <span className="st-bank-fallback" style={{ backgroundColor: '#64748b' }}>
+                    <span className="st-bank-fallback st-bank-fallback-default">
                       BNK
                     </span>
                   )}

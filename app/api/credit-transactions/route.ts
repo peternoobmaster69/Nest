@@ -42,10 +42,23 @@ export async function GET(request: Request) {
       orderBy: { transactionDate: "desc" },
     });
 
-    // Get counts per card
+    const cardCountWhere: Record<string, unknown> = {
+      workspaceId,
+      isAllocated: false,
+    };
+
+    if (year) {
+      cardCountWhere.statementYear = parseInt(year);
+    }
+
+    if (month) {
+      cardCountWhere.statementMonth = parseInt(month);
+    }
+
+    // Get unaccounted counts per card for the selected statement period.
     const cardCounts = await prisma.creditCardTransaction.groupBy({
       by: ["creditCardId"],
-      where: { workspaceId },
+      where: cardCountWhere,
       _count: { id: true },
     });
 

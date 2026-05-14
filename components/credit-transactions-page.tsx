@@ -347,12 +347,21 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     cardCounts: CardCount[],
     previousTx: CreditCardTransaction | null,
     nextTx: CreditCardTransaction | null,
+    year: number,
+    month: number,
   ) => {
+    const shouldCount = (tx: CreditCardTransaction | null): tx is CreditCardTransaction =>
+      Boolean(
+        tx &&
+        !tx.isAllocated &&
+        tx.statementYear === year &&
+        (month < 0 || tx.statementMonth === month + 1),
+      );
     const nextCounts = new Map(cardCounts.map((entry) => [entry.creditCardId, entry._count.id]));
-    if (previousTx && (!nextTx || previousTx.creditCardId !== nextTx.creditCardId)) {
+    if (shouldCount(previousTx)) {
       nextCounts.set(previousTx.creditCardId, Math.max(0, (nextCounts.get(previousTx.creditCardId) ?? 0) - 1));
     }
-    if (nextTx && (!previousTx || previousTx.creditCardId !== nextTx.creditCardId)) {
+    if (shouldCount(nextTx)) {
       nextCounts.set(nextTx.creditCardId, (nextCounts.get(nextTx.creditCardId) ?? 0) + 1);
     }
     return Array.from(nextCounts.entries()).map(([creditCardId, count]) => ({
@@ -382,13 +391,17 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         : withoutPrevious;
       queryClient.setQueryData<CreditTransactionsQueryData>(queryKey, {
         transactions: nextTransactions,
-        cardCounts: updateCardCounts(value.cardCounts, previousTx, nextTx),
+        cardCounts: updateCardCounts(value.cardCounts, previousTx, nextTx, year, month),
       });
     }
   };
 
   const transactions = data?.transactions || [];
   const cardCounts = data?.cardCounts || [];
+  const unaccountedCardCountTotal = useMemo(
+    () => cardCounts.reduce((sum, entry) => sum + entry._count.id, 0),
+    [cardCounts],
+  );
   const selectedCard = useMemo(
     () => sortedCards.find((card) => card.id === selectedCardId) ?? null,
     [selectedCardId, sortedCards],
@@ -866,16 +879,6 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     setSharedPaymentDueDate(earliestPaymentDue?.paymentDueDate ? toDateInputValue(earliestPaymentDue.paymentDueDate) : "");
   }, [earliestPaymentDue?.paymentDueDate, selectedCardId, selectedMonth, selectedYear]);
 
-  // Scroll selected card into view when cards load or selection changes
-  useEffect(() => {
-    if (!cardBarRef.current || !sortedCards.length) return;
-
-    const activeChip = cardBarRef.current.querySelector(".cct-card-chip.active") as HTMLElement | null;
-    if (activeChip) {
-      activeChip.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-    }
-  }, [selectedCardId, sortedCards.length]);
-
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!formCardId || !formDate || !formSubject || !formAmount || !formStatementMonth || !formStatementYear) return;
@@ -967,12 +970,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       {/* Card Selector Bar */}
       <div ref={cardBarRef} className="cct-card-bar">
         <button
-          className={`cct-card-chip ${selectedCardId === "all" ? "active" : ""}`}
+          className={`cct-card-chip cct-card-chip-all ${selectedCardId === "all" ? "active" : ""}`}
           onClick={() => setSelectedCardId("all")}
         >
           <span className="cct-card-chip-icon">📋</span>
           <span className="cct-card-chip-name">All Cards</span>
-          {transactions.length > 0 && <span className="cct-card-chip-badge">{transactions.length}</span>}
+          {unaccountedCardCountTotal > 0 && <span className="cct-card-chip-badge">{unaccountedCardCountTotal}</span>}
         </button>
         {sortedCards.map((card) => {
           const bank = getSingaporeBankByName(card.bankName);
@@ -1009,7 +1012,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       <div className="cct-period-bar">
         <div className="cct-month-tabs">
           <button
-            className={`cct-month-tab ${selectedMonth === -1 ? "active" : ""}`}
+            className={`cct-month-tab cct-month-tab-all ${selectedMonth === -1 ? "active" : ""}`}
             onClick={() => setSelectedMonth(-1)}
           >
             All
@@ -1147,24 +1150,19 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           ref={maybankFileInputRef}
           type="file"
           accept=".csv,text/csv"
-          style={{ display: "none" }}
+          className="cct-file-input"
           onChange={onPickMaybankCsv}
           disabled={!canImportMaybankCsv || importMaybankCsv.isPending}
         />
       </div>
       {importMessage ? (
-        <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-secondary)" }}>
+        <div className="cct-import-message">
           {importMessage}
         </div>
       ) : null}
       {importProgress > 0 ? (
         <div className="cct-import-progress" aria-label="CSV import progress" aria-live="polite">
-          <div className="cct-import-progress-track">
-            <div
-              className="cct-import-progress-bar"
-              style={{ width: `${Math.min(importProgress, 100)}%` }}
-            />
-          </div>
+          <progress className="cct-import-progress-track" value={Math.min(importProgress, 100)} max={100} />
           <div className="cct-import-progress-text">
             {importMaybankCsv.isPending ? `Importing CSV ${Math.round(importProgress)}%` : "Import complete"}
           </div>
@@ -1189,7 +1187,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             {isError && (
               <tr>
                 <td colSpan={5}>
-                  <div className="empty-state" style={{ padding: "40px 20px" }}>
+                  <div className="empty-state cct-load-error">
                     <div className="empty-state-icon">⚠️</div>
                     <h3 className="empty-state-title">Failed to load transactions</h3>
                     <button className="btn btn-primary" onClick={() => refetch()}>
@@ -1413,7 +1411,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               <div className="cct-form-grid">
                 <div className="form-group cct-span-2">
                   <label className="label">Reference</label>
-                  <div className="input" style={{ display: "flex", alignItems: "center" }}>
+                  <div className="input cct-reference-input">
                     {accountingTarget.subject} • {formatCurrency(accountingTarget.amountCents)}
                   </div>
                 </div>
@@ -1479,7 +1477,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               <div className="cct-form-grid">
                 <div className="form-group cct-span-2">
                   <label className="label">Reference</label>
-                  <div className="input" style={{ display: "flex", alignItems: "center" }}>
+                  <div className="input cct-reference-input">
                     {receivableTarget.subject}
                   </div>
                 </div>
@@ -1499,7 +1497,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   <label className="label">Amount ($)</label>
                   <NumericCalculatorInput step="0.01" min="0.01" value={receivableAmount} onValueChange={setReceivableAmount} required />
                 </div>
-                <label className="form-group cct-span-2" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                <label className="form-group cct-span-2 cct-cross-workspace-toggle">
                   <input
                     type="checkbox"
                     checked={useCrossWorkspaceReceivableSource}

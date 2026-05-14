@@ -5756,19 +5756,153 @@ body {
   gap: 6px;
 }
 
+.settings-card-block {
+  margin-bottom: 12px;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.settings-row-spaced {
+  margin-top: 10px;
+}
+
+.settings-section-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-section-copy {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.settings-inline-link {
+  font-size: 12px;
+  color: var(--brand-500);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.settings-message {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-muted-message {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.settings-message-spaced {
+  margin-top: 6px;
+}
+
+.settings-message-auto {
+  margin-top: 10px;
+}
+
+.settings-select-sm {
+  max-width: 140px;
+}
+
+.settings-select-md {
+  max-width: 260px;
+}
+
+.settings-auto-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-auto-copy {
+  flex: 1 1 auto;
+}
+
+.settings-auto-description {
+  max-width: 720px;
+}
+
+.settings-auto-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.gmail-alerts-header {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.gmail-alerts-copy {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+
+.gmail-alerts-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gmail-alerts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .gmail-alerts-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .gmail-alerts-actions .btn,
+  .gmail-alerts-header > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .gmail-sync-progress {
   width: 100%;
   height: 6px;
   background: var(--border-subtle);
   border-radius: 999px;
   overflow: hidden;
+  border: 0;
+  appearance: none;
 }
 
-.gmail-sync-progress-bar {
+.gmail-sync-progress::-webkit-progress-bar {
+  background: var(--border-subtle);
+  border-radius: 999px;
+}
+
+.gmail-sync-progress::-webkit-progress-value {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--brand-500), var(--brand-600));
   transition: width 180ms ease;
+}
+
+.gmail-sync-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-500), var(--brand-600));
 }
 
 .gmail-sync-progress-text {
@@ -6797,15 +6931,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 /* Card Bar */
 .cct-card-bar {
   display: flex;
+  justify-content: flex-start;
   gap: 8px;
   overflow-x: auto;
-  padding: 4px;
-  margin: -4px;
+  padding: 4px 0;
   scrollbar-width: none;
 }
 
@@ -6871,6 +7006,13 @@ body {
   color: var(--brand-500);
 }
 
+.cct-card-chip-all {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  box-shadow: 8px 0 14px -12px color-mix(in srgb, var(--text-primary) 45%, transparent);
+}
+
 /* Month Tabs */
 .cct-period-bar {
   display: flex;
@@ -6884,6 +7026,13 @@ body {
   gap: 4px;
   overflow-x: auto;
   padding-bottom: 4px;
+}
+
+.cct-month-tab-all {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  box-shadow: 8px 0 14px -12px color-mix(in srgb, var(--text-primary) 45%, transparent);
 }
 
 .cct-year-picker {
@@ -7073,19 +7222,30 @@ body {
 /* Actions */
 .cct-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .cct-actions .cct-toggle {
-  margin-right: auto;
+  margin-right: 0;
 }
 
 .cct-import-btn {
   width: 32px;
   height: 32px;
   font-size: 15px;
+}
+
+.cct-file-input {
+  display: none;
+}
+
+.cct-import-message {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .cct-import-progress {
@@ -7100,13 +7260,25 @@ body {
   border-radius: var(--r-pill);
   background: var(--bg-subtle);
   overflow: hidden;
+  border: 0;
+  appearance: none;
 }
 
-.cct-import-progress-bar {
+.cct-import-progress-track::-webkit-progress-bar {
+  background: var(--bg-subtle);
+  border-radius: var(--r-pill);
+}
+
+.cct-import-progress-track::-webkit-progress-value {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--brand-500), var(--brand-600));
   transition: width 180ms ease;
+}
+
+.cct-import-progress-track::-moz-progress-bar {
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand-500), var(--brand-600));
 }
 
 .cct-import-progress-text {
@@ -7273,6 +7445,23 @@ body {
   text-align: center;
   padding: 40px;
   color: var(--text-tertiary);
+}
+
+.cct-load-error {
+  padding: 40px 20px;
+}
+
+.cct-reference-input {
+  display: flex;
+  align-items: center;
+}
+
+.cct-cross-workspace-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* Modal */
@@ -8494,6 +8683,34 @@ body {
   font-weight: 700;
   letter-spacing: 0.02em;
 }
+
+.st-bank-fallback-default { background: #64748b; }
+.st-bank-fallback-dbs { background: #d71920; }
+.st-bank-fallback-posb { background: #e60012; }
+.st-bank-fallback-ocbc { background: #e2001a; }
+.st-bank-fallback-uob { background: #1f4ba5; }
+.st-bank-fallback-choc { background: #5a3a22; }
+.st-bank-fallback-sc { background: #00a3a3; }
+.st-bank-fallback-citi { background: #1a4fa3; }
+.st-bank-fallback-hsbc { background: #db0011; }
+.st-bank-fallback-maybank { background: #ffc72c; }
+.st-bank-fallback-cimb { background: #b20000; }
+.st-bank-fallback-boc { background: #c6002b; }
+.st-bank-fallback-icbc { background: #c41230; }
+.st-bank-fallback-rhb { background: #005bbb; }
+.st-bank-fallback-anz { background: #0072ce; }
+.st-bank-fallback-sbi { background: #00a0df; }
+.st-bank-fallback-boi { background: #003a8c; }
+.st-bank-fallback-mizuho { background: #003a70; }
+.st-bank-fallback-mufg { background: #e60012; }
+.st-bank-fallback-smbc { background: #006b54; }
+.st-bank-fallback-jpm { background: #2e5aac; }
+.st-bank-fallback-bnp { background: #00a651; }
+.st-bank-fallback-db { background: #0018a8; }
+.st-bank-fallback-ubs { background: #e60000; }
+.st-bank-fallback-trust { background: #007a5e; }
+.st-bank-fallback-gxs { background: #ff5a5f; }
+.st-bank-fallback-mari { background: #5e2a84; }
 
 .st-card-actions {
   display: flex;
