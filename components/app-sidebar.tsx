@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 import { useTheme } from "./theme-provider";
 import { SidebarSkeleton } from "./ui-skeleton";
 
@@ -269,7 +270,7 @@ export function AppSidebar({
 
   return (
     <>
-      {isOpen && <div className="sidebar-overlay" onClick={() => setIsOpen(false)} />}
+      {isOpen && <div className="sidebar-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsOpen(false))} />}
       <aside ref={sidebarRef} className={`sidebar${isOpen ? " open" : ""}`}>
         <Link href="/" className="sb-logo" onClick={handleNavClick}>
           <Image src="/icon.svg" alt="Nest" width={30} height={30} className="brand-logo-sm" />
@@ -422,7 +423,7 @@ export function AppSidebar({
         )}
 
       {profileModalOpen && (
-        <div className="profile-modal-overlay" onClick={() => setProfileModalOpen(false)}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setProfileModalOpen(false))}>
           <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Profile</h3>

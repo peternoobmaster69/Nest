@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { EmptyState } from "@/components/ui-skeleton";
 import { RewardsCardGridSkeleton, RewardsRowsSkeleton, RewardsSummarySkeleton } from "@/components/skeletons/RewardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 
 type CreditCardReward = {
   id: string;
@@ -1354,7 +1355,7 @@ export function RewardsPage({
 
       {/* Frequent Flyer Modal */}
       {isFFModalOpen && (
-        <div className="st-modal-overlay" onClick={closeFFModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeFFModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}</h3>
@@ -1467,7 +1468,7 @@ export function RewardsPage({
 
       {/* Add Earn Transaction Modal */}
       {isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
-        <div className="st-modal-overlay" onClick={() => setIsAddEarnModalOpen(false)}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsAddEarnModalOpen(false))}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Earn Transaction</h3>
@@ -1555,7 +1556,7 @@ export function RewardsPage({
 
       {/* Redeem Miles Modal */}
       {isRedeemModalOpen && selectedHistoryFrequentFlyer && (
-        <div className="st-modal-overlay" onClick={() => setIsRedeemModalOpen(false)}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsRedeemModalOpen(false))}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Redeem Miles</h3>

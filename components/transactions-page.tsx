@@ -13,6 +13,7 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 
 const ALL_BANKS_FILTER = "ALL";
 
@@ -1412,7 +1413,7 @@ export function TransactionsPage() {
         {/* Custom Month Popover */}
         {isCustomMonthOpen && typeof document !== "undefined" && createPortal(
           <>
-            <div className="tx-popover-overlay" onClick={() => setIsCustomMonthOpen(false)} />
+            <div className="tx-popover-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsCustomMonthOpen(false))} />
             <div className="tx-month-popover">
               <div className="tx-popover-header">
                 <h4>Select Month</h4>
@@ -1581,7 +1582,7 @@ export function TransactionsPage() {
       </section>
 
       {isCreateModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsCreateModalOpen(false))}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Add Transaction</h3>
@@ -1697,7 +1698,7 @@ export function TransactionsPage() {
       )}
 
       {editingTxId && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={closeEditModal}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditModal)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Transaction</h3>
@@ -1801,7 +1802,7 @@ export function TransactionsPage() {
       )}
 
       {editingBankAccount && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={closeEditBankBalance}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditBankBalance)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Bank Balance</h3>
@@ -1840,7 +1841,7 @@ export function TransactionsPage() {
       )}
 
       {isTransferModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={closeTransferModal}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeTransferModal)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Transfer Between Sub-Accounts</h3>
@@ -1917,7 +1918,7 @@ export function TransactionsPage() {
       )}
 
       {receivableInfoBudgetId && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={() => setReceivableInfoBudgetId(null)}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setReceivableInfoBudgetId(null))}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{receivableInfoBudget?.name || "Receivable Breakdown"}</h3>
@@ -1971,7 +1972,7 @@ export function TransactionsPage() {
       )}
 
       {isBudgetModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={closeBudgetModal}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeBudgetModal)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}</h3>

@@ -12,6 +12,7 @@ import { ArrowRight, ChevronDown, ChevronUp, Pencil, Play, Plus, RotateCcw, Save
 import { DataImportSection } from "@/components/data-import-section";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 
 type Context = {
   workspaceId: string | null;
@@ -88,14 +89,53 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     let detail = `Request failed (${res.status})`;
     try {
       const payload = await res.json();
-      detail = payload?.message || payload?.error || detail;
+      const payloadDetail = payload?.message || payload?.error;
+      detail = typeof payloadDetail === "string" ? payloadDetail : JSON.stringify(payloadDetail || payload) || detail;
     } catch {}
     throw new Error(detail);
   }
   return res.json();
 }
 
-function createEmptyAutoRule(): AutoRule {
+function getRuleFilters(rule: AutoRule) {
+  return rule.filters.map((filter) => filter.trim()).filter(Boolean);
+}
+
+function sanitizeAutoRule(rule: AutoRule): AutoRule {
+  if (rule.action === "DEDUCT_SAME_WORKSPACE") {
+    return {
+      ...rule,
+      name: rule.name.trim(),
+      filters: getRuleFilters(rule),
+    };
+  }
+  return {
+    ...rule,
+    name: rule.name.trim(),
+    filters: getRuleFilters(rule),
+  };
+}
+
+function getAutoRuleValidationMessage(rules: AutoRule[]) {
+  for (const [index, rule] of rules.entries()) {
+    const label = rule.name.trim() || `Rule ${index + 1}`;
+    if (!rule.name.trim()) return `Rule ${index + 1} needs a name.`;
+    if (getRuleFilters(rule).length === 0) return `Rule "${label}" needs at least one subject keyword.`;
+
+    if (rule.action === "DEDUCT_SAME_WORKSPACE") {
+      if (!rule.destinationAccountId) return `Rule "${label}" needs a destination bank account.`;
+      if (!rule.destinationBudgetId) return `Rule "${label}" needs a destination sub account.`;
+      continue;
+    }
+
+    if (!rule.sourceWorkspaceId) return `Rule "${label}" needs a source workspace.`;
+    if (!rule.sourceAccountId) return `Rule "${label}" needs a source bank account.`;
+    if (!rule.sourceBudgetId) return `Rule "${label}" needs a source sub account.`;
+  }
+  return null;
+}
+
+function createEmptyAutoRule(destination: { accountId?: string; budgetId?: string } = {}): AutoRule {
   const id =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -105,9 +145,9 @@ function createEmptyAutoRule(): AutoRule {
     name: "New rule",
     enabled: true,
     action: "DEDUCT_SAME_WORKSPACE",
-    filters: [""],
-    destinationAccountId: "",
-    destinationBudgetId: "",
+    filters: [],
+    destinationAccountId: destination.accountId ?? "",
+    destinationBudgetId: destination.budgetId ?? "",
   };
 }
 
@@ -241,6 +281,15 @@ export function SettingsPage() {
     () => JSON.stringify(ruleDrafts) !== JSON.stringify(autoRules.data?.rules ?? []),
     [ruleDrafts, autoRules.data?.rules],
   );
+
+  const defaultSameWorkspaceDestination = useMemo(() => {
+    const activeAccounts = (accounts.data ?? []).filter((account) => account.isActive);
+    const activeBudgets = (budgets.data ?? []).filter((budget) => budget.isActive);
+    const accountWithBudget = activeAccounts.find((account) => activeBudgets.some((budget) => budget.accountId === account.id));
+    const accountId = accountWithBudget?.id ?? activeAccounts[0]?.id ?? "";
+    const budgetId = activeBudgets.find((budget) => budget.accountId === accountId)?.id ?? "";
+    return { accountId, budgetId };
+  }, [accounts.data, budgets.data]);
 
   const connectGmail = useMutation({
     mutationFn: () =>
@@ -401,10 +450,7 @@ export function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId,
-          rules: rules.map((rule) => ({
-            ...rule,
-            filters: rule.filters.map((filter) => filter.trim()).filter(Boolean),
-          })),
+          rules: rules.map(sanitizeAutoRule),
         }),
       }),
     onSuccess: (data) => {
@@ -594,14 +640,20 @@ export function SettingsPage() {
   };
 
   const addRule = () => {
-    const nextRule = createEmptyAutoRule();
+    const nextRule = createEmptyAutoRule(defaultSameWorkspaceDestination);
     setRuleDrafts((current) => [...current, nextRule]);
     setEditingAutoRuleId(nextRule.id);
+    setAutoRuleMessage("New rule added. Add at least one subject keyword before saving.");
   };
 
   const onSaveAutoRules = () => {
     if (!workspaceId) return;
-    saveAutoRules.mutate(ruleDrafts);
+    const validationMessage = getAutoRuleValidationMessage(ruleDrafts);
+    if (validationMessage) {
+      setAutoRuleMessage(validationMessage);
+      return;
+    }
+    saveAutoRules.mutate(ruleDrafts.map(sanitizeAutoRule));
   };
 
   const getWorkspaceName = (id: string) => workspaces.find((workspace) => workspace.id === id)?.name || "Workspace";
@@ -874,7 +926,7 @@ export function SettingsPage() {
       </div>
 
       {editingAutoRule && (
-        <div className="auto-rule-modal-overlay" onClick={() => setEditingAutoRuleId(null)}>
+        <div className="auto-rule-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setEditingAutoRuleId(null))}>
           <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className="auto-rule-modal-header">
               <div className="auto-rule-modal-title-wrap">
@@ -953,8 +1005,8 @@ export function SettingsPage() {
                                 enabled: current.enabled,
                                 action: "DEDUCT_SAME_WORKSPACE",
                                 filters: current.filters,
-                                destinationAccountId: accounts.data?.find((account) => account.isActive)?.id ?? "",
-                                destinationBudgetId: "",
+                                destinationAccountId: defaultSameWorkspaceDestination.accountId,
+                                destinationBudgetId: defaultSameWorkspaceDestination.budgetId,
                               }
                             : {
                                 id: current.id,
@@ -1314,7 +1366,7 @@ export function SettingsPage() {
 
       {/* Add Account Modal */}
       {isAddModalOpen && (
-        <div className="st-modal-overlay" onClick={closeAddModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAddModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Bank Account</h3>
@@ -1386,7 +1438,7 @@ export function SettingsPage() {
 
       {/* Edit Account Modal */}
       {isEditModalOpen && editingAccountId && (
-        <div className="st-modal-overlay" onClick={closeEditModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Edit Bank Account</h3>

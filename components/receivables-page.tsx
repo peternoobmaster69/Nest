@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { ReceivablesListSkeleton, ReceivablesSummarySkeleton } from "@/components/skeletons/ReceivablesSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 
 type AppContext = {
   workspaceId: string | null;
@@ -655,7 +656,10 @@ export function ReceivablesPage() {
       </section>
 
       {isModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={isSavingReceivable ? undefined : closeModal}>
+        <div
+          className="profile-modal-overlay"
+          onDoubleClick={isSavingReceivable ? undefined : (event) => closeOnBackdropDoubleClick(event, closeModal)}
+        >
           <div className="profile-modal recv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>

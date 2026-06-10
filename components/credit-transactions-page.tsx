@@ -10,6 +10,7 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditTransactionsTableRowsSkeleton } from "@/components/skeletons/CreditTransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
 
@@ -1294,7 +1295,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Add Transaction Modal */}
       {isModalOpen && (
-        <div className="cct-modal-overlay" onClick={closeModal}>
+        <div className="cct-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeModal)}>
           <div className="cct-modal cct-modal-wide" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>{editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}</h3>
@@ -1401,7 +1402,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       )}
 
       {isAccountingModalOpen && accountingTarget && (
-        <div className="cct-modal-overlay" onClick={closeAccountingModal}>
+        <div className="cct-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAccountingModal)}>
           <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Deduct Credit Transaction</h3>
@@ -1467,7 +1468,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       )}
 
       {isReceivableModalOpen && receivableTarget && (
-        <div className="cct-modal-overlay" onClick={closeReceivableModal}>
+        <div className="cct-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeReceivableModal)}>
           <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Create Receivable</h3>

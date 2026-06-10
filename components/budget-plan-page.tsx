@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, GeneratingState } from "@/components/ui-skeleton";
 import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPlanSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 
 type BudgetItem = {
   id: string;
@@ -1456,7 +1457,7 @@ export function BudgetPlanPage() {
 
       {/* Budget Item Modal - Add/Edit */}
       {isAddItemModalOpen && (
-        <div className="st-modal-overlay" onClick={closeItemModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeItemModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingItemId ? "Edit Budget Item" : "Add Budget Item"}</h3>
@@ -1537,7 +1538,7 @@ export function BudgetPlanPage() {
 
       {/* Budget Source Modal - Add/Edit */}
       {isAddSourceModalOpen && (
-        <div className="st-modal-overlay" onClick={closeSourceModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeSourceModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>
@@ -1632,7 +1633,7 @@ export function BudgetPlanPage() {
 
       {/* Edit Allocation Modal */}
       {editingAllocationTarget !== null && editingAllocationSummary && (
-        <div className="st-modal-overlay" onClick={closeEditAllocationModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditAllocationModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Edit Budget Item</h3>
@@ -1673,7 +1674,7 @@ export function BudgetPlanPage() {
       )}
 
       {isAddAllocationModalOpen && (
-        <div className="st-modal-overlay" onClick={closeAddAllocationModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAddAllocationModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Budget Item</h3>
@@ -1719,7 +1720,7 @@ export function BudgetPlanPage() {
 
       {/* Quick Edit Modal - opened from Source Breakdown and Budgeted Items cards */}
       {quickEditTarget && (
-        <div className="st-modal-overlay" onClick={closeQuickEditModal}>
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeQuickEditModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{quickEditTarget.type === "item" ? "Edit Budgeted Item" : "Edit Source"}</h3>

@@ -2,6 +2,7 @@
 
 import { createContext, ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 
 type ConfirmDialogOptions = {
   title?: string;
@@ -59,7 +60,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
       {children}
       {dialog.open && typeof document !== "undefined"
         ? createPortal(
-            <div className="modal-overlay" onClick={() => closeDialog(false)}>
+            <div className="modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => closeDialog(false))}>
               <div
                 className="modal-container modal-md"
                 onClick={(event) => event.stopPropagation()}

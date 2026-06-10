@@ -8,6 +8,7 @@ import Image from "next/image";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 
 type AppContext = {
   workspaceId: string | null;
@@ -683,7 +684,7 @@ export function CreditCardsPage() {
 
       {/* Add Card Modal */}
       {isModalOpen && (
-        <div className="cc-modal-overlay" onClick={closeModal}>
+        <div className="cc-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeModal)}>
           <div className="cc-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cc-modal-header">
               <h3>{editingCardId ? "Edit Credit Card" : "Add Credit Card"}</h3>

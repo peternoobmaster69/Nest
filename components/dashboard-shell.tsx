@@ -9,6 +9,7 @@ import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 import { AppSidebar } from "./app-sidebar";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
@@ -1844,7 +1845,7 @@ export function DashboardShell({
         </div>
 
         {createBudgetOpen && (
-          <div className="profile-modal-overlay" onClick={() => setCreateBudgetOpen(false)}>
+          <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setCreateBudgetOpen(false))}>
             <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>New Sub-Account</h3>
@@ -1895,7 +1896,7 @@ export function DashboardShell({
         )}
 
         {editingBudgetId && (
-          <div className="profile-modal-overlay" onClick={() => setEditingBudgetId(null)}>
+          <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setEditingBudgetId(null))}>
             <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>Edit Account</h3>
@@ -1979,7 +1980,7 @@ export function DashboardShell({
         )}
 
         {editingBankAccount && (
-          <div className="profile-modal-overlay txn-contained-modal-overlay" onClick={closeEditBankBalance}>
+          <div className="profile-modal-overlay txn-contained-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditBankBalance)}>
             <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>Edit Bank Balance</h3>

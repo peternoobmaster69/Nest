@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 
 type AppContext = {
@@ -939,7 +940,7 @@ export function InvestmentsPage() {
       ) : null}
 
       {accountModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={closeAccountModal}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAccountModal)}>
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
@@ -1003,7 +1004,7 @@ export function InvestmentsPage() {
       )}
 
       {entryModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onClick={closeEntryModal}>
+        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEntryModal)}>
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>

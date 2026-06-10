@@ -9,6 +9,15 @@ const UpdateAutoRulesSchema = z.object({
   rules: CreditTxnAutoRulesSchema,
 });
 
+function formatRuleSchemaError(error: z.ZodError) {
+  return error.issues
+    .map((issue) => {
+      const path = issue.path.length ? issue.path.join(".") : "rules";
+      return `${path}: ${issue.message}`;
+    })
+    .join(" ");
+}
+
 async function validateRuleTargets(workspaceId: string, rules: z.infer<typeof CreditTxnAutoRulesSchema>) {
   for (const rule of rules) {
     if (rule.action === "DEDUCT_SAME_WORKSPACE") {
@@ -105,7 +114,10 @@ export async function PUT(request: Request) {
   try {
     const parsed = UpdateAutoRulesSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid auto-accounting rules", message: formatRuleSchemaError(parsed.error) },
+        { status: 400 },
+      );
     }
 
     await requireWorkspaceAccess(parsed.data.workspaceId);
