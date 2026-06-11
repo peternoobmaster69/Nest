@@ -69,11 +69,22 @@ type TransactionMonthSummary = {
 
 type Receivable = {
   id: string;
+  workspaceId?: string | null;
+  sourceWorkspaceId?: string | null;
+  workspaceName?: string | null;
   title: string;
   amountCents: number;
   date: string;
   status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
   budgetId?: string | null;
+};
+
+type ReceivableBudgetSummary = {
+  workspaceId: string;
+  budgetId: string;
+  receivableReservedCents: number;
+  count: number;
+  items: Receivable[];
 };
 
 type BankAccount = {
@@ -320,13 +331,6 @@ export function TransactionsPage() {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
   }, [dateFilter.from]);
 
-  // Initialize with "This Month" active
-  useEffect(() => {
-    if (activeQuickSelect === "thisMonth" && !dateFilter.from) {
-      setDateFilter(getDateRangeForQuickSelect("thisMonth"));
-    }
-  }, []);
-
   const getDateRangeForQuickSelect = (type: string) => {
     const now = new Date();
     const year = now.getFullYear();
@@ -355,6 +359,13 @@ export function TransactionsPage() {
         return {};
     }
   };
+
+  // Initialize with "This Month" active
+  useEffect(() => {
+    if (activeQuickSelect === "thisMonth" && !dateFilter.from) {
+      setDateFilter(getDateRangeForQuickSelect("thisMonth"));
+    }
+  }, []);
 
   const handleQuickSelect = (type: string) => {
     setActiveQuickSelect(type);
@@ -406,10 +417,12 @@ export function TransactionsPage() {
     () => transactionPages.flatMap((page) => page.transactions),
     [transactionPages],
   );
-  const receivables = useQuery({
-    queryKey: ["receivables", workspaceId],
-    queryFn: () => fetchJson<Receivable[]>(`/api/receivables?workspaceId=${workspaceId}`),
-    enabled: Boolean(workspaceId),
+  const receivableBudgetSummary = useQuery({
+    queryKey: ["receivable-budget-summary", workspaceId, receivableInfoBudgetId],
+    queryFn: () => fetchJson<ReceivableBudgetSummary>(
+      `/api/receivables/budget-summary?workspaceId=${workspaceId}&budgetId=${receivableInfoBudgetId}`,
+    ),
+    enabled: Boolean(workspaceId && receivableInfoBudgetId),
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
@@ -835,18 +848,18 @@ export function TransactionsPage() {
   );
   const receivableInfoItems = useMemo(
     () =>
-      (receivables.data ?? [])
+      (receivableBudgetSummary.data?.items ?? [])
         .filter(
           (receivable) =>
             receivable.budgetId === receivableInfoBudgetId &&
             (receivable.status === "OPEN" || receivable.status === "PARTIAL"),
         )
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [receivables.data, receivableInfoBudgetId],
+    [receivableBudgetSummary.data?.items, receivableInfoBudgetId],
   );
   const receivableInfoTotalCents = useMemo(
-    () => receivableInfoItems.reduce((sum, receivable) => sum + receivable.amountCents, 0),
-    [receivableInfoItems],
+    () => receivableBudgetSummary.data?.receivableReservedCents ?? receivableInfoItems.reduce((sum, receivable) => sum + receivable.amountCents, 0),
+    [receivableBudgetSummary.data?.receivableReservedCents, receivableInfoItems],
   );
 
   const beginEdit = (tx: Transaction) => {
@@ -1945,7 +1958,7 @@ export function TransactionsPage() {
                 <strong className={getAmountToneClass(receivableInfoTotalCents)}>{formatCents(receivableInfoTotalCents)}</strong>
               </div>
               <div className="simple-list">
-                {receivables.isLoading ? (
+                {receivableBudgetSummary.isLoading ? (
                   <TransactionsReceivablesListSkeleton />
                 ) : receivableInfoItems.length ? (
                   receivableInfoItems.map((receivable) => (
@@ -1954,6 +1967,7 @@ export function TransactionsPage() {
                         <div style={{ fontWeight: 600 }}>{receivable.title || "Receivable"}</div>
                         <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                           {new Date(receivable.date).toLocaleDateString()} · {receivable.status}
+                          {receivable.workspaceName && receivable.workspaceId !== workspaceId ? ` · ${receivable.workspaceName}` : ""}
                         </div>
                       </div>
                       <div className={getAmountToneClass(receivable.amountCents)}>{formatCents(receivable.amountCents)}</div>
