@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
@@ -136,6 +136,17 @@ function writeCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
 }
 
+function scrollSelectedFilterIntoView(container: HTMLDivElement | null, selectedElement: HTMLElement | null) {
+  if (!container || !selectedElement) return;
+
+  const targetLeft =
+    selectedElement.offsetLeft - (container.clientWidth - selectedElement.offsetWidth) / 2;
+  container.scrollTo({
+    left: Math.max(0, targetLeft),
+    behavior: "smooth",
+  });
+}
+
 export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -180,6 +191,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [sharedPaymentDueDate, setSharedPaymentDueDate] = useState("");
   const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
   const cardBarRef = useRef<HTMLDivElement | null>(null);
+  const monthTabsRef = useRef<HTMLDivElement | null>(null);
+  const [isCardBarScrolled, setIsCardBarScrolled] = useState(false);
+  const [isMonthTabsScrolled, setIsMonthTabsScrolled] = useState(false);
+  const [isSelectedCardOutOfView, setIsSelectedCardOutOfView] = useState(false);
 
   // Form state
   const [formCardId, setFormCardId] = useState("");
@@ -231,6 +246,56 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     writeCookie(CREDIT_TX_MONTH_COOKIE, String(selectedMonth));
   }, [filtersReady, selectedMonth]);
 
+  const updateSelectedCardVisibility = useCallback(() => {
+    const container = cardBarRef.current;
+    if (!container || selectedCardId === "all") {
+      setIsSelectedCardOutOfView(false);
+      return;
+    }
+
+    const selectedChip = container.querySelector<HTMLButtonElement>(`[data-card-id="${CSS.escape(selectedCardId)}"]`);
+    if (!selectedChip) {
+      setIsSelectedCardOutOfView(false);
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const selectedRect = selectedChip.getBoundingClientRect();
+    const isVisible = selectedRect.right > containerRect.left && selectedRect.left < containerRect.right;
+    setIsSelectedCardOutOfView(!isVisible);
+  }, [selectedCardId]);
+
+  useEffect(() => {
+    const watchHorizontalScroll = (
+      element: HTMLDivElement | null,
+      setScrolled: (value: boolean) => void,
+    ) => {
+      if (!element) return undefined;
+
+      const update = () => {
+        setScrolled(element.scrollLeft > 8);
+        if (element === cardBarRef.current) {
+          updateSelectedCardVisibility();
+        }
+      };
+      update();
+      element.addEventListener("scroll", update, { passive: true });
+      return () => element.removeEventListener("scroll", update);
+    };
+
+    const unwatchCardBar = watchHorizontalScroll(cardBarRef.current, setIsCardBarScrolled);
+    const unwatchMonthTabs = watchHorizontalScroll(monthTabsRef.current, setIsMonthTabsScrolled);
+
+    return () => {
+      unwatchCardBar?.();
+      unwatchMonthTabs?.();
+    };
+  }, [updateSelectedCardVisibility]);
+
+  useEffect(() => {
+    requestAnimationFrame(updateSelectedCardVisibility);
+  }, [selectedCardId, sortedCards, updateSelectedCardVisibility]);
+
   useEffect(() => {
     if (!filtersReady) return;
     if (selectedCardId !== "all" && !sortedCards.some((card) => card.id === selectedCardId)) {
@@ -239,6 +304,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     }
     writeCookie(CREDIT_TX_CARD_COOKIE, selectedCardId);
   }, [filtersReady, selectedCardId, sortedCards]);
+
+  useEffect(() => {
+    if (selectedMonth === -1) {
+      monthTabsRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+      return;
+    }
+    const activeMonthTab = Array.from(monthTabsRef.current?.querySelectorAll<HTMLButtonElement>("[data-month]") ?? [])
+      .find((tab) => tab.dataset.month === String(selectedMonth));
+    requestAnimationFrame(() => scrollSelectedFilterIntoView(monthTabsRef.current, activeMonthTab ?? null));
+  }, [selectedMonth]);
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -969,7 +1044,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   return (
     <div className="cct-container">
       {/* Card Selector Bar */}
-      <div ref={cardBarRef} className="cct-card-bar">
+      <div className={`cct-card-selector${isCardBarScrolled ? " is-scrolled" : ""}`}>
         <button
           className={`cct-card-chip cct-card-chip-all ${selectedCardId === "all" ? "active" : ""}`}
           onClick={() => setSelectedCardId("all")}
@@ -978,16 +1053,46 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <span className="cct-card-chip-name">All Cards</span>
           {unaccountedCardCountTotal > 0 && <span className="cct-card-chip-badge">{unaccountedCardCountTotal}</span>}
         </button>
-        {sortedCards.map((card) => {
-          const bank = getSingaporeBankByName(card.bankName);
+        {selectedCard && isSelectedCardOutOfView ? (() => {
+          const bank = getSingaporeBankByName(selectedCard.bankName);
           const logo = getBankLogoUrl(bank);
-          const count = getCardCount(card.id);
+          const count = getCardCount(selectedCard.id);
           return (
             <button
-              key={card.id}
-              className={`cct-card-chip ${selectedCardId === card.id ? "active" : ""}`}
-              onClick={() => setSelectedCardId(card.id)}
+              className="cct-card-chip cct-card-chip-current active"
+              onClick={() => setSelectedCardId(selectedCard.id)}
             >
+              {logo && !failedLogos[selectedCard.id] ? (
+                <Image
+                  src={logo}
+                  alt={selectedCard.bankName || ""}
+                  width={24}
+                  height={16}
+                  sizes="24px"
+                  className="cct-card-chip-logo"
+                  loading="lazy"
+                  onError={() => setFailedLogos((prev) => ({ ...prev, [selectedCard.id]: true }))}
+                />
+              ) : (
+                <span className="cct-card-chip-icon">💳</span>
+              )}
+              <span className="cct-card-chip-name">{selectedCard.cardName}</span>
+              {count > 0 && <span className="cct-card-chip-badge">{count}</span>}
+            </button>
+          );
+        })() : null}
+        <div ref={cardBarRef} className="cct-card-bar">
+          {sortedCards.map((card) => {
+            const bank = getSingaporeBankByName(card.bankName);
+            const logo = getBankLogoUrl(bank);
+            const count = getCardCount(card.id);
+            return (
+              <button
+                key={card.id}
+                data-card-id={card.id}
+                className={`cct-card-chip ${selectedCardId === card.id ? "active" : ""}`}
+                onClick={() => setSelectedCardId(card.id)}
+              >
               {logo && !failedLogos[card.id] ? (
                 <Image
                   src={logo}
@@ -1004,29 +1109,34 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               )}
               <span className="cct-card-chip-name">{card.cardName}</span>
               {count > 0 && <span className="cct-card-chip-badge">{count}</span>}
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Period Filter */}
       <div className="cct-period-bar">
-        <div className="cct-month-tabs">
+        <div className={`cct-month-tabs-shell${isMonthTabsScrolled ? " is-scrolled" : ""}`}>
           <button
+            data-month="-1"
             className={`cct-month-tab cct-month-tab-all ${selectedMonth === -1 ? "active" : ""}`}
             onClick={() => setSelectedMonth(-1)}
           >
             All
           </button>
-          {MONTHS.map((month, idx) => (
-            <button
-              key={month}
-              className={`cct-month-tab ${selectedMonth === idx ? "active" : ""}`}
-              onClick={() => setSelectedMonth(idx)}
-            >
-              {month}
-            </button>
-          ))}
+          <div ref={monthTabsRef} className="cct-month-tabs">
+            {MONTHS.map((month, idx) => (
+              <button
+                key={month}
+                data-month={idx}
+                className={`cct-month-tab ${selectedMonth === idx ? "active" : ""}`}
+                onClick={() => setSelectedMonth(idx)}
+              >
+                {month}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="cct-year-picker">
           <label className="label" htmlFor="credit-transactions-year">Statement Year</label>

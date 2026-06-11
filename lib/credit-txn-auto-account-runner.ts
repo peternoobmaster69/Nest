@@ -42,45 +42,63 @@ async function applyDeductRule(
   },
   rule: Extract<CreditTxnAutoRule, { action: "DEDUCT_SAME_WORKSPACE" }>,
 ) {
-  const account = await db.financialAccount.findFirst({
+  const sameWorkspaceBudgets = await db.budgetEnvelope.findMany({
     where: {
-      id: rule.destinationAccountId,
       workspaceId: transaction.workspaceId,
-      kind: "BANK",
+      id: { in: [rule.sourceBudgetId, rule.destinationBudgetId] },
       isActive: true,
+      account: {
+        kind: "BANK",
+        isActive: true,
+      },
     },
-    select: { id: true },
+    select: { id: true, name: true, accountId: true },
   });
-  if (!account) return false;
 
-  const budget = await db.budgetEnvelope.findFirst({
-    where: {
-      id: rule.destinationBudgetId,
-      workspaceId: transaction.workspaceId,
-      accountId: account.id,
-      isActive: true,
-    },
-    select: { id: true },
-  });
-  if (!budget) return false;
+  const sourceBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.sourceBudgetId);
+  const destinationBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.destinationBudgetId);
+  if (!sourceBudget || !destinationBudget) return false;
+
+  const shouldCreateDestinationCredit = sourceBudget.id !== destinationBudget.id;
+  const externalRef = `credit-auto:${transaction.id}:${rule.id}`;
 
   await db.$transaction(async (tx) => {
     const posted = await tx.transaction.create({
       data: {
         workspaceId: transaction.workspaceId,
-        accountId: account.id,
-        budgetId: budget.id,
+        accountId: sourceBudget.accountId,
+        budgetId: sourceBudget.id,
         kind: "CREDIT_CARD_PAYMENT",
         direction: "DEBIT",
         date: transaction.transactionDate,
         amountCents: transaction.amountCents,
         subject: transaction.subject,
-        details: `Auto-accounted by rule "${rule.name}" from ${transaction.creditCard.cardName} ••${transaction.creditCard.last4Digit}`,
+        details: `Auto-accounted by rule "${rule.name}" from ${transaction.creditCard.cardName} ending ${transaction.creditCard.last4Digit}`,
+        externalRef,
         isSynced: false,
         isFromFamily: false,
       },
       select: { id: true },
     });
+
+    if (shouldCreateDestinationCredit) {
+      await tx.transaction.create({
+        data: {
+          workspaceId: transaction.workspaceId,
+          accountId: destinationBudget.accountId,
+          budgetId: destinationBudget.id,
+          kind: "CREDIT_CARD_PAYMENT",
+          direction: "CREDIT",
+          date: transaction.transactionDate,
+          amountCents: transaction.amountCents,
+          subject: transaction.subject,
+          details: `Auto-accounted by rule "${rule.name}" to ${destinationBudget.name}`,
+          externalRef,
+          isSynced: false,
+          isFromFamily: false,
+        },
+      });
+    }
 
     await tx.creditCardTxnLink.create({
       data: {
@@ -99,7 +117,10 @@ async function applyDeductRule(
       data: { isAllocated: true },
     });
 
-    await recalculateBudgetAvailableCents(tx, transaction.workspaceId, budget.id);
+    await recalculateBudgetAvailableCents(tx, transaction.workspaceId, sourceBudget.id);
+    if (shouldCreateDestinationCredit) {
+      await recalculateBudgetAvailableCents(tx, transaction.workspaceId, destinationBudget.id);
+    }
   });
 
   return true;

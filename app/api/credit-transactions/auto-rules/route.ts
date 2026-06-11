@@ -21,30 +21,34 @@ function formatRuleSchemaError(error: z.ZodError) {
 async function validateRuleTargets(workspaceId: string, rules: z.infer<typeof CreditTxnAutoRulesSchema>) {
   for (const rule of rules) {
     if (rule.action === "DEDUCT_SAME_WORKSPACE") {
-      const account = await prisma.financialAccount.findFirst({
-        where: {
-          id: rule.destinationAccountId,
-          workspaceId,
-          kind: "BANK",
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      if (!account) {
-        throw new Error(`Rule "${rule.name}" has an invalid same-workspace bank account.`);
+      if (rule.sourceBudgetId === rule.destinationBudgetId) {
+        throw new Error(`Rule "${rule.name}" needs different source and destination sub accounts.`);
       }
 
-      const budget = await prisma.budgetEnvelope.findFirst({
+      const sameWorkspaceBudgets = await prisma.budgetEnvelope.findMany({
         where: {
-          id: rule.destinationBudgetId,
+          id: { in: [rule.sourceBudgetId, rule.destinationBudgetId] },
           workspaceId,
-          accountId: account.id,
           isActive: true,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          account: {
+            select: {
+              kind: true,
+              isActive: true,
+            },
+          },
+        },
       });
-      if (!budget) {
-        throw new Error(`Rule "${rule.name}" has an invalid same-workspace sub account.`);
+
+      const sourceBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.sourceBudgetId);
+      const destinationBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.destinationBudgetId);
+      if (!sourceBudget || sourceBudget.account.kind !== "BANK" || !sourceBudget.account.isActive) {
+        throw new Error(`Rule "${rule.name}" has an invalid source sub account.`);
+      }
+      if (!destinationBudget || destinationBudget.account.kind !== "BANK" || !destinationBudget.account.isActive) {
+        throw new Error(`Rule "${rule.name}" has an invalid destination sub account.`);
       }
       continue;
     }

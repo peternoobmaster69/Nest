@@ -10,7 +10,8 @@ const SameWorkspaceDeductRuleSchema = z.object({
   enabled: z.boolean().default(true),
   action: z.literal("DEDUCT_SAME_WORKSPACE"),
   filters: z.array(SubjectFilterSchema).min(1).max(20),
-  destinationAccountId: z.string().min(1),
+  sourceBudgetId: z.string().min(1),
+  destinationAccountId: z.string().min(1).optional(),
   destinationBudgetId: z.string().min(1),
 });
 
@@ -34,10 +35,29 @@ export const CreditTxnAutoRulesSchema = z.array(CreditTxnAutoRuleSchema).max(100
 
 export type CreditTxnAutoRule = z.infer<typeof CreditTxnAutoRuleSchema>;
 
+function normalizeCreditTxnAutoRulesInput(value: unknown) {
+  if (!Array.isArray(value)) return value;
+  return value.map((rule) => {
+    if (!rule || typeof rule !== "object" || (rule as { action?: unknown }).action !== "DEDUCT_SAME_WORKSPACE") {
+      return rule;
+    }
+
+    const sameWorkspaceRule = rule as { sourceBudgetId?: unknown; destinationBudgetId?: unknown };
+    if (typeof sameWorkspaceRule.sourceBudgetId === "string") {
+      return rule;
+    }
+
+    return {
+      ...sameWorkspaceRule,
+      sourceBudgetId: typeof sameWorkspaceRule.destinationBudgetId === "string" ? sameWorkspaceRule.destinationBudgetId : "",
+    };
+  });
+}
+
 export function parseCreditTxnAutoRules(value: string | null | undefined): CreditTxnAutoRule[] {
   if (!value) return [];
   try {
-    const parsed = JSON.parse(value);
+    const parsed = normalizeCreditTxnAutoRulesInput(JSON.parse(value));
     const result = CreditTxnAutoRulesSchema.safeParse(parsed);
     return result.success ? result.data : [];
   } catch {

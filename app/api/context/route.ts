@@ -10,6 +10,7 @@ import {
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { z } from "zod";
 
 const UpdateContextSchema = z.object({
@@ -18,6 +19,7 @@ const UpdateContextSchema = z.object({
   baseCurrency: z.enum(["SGD", "USD", "EUR", "GBP", "AUD", "JPY"]).optional(),
   receivableDefaultAccountId: z.string().min(1).nullable().optional(),
   receivableDefaultBudgetId: z.string().min(1).nullable().optional(),
+  publicNetWorthEnabled: z.boolean().optional(),
 });
 
 const DEFAULT_SIDEBAR_MONEY_PAGES = {
@@ -49,6 +51,8 @@ function emptyContextResponse(workspaces: WorkspaceSummary[] = []) {
     workspaces,
     accounts: [],
     sidebarMoneyPages: DEFAULT_SIDEBAR_MONEY_PAGES,
+    publicNetWorthEnabled: false,
+    publicNetWorthToken: null,
   };
 }
 
@@ -216,6 +220,8 @@ export async function GET() {
           receivableDefaultBudgetId: true,
           isShared: true,
           sidebarMoneyPages: true,
+          publicNetWorthEnabled: true,
+          publicNetWorthToken: true,
           financials: {
             where: { isActive: true },
             orderBy: { createdAt: "asc" },
@@ -256,6 +262,8 @@ export async function GET() {
       memberCount: workspace._count.members,
       pendingInviteCount,
       sidebarMoneyPages: parseSidebarMoneyPages(workspace.sidebarMoneyPages),
+      publicNetWorthEnabled: workspace.publicNetWorthEnabled,
+      publicNetWorthToken: workspace.publicNetWorthToken,
       workspaces: workspaceSummaries,
       accounts: workspace.financials.map((a) => ({
         id: a.id,
@@ -307,19 +315,26 @@ export async function PATCH(request: Request) {
       baseCurrency: string;
       receivableDefaultAccountId: string | null;
       receivableDefaultBudgetId: string | null;
+      publicNetWorthEnabled: boolean;
+      publicNetWorthToken: string | null;
     } | null = null;
     if (
       parsed.data.workspaceId &&
       (
         parsed.data.baseCurrency !== undefined ||
         parsed.data.receivableDefaultAccountId !== undefined ||
-        parsed.data.receivableDefaultBudgetId !== undefined
+        parsed.data.receivableDefaultBudgetId !== undefined ||
+        parsed.data.publicNetWorthEnabled !== undefined
       )
     ) {
       await requireWorkspaceAccess(parsed.data.workspaceId);
       const existingWorkspace = await prisma.workspace.findUnique({
         where: { id: parsed.data.workspaceId },
-        select: { receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
+        select: {
+          receivableDefaultAccountId: true,
+          receivableDefaultBudgetId: true,
+          publicNetWorthToken: true,
+        },
       });
       if (!existingWorkspace) {
         return NextResponse.json({ error: "Workspace not found." }, { status: 404 });
@@ -382,8 +397,20 @@ export async function PATCH(request: Request) {
               ? undefined
               : parsed.data.receivableDefaultAccountId,
           receivableDefaultBudgetId: nextBudgetId,
+          publicNetWorthEnabled: parsed.data.publicNetWorthEnabled,
+          publicNetWorthToken:
+            parsed.data.publicNetWorthEnabled && !existingWorkspace.publicNetWorthToken
+              ? randomBytes(32).toString("base64url")
+              : undefined,
         },
-        select: { id: true, baseCurrency: true, receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
+        select: {
+          id: true,
+          baseCurrency: true,
+          receivableDefaultAccountId: true,
+          receivableDefaultBudgetId: true,
+          publicNetWorthEnabled: true,
+          publicNetWorthToken: true,
+        },
       });
     }
 
@@ -392,6 +419,8 @@ export async function PATCH(request: Request) {
       baseCurrency: updated?.baseCurrency ?? null,
       defaultAccountId: updated?.receivableDefaultAccountId ?? null,
       defaultBudgetId: updated?.receivableDefaultBudgetId ?? null,
+      publicNetWorthEnabled: updated?.publicNetWorthEnabled ?? null,
+      publicNetWorthToken: updated?.publicNetWorthToken ?? null,
       activeWorkspaceId: parsed.data.activeWorkspaceId ?? null,
     });
     if (parsed.data.activeWorkspaceId) {

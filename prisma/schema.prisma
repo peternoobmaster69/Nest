@@ -78,6 +78,8 @@ model Workspace {
   isShared        Boolean            @default(false)
   sidebarMoneyPages String?          // Stores visibility settings for Money section pages in sidebar (JSON string)
   creditCardAutoRules String?        @db.NVarChar(Max) // Stores ordered credit card auto-accounting rules (JSON string)
+  publicNetWorthEnabled Boolean      @default(false)
+  publicNetWorthToken   String?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   receivableDefaultAccount FinancialAccount? @relation("WorkspaceReceivableDefaultAccount", fields: [receivableDefaultAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -110,6 +112,8 @@ model Workspace {
   budgetSources       BudgetSource[]
   monthlyBudgetSources MonthlyBudgetSource[]
   monthlyBudgets      MonthlyBudget[]
+
+  @@index([publicNetWorthToken])
 }
 
 model WorkspaceInvite {

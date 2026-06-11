@@ -8,7 +8,7 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, ChevronDown, ChevronUp, Pencil, Play, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, Copy, Pencil, Play, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
 import { DataImportSection } from "@/components/data-import-section";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
@@ -19,6 +19,8 @@ type Context = {
   defaultAccountId: string | null;
   defaultBudgetId: string | null;
   baseCurrency?: string | null;
+  publicNetWorthEnabled?: boolean | null;
+  publicNetWorthToken?: string | null;
   workspaces?: Array<{ id: string; name: string }>;
 };
 
@@ -60,7 +62,8 @@ type AutoRule =
       enabled: boolean;
       action: "DEDUCT_SAME_WORKSPACE";
       filters: string[];
-      destinationAccountId: string;
+      sourceBudgetId: string;
+      destinationAccountId?: string;
       destinationBudgetId: string;
     }
   | {
@@ -104,9 +107,13 @@ function getRuleFilters(rule: AutoRule) {
 function sanitizeAutoRule(rule: AutoRule): AutoRule {
   if (rule.action === "DEDUCT_SAME_WORKSPACE") {
     return {
-      ...rule,
+      id: rule.id,
       name: rule.name.trim(),
+      enabled: rule.enabled,
+      action: rule.action,
       filters: getRuleFilters(rule),
+      sourceBudgetId: rule.sourceBudgetId,
+      destinationBudgetId: rule.destinationBudgetId,
     };
   }
   return {
@@ -123,8 +130,9 @@ function getAutoRuleValidationMessage(rules: AutoRule[]) {
     if (getRuleFilters(rule).length === 0) return `Rule "${label}" needs at least one subject keyword.`;
 
     if (rule.action === "DEDUCT_SAME_WORKSPACE") {
-      if (!rule.destinationAccountId) return `Rule "${label}" needs a destination bank account.`;
+      if (!rule.sourceBudgetId) return `Rule "${label}" needs a source sub account.`;
       if (!rule.destinationBudgetId) return `Rule "${label}" needs a destination sub account.`;
+      if (rule.sourceBudgetId === rule.destinationBudgetId) return `Rule "${label}" needs different source and destination sub accounts.`;
       continue;
     }
 
@@ -135,7 +143,7 @@ function getAutoRuleValidationMessage(rules: AutoRule[]) {
   return null;
 }
 
-function createEmptyAutoRule(destination: { accountId?: string; budgetId?: string } = {}): AutoRule {
+function createEmptyAutoRule(destination: { sourceBudgetId?: string; destinationBudgetId?: string } = {}): AutoRule {
   const id =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -146,8 +154,8 @@ function createEmptyAutoRule(destination: { accountId?: string; budgetId?: strin
     enabled: true,
     action: "DEDUCT_SAME_WORKSPACE",
     filters: [],
-    destinationAccountId: destination.accountId ?? "",
-    destinationBudgetId: destination.budgetId ?? "",
+    sourceBudgetId: destination.sourceBudgetId ?? "",
+    destinationBudgetId: destination.destinationBudgetId ?? "",
   };
 }
 
@@ -159,6 +167,8 @@ export function SettingsPage() {
   const [gmailSyncProgress, setGmailSyncProgress] = useState<GmailSyncProgress | null>(null);
   const [currencyMessage, setCurrencyMessage] = useState("");
   const [receivableAccountMessage, setReceivableAccountMessage] = useState("");
+  const [publicNetWorthMessage, setPublicNetWorthMessage] = useState("");
+  const [optimisticPublicNetWorthEnabled, setOptimisticPublicNetWorthEnabled] = useState<boolean | null>(null);
   const [autoRuleMessage, setAutoRuleMessage] = useState("");
   const [ruleDrafts, setRuleDrafts] = useState<AutoRule[]>([]);
   const [ruleDraftWorkspaceId, setRuleDraftWorkspaceId] = useState<string | null>(null);
@@ -192,6 +202,12 @@ export function SettingsPage() {
   const [editingBalance, setEditingBalance] = useState("");
   const [editingDescription, setEditingDescription] = useState("");
   const [editingIsActive, setEditingIsActive] = useState(true);
+  const [publicOrigin, setPublicOrigin] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setPublicOrigin(window.location.origin);
+  }, []);
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -202,6 +218,13 @@ export function SettingsPage() {
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
   const defaultReceivableAccountId = context.data?.defaultAccountId ?? null;
   const defaultReceivableBudgetId = context.data?.defaultBudgetId ?? null;
+  const savedPublicNetWorthEnabled = Boolean(context.data?.publicNetWorthEnabled);
+  const publicNetWorthEnabled = optimisticPublicNetWorthEnabled ?? savedPublicNetWorthEnabled;
+  const publicNetWorthToken = context.data?.publicNetWorthToken ?? null;
+  const publicNetWorthUrl =
+    publicNetWorthEnabled && publicNetWorthToken && publicOrigin
+      ? `${publicOrigin}/api/public/net-worth/${publicNetWorthToken}`
+      : "";
 
   const accounts = useQuery({
     queryKey: ["bank-accounts", workspaceId],
@@ -283,13 +306,15 @@ export function SettingsPage() {
   );
 
   const defaultSameWorkspaceDestination = useMemo(() => {
-    const activeAccounts = (accounts.data ?? []).filter((account) => account.isActive);
     const activeBudgets = (budgets.data ?? []).filter((budget) => budget.isActive);
-    const accountWithBudget = activeAccounts.find((account) => activeBudgets.some((budget) => budget.accountId === account.id));
-    const accountId = accountWithBudget?.id ?? activeAccounts[0]?.id ?? "";
-    const budgetId = activeBudgets.find((budget) => budget.accountId === accountId)?.id ?? "";
-    return { accountId, budgetId };
-  }, [accounts.data, budgets.data]);
+    const sourceBudgetId =
+      activeBudgets.find((budget) => budget.id !== defaultReceivableBudgetId)?.id ?? activeBudgets[0]?.id ?? "";
+    const preferredDestinationBudgetId =
+      defaultReceivableBudgetId && defaultReceivableBudgetId !== sourceBudgetId && activeBudgets.some((budget) => budget.id === defaultReceivableBudgetId)
+        ? defaultReceivableBudgetId
+        : activeBudgets.find((budget) => budget.id !== sourceBudgetId)?.id ?? "";
+    return { sourceBudgetId, destinationBudgetId: preferredDestinationBudgetId };
+  }, [budgets.data, defaultReceivableBudgetId]);
 
   const connectGmail = useMutation({
     mutationFn: () =>
@@ -442,6 +467,54 @@ export function SettingsPage() {
     onError: (error) =>
       setReceivableAccountMessage(error instanceof Error ? error.message : "Failed to update default receivable account."),
   });
+
+  const updatePublicNetWorth = useMutation({
+    mutationFn: (enabled: boolean) => {
+      if (!workspaceId) throw new Error("No active workspace selected.");
+      return fetchJson<{ publicNetWorthEnabled: boolean | null; publicNetWorthToken: string | null }>("/api/context", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          publicNetWorthEnabled: enabled,
+        }),
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData<Context>(["app-context"], (current) =>
+        current
+          ? {
+              ...current,
+              publicNetWorthEnabled: data.publicNetWorthEnabled,
+              publicNetWorthToken: data.publicNetWorthToken,
+            }
+          : current,
+      );
+      setOptimisticPublicNetWorthEnabled(null);
+      setPublicNetWorthMessage(data.publicNetWorthEnabled ? "Public net worth URL enabled." : "Public net worth URL disabled.");
+      queryClient.invalidateQueries({ queryKey: ["app-context"] });
+    },
+    onError: (error) => {
+      setOptimisticPublicNetWorthEnabled(null);
+      setPublicNetWorthMessage(error instanceof Error ? error.message : "Failed to update public net worth URL.");
+    },
+  });
+
+  const onTogglePublicNetWorth = (enabled: boolean) => {
+    setPublicNetWorthMessage("");
+    setOptimisticPublicNetWorthEnabled(enabled);
+    updatePublicNetWorth.mutate(enabled);
+  };
+
+  const copyPublicNetWorthUrl = async () => {
+    if (!publicNetWorthUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicNetWorthUrl);
+      setPublicNetWorthMessage("Public net worth URL copied.");
+    } catch {
+      setPublicNetWorthMessage("Copy failed. Select the URL and copy it manually.");
+    }
+  };
 
   const saveAutoRules = useMutation({
     mutationFn: (rules: AutoRule[]) =>
@@ -674,12 +747,12 @@ export function SettingsPage() {
 
   const getRuleActionLabel = (rule: AutoRule) =>
     rule.action === "DEDUCT_SAME_WORKSPACE"
-      ? "Deduct same workspace"
+      ? "Transfer same workspace"
       : "Create receivable";
 
   const getRuleTargetLabel = (rule: AutoRule) => {
     if (rule.action === "DEDUCT_SAME_WORKSPACE") {
-      return `${getAccountName(rule.destinationAccountId)} · ${getBudgetName(rule.destinationBudgetId)}`;
+      return `${getBudgetName(rule.sourceBudgetId)} -> ${getBudgetName(rule.destinationBudgetId)}`;
     }
     return `${getWorkspaceName(rule.sourceWorkspaceId)} · ${getAccountName(rule.sourceAccountId, rule.sourceWorkspaceId)} · ${getBudgetName(rule.sourceBudgetId, rule.sourceWorkspaceId)}`;
   };
@@ -687,7 +760,7 @@ export function SettingsPage() {
   const editingAutoRule = editingAutoRuleId ? ruleDrafts.find((rule) => rule.id === editingAutoRuleId) ?? null : null;
   const editingAutoRuleIndex = editingAutoRule ? ruleDrafts.findIndex((rule) => rule.id === editingAutoRule.id) : -1;
   const editingSameWorkspaceBudgets = editingAutoRule?.action === "DEDUCT_SAME_WORKSPACE"
-    ? (budgets.data ?? []).filter((budget) => budget.isActive && budget.accountId === editingAutoRule.destinationAccountId)
+    ? (budgets.data ?? []).filter((budget) => budget.isActive)
     : [];
   const editingSourceAccounts = editingAutoRule?.action === "RECEIVABLE_OTHER_WORKSPACE"
     ? (crossWorkspaceAccountsById.get(editingAutoRule.sourceWorkspaceId) ?? []).filter((account) => account.isActive)
@@ -777,6 +850,49 @@ export function SettingsPage() {
           </select>
         </div>
         {currencyMessage ? <div className="settings-message">{currencyMessage}</div> : null}
+      </div>
+
+      <div className="card settings-card-block">
+        <div className="settings-row">
+          <div>
+            <div className="settings-section-title">Public Net Worth API</div>
+            <div className="settings-section-copy">
+              Read-only JSON endpoint for the current workspace.
+            </div>
+          </div>
+          <label className="auto-rule-switch" aria-label="Public net worth API enabled">
+            <input
+              type="checkbox"
+              checked={publicNetWorthEnabled}
+              onChange={(event) => onTogglePublicNetWorth(event.target.checked)}
+              disabled={!workspaceId || updatePublicNetWorth.isPending}
+            />
+            <span />
+          </label>
+        </div>
+        {publicNetWorthEnabled ? (
+          <div className="settings-row settings-row-spaced">
+            <div>
+              <div className="settings-section-title">Fixed URL</div>
+              <div className="settings-section-copy">
+                Returns amount, base, and currency only.
+              </div>
+            </div>
+            <div className="settings-public-url-row">
+              <input className="input" value={publicNetWorthUrl || "Generating URL..."} readOnly />
+              <button
+                className="btn btn-ghost btn-xs"
+                type="button"
+                onClick={copyPublicNetWorthUrl}
+                disabled={!publicNetWorthUrl}
+              >
+                <Copy size={14} aria-hidden="true" />
+                Copy
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {publicNetWorthMessage ? <div className="settings-message">{publicNetWorthMessage}</div> : null}
       </div>
 
       <div className="card settings-card-block">
@@ -954,7 +1070,7 @@ export function SettingsPage() {
                 </div>
                 <ArrowRight className="auto-rule-hero-arrow" size={22} aria-hidden="true" />
                 <div className="auto-rule-hero-step">
-                  <span>Destination</span>
+                  <span>Posting</span>
                   <strong>{getRuleTargetLabel(editingAutoRule)}</strong>
                 </div>
               </div>
@@ -1005,8 +1121,8 @@ export function SettingsPage() {
                                 enabled: current.enabled,
                                 action: "DEDUCT_SAME_WORKSPACE",
                                 filters: current.filters,
-                                destinationAccountId: defaultSameWorkspaceDestination.accountId,
-                                destinationBudgetId: defaultSameWorkspaceDestination.budgetId,
+                                sourceBudgetId: defaultSameWorkspaceDestination.sourceBudgetId,
+                                destinationBudgetId: defaultSameWorkspaceDestination.destinationBudgetId,
                               }
                             : {
                                 id: current.id,
@@ -1021,7 +1137,7 @@ export function SettingsPage() {
                         )
                       }
                     >
-                      <option value="DEDUCT_SAME_WORKSPACE">Deduct from same-workspace sub account</option>
+                      <option value="DEDUCT_SAME_WORKSPACE">Transfer between same-workspace sub accounts</option>
                       <option value="RECEIVABLE_OTHER_WORKSPACE">Create receivable from another workspace</option>
                     </select>
                   </div>
@@ -1067,38 +1183,32 @@ export function SettingsPage() {
                 {editingAutoRule.action === "DEDUCT_SAME_WORKSPACE" ? (
                   <section className="auto-rule-edit-section auto-rule-span">
                     <div className="auto-rule-section-divider">
-                      <span>Destination</span>
+                      <span>Source and Destination</span>
                     </div>
                     <div className="auto-rule-field-grid">
                       <label>
-                        <span>Bank Account</span>
+                        <span>Source Sub Account</span>
                         <select
                           className="input"
-                          value={editingAutoRule.destinationAccountId}
+                          value={editingAutoRule.sourceBudgetId}
                           onChange={(event) =>
-                            updateDraftRule(editingAutoRule.id, (current) => {
-                              if (current.action !== "DEDUCT_SAME_WORKSPACE") return current;
-                              const nextAccountId = event.target.value;
-                              const nextBudgetId =
-                                (budgets.data ?? []).find((budget) => budget.accountId === nextAccountId && budget.isActive)?.id ?? "";
-                              return {
-                                ...current,
-                                destinationAccountId: nextAccountId,
-                                destinationBudgetId: nextBudgetId,
-                              };
-                            })
+                            updateDraftRule(editingAutoRule.id, (current) =>
+                              current.action === "DEDUCT_SAME_WORKSPACE"
+                                ? { ...current, sourceBudgetId: event.target.value }
+                                : current,
+                            )
                           }
                         >
-                          <option value="">Select bank account</option>
-                          {(accounts.data ?? []).filter((account) => account.isActive).map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.name}
+                          <option value="">Select source sub account</option>
+                          {editingSameWorkspaceBudgets.map((budget) => (
+                            <option key={budget.id} value={budget.id}>
+                              {budget.name}
                             </option>
                           ))}
                         </select>
                       </label>
                       <label>
-                        <span>Sub Account</span>
+                        <span>Destination Sub Account</span>
                         <select
                           className="input"
                           value={editingAutoRule.destinationBudgetId}
