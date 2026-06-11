@@ -193,17 +193,22 @@ function allocateItemWithinRemainingSources(
   return allocations.filter((entry) => entry.allocatedCents > 0);
 }
 
-async function ensureMonthIsNotConfirmed(workspaceId: string, year: number, month: number) {
-  const confirmedCount = await prisma.monthlyBudget.count({
-    where: { workspaceId, year, month, isDraft: false },
-  });
-  if (confirmedCount > 0) {
-    return NextResponse.json(
-      { error: `The monthly budget for ${month}/${year} has already been approved.` },
-      { status: 409 },
-    );
-  }
-  return null;
+function monthlyAllocationWhere(
+  workspaceId: string,
+  year: number,
+  month: number,
+  budgetItemId: string,
+  budgetSourceId: string,
+) {
+  return {
+    workspaceId_year_month_budgetItemId_budgetSourceId: {
+      workspaceId,
+      year,
+      month,
+      budgetItemId,
+      budgetSourceId,
+    },
+  };
 }
 
 async function ensureMonthlyBudgetSources(workspaceId: string, year: number, month: number) {
@@ -231,7 +236,7 @@ async function ensureMonthlyBudgetSources(workspaceId: string, year: number, mon
   const existingByTemplateId = new Set(existingMonthlySources.map((source) => source.budgetSourceId));
   const missingTemplateSources = templateSources.filter((source) => !existingByTemplateId.has(source.id));
 
-  if (missingTemplateSources.length === 0) {
+  if (missingTemplateSources.length === 0 || existingMonthlySources.some((source) => !source.isDraft)) {
     return existingMonthlySources;
   }
 
@@ -263,15 +268,11 @@ async function ensureMonthlyBudgetSources(workspaceId: string, year: number, mon
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const workspaceId = searchParams.get("workspaceId");
+    const requestedWorkspaceId = searchParams.get("workspaceId");
     const year = searchParams.get("year");
     const month = searchParams.get("month");
 
-    if (!workspaceId) {
-      return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
-    }
-
-    await requireWorkspaceAccess(workspaceId);
+    const { workspaceId } = await requireWorkspaceAccess(requestedWorkspaceId);
 
     const budgetItems = await prisma.budgetItem.findMany({
       where: { workspaceId, isActive: true },
@@ -421,10 +422,6 @@ export async function POST(request: Request) {
 
       await requireWorkspaceAccess(body.workspaceId);
       const { year, month, title, ownerId, amountCents } = parsed.data;
-      const alreadyConfirmed = await ensureMonthIsNotConfirmed(body.workspaceId, year, month);
-      if (alreadyConfirmed) {
-        return alreadyConfirmed;
-      }
 
       const created = await prisma.$transaction(async (db) => {
         const templateSource = await db.budgetSource.create({
@@ -470,32 +467,36 @@ export async function POST(request: Request) {
       await requireWorkspaceAccess(body.workspaceId);
 
       const { year, month } = parsed.data;
-      const alreadyConfirmed = await ensureMonthIsNotConfirmed(body.workspaceId, year, month);
-      if (alreadyConfirmed) {
-        return alreadyConfirmed;
-      }
 
       const budgetItems = await prisma.budgetItem.findMany({
         where: { workspaceId: body.workspaceId, isActive: true, isMonthly: true },
         orderBy: { sortOrder: "asc" },
       });
 
-      const monthlyBudgetSources = await ensureMonthlyBudgetSources(body.workspaceId, year, month);
+      const [monthlyBudgetSources, existingMonthlyBudgets] = await Promise.all([
+        ensureMonthlyBudgetSources(body.workspaceId, year, month),
+        prisma.monthlyBudget.findMany({
+          where: { workspaceId: body.workspaceId, year, month },
+          select: { budgetItemId: true },
+        }),
+      ]);
 
       if (budgetItems.length === 0 || monthlyBudgetSources.length === 0) {
         return NextResponse.json({ error: "Need at least one budget item and one source" }, { status: 400 });
       }
 
+      const existingBudgetItemIds = new Set(existingMonthlyBudgets.map((row) => row.budgetItemId));
+      const newBudgetItems = budgetItems.filter((item) => !existingBudgetItemIds.has(item.id));
+
       const totalSourceCents = monthlyBudgetSources.reduce((sum, source) => sum + source.amountCents, 0);
       const totalBudgetCents = budgetItems.reduce((sum, item) => sum + item.amountCents, 0);
-      const remainingBySourceId = new Map(monthlyBudgetSources.map((source) => [source.budgetSourceId, source.amountCents]));
 
       // Create ONE allocation per budget item with template amount
       // User will manually adjust amounts and add more allocations if needed
       const generatedMonthlyBudgets = [];
-      for (const item of budgetItems) {
-        // Use first source as default
-        const defaultSource = monthlyBudgetSources[0];
+      for (const item of newBudgetItems) {
+        // Use a newly added source first, then fall back to the first monthly source.
+        const defaultSource = monthlyBudgetSources.find((source) => source.isDraft) ?? monthlyBudgetSources[0];
         if (!defaultSource) continue;
 
         const monthlyBudget = await prisma.monthlyBudget.create({
@@ -531,43 +532,56 @@ export async function POST(request: Request) {
 
       await requireWorkspaceAccess(body.workspaceId);
       const { year, month, budgetItemId, budgetSourceId, allocatedCents } = parsed.data;
-      const alreadyConfirmed = await ensureMonthIsNotConfirmed(body.workspaceId, year, month);
-      if (alreadyConfirmed) {
-        return alreadyConfirmed;
-      }
 
-      const [budgetItem, budgetSource, monthlyBudgetSource] = await Promise.all([
+      const [budgetItem, budgetSource, monthlyBudgetSource, existingAllocation] = await Promise.all([
         prisma.budgetItem.findFirst({
           where: { workspaceId: body.workspaceId, id: budgetItemId, isActive: true },
           select: { id: true, title: true, destinationSubAccountId: true },
         }),
         prisma.budgetSource.findFirst({
           where: { workspaceId: body.workspaceId, id: budgetSourceId, isActive: true },
-          select: { id: true, title: true },
+          select: { id: true, title: true, ownerId: true, amountCents: true },
         }),
         prisma.monthlyBudgetSource.findFirst({
           where: { workspaceId: body.workspaceId, year, month, budgetSourceId },
-          select: { id: true },
+          select: { id: true, budgetSourceId: true, title: true, ownerId: true, amountCents: true, isDraft: true },
+        }),
+        prisma.monthlyBudget.findUnique({
+          where: monthlyAllocationWhere(body.workspaceId, year, month, budgetItemId, budgetSourceId),
+          select: { id: true, isDraft: true },
         }),
       ]);
 
-      if (!budgetItem || !budgetSource) {
-        return NextResponse.json({ error: "Selected template item or source is invalid." }, { status: 400 });
+      if (!budgetItem) {
+        return NextResponse.json({ error: "Selected template item is invalid." }, { status: 400 });
       }
-      if (!monthlyBudgetSource) {
-        return NextResponse.json({ error: "Selected source is not part of this month's source plan." }, { status: 400 });
+      if (!monthlyBudgetSource && !budgetSource) {
+        return NextResponse.json({ error: "Selected source is invalid." }, { status: 400 });
+      }
+      if (existingAllocation && !existingAllocation.isDraft) {
+        return NextResponse.json({ error: "Approved monthly allocations cannot be added again or changed." }, { status: 409 });
+      }
+      const plannedMonthlySource =
+        monthlyBudgetSource ??
+        await prisma.monthlyBudgetSource.create({
+          data: {
+            workspaceId: body.workspaceId,
+            budgetSourceId,
+            year,
+            month,
+            title: budgetSource!.title,
+            ownerId: budgetSource!.ownerId,
+            amountCents: budgetSource!.amountCents,
+            isDraft: true,
+          },
+          select: { id: true, budgetSourceId: true, title: true, ownerId: true, amountCents: true, isDraft: true },
+        });
+      if (!plannedMonthlySource.isDraft) {
+        return NextResponse.json({ error: "New monthly allocations must use a new monthly source." }, { status: 409 });
       }
 
       const monthlyBudget = await prisma.monthlyBudget.upsert({
-        where: {
-          workspaceId_year_month_budgetItemId_budgetSourceId: {
-            workspaceId: body.workspaceId,
-            year,
-            month,
-            budgetItemId,
-            budgetSourceId,
-          },
-        },
+        where: monthlyAllocationWhere(body.workspaceId, year, month, budgetItemId, budgetSourceId),
         create: {
           workspaceId: body.workspaceId,
           budgetItemId,
@@ -575,14 +589,14 @@ export async function POST(request: Request) {
           year,
           month,
           budgetItemTitle: budgetItem.title,
-          budgetSourceTitle: budgetSource.title,
+          budgetSourceTitle: plannedMonthlySource.title,
           destinationSubAccountId: budgetItem.destinationSubAccountId,
           allocatedCents,
           isDraft: true,
         },
         update: {
           budgetItemTitle: budgetItem.title,
-          budgetSourceTitle: budgetSource.title,
+          budgetSourceTitle: plannedMonthlySource.title,
           destinationSubAccountId: budgetItem.destinationSubAccountId,
           allocatedCents,
           isDraft: true,
@@ -635,10 +649,6 @@ export async function POST(request: Request) {
           throw new Error("No monthly source plan exists for this month.");
         }
 
-        if (currentRows.some((row) => !row.isDraft) || monthlyBudgetSources.some((source) => !source.isDraft)) {
-          throw new Error("This monthly budget has already been approved.");
-        }
-
         const validSourceIds = new Set(monthlyBudgetSources.map((source) => source.budgetSourceId));
         const positiveAllocations = allocations.filter((allocation) => allocation.allocatedCents > 0);
         for (const allocation of positiveAllocations) {
@@ -647,11 +657,27 @@ export async function POST(request: Request) {
           }
         }
 
-        const budgetItems = positiveAllocations.length
+        const confirmedRows = currentRows.filter((row) => !row.isDraft);
+        const draftRows = currentRows.filter((row) => row.isDraft);
+        const confirmedRowByKey = new Map(
+          confirmedRows.map((row) => [allocationKey(row.budgetItemId, row.budgetSourceId), row]),
+        );
+        for (const allocation of positiveAllocations) {
+          const confirmedRow = confirmedRowByKey.get(allocationKey(allocation.budgetItemId, allocation.budgetSourceId));
+          if (confirmedRow && confirmedRow.allocatedCents !== allocation.allocatedCents) {
+            throw new Error(`Approved allocation "${allocation.budgetItemTitle || allocation.budgetItemId}" cannot be changed.`);
+          }
+        }
+
+        const draftOrNewAllocations = positiveAllocations.filter(
+          (allocation) => !confirmedRowByKey.has(allocationKey(allocation.budgetItemId, allocation.budgetSourceId)),
+        );
+
+        const budgetItems = draftOrNewAllocations.length
           ? await db.budgetItem.findMany({
               where: {
                 workspaceId: body.workspaceId,
-                id: { in: [...new Set(positiveAllocations.map((allocation) => allocation.budgetItemId))] },
+                id: { in: [...new Set(draftOrNewAllocations.map((allocation) => allocation.budgetItemId))] },
                 isActive: true,
               },
               select: { id: true, title: true, destinationSubAccountId: true },
@@ -660,7 +686,7 @@ export async function POST(request: Request) {
         const budgetItemById = new Map(budgetItems.map((item) => [item.id, item]));
         const monthlySourceById = new Map(monthlyBudgetSources.map((source) => [source.budgetSourceId, source]));
 
-        const toConfirm = positiveAllocations.map((allocation) => {
+        const toConfirm = draftOrNewAllocations.map((allocation) => {
           const budgetItem = budgetItemById.get(allocation.budgetItemId);
           if (!budgetItem) {
             throw new Error(`Budget item "${allocation.budgetItemTitle || allocation.budgetItemId}" is invalid or inactive.`);
@@ -668,6 +694,9 @@ export async function POST(request: Request) {
           const source = monthlySourceById.get(allocation.budgetSourceId);
           if (!source) {
             throw new Error(`Source "${allocation.budgetSourceTitle || allocation.budgetSourceId}" is not in this month's source plan.`);
+          }
+          if (!source.isDraft) {
+            throw new Error(`New allocation "${allocation.budgetItemTitle || allocation.budgetItemId}" must use a new monthly source.`);
           }
           const existingRow = currentRowByKey.get(allocationKey(allocation.budgetItemId, allocation.budgetSourceId));
 
@@ -677,20 +706,25 @@ export async function POST(request: Request) {
             budgetSourceId: source.budgetSourceId,
             destinationSubAccountId: budgetItem.destinationSubAccountId,
             allocatedCents: allocation.allocatedCents,
-            budgetItemTitle: allocation.budgetItemTitle || budgetItem.title,
-            budgetSourceTitle: allocation.budgetSourceTitle || source.title,
+            budgetItemTitle: budgetItem.title,
+            budgetSourceTitle: source.title,
           };
         });
-        const toDeleteIds = currentRows
-          .filter((row) => !positiveAllocations.some((allocation) => allocationKey(allocation.budgetItemId, allocation.budgetSourceId) === allocationKey(row.budgetItemId, row.budgetSourceId)))
+        const toDeleteDraftIds = draftRows
+          .filter((row) => !draftOrNewAllocations.some((allocation) => allocationKey(allocation.budgetItemId, allocation.budgetSourceId) === allocationKey(row.budgetItemId, row.budgetSourceId)))
           .map((row) => row.id);
 
-        if (toConfirm.length === 0) {
+        if (confirmedRows.length === 0 && toConfirm.length === 0) {
           throw new Error("At least one monthly allocation must remain before approval.");
+        }
+        if (toConfirm.length === 0 && toDeleteDraftIds.length === 0 && monthlyBudgetSources.every((source) => !source.isDraft)) {
+          throw new Error("No new monthly allocations or sources need approval.");
         }
 
         // Only check that total allocated equals total sources (no per-item validation)
-        const totalAllocatedCents = toConfirm.reduce((sum, row) => sum + row.allocatedCents, 0);
+        const totalAllocatedCents =
+          confirmedRows.reduce((sum, row) => sum + row.allocatedCents, 0) +
+          toConfirm.reduce((sum, row) => sum + row.allocatedCents, 0);
         const totalSourceCents = monthlyBudgetSources.reduce((sum, source) => sum + source.amountCents, 0);
         if (totalAllocatedCents !== totalSourceCents) {
           throw new Error(
@@ -715,27 +749,31 @@ export async function POST(request: Request) {
           data: { isDraft: false, confirmedAt: applyTimestamp },
         });
 
-        await db.monthlyBudget.deleteMany({
-          where: { workspaceId: body.workspaceId, year, month },
-        });
+        if (draftRows.length > 0) {
+          await db.monthlyBudget.deleteMany({
+            where: { workspaceId: body.workspaceId, year, month, id: { in: draftRows.map((row) => row.id) } },
+          });
+        }
 
-        await db.monthlyBudget.createMany({
-          data: toConfirm.map((row) => ({
-            workspaceId: body.workspaceId,
-            budgetItemId: row.budgetItemId,
-            budgetSourceId: row.budgetSourceId,
-            year,
-            month,
-            budgetItemTitle: row.budgetItemTitle,
-            budgetSourceTitle: row.budgetSourceTitle,
-            destinationSubAccountId: row.destinationSubAccountId,
-            allocatedCents: row.allocatedCents,
-            isDraft: false,
-            confirmedAt: applyTimestamp,
-            appliedAt:
-              applyToSubAccounts && row.destinationSubAccountId && row.allocatedCents > 0 ? applyTimestamp : null,
-          })),
-        });
+        if (toConfirm.length > 0) {
+          await db.monthlyBudget.createMany({
+            data: toConfirm.map((row) => ({
+              workspaceId: body.workspaceId,
+              budgetItemId: row.budgetItemId,
+              budgetSourceId: row.budgetSourceId,
+              year,
+              month,
+              budgetItemTitle: row.budgetItemTitle,
+              budgetSourceTitle: row.budgetSourceTitle,
+              destinationSubAccountId: row.destinationSubAccountId,
+              allocatedCents: row.allocatedCents,
+              isDraft: false,
+              confirmedAt: applyTimestamp,
+              appliedAt:
+                applyToSubAccounts && row.destinationSubAccountId && row.allocatedCents > 0 ? applyTimestamp : null,
+            })),
+          });
+        }
 
         const ledgerRows = toConfirm.filter((row) => applyToSubAccounts && row.destinationSubAccountId && row.allocatedCents > 0);
         if (ledgerRows.length > 0) {
@@ -766,7 +804,7 @@ export async function POST(request: Request) {
           appliedToSubAccounts: applyToSubAccounts,
           destinationBudgetIds: [...destinationBudgetById.keys()],
         };
-      });
+      }, { maxWait: 10000, timeout: 30000 });
 
       for (const budgetId of result.destinationBudgetIds) {
         await recalculateBudgetAvailableCents(prisma, body.workspaceId, budgetId);
@@ -807,6 +845,13 @@ export async function DELETE(request: Request) {
       }
       await requireWorkspaceAccess(item.workspaceId);
 
+      const approvedUsageCount = await prisma.monthlyBudget.count({
+        where: { budgetItemId: id, isDraft: false },
+      });
+      if (approvedUsageCount > 0) {
+        return NextResponse.json({ error: "Approved budget items cannot be removed." }, { status: 409 });
+      }
+
       await prisma.budgetItem.update({
         where: { id },
         data: { isActive: false },
@@ -823,6 +868,19 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ error: "Budget source not found" }, { status: 404 });
       }
       await requireWorkspaceAccess(source.workspaceId);
+
+      const [approvedSourceUsageCount, approvedAllocationUsageCount] = await Promise.all([
+        prisma.monthlyBudgetSource.count({
+          where: { budgetSourceId: id, isDraft: false },
+        }),
+        prisma.monthlyBudget.count({
+          where: { budgetSourceId: id, isDraft: false },
+        }),
+      ]);
+      const approvedUsageCount = approvedSourceUsageCount + approvedAllocationUsageCount;
+      if (approvedUsageCount > 0) {
+        return NextResponse.json({ error: "Approved budget sources cannot be removed." }, { status: 409 });
+      }
 
       await prisma.budgetSource.update({
         where: { id },
@@ -967,17 +1025,16 @@ export async function PATCH(request: Request) {
 
       await requireWorkspaceAccess(body.workspaceId);
       const { id, year, month, title, ownerId, amountCents } = parsed.data;
-      const alreadyConfirmed = await ensureMonthIsNotConfirmed(body.workspaceId, year, month);
-      if (alreadyConfirmed) {
-        return alreadyConfirmed;
-      }
 
       const existing = await prisma.monthlyBudgetSource.findUnique({
         where: { id },
-        select: { workspaceId: true, year: true, month: true },
+        select: { workspaceId: true, year: true, month: true, isDraft: true },
       });
       if (!existing || existing.workspaceId !== body.workspaceId || existing.year !== year || existing.month !== month) {
         return NextResponse.json({ error: "Monthly source not found" }, { status: 404 });
+      }
+      if (!existing.isDraft) {
+        return NextResponse.json({ error: "Approved monthly sources cannot be changed." }, { status: 409 });
       }
 
       const updated = await prisma.monthlyBudgetSource.update({
@@ -1001,10 +1058,6 @@ export async function PATCH(request: Request) {
 
       await requireWorkspaceAccess(body.workspaceId);
       const { id, year, month, budgetItemId, budgetSourceId, allocatedCents } = parsed.data;
-      const alreadyConfirmed = await ensureMonthIsNotConfirmed(body.workspaceId, year, month);
-      if (alreadyConfirmed) {
-        return alreadyConfirmed;
-      }
 
       const where = id
         ? { id }
@@ -1017,6 +1070,17 @@ export async function PATCH(request: Request) {
               budgetSourceId,
             },
           };
+
+      const existing = await prisma.monthlyBudget.findUnique({
+        where,
+        select: { workspaceId: true, year: true, month: true, isDraft: true },
+      });
+      if (!existing || existing.workspaceId !== body.workspaceId || existing.year !== year || existing.month !== month) {
+        return NextResponse.json({ error: "Monthly allocation not found" }, { status: 404 });
+      }
+      if (!existing.isDraft) {
+        return NextResponse.json({ error: "Approved monthly allocations cannot be changed." }, { status: 409 });
+      }
 
       const updated = await prisma.monthlyBudget.update({
         where,
