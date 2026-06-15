@@ -1,4 +1,12 @@
 import { isGmailSyncRunning, runGmailSyncForIntegration } from "@/lib/gmail-sync-runner";
+import { GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey } from "@/lib/gmail-sync-runner";
+import {
+  backgroundJobToProgress,
+  createBackgroundJob,
+  failBackgroundJob,
+  findActiveBackgroundJob,
+  findLatestBackgroundJob,
+} from "@/lib/background-jobs";
 import {
   clearGmailSyncProgressLater,
   getGmailSyncProgress,
@@ -13,7 +21,24 @@ export async function GET() {
   try {
     const { workspaceId, userId } = await requireWorkspaceAccess();
     const key = getGmailSyncProgressKey(workspaceId, userId);
-    return NextResponse.json(getGmailSyncProgress(key));
+    const memoryProgress = getGmailSyncProgress(key);
+    if (memoryProgress.phase !== "idle") {
+      return NextResponse.json(memoryProgress);
+    }
+
+    const integration = await prisma.gmailIntegration.findFirst({
+      where: { workspaceId, userId, isActive: true },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true },
+    });
+    if (!integration) {
+      return NextResponse.json(memoryProgress);
+    }
+
+    const persisted = backgroundJobToProgress(
+      await findLatestBackgroundJob(GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey(integration.id)),
+    );
+    return NextResponse.json(persisted ?? memoryProgress);
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -54,12 +79,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Gmail sync is already running." }, { status: 409 });
     }
 
-    const result = await runGmailSyncForIntegration(integration, new URL(request.url).origin);
+    const activeJob = await findActiveBackgroundJob(GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey(integration.id));
+    if (activeJob) {
+      return NextResponse.json(
+        {
+          ok: true,
+          queued: false,
+          jobId: activeJob.id,
+          message: activeJob.message ?? "Gmail sync is already running.",
+        },
+        { status: 202 },
+      );
+    }
+
+    const job = await createBackgroundJob({
+      type: GMAIL_SYNC_JOB_TYPE,
+      key: getGmailSyncJobKey(integration.id),
+      workspaceId,
+      userId,
+      message: "Gmail sync queued.",
+    });
+
+    void runGmailSyncForIntegration(integration, new URL(request.url).origin, job.id).catch(async (error) => {
+      console.error("Gmail sync background job error:", error);
+      await failBackgroundJob(job.id, error);
+    });
 
     return NextResponse.json({
       ok: true,
-      ...result,
-    });
+      queued: true,
+      jobId: job.id,
+    }, { status: 202 });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

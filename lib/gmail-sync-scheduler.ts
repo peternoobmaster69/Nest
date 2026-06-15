@@ -2,7 +2,6 @@ import { GMAIL_SYNC_INTERVAL_MS } from "@/lib/gmail-alert-query";
 import { runScheduledGmailSyncs } from "@/lib/gmail-sync-runner";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __nestGmailSyncSchedulerStarted: boolean | undefined;
 }
 

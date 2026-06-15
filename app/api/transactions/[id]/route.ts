@@ -1,4 +1,4 @@
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyTransactionBudgetDelta } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -27,7 +27,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const existing = await prisma.transaction.findUnique({
       where: { id },
-      select: { id: true, workspaceId: true, budgetId: true, accountId: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        budgetId: true,
+        accountId: true,
+        direction: true,
+        amountCents: true,
+      },
     });
     if (!existing) {
       throw new Error("Transaction not found");
@@ -55,13 +62,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         data: parsed.data,
       });
 
-      const budgetIdsToRecalculate = [existing.budgetId, parsed.data.budgetId].filter(
-        (budgetId, index, allBudgetIds): budgetId is string =>
-          typeof budgetId === "string" && allBudgetIds.indexOf(budgetId) === index,
-      );
-      for (const budgetId of budgetIdsToRecalculate) {
-        await recalculateBudgetAvailableCents(db, existing.workspaceId, budgetId);
-      }
+      await applyTransactionBudgetDelta(db, {
+        previousBudgetId: existing.budgetId,
+        previousDirection: existing.direction,
+        previousAmountCents: existing.amountCents,
+        nextBudgetId: updated.budgetId,
+        nextDirection: updated.direction,
+        nextAmountCents: updated.amountCents,
+      });
 
       return updated;
       },
@@ -94,6 +102,8 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
         id: true,
         workspaceId: true,
         budgetId: true,
+        direction: true,
+        amountCents: true,
       },
     });
 
@@ -123,9 +133,11 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
       await db.transaction.delete({ where: { id } });
 
-      if (existing.budgetId) {
-        await recalculateBudgetAvailableCents(db, existing.workspaceId, existing.budgetId);
-      }
+      await applyTransactionBudgetDelta(db, {
+        previousBudgetId: existing.budgetId,
+        previousDirection: existing.direction,
+        previousAmountCents: existing.amountCents,
+      });
       },
       { maxWait: 5000, timeout: 10000 },
     );

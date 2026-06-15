@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Providers } from "@/app/providers";
-import { startGmailSyncScheduler } from "@/lib/gmail-sync-scheduler";
-import { startCreditTxnAutoAccountScheduler } from "@/lib/credit-txn-auto-account-scheduler";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,8 +22,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: "#f5f2ed",
 };
 
@@ -49,9 +45,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  startGmailSyncScheduler();
-  startCreditTxnAutoAccountScheduler();
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

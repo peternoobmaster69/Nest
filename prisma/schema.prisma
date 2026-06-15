@@ -390,6 +390,10 @@ model Transaction {
   @@index([workspaceId, date])
   @@index([accountId, date])
   @@index([workspaceId, budgetId, date])
+  @@index([workspaceId, date, createdAt, id])
+  @@index([workspaceId, direction, date])
+  @@index([workspaceId, budgetId, direction, date])
+  @@index([workspaceId, accountId, date])
 }
 
 model Expense {
@@ -686,6 +690,11 @@ model CreditCardTransaction {
   @@index([creditCardId])
   @@index([statementYear, statementMonth])
   @@index([transactionDate])
+  @@index([workspaceId, creditCardId, statementYear, statementMonth, transactionDate])
+  @@index([workspaceId, statementYear, statementMonth, isAllocated])
+  @@index([workspaceId, isAllocated, transactionDate])
+  @@index([workspaceId, paymentDueDate])
+  @@index([workspaceId, creditCardId, transactionDate])
 }
 
 model CardAlertStaging {
@@ -713,6 +722,7 @@ model CardAlertStaging {
 
   @@index([workspaceId, parseStatus])
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, transactionRef])
   @@index([creditTransactionId])
 }
 
@@ -736,4 +746,29 @@ model GmailIntegration {
 
   @@unique([workspaceId, email])
   @@index([workspaceId, isActive])
+}
+
+model BackgroundJob {
+  id             String    @id @default(cuid())
+  type           String
+  key            String?
+  status         String    @default("PENDING")
+  workspaceId    String?
+  userId         String?
+  progress       Int       @default(0)
+  total          Int?
+  current        Int?
+  message        String?
+  resultJson     String?   @db.NVarChar(Max)
+  error          String?   @db.NVarChar(Max)
+  lockedAt       DateTime?
+  leaseExpiresAt DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([type, status, createdAt])
+  @@index([key, status])
+  @@index([leaseExpiresAt])
 }

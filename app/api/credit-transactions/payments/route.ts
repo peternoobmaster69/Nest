@@ -1,4 +1,4 @@
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -61,20 +61,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const existingTransactions = await prisma.creditCardTransaction.findMany({
+    const outstanding = await prisma.creditCardTransaction.aggregate({
       where: {
         workspaceId,
         creditCardId: cardId,
         statementMonth,
         statementYear,
       },
-      select: {
-        id: true,
-        amountCents: true,
-      },
+      _sum: { amountCents: true },
     });
 
-    const outstandingAmountCents = existingTransactions.reduce((sum, tx) => sum + tx.amountCents, 0);
+    const outstandingAmountCents = outstanding._sum.amountCents ?? 0;
     if (outstandingAmountCents <= 0) {
       return NextResponse.json(
         { error: "No outstanding amount for the selected card and statement month." },
@@ -170,7 +167,7 @@ export async function POST(request: Request) {
         include: { creditCard: true },
       });
 
-      await recalculateBudgetAvailableCents(db, workspaceId, defaultBudget.id);
+      await applyBudgetAvailableDelta(db, defaultBudget.id, -amountCents);
 
       return {
         bankTransactionId: bankTransaction.id,

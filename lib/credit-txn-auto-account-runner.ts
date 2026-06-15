@@ -1,5 +1,12 @@
 import { PrismaClient } from "@prisma/client";
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
+import {
+  completeBackgroundJob,
+  createBackgroundJob,
+  failBackgroundJob,
+  findActiveBackgroundJob,
+  updateBackgroundJobProgress,
+} from "@/lib/background-jobs";
 import {
   CreditTxnAutoRule,
   CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS,
@@ -9,7 +16,6 @@ import {
 import { prisma } from "@/lib/prisma";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __nestCreditTxnAutoAccountRunning: boolean | undefined;
 }
 
@@ -18,7 +24,12 @@ type RunnerSummary = {
   matched: number;
   accounted: number;
   skipped: number;
+  jobId?: string;
+  alreadyRunning?: boolean;
 };
+
+export const CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE = "CREDIT_TXN_AUTO_ACCOUNT";
+export const CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY = "global";
 
 function formatAutoReceivableGroupTitle(ruleName: string, transactionDate: Date) {
   const monthLabel = transactionDate.toLocaleString("en-US", {
@@ -117,9 +128,9 @@ async function applyDeductRule(
       data: { isAllocated: true },
     });
 
-    await recalculateBudgetAvailableCents(tx, transaction.workspaceId, sourceBudget.id);
+    await applyBudgetAvailableDelta(tx, sourceBudget.id, -transaction.amountCents);
     if (shouldCreateDestinationCredit) {
-      await recalculateBudgetAvailableCents(tx, transaction.workspaceId, destinationBudget.id);
+      await applyBudgetAvailableDelta(tx, destinationBudget.id, transaction.amountCents);
     }
   });
 
@@ -249,24 +260,48 @@ async function applyRuleToTransaction(
   return applyReceivableRule(db, transaction, rule);
 }
 
-export async function runCreditTxnAutoAccounting(db: PrismaClient = prisma): Promise<RunnerSummary> {
+export async function runCreditTxnAutoAccounting(db: PrismaClient = prisma, jobId?: string): Promise<RunnerSummary> {
   if (globalThis.__nestCreditTxnAutoAccountRunning) {
-    return { scanned: 0, matched: 0, accounted: 0, skipped: 0 };
+    return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId, alreadyRunning: true };
+  }
+
+  let persistedJobId = jobId;
+  if (!persistedJobId) {
+    const activeJob = await findActiveBackgroundJob(CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE, CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY);
+    if (activeJob) {
+      return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId: activeJob.id, alreadyRunning: true };
+    }
+
+    const job = await createBackgroundJob({
+      type: CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE,
+      key: CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY,
+      message: "Credit transaction auto-accounting started.",
+    });
+    persistedJobId = job.id;
   }
 
   globalThis.__nestCreditTxnAutoAccountRunning = true;
 
   try {
+    await updateBackgroundJobProgress(persistedJobId, {
+      progress: 5,
+      message: "Loading workspaces with auto-accounting rules...",
+    });
+
     const workspaces = await db.workspace.findMany({
       where: { creditCardAutoRules: { not: null } },
       select: { id: true, creditCardAutoRules: true },
     });
 
     const summary: RunnerSummary = { scanned: 0, matched: 0, accounted: 0, skipped: 0 };
+    let processedWorkspaces = 0;
 
     for (const workspace of workspaces) {
       const rules = parseCreditTxnAutoRules(workspace.creditCardAutoRules).filter((rule) => rule.enabled);
-      if (rules.length === 0) continue;
+      if (rules.length === 0) {
+        processedWorkspaces += 1;
+        continue;
+      }
 
       const creditTransactions = await db.creditCardTransaction.findMany({
         where: {
@@ -294,9 +329,25 @@ export async function runCreditTxnAutoAccounting(db: PrismaClient = prisma): Pro
         if (accounted) summary.accounted += 1;
         else summary.skipped += 1;
       }
+
+      processedWorkspaces += 1;
+      await updateBackgroundJobProgress(persistedJobId, {
+        progress: 5 + (processedWorkspaces / Math.max(workspaces.length, 1)) * 90,
+        message: `Processed ${processedWorkspaces}/${workspaces.length} workspaces.`,
+        total: workspaces.length,
+        current: processedWorkspaces,
+      });
     }
 
-    return summary;
+    const result = { ...summary, jobId: persistedJobId };
+    await completeBackgroundJob(persistedJobId, {
+      message: `Auto-accounting complete: ${summary.accounted} accounted, ${summary.skipped} skipped.`,
+      result,
+    });
+    return result;
+  } catch (error) {
+    await failBackgroundJob(persistedJobId, error);
+    throw error;
   } finally {
     globalThis.__nestCreditTxnAutoAccountRunning = false;
   }

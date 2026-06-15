@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
 import { requireWorkspaceAccess, requireSessionUserId, ApiAuthError } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -777,12 +777,17 @@ export async function POST(request: Request) {
 
         const ledgerRows = toConfirm.filter((row) => applyToSubAccounts && row.destinationSubAccountId && row.allocatedCents > 0);
         if (ledgerRows.length > 0) {
+          const deltaByBudget = new Map<string, number>();
           await db.transaction.createMany({
             data: ledgerRows.map((row) => {
               const destinationBudget = destinationBudgetById.get(row.destinationSubAccountId!);
               if (!destinationBudget) {
                 throw new Error(`Destination sub-account is missing for "${row.budgetItemTitle ?? "budget item"}".`);
               }
+              deltaByBudget.set(
+                destinationBudget.id,
+                (deltaByBudget.get(destinationBudget.id) ?? 0) + row.allocatedCents,
+              );
 
               return {
                 workspaceId: body.workspaceId,
@@ -797,6 +802,10 @@ export async function POST(request: Request) {
               };
             }),
           });
+
+          for (const [budgetId, deltaCents] of deltaByBudget) {
+            await applyBudgetAvailableDelta(db, budgetId, deltaCents);
+          }
         }
 
         return {
@@ -805,10 +814,6 @@ export async function POST(request: Request) {
           destinationBudgetIds: [...destinationBudgetById.keys()],
         };
       }, { maxWait: 10000, timeout: 30000 });
-
-      for (const budgetId of result.destinationBudgetIds) {
-        await recalculateBudgetAvailableCents(prisma, body.workspaceId, budgetId);
-      }
 
       return NextResponse.json(result);
     }

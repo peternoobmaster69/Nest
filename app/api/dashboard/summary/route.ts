@@ -1,6 +1,7 @@
 import { getBankConsistency } from "@/lib/bank-consistency";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 const DASHBOARD_CACHE_HEADERS = {
@@ -13,6 +14,10 @@ function getMonthKey(date: Date) {
 
 function getMonthLabel(date: Date) {
   return date.toLocaleDateString("en-SG", { month: "short", year: "2-digit" });
+}
+
+function toNumber(value: number | bigint | null | undefined) {
+  return Number(value ?? 0);
 }
 
 export async function GET() {
@@ -34,8 +39,8 @@ export async function GET() {
       receivableSourceTotals,
       transactions,
       bankConsistency,
-      creditCardTransactions,
-      cashFlowTransactions,
+      creditCardDueRows,
+      cashFlowRows,
     ] = await Promise.all([
       prisma.budgetEnvelope.findMany({
         where: { workspaceId },
@@ -66,7 +71,7 @@ export async function GET() {
       prisma.transaction.findMany({
         where: { workspaceId },
         take: 8,
-        orderBy: { date: "desc" },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         include: {
           budget: {
             select: {
@@ -76,40 +81,67 @@ export async function GET() {
         },
       }),
       getBankConsistency(prisma, workspaceId),
-      prisma.creditCardTransaction.findMany({
-        where: {
-          workspaceId,
-          paymentDueDate: { not: null },
-        },
-        include: {
-          creditCard: {
-            select: {
-              id: true,
-              cardName: true,
-              bankName: true,
-            },
-          },
-        },
-        orderBy: {
-          paymentDueDate: "asc",
-        },
-      }),
-      prisma.transaction.findMany({
-        where: {
-          workspaceId,
-          date: {
-            gte: cashFlowStart,
-            lt: nextMonthStart,
-          },
-        },
-        select: {
-          accountId: true,
-          budgetId: true,
-          direction: true,
-          date: true,
-          amountCents: true,
-        },
-      }),
+      prisma.$queryRaw<
+        Array<{
+          cardId: string;
+          cardName: string;
+          bankName: string | null;
+          statementMonth: number;
+          statementYear: number;
+          paymentDueDate: Date;
+          outstandingCents: number | bigint;
+        }>
+      >(Prisma.sql`
+        SELECT
+          cct.[creditCardId] AS [cardId],
+          cc.[cardName] AS [cardName],
+          cc.[bankName] AS [bankName],
+          cct.[statementMonth] AS [statementMonth],
+          cct.[statementYear] AS [statementYear],
+          MIN(cct.[paymentDueDate]) AS [paymentDueDate],
+          SUM(CAST(cct.[amountCents] AS BIGINT)) AS [outstandingCents]
+        FROM [dbo].[CreditCardTransaction] cct
+        INNER JOIN [dbo].[CreditCardAccount] cc
+          ON cc.[id] = cct.[creditCardId]
+        WHERE cct.[workspaceId] = ${workspaceId}
+          AND cct.[paymentDueDate] IS NOT NULL
+        GROUP BY
+          cct.[creditCardId],
+          cc.[cardName],
+          cc.[bankName],
+          cct.[statementMonth],
+          cct.[statementYear]
+        HAVING SUM(CAST(cct.[amountCents] AS BIGINT)) > 0
+        ORDER BY MIN(cct.[paymentDueDate]) ASC
+      `),
+      prisma.$queryRaw<
+        Array<{
+          year: number;
+          month: number;
+          accountId: string;
+          budgetId: string | null;
+          direction: string;
+          amountCents: number | bigint;
+        }>
+      >(Prisma.sql`
+        SELECT
+          YEAR([date]) AS [year],
+          MONTH([date]) AS [month],
+          [accountId],
+          [budgetId],
+          [direction],
+          SUM(CAST([amountCents] AS BIGINT)) AS [amountCents]
+        FROM [dbo].[Transaction]
+        WHERE [workspaceId] = ${workspaceId}
+          AND [date] >= ${cashFlowStart}
+          AND [date] < ${nextMonthStart}
+        GROUP BY
+          YEAR([date]),
+          MONTH([date]),
+          [accountId],
+          [budgetId],
+          [direction]
+      `),
     ]);
 
     const outgoingByBudget = new Map(
@@ -141,41 +173,15 @@ export async function GET() {
 
     const totalBankBalance = bankConsistency.reduce((sum, bank) => sum + bank.currentBalanceCents, 0);
 
-    const dueByStatement = new Map<string, {
-      cardId: string;
-      cardName: string;
-      bankName: string | null;
-      statementMonth: number;
-      statementYear: number;
-      paymentDueDate: string;
-      outstandingCents: number;
-    }>();
-
-    for (const tx of creditCardTransactions) {
-      if (!tx.paymentDueDate) continue;
-      const key = `${tx.creditCardId}:${tx.statementYear}:${tx.statementMonth}`;
-      const existing = dueByStatement.get(key);
-      if (existing) {
-        existing.outstandingCents += tx.amountCents;
-        if (tx.amountCents > 0) {
-          existing.paymentDueDate = tx.paymentDueDate.toISOString();
-        }
-        continue;
-      }
-      dueByStatement.set(key, {
-        cardId: tx.creditCardId,
-        cardName: tx.creditCard.cardName,
-        bankName: tx.creditCard.bankName,
-        statementMonth: tx.statementMonth,
-        statementYear: tx.statementYear,
-        paymentDueDate: tx.paymentDueDate.toISOString(),
-        outstandingCents: tx.amountCents,
-      });
-    }
-
-    const nextDueCards = [...dueByStatement.values()]
-      .filter((item) => item.outstandingCents > 0)
-      .sort((a, b) => new Date(a.paymentDueDate).getTime() - new Date(b.paymentDueDate).getTime());
+    const nextDueCards = creditCardDueRows.map((row) => ({
+      cardId: row.cardId,
+      cardName: row.cardName,
+      bankName: row.bankName,
+      statementMonth: row.statementMonth,
+      statementYear: row.statementYear,
+      paymentDueDate: row.paymentDueDate.toISOString(),
+      outstandingCents: toNumber(row.outstandingCents),
+    }));
 
     const totalOutstandingCents = nextDueCards.reduce((sum, item) => sum + item.outstandingCents, 0);
     const overdueCount = nextDueCards.filter((item) => new Date(item.paymentDueDate).getTime() < now.getTime()).length;
@@ -198,25 +204,26 @@ export async function GET() {
         budgets: new Map(),
       });
     }
-    for (const tx of cashFlowTransactions) {
-      const month = cashFlowByMonth.get(getMonthKey(tx.date));
+    for (const row of cashFlowRows) {
+      const month = cashFlowByMonth.get(`${row.year}-${String(row.month).padStart(2, "0")}`);
       if (!month) continue;
 
-      const account = month.accounts.get(tx.accountId) ?? { inflowCents: 0, outflowCents: 0 };
-      const budget = tx.budgetId
-        ? month.budgets.get(tx.budgetId) ?? { inflowCents: 0, outflowCents: 0 }
+      const amountCents = toNumber(row.amountCents);
+      const account = month.accounts.get(row.accountId) ?? { inflowCents: 0, outflowCents: 0 };
+      const budget = row.budgetId
+        ? month.budgets.get(row.budgetId) ?? { inflowCents: 0, outflowCents: 0 }
         : null;
-      if (tx.direction === "CREDIT") {
-        month.inflowCents += tx.amountCents;
-        account.inflowCents += tx.amountCents;
-        if (budget) budget.inflowCents += tx.amountCents;
+      if (row.direction === "CREDIT") {
+        month.inflowCents += amountCents;
+        account.inflowCents += amountCents;
+        if (budget) budget.inflowCents += amountCents;
       } else {
-        month.outflowCents += tx.amountCents;
-        account.outflowCents += tx.amountCents;
-        if (budget) budget.outflowCents += tx.amountCents;
+        month.outflowCents += amountCents;
+        account.outflowCents += amountCents;
+        if (budget) budget.outflowCents += amountCents;
       }
-      month.accounts.set(tx.accountId, account);
-      if (tx.budgetId && budget) month.budgets.set(tx.budgetId, budget);
+      month.accounts.set(row.accountId, account);
+      if (row.budgetId && budget) month.budgets.set(row.budgetId, budget);
     }
 
     const cashFlow = cashFlowMonthStarts.map((month) => {

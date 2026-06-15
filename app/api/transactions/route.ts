@@ -1,4 +1,4 @@
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyTransactionBudgetDelta } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import type { Prisma } from "@prisma/client";
@@ -236,7 +236,11 @@ export async function POST(request: Request) {
         throw new Error("Selected budget is linked to a different bank account.");
       }
 
-      const updatedBudget = await recalculateBudgetAvailableCents(db, txPayload.workspaceId, budget.id);
+      const [updatedBudget] = await applyTransactionBudgetDelta(db, {
+        nextBudgetId: budget.id,
+        nextDirection: tx.direction,
+        nextAmountCents: tx.amountCents,
+      });
 
       return { tx, updatedBudget };
     });

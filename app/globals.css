@@ -204,6 +204,7 @@
   --modal-shadow: var(--shadow-lg);
   --modal-backdrop: var(--color-overlay);
   --modal-padding: 16px;
+  --modal-mobile-action-min-height: 48px;
   --mobile-action-safe-bottom: max(24px, env(safe-area-inset-bottom, 0px));
 }
 
@@ -228,9 +229,15 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   min-height: 100vh;
+  min-height: 100dvh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html[data-modal-scroll-lock="true"],
+body[data-modal-scroll-lock="true"] {
+  overscroll-behavior: none;
 }
 
 /* ============================================================
@@ -240,6 +247,7 @@ body {
 .app-shell {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -258,6 +266,7 @@ body {
   flex-direction: column;
   padding: 0;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -9558,6 +9567,10 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 
+  .auto-rule-order-actions .btn:last-child {
+    grid-column: 1 / -1;
+  }
+
   .auto-rule-order-actions .btn,
   .auto-rule-modal-actions .btn {
     width: 100%;
@@ -10849,6 +10862,43 @@ body {
   }
 }
 
+/* Shared Modal Mobile Behavior */
+.modal-overlay,
+.profile-modal-overlay,
+.cc-modal-overlay,
+.cct-modal-overlay,
+.st-modal-overlay,
+.auto-rule-modal-overlay {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+.modal-body,
+.profile-modal-body,
+.recv-modal-body,
+.txn-modal-body,
+.cc-modal-form,
+.cct-modal-form,
+.st-modal-form,
+.auto-rule-modal-body,
+.inv-modal-body {
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.modal-footer,
+.profile-actions,
+.txn-modal-actions,
+.cc-modal-actions,
+.cct-modal-actions,
+.st-modal-actions,
+.inv-modal-actions,
+.auto-rule-modal-footer {
+  z-index: 1;
+}
+
 /* Form Inputs — Standardized */
 .input {
   font-family: var(--font-body);
@@ -10965,3 +11015,36 @@ body {
 .space-x-2 > * + * { margin-left: var(--space-2); }
 .space-x-3 > * + * { margin-left: var(--space-3); }
 .space-x-4 > * + * { margin-left: var(--space-4); }
+
+@media (max-width: 820px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea,
+  .input {
+    font-size: 16px;
+  }
+
+  .modal-footer .btn,
+  .profile-actions .btn,
+  .txn-modal-actions .btn,
+  .cc-modal-actions .btn,
+  .cct-modal-actions .btn,
+  .st-modal-actions .btn,
+  .inv-modal-actions .btn,
+  .auto-rule-order-actions .btn,
+  .auto-rule-modal-actions .btn {
+    min-height: var(--modal-mobile-action-min-height);
+  }
+
+  .modal-footer,
+  .profile-actions,
+  .txn-modal-actions,
+  .cc-modal-actions,
+  .cct-modal-actions,
+  .st-modal-actions,
+  .inv-modal-actions,
+  .auto-rule-modal-footer {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+}

@@ -1,6 +1,7 @@
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { deriveStatementCycle } from "@/lib/credit-card-statement-cycle";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -14,6 +15,9 @@ const CreateTransactionSchema = z.object({
   subject: z.string().min(1),
 });
 
+const DEFAULT_PAGE_LIMIT = 250;
+const MAX_PAGE_LIMIT = 500;
+
 export async function GET(request: Request) {
   try {
     const { workspaceId } = await requireWorkspaceAccess();
@@ -21,48 +25,102 @@ export async function GET(request: Request) {
     const cardId = searchParams.get("cardId");
     const year = searchParams.get("year");
     const month = searchParams.get("month");
+    const pageParam = searchParams.get("page");
+    const limitParam = searchParams.get("limit");
+    const cursor = searchParams.get("cursor");
 
-    const where: Record<string, unknown> = { workspaceId };
+    const where: Prisma.CreditCardTransactionWhereInput = { workspaceId };
 
     if (cardId && cardId !== "all") {
       where.creditCardId = cardId;
     }
 
     if (year) {
-      where.statementYear = parseInt(year);
+      where.statementYear = parseInt(year, 10);
     }
 
     if (month) {
-      where.statementMonth = parseInt(month);
+      where.statementMonth = parseInt(month, 10);
     }
 
-    const transactions = await prisma.creditCardTransaction.findMany({
-      where,
-      include: { creditCard: true },
-      orderBy: { transactionDate: "desc" },
-    });
+    const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
+    const limit = Math.min(
+      Math.max(Number.parseInt(limitParam || String(DEFAULT_PAGE_LIMIT), 10) || DEFAULT_PAGE_LIMIT, 1),
+      MAX_PAGE_LIMIT,
+    );
 
-    const cardCountWhere: Record<string, unknown> = {
+    const cardCountWhere: Prisma.CreditCardTransactionWhereInput = {
       workspaceId,
       isAllocated: false,
     };
 
     if (year) {
-      cardCountWhere.statementYear = parseInt(year);
+      cardCountWhere.statementYear = parseInt(year, 10);
     }
 
     if (month) {
-      cardCountWhere.statementMonth = parseInt(month);
+      cardCountWhere.statementMonth = parseInt(month, 10);
     }
 
     // Get unaccounted counts per card for the selected statement period.
-    const cardCounts = await prisma.creditCardTransaction.groupBy({
-      by: ["creditCardId"],
-      where: cardCountWhere,
-      _count: { id: true },
-    });
+    const [transactions, total, cardCounts] = await Promise.all([
+      prisma.creditCardTransaction.findMany({
+        where,
+        ...(cursor
+          ? {
+              cursor: { id: cursor },
+              skip: 1,
+            }
+          : { skip: (page - 1) * limit }),
+        take: limit + 1,
+        orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        select: {
+          id: true,
+          workspaceId: true,
+          creditCardId: true,
+          transactionDate: true,
+          paymentDueDate: true,
+          statementMonth: true,
+          statementYear: true,
+          amountCents: true,
+          subject: true,
+          isInstallment: true,
+          installmentNo: true,
+          totalInstallments: true,
+          isAllocated: true,
+          budgetId: true,
+          createdAt: true,
+          updatedAt: true,
+          creditCard: {
+            select: {
+              id: true,
+              cardName: true,
+              bankName: true,
+              last4Digit: true,
+            },
+          },
+        },
+      }),
+      prisma.creditCardTransaction.count({ where }),
+      prisma.creditCardTransaction.groupBy({
+        by: ["creditCardId"],
+        where: cardCountWhere,
+        _count: { id: true },
+      }),
+    ]);
 
-    return NextResponse.json({ transactions, cardCounts });
+    const hasMore = transactions.length > limit;
+    const pageItems = hasMore ? transactions.slice(0, limit) : transactions;
+
+    return NextResponse.json({
+      transactions: pageItems,
+      cardCounts,
+      total,
+      page,
+      limit,
+      hasMore,
+      nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

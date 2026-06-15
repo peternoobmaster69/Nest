@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+
+function toNumber(value: number | bigint | null | undefined) {
+  return Number(value ?? 0);
+}
 
 export async function GET(request: Request) {
   try {
@@ -15,78 +20,48 @@ export async function GET(request: Request) {
 
     await requireWorkspaceAccess(workspaceId);
 
-    const where = {
-      workspaceId,
-      ...(accountId ? { accountId } : {}),
-      ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
-    };
-
-    // Get all transactions with just the fields we need for aggregation
-    const transactions = await prisma.transaction.findMany({
-      where,
-      select: {
-        date: true,
-        amountCents: true,
-        direction: true,
-      },
-      orderBy: [{ date: "desc" }],
-    });
-
-    // Aggregate by month (using UTC to avoid timezone issues)
-    const monthMap = new Map<
-      string,
-      {
-        monthKey: string;
+    const rows = await prisma.$queryRaw<
+      Array<{
         year: number;
         month: number;
-        count: number;
-        incomeCents: number;
-        expenseCents: number;
-      }
-    >();
+        count: number | bigint;
+        incomeCents: number | bigint | null;
+        expenseCents: number | bigint | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        YEAR([date]) AS [year],
+        MONTH([date]) AS [month],
+        COUNT_BIG(*) AS [count],
+        SUM(CASE WHEN [direction] = 'CREDIT' THEN CAST([amountCents] AS BIGINT) ELSE 0 END) AS [incomeCents],
+        SUM(CASE WHEN [direction] = 'DEBIT' THEN CAST([amountCents] AS BIGINT) ELSE 0 END) AS [expenseCents]
+      FROM [dbo].[Transaction]
+      WHERE [workspaceId] = ${workspaceId}
+        ${accountId ? Prisma.sql`AND [accountId] = ${accountId}` : Prisma.empty}
+        ${budgetId && budgetId !== "ALL" ? Prisma.sql`AND [budgetId] = ${budgetId}` : Prisma.empty}
+      GROUP BY YEAR([date]), MONTH([date])
+      ORDER BY YEAR([date]) DESC, MONTH([date]) DESC
+    `);
 
-    transactions.forEach((tx) => {
-      const date = new Date(tx.date);
-      const year = date.getUTCFullYear();
-      const month = date.getUTCMonth() + 1;
-      const monthKey = `${year}-${String(month).padStart(2, "0")}`;
-
-      if (!monthMap.has(monthKey)) {
-        monthMap.set(monthKey, {
-          monthKey,
-          year,
-          month,
-          count: 0,
-          incomeCents: 0,
-          expenseCents: 0,
-        });
-      }
-
-      const data = monthMap.get(monthKey)!;
-      data.count += 1;
-      if (tx.direction === "CREDIT") {
-        data.incomeCents += tx.amountCents;
-      } else {
-        data.expenseCents += tx.amountCents;
-      }
-    });
-
-    // Sort by most recent month first
-    const months = Array.from(monthMap.values())
-      .sort((a, b) => b.monthKey.localeCompare(a.monthKey))
-      .map((m) => ({
-        monthKey: m.monthKey,
-        monthLabel: new Date(Date.UTC(m.year, m.month - 1, 1)).toLocaleDateString(undefined, {
+    const months = rows.map((row) => {
+      const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
+      return {
+        monthKey,
+        monthLabel: new Date(Date.UTC(row.year, row.month - 1, 1)).toLocaleDateString(undefined, {
           month: "short",
           year: "numeric",
           timeZone: "UTC",
         }),
-        count: m.count,
-        incomeCents: m.incomeCents,
-        expenseCents: m.expenseCents,
-      }));
+        count: toNumber(row.count),
+        incomeCents: toNumber(row.incomeCents),
+        expenseCents: toNumber(row.expenseCents),
+      };
+    });
 
-    return NextResponse.json({ months, total: transactions.length });
+    return NextResponse.json({
+      months,
+      total: months.reduce((sum, month) => sum + month.count, 0),
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

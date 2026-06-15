@@ -174,6 +174,7 @@ export function SettingsPage() {
   const [ruleDraftWorkspaceId, setRuleDraftWorkspaceId] = useState<string | null>(null);
   const [ruleKeywordInputs, setRuleKeywordInputs] = useState<Record<string, string>>({});
   const [editingAutoRuleId, setEditingAutoRuleId] = useState<string | null>(null);
+  const [editingAutoRuleDraft, setEditingAutoRuleDraft] = useState<AutoRule | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -517,20 +518,26 @@ export function SettingsPage() {
   };
 
   const saveAutoRules = useMutation({
-    mutationFn: (rules: AutoRule[]) =>
+    mutationFn: (payload: { rules: AutoRule[]; closeEditor?: boolean; message?: string }) =>
       fetchJson<{ workspaceId: string; rules: AutoRule[] }>("/api/credit-transactions/auto-rules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId,
-          rules: rules.map(sanitizeAutoRule),
+          rules: payload.rules.map(sanitizeAutoRule),
         }),
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, payload) => {
       setRuleDrafts(data.rules);
       setRuleDraftWorkspaceId(data.workspaceId);
-      setEditingAutoRuleId(null);
-      setAutoRuleMessage(`Rules saved. Auto-accounting runs every ${Math.round(CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS / 60000)} minutes.`);
+      if (payload.closeEditor) {
+        setEditingAutoRuleId(null);
+        setEditingAutoRuleDraft(null);
+      }
+      setAutoRuleMessage(
+        payload.message ||
+          `Rules saved. Auto-accounting runs every ${Math.round(CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS / 60000)} minutes.`,
+      );
       queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", workspaceId] });
     },
     onError: (error) => {
@@ -669,64 +676,109 @@ export function SettingsPage() {
     setRuleDrafts((current) => current.map((rule) => (rule.id === id ? updater(rule) : rule)));
   };
 
+  const openRuleEditor = (rule: AutoRule) => {
+    setEditingAutoRuleId(rule.id);
+    setEditingAutoRuleDraft({ ...rule, filters: [...rule.filters] });
+    setAutoRuleMessage("");
+  };
+
+  const closeRuleEditor = () => {
+    setEditingAutoRuleId(null);
+    setEditingAutoRuleDraft(null);
+  };
+
+  const updateEditingRule = (updater: (rule: AutoRule) => AutoRule) => {
+    setEditingAutoRuleDraft((current) => (current ? updater(current) : current));
+  };
+
+  const persistRules = (rules: AutoRule[], options?: { closeEditor?: boolean; message?: string }) => {
+    if (!workspaceId || saveAutoRules.isPending) return;
+    const validationMessage = getAutoRuleValidationMessage(rules);
+    if (validationMessage) {
+      setAutoRuleMessage(validationMessage);
+      return;
+    }
+    saveAutoRules.mutate({
+      rules: rules.map(sanitizeAutoRule),
+      closeEditor: options?.closeEditor,
+      message: options?.message,
+    });
+  };
+
+  const saveEditingRule = () => {
+    if (!editingAutoRuleDraft) return;
+    const sanitized = sanitizeAutoRule(editingAutoRuleDraft);
+    const existingIndex = ruleDrafts.findIndex((rule) => rule.id === sanitized.id);
+    const nextRules =
+      existingIndex >= 0
+        ? ruleDrafts.map((rule) => (rule.id === sanitized.id ? sanitized : rule))
+        : [...ruleDrafts, sanitized];
+    persistRules(nextRules, {
+      closeEditor: true,
+      message: `Rule "${sanitized.name}" saved.`,
+    });
+  };
+
   const setRuleFilters = (id: string, filters: string[]) => {
     const nextFilters = filters.map((filter) => filter.trim()).filter(Boolean);
+    if (editingAutoRuleDraft?.id === id) {
+      updateEditingRule((current) => ({ ...current, filters: nextFilters }));
+      return;
+    }
     updateDraftRule(id, (current) => ({ ...current, filters: nextFilters }));
   };
 
   const addRuleFilter = (id: string) => {
     const keyword = (ruleKeywordInputs[id] ?? "").trim();
     if (!keyword) return;
-    const rule = ruleDrafts.find((item) => item.id === id);
+    const rule = editingAutoRuleDraft?.id === id ? editingAutoRuleDraft : ruleDrafts.find((item) => item.id === id);
     if (!rule) return;
     setRuleFilters(id, [...rule.filters, keyword]);
     setRuleKeywordInputs((current) => ({ ...current, [id]: "" }));
   };
 
   const removeRuleFilter = (id: string, filterIndex: number) => {
-    const rule = ruleDrafts.find((item) => item.id === id);
+    const rule = editingAutoRuleDraft?.id === id ? editingAutoRuleDraft : ruleDrafts.find((item) => item.id === id);
     if (!rule) return;
     setRuleFilters(id, rule.filters.filter((_, index) => index !== filterIndex));
   };
 
   const moveRule = (id: string, direction: -1 | 1) => {
-    setRuleDrafts((current) => {
-      const index = current.findIndex((rule) => rule.id === id);
-      if (index < 0) return current;
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= current.length) return current;
-      const next = [...current];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
-    });
+    const index = ruleDrafts.findIndex((rule) => rule.id === id);
+    if (index < 0) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= ruleDrafts.length) return;
+    const next = [...ruleDrafts];
+    const [item] = next.splice(index, 1);
+    next.splice(nextIndex, 0, item);
+    setRuleDrafts(next);
+    persistRules(next, { message: "Rule order saved." });
   };
 
   const removeRule = (id: string) => {
-    if (editingAutoRuleId === id) setEditingAutoRuleId(null);
-    setRuleDrafts((current) => current.filter((rule) => rule.id !== id));
+    const nextRules = ruleDrafts.filter((rule) => rule.id !== id);
+    if (editingAutoRuleId === id) closeRuleEditor();
+    setRuleDrafts(nextRules);
     setRuleKeywordInputs((current) => {
       const next = { ...current };
       delete next[id];
       return next;
     });
+    if (ruleDrafts.some((rule) => rule.id === id)) {
+      persistRules(nextRules, { closeEditor: true, message: "Rule deleted." });
+    }
   };
 
   const addRule = () => {
     const nextRule = createEmptyAutoRule(defaultSameWorkspaceDestination);
-    setRuleDrafts((current) => [...current, nextRule]);
-    setEditingAutoRuleId(nextRule.id);
+    openRuleEditor(nextRule);
     setAutoRuleMessage("New rule added. Add at least one subject keyword before saving.");
   };
 
-  const onSaveAutoRules = () => {
-    if (!workspaceId) return;
-    const validationMessage = getAutoRuleValidationMessage(ruleDrafts);
-    if (validationMessage) {
-      setAutoRuleMessage(validationMessage);
-      return;
-    }
-    saveAutoRules.mutate(ruleDrafts.map(sanitizeAutoRule));
+  const toggleRuleEnabled = (id: string, enabled: boolean) => {
+    const nextRules = ruleDrafts.map((rule) => (rule.id === id ? { ...rule, enabled } : rule));
+    setRuleDrafts(nextRules);
+    persistRules(nextRules, { message: enabled ? "Rule enabled." : "Rule paused." });
   };
 
   const getWorkspaceName = (id: string) => workspaces.find((workspace) => workspace.id === id)?.name || "Workspace";
@@ -757,8 +809,12 @@ export function SettingsPage() {
     return `${getWorkspaceName(rule.sourceWorkspaceId)} · ${getAccountName(rule.sourceAccountId, rule.sourceWorkspaceId)} · ${getBudgetName(rule.sourceBudgetId, rule.sourceWorkspaceId)}`;
   };
 
-  const editingAutoRule = editingAutoRuleId ? ruleDrafts.find((rule) => rule.id === editingAutoRuleId) ?? null : null;
-  const editingAutoRuleIndex = editingAutoRule ? ruleDrafts.findIndex((rule) => rule.id === editingAutoRule.id) : -1;
+  const editingAutoRule = editingAutoRuleDraft;
+  const editingAutoRuleIndex = editingAutoRule
+    ? ruleDrafts.findIndex((rule) => rule.id === editingAutoRule.id)
+    : -1;
+  const editingAutoRuleDisplayIndex =
+    editingAutoRuleIndex >= 0 ? editingAutoRuleIndex + 1 : ruleDrafts.length + 1;
   const editingSameWorkspaceBudgets = editingAutoRule?.action === "DEDUCT_SAME_WORKSPACE"
     ? (budgets.data ?? []).filter((budget) => budget.isActive)
     : [];
@@ -963,17 +1019,22 @@ export function SettingsPage() {
             </div>
           </div>
           <div className="settings-auto-actions">
-            <button className="btn btn-ghost btn-xs" type="button" onClick={() => setRuleDrafts(autoRules.data?.rules ?? [])} disabled={saveAutoRules.isPending || runAutoRules.isPending || !hasAutoRuleChanges}>
+            <button
+              className="btn btn-ghost btn-xs"
+              type="button"
+              onClick={() => {
+                setRuleDrafts(autoRules.data?.rules ?? []);
+                closeRuleEditor();
+                setRuleKeywordInputs({});
+              }}
+              disabled={saveAutoRules.isPending || runAutoRules.isPending || !hasAutoRuleChanges}
+            >
               <RotateCcw size={14} aria-hidden="true" />
               Reset
             </button>
             <button className="btn btn-ghost btn-xs" type="button" onClick={() => runAutoRules.mutate()} disabled={!workspaceId || runAutoRules.isPending}>
               <Play size={14} aria-hidden="true" />
               {runAutoRules.isPending ? "Running..." : "Run Now"}
-            </button>
-            <button className="btn btn-primary btn-xs" type="button" onClick={onSaveAutoRules} disabled={!workspaceId || saveAutoRules.isPending || !hasAutoRuleChanges}>
-              <Save size={14} aria-hidden="true" />
-              {saveAutoRules.isPending ? "Saving..." : "Save Rules"}
             </button>
           </div>
         </div>
@@ -991,7 +1052,7 @@ export function SettingsPage() {
             <div className="auto-rules-stack">
               {ruleDrafts.map((rule, index) => (
                 <div key={rule.id} className={`auto-rule-card ${rule.enabled ? "" : "is-disabled"}`}>
-                  <button className="auto-rule-summary" type="button" onClick={() => setEditingAutoRuleId(rule.id)}>
+                  <button className="auto-rule-summary" type="button" onClick={() => openRuleEditor(rule)}>
                     <span className="auto-rule-number">{index + 1}</span>
                     <span className="auto-rule-main">
                       <span className="auto-rule-title-row">
@@ -1016,7 +1077,7 @@ export function SettingsPage() {
                         <input
                           type="checkbox"
                           checked={rule.enabled}
-                          onChange={(event) => updateDraftRule(rule.id, (current) => ({ ...current, enabled: event.target.checked }))}
+                          onChange={(event) => toggleRuleEnabled(rule.id, event.target.checked)}
                         />
                         <span />
                       </label>
@@ -1042,17 +1103,17 @@ export function SettingsPage() {
       </div>
 
       {editingAutoRule && (
-        <div className="auto-rule-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setEditingAutoRuleId(null))}>
+        <div className="auto-rule-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeRuleEditor)}>
           <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className="auto-rule-modal-header">
               <div className="auto-rule-modal-title-wrap">
-                <span className="auto-rule-number">{editingAutoRuleIndex + 1}</span>
+                <span className="auto-rule-number">{editingAutoRuleDisplayIndex}</span>
                 <div>
                   <h3 id="auto-rule-modal-title">Edit Auto Accounting Rule</h3>
-                  <p>{editingAutoRule.name || `Rule ${editingAutoRuleIndex + 1}`}</p>
+                  <p>{editingAutoRule.name || `Rule ${editingAutoRuleDisplayIndex}`}</p>
                 </div>
               </div>
-              <button className="auto-rule-icon-btn" type="button" onClick={() => setEditingAutoRuleId(null)} aria-label="Close editor">
+              <button className="auto-rule-icon-btn" type="button" onClick={closeRuleEditor} aria-label="Close editor">
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -1082,7 +1143,7 @@ export function SettingsPage() {
                     className="input"
                     type="text"
                     value={editingAutoRule.name}
-                    onChange={(event) => updateDraftRule(editingAutoRule.id, (current) => ({ ...current, name: event.target.value }))}
+                    onChange={(event) => updateEditingRule((current) => ({ ...current, name: event.target.value }))}
                   />
                 </section>
 
@@ -1094,7 +1155,7 @@ export function SettingsPage() {
                       <input
                         type="checkbox"
                         checked={editingAutoRule.enabled}
-                        onChange={(event) => updateDraftRule(editingAutoRule.id, (current) => ({ ...current, enabled: event.target.checked }))}
+                        onChange={(event) => updateEditingRule((current) => ({ ...current, enabled: event.target.checked }))}
                       />
                       <span />
                     </span>
@@ -1113,7 +1174,7 @@ export function SettingsPage() {
                       className="input"
                       value={editingAutoRule.action}
                       onChange={(event) =>
-                        updateDraftRule(editingAutoRule.id, (current) =>
+                        updateEditingRule((current) =>
                           event.target.value === "DEDUCT_SAME_WORKSPACE"
                             ? {
                                 id: current.id,
@@ -1192,7 +1253,7 @@ export function SettingsPage() {
                           className="input"
                           value={editingAutoRule.sourceBudgetId}
                           onChange={(event) =>
-                            updateDraftRule(editingAutoRule.id, (current) =>
+                            updateEditingRule((current) =>
                               current.action === "DEDUCT_SAME_WORKSPACE"
                                 ? { ...current, sourceBudgetId: event.target.value }
                                 : current,
@@ -1213,7 +1274,7 @@ export function SettingsPage() {
                           className="input"
                           value={editingAutoRule.destinationBudgetId}
                           onChange={(event) =>
-                            updateDraftRule(editingAutoRule.id, (current) =>
+                            updateEditingRule((current) =>
                               current.action === "DEDUCT_SAME_WORKSPACE"
                                 ? { ...current, destinationBudgetId: event.target.value }
                                 : current,
@@ -1242,7 +1303,7 @@ export function SettingsPage() {
                           className="input"
                           value={editingAutoRule.sourceWorkspaceId}
                           onChange={(event) =>
-                            updateDraftRule(editingAutoRule.id, (current) =>
+                            updateEditingRule((current) =>
                               current.action === "RECEIVABLE_OTHER_WORKSPACE"
                                 ? {
                                     ...current,
@@ -1268,7 +1329,7 @@ export function SettingsPage() {
                           className="input"
                           value={editingAutoRule.sourceAccountId}
                           onChange={(event) =>
-                            updateDraftRule(editingAutoRule.id, (current) => {
+                            updateEditingRule((current) => {
                               if (current.action !== "RECEIVABLE_OTHER_WORKSPACE") return current;
                               const nextAccountId = event.target.value;
                               const nextBudgetId =
@@ -1297,7 +1358,7 @@ export function SettingsPage() {
                           className="input"
                           value={editingAutoRule.sourceBudgetId}
                           onChange={(event) =>
-                            updateDraftRule(editingAutoRule.id, (current) =>
+                            updateEditingRule((current) =>
                               current.action === "RECEIVABLE_OTHER_WORKSPACE"
                                 ? { ...current, sourceBudgetId: event.target.value }
                                 : current,
@@ -1322,25 +1383,26 @@ export function SettingsPage() {
 
             <div className="auto-rule-modal-footer">
               <div className="auto-rule-order-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, -1)} disabled={editingAutoRuleIndex <= 0}>
+                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, -1)} disabled={editingAutoRuleIndex <= 0 || saveAutoRules.isPending}>
                   <ChevronUp size={15} aria-hidden="true" />
                   Move up
                 </button>
-                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, 1)} disabled={editingAutoRuleIndex < 0 || editingAutoRuleIndex >= ruleDrafts.length - 1}>
+                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, 1)} disabled={editingAutoRuleIndex < 0 || editingAutoRuleIndex >= ruleDrafts.length - 1 || saveAutoRules.isPending}>
                   <ChevronDown size={15} aria-hidden="true" />
                   Move down
                 </button>
-                <button className="btn btn-ghost" type="button" onClick={() => removeRule(editingAutoRule.id)}>
+                <button className="btn btn-ghost" type="button" onClick={() => removeRule(editingAutoRule.id)} disabled={saveAutoRules.isPending}>
                   <Trash2 size={15} aria-hidden="true" />
                   Delete rule
                 </button>
               </div>
               <div className="auto-rule-modal-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => setEditingAutoRuleId(null)}>
+                <button className="btn btn-ghost" type="button" onClick={closeRuleEditor}>
                   Cancel
                 </button>
-                <button className="btn btn-primary" type="button" onClick={onSaveAutoRules} disabled={!workspaceId || saveAutoRules.isPending || !hasAutoRuleChanges}>
-                  {saveAutoRules.isPending ? "Saving..." : "Save"}
+                <button className="btn btn-primary" type="button" onClick={saveEditingRule} disabled={!workspaceId || saveAutoRules.isPending}>
+                  <Save size={15} aria-hidden="true" />
+                  {saveAutoRules.isPending ? "Saving..." : "Save Rule"}
                 </button>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -85,8 +85,8 @@ export async function POST(request: Request) {
         },
       });
 
-      await recalculateBudgetAvailableCents(db, workspaceId, sourceBudget.id);
-      await recalculateBudgetAvailableCents(db, workspaceId, destinationBudget.id);
+      await applyBudgetAvailableDelta(db, sourceBudget.id, -amountCents);
+      await applyBudgetAvailableDelta(db, destinationBudget.id, amountCents);
 
       return {
         transferOutId: transferOut.id,

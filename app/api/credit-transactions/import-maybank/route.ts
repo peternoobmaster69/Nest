@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     const seenImportKeys = new Set<string>();
     let imported = 0;
     let skippedDuplicates = 0;
-    let skippedPayments = parsedRows.length - candidateRows.length;
+    const skippedPayments = parsedRows.length - candidateRows.length;
 
     for (const row of candidateRows) {
       const subject = row.description;

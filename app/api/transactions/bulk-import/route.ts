@@ -1,4 +1,4 @@
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyBudgetAvailableDelta, getBudgetAvailableDeltaCents } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import type { Prisma } from "@prisma/client";
@@ -208,7 +208,13 @@ export async function POST(request: Request) {
         const createResult = await prisma.$transaction(async (db) => {
           const created = await db.transaction.createMany({ data });
           if (recalculate && created.count > 0) {
-            await recalculateBudgetAvailableCents(db, workspaceId, budgetId);
+            const deltaCents = data.reduce(
+              (sum, tx) => sum + getBudgetAvailableDeltaCents(tx.direction, tx.amountCents),
+              0,
+            );
+            if (deltaCents !== 0) {
+              await applyBudgetAvailableDelta(db, budgetId, deltaCents);
+            }
           }
           return created;
         });

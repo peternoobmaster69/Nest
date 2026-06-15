@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
+import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -37,6 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: true,
         title: true,
         remarkTogether: true,
+        notes: true,
       },
     });
     if (!receivable) {
@@ -149,7 +150,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const closeDate = parsed.data.closeDate ? new Date(parsed.data.closeDate) : new Date();
     const externalRef = `receivable-close:${receivable.id}:${Date.now()}`;
-    const note = receivable.remarkTogether?.trim() || receivable.title || "Receivable";
+    const transactionTitle = receivable.title.trim() || "Receivable";
+    const transactionNotes = receivable.notes?.trim() || null;
 
     const result = await prisma.$transaction(async (db) => {
       const incomeTx = await db.transaction.create({
@@ -161,8 +163,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           budgetId: targetBudget.id,
           date: closeDate,
           amountCents: receivable.amountCents,
-          subject: note,
+          subject: transactionTitle,
           details: sourceAccount ? `Receivable closed • funded from ${sourceAccount.name}` : "Receivable closed",
+          notes: transactionNotes,
           externalRef,
           isSynced: false,
           isFromFamily: false,
@@ -187,8 +190,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             budgetId: sourceBudget.id,
             date: closeDate,
             amountCents: receivable.amountCents,
-            subject: note,
+            subject: transactionTitle,
             details: `Receivable transfer out • to workspace "${destinationWorkspace.name}" receivable account`,
+            notes: transactionNotes,
             externalRef,
             isSynced: false,
             isFromFamily: false,
@@ -205,9 +209,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       });
 
-      await recalculateBudgetAvailableCents(db, targetWorkspaceId, targetBudget.id);
-      if (sourceAccount && sourceBudget) {
-        await recalculateBudgetAvailableCents(db, sourceAccount.workspaceId, sourceBudget.id);
+      await applyBudgetAvailableDelta(db, targetBudget.id, receivable.amountCents);
+      if (shouldCreateSourceDeduction && sourceBudget) {
+        await applyBudgetAvailableDelta(db, sourceBudget.id, -receivable.amountCents);
       }
 
       return {

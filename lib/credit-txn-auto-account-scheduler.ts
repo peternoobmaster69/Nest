@@ -1,7 +1,6 @@
 import { getCreditTxnAutoAccountIntervalMs, runCreditTxnAutoAccounting } from "@/lib/credit-txn-auto-account-runner";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __nestCreditTxnAutoAccountSchedulerStarted: boolean | undefined;
 }
 
