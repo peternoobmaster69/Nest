@@ -38,6 +38,13 @@ export default async function RewardsRoute() {
       })
     : [];
 
+  const hotelRewardsRaw = workspaceId
+    ? await prisma.hotelRewardAccount.findMany({
+        where: { workspaceId, isActive: true },
+        orderBy: { programName: "asc" },
+      })
+    : [];
+
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
 
@@ -128,6 +135,12 @@ export default async function RewardsRoute() {
     createdAt: conversion.createdAt.toISOString(),
   }));
 
+  const hotelRewards = hotelRewardsRaw.map((hotel) => ({
+    ...hotel,
+    createdAt: hotel.createdAt.toISOString(),
+    updatedAt: hotel.updatedAt.toISOString(),
+  }));
+
   return (
     <PageFrame
       title="Rewards & Miles"
@@ -135,12 +148,13 @@ export default async function RewardsRoute() {
       userName={userName}
       userImage={session.user?.image || null}
       badgeCounts={{
-        budgets: creditCards.length + frequentFlyers.length,
+        budgets: creditCards.length + frequentFlyers.length + hotelRewards.length,
       }}
     >
       <RewardsPage
         initialCreditCards={creditCards}
         initialFrequentFlyers={frequentFlyers}
+        initialHotelRewards={hotelRewards}
         initialConversions={conversions}
         availableCards={availableCards}
       />

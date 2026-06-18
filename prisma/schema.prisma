@@ -100,6 +100,7 @@ model Workspace {
   milePrograms         MileProgram[]
   mileRedemptions      MileRedemption[]
   frequentFlyerAccounts FrequentFlyerAccount[]
+  hotelRewardAccounts HotelRewardAccount[]
   creditCardRewards    CreditCardReward[]
   pointConversions     PointConversion[]
   creditCardTransactions CreditCardTransaction[]
@@ -154,6 +155,7 @@ model InvestmentAccount {
   productName       String
   inceptionDate     DateTime
   divestedDate      DateTime?
+  isLiquid          Boolean           @default(false)
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -625,6 +627,25 @@ model FrequentFlyerAccount {
   conversions     PointConversion[]
   milePrograms    MileProgram[]   @relation("FrequentFlyerMilePrograms")
   mileRedemptions MileRedemption[] @relation("FrequentFlyerMileRedemptions")
+
+  @@unique([workspaceId, programName])
+  @@index([workspaceId, isActive])
+}
+
+model HotelRewardAccount {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  programName     String
+  hotelBrand      String
+  accountNumber   String?
+  currentPoints   Int      @default(0)
+  targetPoints    Int?
+  centsPerPoint   Float    @default(0)
+  notes           String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, programName])
   @@index([workspaceId, isActive])

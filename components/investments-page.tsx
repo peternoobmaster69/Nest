@@ -10,6 +10,7 @@ import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } fr
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
+import { Droplet } from "lucide-react";
 
 type AppContext = {
   workspaceId: string | null;
@@ -31,6 +32,7 @@ type InvestmentAccount = {
   productName: string;
   inceptionDate: string;
   divestedDate?: string | null;
+  isLiquid: boolean;
   entries: InvestmentEntry[];
 };
 
@@ -115,6 +117,7 @@ export function InvestmentsPage() {
   const [productName, setProductName] = useState("");
   const [inceptionDate, setInceptionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [divestedDate, setDivestedDate] = useState("");
+  const [isLiquid, setIsLiquid] = useState(false);
 
   const [entryModalMode, setEntryModalMode] = useState<"create" | "edit">("create");
   const [entryModalOpen, setEntryModalOpen] = useState(false);
@@ -211,6 +214,17 @@ export function InvestmentsPage() {
     }
     return total;
   }, [accounts.data]);
+  const liquidCurrentAcrossAll = useMemo(() => {
+    let total = 0;
+    for (const account of accounts.data ?? []) {
+      if (!account.isLiquid) continue;
+      const latest = [...(account.entries ?? [])]
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .at(-1);
+      total += latest?.currentValueCents ?? 0;
+    }
+    return total;
+  }, [accounts.data]);
 
   // Calculate gain/loss and return
   const totalGainCents = totalCurrentAcrossAll - totalInvestedAcrossAll;
@@ -231,6 +245,7 @@ export function InvestmentsPage() {
           productName,
           inceptionDate: toIsoFromDateInput(inceptionDate),
           divestedDate: divestedDate ? toIsoFromDateInput(divestedDate) : null,
+          isLiquid,
         }),
       }),
     onSuccess: (created) => {
@@ -255,6 +270,7 @@ export function InvestmentsPage() {
           productName,
           inceptionDate: toIsoFromDateInput(inceptionDate),
           divestedDate: divestedDate ? toIsoFromDateInput(divestedDate) : null,
+          isLiquid,
         }),
       }),
     onSuccess: () => {
@@ -350,6 +366,7 @@ export function InvestmentsPage() {
     setProductName("");
     setInceptionDate(new Date().toISOString().slice(0, 10));
     setDivestedDate("");
+    setIsLiquid(false);
     setAccountModalOpen(true);
     setAccountError("");
   };
@@ -362,6 +379,7 @@ export function InvestmentsPage() {
     setProductName(account.productName);
     setInceptionDate(dateInputFromIso(account.inceptionDate));
     setDivestedDate(dateInputFromIso(account.divestedDate));
+    setIsLiquid(account.isLiquid);
     setAccountModalOpen(true);
     setAccountError("");
   };
@@ -588,6 +606,10 @@ export function InvestmentsPage() {
                 <div style={{ fontSize: "32px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>
                   {formatCents(totalCurrentAcrossAll)}
                 </div>
+                <div className="inv-withdrawable-summary">
+                  <span>Amount Available to withdraw</span>
+                  <strong>{formatCents(liquidCurrentAcrossAll)}</strong>
+                </div>
               </div>
 
               {/* Divider */}
@@ -731,6 +753,11 @@ export function InvestmentsPage() {
               </button>
               <div className="inv-account-actions">
                 {inceptionBadge ? <span className="inv-inception-chip">{inceptionBadge}</span> : null}
+                {account.isLiquid ? (
+                  <span className="inv-liquid-chip" title="Liquid portfolio" aria-label="Liquid portfolio">
+                    <Droplet size={13} aria-hidden="true" />
+                  </span>
+                ) : null}
                 <button
                   className="btn btn-primary btn-icon btn-xs inv-add-update-btn"
                   type="button"
@@ -977,6 +1004,27 @@ export function InvestmentsPage() {
               <div className="profile-field">
                 <span>Divested Date (Optional)</span>
                 <input className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
+              </div>
+              <div className="profile-field">
+                <span>Is liquid (Available to withdraw anytime?)</span>
+                <div className="segmented-toggle inv-liquidity-toggle" role="group" aria-label="Is liquid">
+                  <button
+                    type="button"
+                    className={`segmented-toggle-btn inv-liquidity-toggle-btn ${isLiquid ? "is-active" : ""}`}
+                    aria-pressed={isLiquid}
+                    onClick={() => setIsLiquid(true)}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    className={`segmented-toggle-btn inv-liquidity-toggle-btn ${!isLiquid ? "is-active" : ""}`}
+                    aria-pressed={!isLiquid}
+                    onClick={() => setIsLiquid(false)}
+                  >
+                    No
+                  </button>
+                </div>
               </div>
               <div className="profile-actions inv-modal-actions">
                 {accountModalMode === "edit" && editingAccountId ? (

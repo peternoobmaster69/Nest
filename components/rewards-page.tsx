@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui-skeleton";
 import { RewardsCardGridSkeleton, RewardsRowsSkeleton, RewardsSummarySkeleton } from "@/components/skeletons/RewardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { ArrowLeftRight, Building2, CreditCard, Plane, Plus } from "lucide-react";
 
 type CreditCardReward = {
   id: string;
@@ -36,6 +37,20 @@ type FrequentFlyer = {
     month: string;
     amount: number;
   }>;
+};
+
+type HotelReward = {
+  id: string;
+  programName: string;
+  hotelBrand: string;
+  accountNumber: string | null;
+  currentPoints: number;
+  targetPoints: number | null;
+  centsPerPoint: number;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type MileProgramHistory = {
@@ -108,6 +123,7 @@ type AppContext = {
 async function fetchRewards(): Promise<{
   creditCards: CreditCardReward[];
   frequentFlyers: FrequentFlyer[];
+  hotelRewards: HotelReward[];
   conversions: PointConversion[];
   cardsWithoutRewards: AvailableCard[];
 }> {
@@ -118,6 +134,10 @@ async function fetchRewards(): Promise<{
 
 function formatNumber(num: number): string {
   return new Intl.NumberFormat("en-US").format(num);
+}
+
+function hotelPointValueCents(points: number, centsPerPoint: number): number {
+  return Math.round(points * centsPerPoint);
 }
 
 function toDateInputValue(value: string): string {
@@ -140,16 +160,18 @@ function isExpiredAtToday(dateValue: string | null): boolean {
 export function RewardsPage({
   initialCreditCards,
   initialFrequentFlyers,
+  initialHotelRewards,
   initialConversions,
   availableCards,
 }: {
   initialCreditCards: CreditCardReward[];
   initialFrequentFlyers: FrequentFlyer[];
+  initialHotelRewards: HotelReward[];
   initialConversions: PointConversion[];
   availableCards: AvailableCard[];
 }) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"credit-cards" | "frequent-flyers" | "conversions">("credit-cards");
+  const [activeTab, setActiveTab] = useState<"credit-cards" | "frequent-flyers" | "hotel-rewards" | "conversions">("credit-cards");
 
   // Forms state
   const [newCardId, setNewCardId] = useState("");
@@ -158,6 +180,7 @@ export function RewardsPage({
   const [newCardConvPoints, setNewCardConvPoints] = useState("10000");
   const [newCardConvMiles, setNewCardConvMiles] = useState("4000");
   const [newCardConvDesc, setNewCardConvDesc] = useState("");
+  const [isCardRewardModalOpen, setIsCardRewardModalOpen] = useState(false);
 
 
   const [convCardId, setConvCardId] = useState("");
@@ -165,6 +188,7 @@ export function RewardsPage({
   const [convPoints, setConvPoints] = useState("");
   const [convMiles, setConvMiles] = useState("");
   const [convDesc, setConvDesc] = useState("");
+  const [isConversionModalOpen, setIsConversionModalOpen] = useState(false);
   const [editingConversionId, setEditingConversionId] = useState<string | null>(null);
   const [editingConvPoints, setEditingConvPoints] = useState("");
   const [editingConvMiles, setEditingConvMiles] = useState("");
@@ -199,6 +223,15 @@ export function RewardsPage({
   const [editingEarnExpiryDate, setEditingEarnExpiryDate] = useState("");
   const [earnPage, setEarnPage] = useState(1);
   const [redemptionPage, setRedemptionPage] = useState(1);
+  const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
+  const [editingHotelId, setEditingHotelId] = useState<string | null>(null);
+  const [hotelFormProgram, setHotelFormProgram] = useState("");
+  const [hotelFormBrand, setHotelFormBrand] = useState("");
+  const [hotelFormNumber, setHotelFormNumber] = useState("");
+  const [hotelFormPoints, setHotelFormPoints] = useState("");
+  const [hotelFormTarget, setHotelFormTarget] = useState("");
+  const [hotelFormCentsPerPoint, setHotelFormCentsPerPoint] = useState("");
+  const [hotelFormNotes, setHotelFormNotes] = useState("");
 
   const context = useQuery({
     queryKey: ["app-context"],
@@ -220,6 +253,7 @@ export function RewardsPage({
     initialData: {
       creditCards: initialCreditCards,
       frequentFlyers: initialFrequentFlyers,
+      hotelRewards: initialHotelRewards,
       conversions: initialConversions,
       cardsWithoutRewards: availableCards,
     },
@@ -262,12 +296,7 @@ export function RewardsPage({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rewards"] });
-      setNewCardId("");
-      setNewCardPoints("");
-      setNewCardValue("");
-      setNewCardConvPoints("10000");
-      setNewCardConvMiles("4000");
-      setNewCardConvDesc("");
+      closeCardRewardModal();
     },
   });
 
@@ -328,6 +357,49 @@ export function RewardsPage({
     },
   });
 
+  const createHotelReward = useMutation({
+    mutationFn: (payload: {
+      programName: string;
+      hotelBrand: string;
+      accountNumber?: string;
+      currentPoints: number;
+      targetPoints?: number | null;
+      centsPerPoint: number;
+      notes?: string;
+    }) =>
+      fetch("/api/rewards/hotel-rewards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      closeHotelModal();
+    },
+  });
+
+  const updateHotelReward = useMutation({
+    mutationFn: (payload: {
+      id: string;
+      programName: string;
+      hotelBrand: string;
+      accountNumber?: string;
+      currentPoints: number;
+      targetPoints?: number | null;
+      centsPerPoint: number;
+      notes?: string;
+    }) =>
+      fetch("/api/rewards/hotel-rewards", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      closeHotelModal();
+    },
+  });
+
   const createConversion = useMutation({
     mutationFn: (payload: {
       creditCardRewardId: string;
@@ -343,11 +415,7 @@ export function RewardsPage({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rewards"] });
-      setConvCardId("");
-      setConvFFId("");
-      setConvPoints("");
-      setConvMiles("");
-      setConvDesc("");
+      closeConversionModal();
     },
   });
 
@@ -358,6 +426,11 @@ export function RewardsPage({
 
   const deleteFrequentFlyer = useMutation({
     mutationFn: (id: string) => fetch(`/api/rewards/frequent-flyer?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
+  });
+
+  const deleteHotelReward = useMutation({
+    mutationFn: (id: string) => fetch(`/api/rewards/hotel-rewards?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
   });
 
@@ -502,6 +575,25 @@ export function RewardsPage({
     });
   };
 
+  const resetCardRewardForm = () => {
+    setNewCardId("");
+    setNewCardPoints("");
+    setNewCardValue("");
+    setNewCardConvPoints("10000");
+    setNewCardConvMiles("4000");
+    setNewCardConvDesc("");
+  };
+
+  const openCardRewardModal = () => {
+    resetCardRewardForm();
+    setIsCardRewardModalOpen(true);
+  };
+
+  const closeCardRewardModal = () => {
+    setIsCardRewardModalOpen(false);
+    resetCardRewardForm();
+  };
+
   const onCreateConversion = (e: FormEvent) => {
     e.preventDefault();
     if (!convCardId || !convFFId || !convPoints || !convMiles) return;
@@ -512,6 +604,24 @@ export function RewardsPage({
       toMiles: parseInt(convMiles),
       description: convDesc || undefined,
     });
+  };
+
+  const resetConversionForm = () => {
+    setConvCardId("");
+    setConvFFId("");
+    setConvPoints("");
+    setConvMiles("");
+    setConvDesc("");
+  };
+
+  const openConversionModal = () => {
+    resetConversionForm();
+    setIsConversionModalOpen(true);
+  };
+
+  const closeConversionModal = () => {
+    setIsConversionModalOpen(false);
+    resetConversionForm();
   };
 
   const beginEditConversion = (conversion: PointConversion) => {
@@ -575,6 +685,60 @@ export function RewardsPage({
     }
   };
 
+  const resetHotelForm = () => {
+    setHotelFormProgram("");
+    setHotelFormBrand("");
+    setHotelFormNumber("");
+    setHotelFormPoints("");
+    setHotelFormTarget("");
+    setHotelFormCentsPerPoint("");
+    setHotelFormNotes("");
+  };
+
+  const closeHotelModal = () => {
+    setIsHotelModalOpen(false);
+    setEditingHotelId(null);
+    resetHotelForm();
+  };
+
+  const openAddHotelModal = () => {
+    setEditingHotelId(null);
+    resetHotelForm();
+    setIsHotelModalOpen(true);
+  };
+
+  const openEditHotelModal = (hotel: HotelReward) => {
+    setEditingHotelId(hotel.id);
+    setHotelFormProgram(hotel.programName);
+    setHotelFormBrand(hotel.hotelBrand);
+    setHotelFormNumber(hotel.accountNumber || "");
+    setHotelFormPoints(String(hotel.currentPoints));
+    setHotelFormTarget(hotel.targetPoints && hotel.targetPoints > 0 ? String(hotel.targetPoints) : "");
+    setHotelFormCentsPerPoint(String(hotel.centsPerPoint));
+    setHotelFormNotes(hotel.notes || "");
+    setIsHotelModalOpen(true);
+  };
+
+  const onSubmitHotel = (e: FormEvent) => {
+    e.preventDefault();
+    if (!hotelFormProgram || !hotelFormBrand || !hotelFormPoints || !hotelFormCentsPerPoint) return;
+    const targetPoints = hotelFormTarget.trim() === "" ? null : parseInt(hotelFormTarget, 10);
+    const payload = {
+      programName: hotelFormProgram,
+      hotelBrand: hotelFormBrand,
+      accountNumber: hotelFormNumber || undefined,
+      currentPoints: parseInt(hotelFormPoints, 10) || 0,
+      targetPoints: targetPoints && targetPoints > 0 ? targetPoints : null,
+      centsPerPoint: parseFloat(hotelFormCentsPerPoint) || 0,
+      notes: hotelFormNotes || undefined,
+    };
+    if (editingHotelId) {
+      updateHotelReward.mutate({ id: editingHotelId, ...payload });
+    } else {
+      createHotelReward.mutate(payload);
+    }
+  };
+
   const openHistoryForFrequentFlyer = (frequentFlyerId: string) => {
     if (openHistoryFFId === frequentFlyerId) {
       setOpenHistoryFFId(null);
@@ -595,12 +759,20 @@ export function RewardsPage({
     deleteFrequentFlyer.mutate(id);
   };
 
+  const confirmDeleteHotelReward = (id: string) => {
+    if (!confirmDestructiveAction("Delete this hotel rewards account?")) return;
+    deleteHotelReward.mutate(id);
+  };
+
   const confirmDeleteConversion = (id: string) => {
     if (!confirmDestructiveAction("Delete this conversion rate?")) return;
     deleteConversion.mutate(id);
   };
 
   const totalMiles = data?.frequentFlyers.reduce((sum, f) => sum + f.currentMiles, 0) || 0;
+  const totalHotelPoints = data?.hotelRewards.reduce((sum, hotel) => sum + hotel.currentPoints, 0) || 0;
+  const totalHotelValueCents =
+    data?.hotelRewards.reduce((sum, hotel) => sum + hotelPointValueCents(hotel.currentPoints, hotel.centsPerPoint), 0) || 0;
   const conversionByRewardId = new Map<string, PointConversion>();
   for (const conversion of data?.conversions ?? []) {
     if (conversion.creditCardRewardId && !conversionByRewardId.has(conversion.creditCardRewardId)) {
@@ -638,33 +810,77 @@ export function RewardsPage({
     if (redemptionPage > redemptionTotalPages) setRedemptionPage(redemptionTotalPages);
   }, [redemptionPage, redemptionTotalPages]);
 
+  const activeTabAction =
+    activeTab === "credit-cards" && data?.cardsWithoutRewards.length ? (
+      <button className="btn btn-primary rewards-tab-action" onClick={openCardRewardModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add card rewards
+      </button>
+    ) : activeTab === "frequent-flyers" ? (
+      <button className="btn btn-primary rewards-tab-action" onClick={openAddFFModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add frequent flyer
+      </button>
+    ) : activeTab === "hotel-rewards" ? (
+      <button className="btn btn-primary rewards-tab-action" onClick={openAddHotelModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add hotel rewards
+      </button>
+    ) : activeTab === "conversions" && data?.creditCards.length && data?.frequentFlyers.length ? (
+      <button className="btn btn-primary rewards-tab-action" onClick={openConversionModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add conversion rate
+      </button>
+    ) : null;
+
   return (
     <div>
       {/* Summary Stats */}
-      <section className="stat-card" style={{ marginBottom: "20px", display: "grid", gap: "12px" }}>
+      <section className="rewards-overview">
         {isLoading ? (
           <RewardsSummarySkeleton />
         ) : (
           <>
-            <div>
-              <div className="stat-label">Total Miles</div>
-              <div className="stat-value">{formatNumber(totalCombinedMiles)}</div>
-              <div className="stat-sub">Combined miles across cards and frequent flyer programs</div>
-            </div>
-            <div className="grid-2" style={{ gap: "10px" }}>
-              <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
-                <div className="stat-label">Miles Across Credit Cards</div>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
-                  {formatNumber(totalCreditCardMiles)}
+            <div className="rewards-overview-grid">
+              <div className="rewards-overview-card">
+                <div className="rewards-overview-label">
+                  <CreditCard size={16} aria-hidden="true" />
+                  Card Miles
                 </div>
-                <div className="stat-sub">Across {data?.creditCards.length || 0} cards</div>
+                <div className="rewards-overview-value">{formatNumber(totalCreditCardMiles)}</div>
+                <div className="rewards-overview-sub">Across {data?.creditCards.length || 0} cards</div>
               </div>
-              <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }}>
-                <div className="stat-label">Frequent Flyer Miles</div>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", fontWeight: 700 }}>
-                  {formatNumber(totalMiles)}
+              <div className="rewards-overview-card">
+                <div className="rewards-overview-label">
+                  <Plane size={16} aria-hidden="true" />
+                  Frequent Flyer
                 </div>
-                <div className="stat-sub">Across {data?.frequentFlyers.length || 0} programs</div>
+                <div className="rewards-overview-value">{formatNumber(totalMiles)}</div>
+                <div className="rewards-overview-sub">Across {data?.frequentFlyers.length || 0} programs</div>
+              </div>
+              <div className="rewards-overview-card">
+                <div className="rewards-overview-label">
+                  <Building2 size={16} aria-hidden="true" />
+                  Hotel Points
+                </div>
+                <div className="rewards-overview-value">{formatNumber(totalHotelPoints)}</div>
+                <div className="rewards-overview-sub">Across {data?.hotelRewards.length || 0} programs</div>
+                <div className="rewards-overview-value-sub">~ {formatCurrency(totalHotelValueCents)}</div>
+              </div>
+            </div>
+            <div className="rewards-total-panel">
+              <div>
+                <div className="rewards-total-label">Total travel miles</div>
+                <div className="rewards-total-value">{formatNumber(totalCombinedMiles)}</div>
+                <div className="rewards-total-sub">Cards + frequent flyer combined</div>
+              </div>
+              <div className="rewards-total-divider" aria-hidden="true" />
+              <div>
+                <div className="rewards-total-label">Hotel points value</div>
+                <div className="rewards-total-value">{formatCurrency(totalHotelValueCents)}</div>
+                <div className="rewards-total-sub">
+                  {formatNumber(totalHotelPoints)} points tracked separately
+                </div>
               </div>
             </div>
           </>
@@ -686,25 +902,46 @@ export function RewardsPage({
       )}
 
       {/* Tabs */}
-      <div className="segmented" style={{ marginBottom: "20px" }}>
-        <button
-          className={`segmented-btn ${activeTab === "credit-cards" ? "on" : ""}`}
-          onClick={() => setActiveTab("credit-cards")}
-        >
-          Credit Cards
-        </button>
-        <button
-          className={`segmented-btn ${activeTab === "frequent-flyers" ? "on" : ""}`}
-          onClick={() => setActiveTab("frequent-flyers")}
-        >
-          Frequent Flyer
-        </button>
-        <button
-          className={`segmented-btn ${activeTab === "conversions" ? "on" : ""}`}
-          onClick={() => setActiveTab("conversions")}
-        >
-          Conversions
-        </button>
+      <div className="rewards-tabs-row">
+        <div className="segmented rewards-tabs">
+          <button
+            type="button"
+            aria-label="Credit cards"
+            className={`segmented-btn ${activeTab === "credit-cards" ? "on" : ""}`}
+            onClick={() => setActiveTab("credit-cards")}
+          >
+            <CreditCard className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Credit cards</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Frequent flyer"
+            className={`segmented-btn ${activeTab === "frequent-flyers" ? "on" : ""}`}
+            onClick={() => setActiveTab("frequent-flyers")}
+          >
+            <Plane className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Frequent flyer</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Hotel rewards"
+            className={`segmented-btn ${activeTab === "hotel-rewards" ? "on" : ""}`}
+            onClick={() => setActiveTab("hotel-rewards")}
+          >
+            <Building2 className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Hotel rewards</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Conversions"
+            className={`segmented-btn ${activeTab === "conversions" ? "on" : ""}`}
+            onClick={() => setActiveTab("conversions")}
+          >
+            <ArrowLeftRight className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Conversions</span>
+          </button>
+        </div>
+        {activeTabAction}
       </div>
 
       {/* Credit Cards Tab */}
@@ -798,75 +1035,13 @@ export function RewardsPage({
             ))}
           </div>
 
-          {data?.cardsWithoutRewards.length ? (
-            <form className="card" onSubmit={onCreateCardReward}>
-              <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>
-                Add Credit Card Rewards
-              </div>
-              <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr auto" }}>
-                <select
-                  className="input"
-                  value={newCardId}
-                  onChange={(e) => setNewCardId(e.target.value)}
-                  required
-                >
-                  <option value="">Select card...</option>
-                  {data.cardsWithoutRewards.map((card) => (
-                    <option key={card.id} value={card.id}>
-                      {card.cardName} ••{card.last4Digit}
-                    </option>
-                  ))}
-                </select>
-                <NumericCalculatorInput
-                  allowDecimal={false}
-                  placeholder="Current points"
-                  value={newCardPoints}
-                  onValueChange={setNewCardPoints}
-                  required
-                />
-                <NumericCalculatorInput
-                  step="0.01"
-                  placeholder="Cash value ($)"
-                  value={newCardValue}
-                  onValueChange={setNewCardValue}
-                />
-                <NumericCalculatorInput
-                  allowDecimal={false}
-                  placeholder="Conv points"
-                  value={newCardConvPoints}
-                  onValueChange={setNewCardConvPoints}
-                  required
-                />
-                <NumericCalculatorInput
-                  allowDecimal={false}
-                  placeholder="Conv miles"
-                  value={newCardConvMiles}
-                  onValueChange={setNewCardConvMiles}
-                  required
-                />
-                <button type="submit" className="btn btn-primary" disabled={createCardReward.isPending}>
-                  Add
-                </button>
-              </div>
-              <input
-                type="text"
-                className="input"
-                placeholder="Conversion description (optional)"
-                value={newCardConvDesc}
-                onChange={(e) => setNewCardConvDesc(e.target.value)}
-                style={{ marginTop: "8px" }}
-              />
-            </form>
-          ) : (
+          {!isLoading && !isError && data && data.creditCards.length > 0 && data.cardsWithoutRewards.length === 0 ? (
             <div className="card" style={{ textAlign: "center", color: "var(--text-tertiary)" }}>
               All credit cards have rewards tracked. Add more cards to track their rewards.
             </div>
-          )}
+          ) : null}
         </div>
       )}
-      <button className="btn btn-primary" style={{ marginBottom: "10px"}} onClick={openAddFFModal}>
-              + Add Frequent Flyer Program
-      </button>
       {/* Frequent Flyer Tab */}
       {activeTab === "frequent-flyers" && (
         <div>
@@ -1194,6 +1369,77 @@ export function RewardsPage({
         </div>
       )}
 
+      {/* Hotel Rewards Tab */}
+      {activeTab === "hotel-rewards" && (
+        <div>
+          <div className="grid-2" style={{ marginBottom: "20px" }}>
+            {isLoading && <RewardsCardGridSkeleton variant="hotel" />}
+            {!isLoading && !isError && data?.hotelRewards.length === 0 && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <EmptyState
+                  icon="H"
+                  title="No hotel rewards programs"
+                  description="Add your first hotel rewards program to track points, point value, and redemption goals."
+                />
+              </div>
+            )}
+            {!isLoading && data?.hotelRewards.map((hotel) => {
+              const valueCents = hotelPointValueCents(hotel.currentPoints, hotel.centsPerPoint);
+              return (
+                <div key={hotel.id} className="card">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>{hotel.programName}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                        {hotel.hotelBrand}
+                        {hotel.accountNumber && ` - ${hotel.accountNumber}`}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => openEditHotelModal(hotel)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => confirmDeleteHotelReward(hotel.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "12px" }}>
+                    <div style={{ fontSize: "24px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+                      {formatNumber(hotel.currentPoints)}
+                    </div>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--brand-500)", marginTop: "2px" }}>
+                      {formatCurrency(valueCents)}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                      points
+                      {hotel.targetPoints && hotel.targetPoints > 0 ? ` / ${formatNumber(hotel.targetPoints)} goal` : ""}
+                      {` - ${hotel.centsPerPoint.toFixed(3)}c per point`}
+                    </div>
+                  </div>
+                  {hotel.targetPoints !== null && hotel.targetPoints > 0 ? (
+                    <div className="prog-track" style={{ marginTop: "8px" }}>
+                      <div
+                        className="prog-bar"
+                        style={{
+                          width: `${Math.min((hotel.currentPoints / hotel.targetPoints) * 100, 100)}%`,
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Conversions Tab */}
       {activeTab === "conversions" && (
         <div>
@@ -1282,74 +1528,328 @@ export function RewardsPage({
             )}
           </div>
 
-          {data?.creditCards.length && data?.frequentFlyers.length ? (
-            <form className="card" onSubmit={onCreateConversion}>
-              <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>
-                Add Conversion Rate
-              </div>
-              <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "1fr 1fr 1fr 1fr auto" }}>
-                <select
-                  className="input"
-                  value={convCardId}
-                  onChange={(e) => setConvCardId(e.target.value)}
-                  required
-                >
-                  <option value="">From card...</option>
-                  {data.creditCards.map((card) => (
-                    <option key={card.id} value={card.id}>
-                      {card.creditCard.cardName}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="input"
-                  value={convFFId}
-                  onChange={(e) => setConvFFId(e.target.value)}
-                  required
-                >
-                  <option value="">To program...</option>
-                  {data.frequentFlyers.map((ff) => (
-                    <option key={ff.id} value={ff.id}>
-                      {ff.programName}
-                    </option>
-                  ))}
-                </select>
-                <NumericCalculatorInput
-                  allowDecimal={false}
-                  placeholder="Points"
-                  value={convPoints}
-                  onValueChange={setConvPoints}
-                  required
-                />
-                <NumericCalculatorInput
-                  allowDecimal={false}
-                  placeholder="Miles"
-                  value={convMiles}
-                  onValueChange={setConvMiles}
-                  required
-                />
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={createConversion.isPending}
-                >
-                  Add
-                </button>
-              </div>
-              <input
-                type="text"
-                className="input"
-                placeholder="Description (optional)"
-                value={convDesc}
-                onChange={(e) => setConvDesc(e.target.value)}
-                style={{ marginTop: "8px" }}
-              />
-            </form>
-          ) : (
+          {!isLoading && !isError && (!data?.creditCards.length || !data?.frequentFlyers.length) ? (
             <div className="card" style={{ textAlign: "center", color: "var(--text-tertiary)" }}>
               Add at least one credit card reward and one frequent flyer program to create conversions.
             </div>
-          )}
+          ) : null}
+        </div>
+      )}
+
+      {/* Credit Card Rewards Modal */}
+      {isCardRewardModalOpen && data?.cardsWithoutRewards.length ? (
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeCardRewardModal)}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Add Credit Card Rewards</h3>
+              <button className="st-close-btn" onClick={closeCardRewardModal} aria-label="Close">
+                x
+              </button>
+            </div>
+            <form className="st-modal-form" onSubmit={onCreateCardReward}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label" htmlFor="reward-card-id">Card</label>
+                  <select
+                    id="reward-card-id"
+                    className="input"
+                    value={newCardId}
+                    onChange={(e) => setNewCardId(e.target.value)}
+                    required
+                  >
+                    <option value="">Select card...</option>
+                    {data.cardsWithoutRewards.map((card) => (
+                      <option key={card.id} value={card.id}>
+                        {card.cardName} ••{card.last4Digit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label" htmlFor="reward-card-points">Current Points</label>
+                  <NumericCalculatorInput
+                    id="reward-card-points"
+                    allowDecimal={false}
+                    placeholder="0"
+                    value={newCardPoints}
+                    onValueChange={setNewCardPoints}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label" htmlFor="reward-card-cash-value">Cash Value</label>
+                  <NumericCalculatorInput
+                    id="reward-card-cash-value"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={newCardValue}
+                    onValueChange={setNewCardValue}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label" htmlFor="reward-card-conv-points">Conversion Points</label>
+                  <NumericCalculatorInput
+                    id="reward-card-conv-points"
+                    allowDecimal={false}
+                    placeholder="10000"
+                    value={newCardConvPoints}
+                    onValueChange={setNewCardConvPoints}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label" htmlFor="reward-card-conv-miles">Conversion Miles</label>
+                  <NumericCalculatorInput
+                    id="reward-card-conv-miles"
+                    allowDecimal={false}
+                    placeholder="4000"
+                    value={newCardConvMiles}
+                    onValueChange={setNewCardConvMiles}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label" htmlFor="reward-card-conv-desc">Conversion Description</label>
+                  <input
+                    id="reward-card-conv-desc"
+                    type="text"
+                    className="input"
+                    placeholder="Optional notes"
+                    value={newCardConvDesc}
+                    onChange={(e) => setNewCardConvDesc(e.target.value)}
+                  />
+                </div>
+              </div>
+              {createCardReward.isError && (
+                <div className="st-error">
+                  {(createCardReward.error as Error)?.message || "Failed to add credit card rewards"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeCardRewardModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={createCardReward.isPending}>
+                  {createCardReward.isPending ? "Adding..." : "Add Rewards"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Conversion Rate Modal */}
+      {isConversionModalOpen && data?.creditCards.length && data?.frequentFlyers.length ? (
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeConversionModal)}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>Add Conversion Rate</h3>
+              <button className="st-close-btn" onClick={closeConversionModal} aria-label="Close">
+                x
+              </button>
+            </div>
+            <form className="st-modal-form" onSubmit={onCreateConversion}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label" htmlFor="conversion-card-id">From Card</label>
+                  <select
+                    id="conversion-card-id"
+                    className="input"
+                    value={convCardId}
+                    onChange={(e) => setConvCardId(e.target.value)}
+                    required
+                  >
+                    <option value="">Select card...</option>
+                    {data.creditCards.map((card) => (
+                      <option key={card.id} value={card.id}>
+                        {card.creditCard.cardName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label" htmlFor="conversion-ff-id">To Program</label>
+                  <select
+                    id="conversion-ff-id"
+                    className="input"
+                    value={convFFId}
+                    onChange={(e) => setConvFFId(e.target.value)}
+                    required
+                  >
+                    <option value="">Select frequent flyer program...</option>
+                    {data.frequentFlyers.map((ff) => (
+                      <option key={ff.id} value={ff.id}>
+                        {ff.programName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label" htmlFor="conversion-points">From Points</label>
+                  <NumericCalculatorInput
+                    id="conversion-points"
+                    min="1"
+                    allowDecimal={false}
+                    placeholder="10000"
+                    value={convPoints}
+                    onValueChange={setConvPoints}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label" htmlFor="conversion-miles">To Miles</label>
+                  <NumericCalculatorInput
+                    id="conversion-miles"
+                    min="1"
+                    allowDecimal={false}
+                    placeholder="4000"
+                    value={convMiles}
+                    onValueChange={setConvMiles}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label" htmlFor="conversion-desc">Description</label>
+                  <input
+                    id="conversion-desc"
+                    type="text"
+                    className="input"
+                    placeholder="Optional notes"
+                    value={convDesc}
+                    onChange={(e) => setConvDesc(e.target.value)}
+                  />
+                </div>
+              </div>
+              {createConversion.isError && (
+                <div className="st-error">
+                  {(createConversion.error as Error)?.message || "Failed to add conversion rate"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeConversionModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={createConversion.isPending}>
+                  {createConversion.isPending ? "Adding..." : "Add Conversion"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Hotel Rewards Modal */}
+      {isHotelModalOpen && (
+        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeHotelModal)}>
+          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-modal-header">
+              <h3>{editingHotelId ? "Edit Hotel Rewards" : "Add Hotel Rewards"}</h3>
+              <button className="st-close-btn" onClick={closeHotelModal} aria-label="Close">
+                x
+              </button>
+            </div>
+            <form className="st-modal-form" onSubmit={onSubmitHotel}>
+              <div className="st-form-grid">
+                <div className="form-group st-span-2">
+                  <label className="label">Program Name</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g., Marriott Bonvoy"
+                    value={hotelFormProgram}
+                    onChange={(e) => setHotelFormProgram(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Hotel Brand</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g., Marriott"
+                    value={hotelFormBrand}
+                    onChange={(e) => setHotelFormBrand(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Account Number</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Optional"
+                    value={hotelFormNumber}
+                    onChange={(e) => setHotelFormNumber(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Current Points</label>
+                  <NumericCalculatorInput
+                    min="1"
+                    allowDecimal={false}
+                    placeholder="0"
+                    value={hotelFormPoints}
+                    onValueChange={setHotelFormPoints}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Target Points</label>
+                  <NumericCalculatorInput
+                    min="0"
+                    allowDecimal={false}
+                    placeholder="Optional"
+                    value={hotelFormTarget}
+                    onValueChange={setHotelFormTarget}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Cents Per Point</label>
+                  <NumericCalculatorInput
+                    min="0"
+                    step="0.001"
+                    placeholder="0.700"
+                    value={hotelFormCentsPerPoint}
+                    onValueChange={setHotelFormCentsPerPoint}
+                    required
+                  />
+                </div>
+                <div className="form-group st-span-2">
+                  <label className="label">Notes</label>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    placeholder="Optional notes..."
+                    value={hotelFormNotes}
+                    onChange={(e) => setHotelFormNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+              {(createHotelReward.isError || updateHotelReward.isError) && (
+                <div className="st-error">
+                  {((createHotelReward.error || updateHotelReward.error) as Error)?.message || "Failed to save"}
+                </div>
+              )}
+              <div className="st-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={closeHotelModal}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createHotelReward.isPending || updateHotelReward.isPending}
+                >
+                  {editingHotelId
+                    ? updateHotelReward.isPending
+                      ? "Saving..."
+                      : "Save Changes"
+                    : createHotelReward.isPending
+                      ? "Adding..."
+                      : "Add Program"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

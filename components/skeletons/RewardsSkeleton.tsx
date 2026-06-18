@@ -1,25 +1,32 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ArrowLeftRight, Building2, CreditCard, Plane } from "lucide-react";
 
-/*
-Structural inventory: Rewards page shell
-Route: /rewards
-Layout regions: PageFrame chrome static; page body is an unframed stack with summary card, tab segmented control, and active-tab content.
-Content blocks:
-- Summary stat-card: margin-bottom 20px, grid gap 12px; one primary total block and two .card-sm metric panels.
-- Segmented tabs: static three-button .segmented control, not skeletonized.
-- Credit-card rewards default tab: .rewards-cc-grid, repeat(4, 1fr), gap from CSS; cards use .card padding and action buttons.
-Do not skeletonize: PageFrame chrome, tab labels, add-form chrome, modal chrome.
-*/
 export function RewardsPageSkeleton() {
   return (
     <div>
-      <section className="stat-card" style={{ marginBottom: "20px", display: "grid", gap: "12px" }}>
+      <section className="rewards-overview">
         <RewardsSummarySkeleton />
       </section>
-      <div className="segmented" style={{ marginBottom: "20px" }}>
-        <button className="segmented-btn on" type="button" disabled>Credit Cards</button>
-        <button className="segmented-btn" type="button" disabled>Frequent Flyer</button>
-        <button className="segmented-btn" type="button" disabled>Conversions</button>
+      <div className="rewards-tabs-row">
+        <div className="segmented rewards-tabs">
+          <button className="segmented-btn on" type="button" disabled aria-label="Credit cards">
+            <CreditCard className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Credit cards</span>
+          </button>
+          <button className="segmented-btn" type="button" disabled aria-label="Frequent flyer">
+            <Plane className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Frequent flyer</span>
+          </button>
+          <button className="segmented-btn" type="button" disabled aria-label="Hotel rewards">
+            <Building2 className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Hotel rewards</span>
+          </button>
+          <button className="segmented-btn" type="button" disabled aria-label="Conversions">
+            <ArrowLeftRight className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Conversions</span>
+          </button>
+        </div>
+        <Skeleton className="rewards-tab-action-skeleton" width={168} height={44} borderRadius="var(--r-md)" />
       </div>
       <div className="rewards-cc-grid" style={{ marginBottom: "20px" }}>
         <RewardsCardGridSkeleton />
@@ -28,42 +35,66 @@ export function RewardsPageSkeleton() {
   );
 }
 
-/*
-Structural inventory: Rewards page summary
-Route: /rewards
-Layout regions: PageFrame chrome and tab segmented control are static; only reward totals/cards/history data skeletonize.
-Content blocks:
-- Summary stat-card: padding 16px, grid gap 12px; primary Total Miles block plus .grid-2 of two card-sm metric panels.
-- Reward cards: credit card tab uses .rewards-cc-grid repeat(4, 1fr), gap 12px; frequent flyer tab uses .grid-2; conversion tab uses stacked .card rows.
-- Card internals: top flex between title/meta and action button, 24px primary value, 16px secondary value, compact metadata lines.
-Do not skeletonize: tab buttons, Add Frequent Flyer button, modal/form chrome.
-*/
 export function RewardsSummarySkeleton() {
   return (
     <>
-      <div style={{ display: "grid", gap: "8px" }}>
-        <Skeleton width={88} height={14} borderRadius="4px" />
-        <Skeleton width={150} height={29} borderRadius="6px" />
-        <Skeleton width={280} height={14} borderRadius="4px" />
-      </div>
-      <div className="grid-2" style={{ gap: "10px" }}>
-        {Array.from({ length: 2 }).map((_, index) => (
-          <div className="card-sm" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-elevated)" }} key={index}>
-            <Skeleton width={index === 0 ? 148 : 128} height={14} borderRadius="4px" />
-            <Skeleton width={96} height={24} borderRadius="5px" />
-            <Skeleton width={86} height={14} borderRadius="4px" />
+      <div className="rewards-overview-grid">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div className="rewards-overview-card" key={index}>
+            <div className="rewards-overview-label">
+              <Skeleton width={16} height={16} borderRadius="4px" />
+              <Skeleton width={index === 1 ? 122 : 96} height={14} borderRadius="4px" />
+            </div>
+            <Skeleton width={index === 2 ? 94 : 132} height={31} borderRadius="6px" />
+            <Skeleton width={index === 0 ? 112 : 132} height={14} borderRadius="4px" />
+            {index === 2 ? <Skeleton width={70} height={14} borderRadius="4px" /> : null}
           </div>
         ))}
+      </div>
+      <div className="rewards-total-panel">
+        <div>
+          <Skeleton width={124} height={16} borderRadius="4px" />
+          <Skeleton width={136} height={31} borderRadius="6px" />
+          <Skeleton width={198} height={14} borderRadius="4px" />
+        </div>
+        <div className="rewards-total-divider" aria-hidden="true" />
+        <div>
+          <Skeleton width={130} height={16} borderRadius="4px" />
+          <Skeleton width={96} height={31} borderRadius="6px" />
+          <Skeleton width={196} height={14} borderRadius="4px" />
+        </div>
       </div>
     </>
   );
 }
 
-/*
-Structural inventory: Rewards card grids
-Maps to card layouts used by credit-card rewards and frequent-flyer rewards. Parent grid is supplied by the page (.rewards-cc-grid or .grid-2).
-*/
-export function RewardsCardGridSkeleton() {
+export function RewardsCardGridSkeleton({ variant = "standard" }: { variant?: "standard" | "hotel" }) {
+  if (variant === "hotel") {
+    return (
+      <>
+        {Array.from({ length: 2 }).map((_, index) => (
+          <div className="card" key={index}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ display: "grid", gap: "4px" }}>
+                <Skeleton width={index === 0 ? 156 : 132} height={16} borderRadius="4px" />
+                <Skeleton width={112} height={13} borderRadius="4px" />
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <Skeleton width={44} height={28} borderRadius="var(--r-sm)" />
+                <Skeleton width={62} height={28} borderRadius="var(--r-sm)" />
+              </div>
+            </div>
+            <div style={{ marginTop: "12px", display: "grid", gap: "4px" }}>
+              <Skeleton width={96} height={29} borderRadius="6px" />
+              <Skeleton width={82} height={20} borderRadius="5px" />
+              <Skeleton width="72%" height={14} borderRadius="4px" />
+            </div>
+          </div>
+        ))}
+      </>
+    );
+  }
+
   return (
     <>
       {Array.from({ length: 4 }).map((_, index) => (
@@ -86,10 +117,6 @@ export function RewardsCardGridSkeleton() {
   );
 }
 
-/*
-Structural inventory: Rewards transaction history and conversion rows
-Maps to stacked .card rows with top metadata, values, and action controls; used inside history/conversion sections.
-*/
 export function RewardsRowsSkeleton() {
   return (
     <>

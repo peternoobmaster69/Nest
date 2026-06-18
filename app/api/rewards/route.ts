@@ -14,13 +14,17 @@ export async function GET() {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
-    const [creditCardRewards, frequentFlyers, conversions] = await Promise.all([
+    const [creditCardRewards, frequentFlyers, hotelRewards, conversions] = await Promise.all([
       prisma.creditCardReward.findMany({
         where: { workspaceId },
         include: { creditCard: true },
       }),
       prisma.frequentFlyerAccount.findMany({
         where: { workspaceId },
+        orderBy: { programName: "asc" },
+      }),
+      prisma.hotelRewardAccount.findMany({
+        where: { workspaceId, isActive: true },
         orderBy: { programName: "asc" },
       }),
       prisma.pointConversion.findMany({
@@ -100,6 +104,7 @@ export async function GET() {
     return NextResponse.json({
       creditCards: creditCardRewards,
       frequentFlyers: frequentFlyersWithExpiry,
+      hotelRewards,
       conversions,
       cardsWithoutRewards,
     });
@@ -109,6 +114,7 @@ export async function GET() {
         return NextResponse.json({
           creditCards: [],
           frequentFlyers: [],
+          hotelRewards: [],
           conversions: [],
           cardsWithoutRewards: [],
         });

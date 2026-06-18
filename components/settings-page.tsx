@@ -86,6 +86,37 @@ type GmailSyncProgress = {
   updatedAt: number;
 };
 
+type GmailSyncSummary = {
+  scannedMessages: number;
+  processed: number;
+  duplicates: number;
+  failed: number;
+  skipped?: boolean;
+  reason?: string;
+};
+
+type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
+  ok?: boolean;
+  queued?: boolean;
+  jobId?: string;
+  message?: string;
+};
+
+function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSummary {
+  return (
+    typeof data.scannedMessages === "number" &&
+    typeof data.processed === "number" &&
+    typeof data.duplicates === "number" &&
+    typeof data.failed === "number"
+  );
+}
+
+function formatGmailSyncSummary(data: GmailSyncSummary) {
+  return data.skipped && data.reason
+    ? data.reason
+    : `Synced ${data.scannedMessages} emails: ${data.processed} processed, ${data.duplicates} duplicates, ${data.failed} failed.`;
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -165,6 +196,7 @@ export function SettingsPage() {
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [gmailMessage, setGmailMessage] = useState("");
   const [gmailSyncProgress, setGmailSyncProgress] = useState<GmailSyncProgress | null>(null);
+  const [isGmailSyncPolling, setIsGmailSyncPolling] = useState(false);
   const [currencyMessage, setCurrencyMessage] = useState("");
   const [receivableAccountMessage, setReceivableAccountMessage] = useState("");
   const [publicNetWorthMessage, setPublicNetWorthMessage] = useState("");
@@ -330,14 +362,39 @@ export function SettingsPage() {
 
   const syncGmail = useMutation({
     mutationFn: () =>
-      fetchJson<{ scannedMessages: number; processed: number; duplicates: number; failed: number; skipped?: boolean; reason?: string }>("/api/gmail/sync", {
+      fetchJson<GmailSyncStartResponse>("/api/gmail/sync", {
         method: "POST",
       }),
+    onMutate: () => {
+      setGmailMessage("Syncing Gmail inbox...");
+      setGmailSyncProgress({
+        phase: "reading",
+        progress: 0,
+        message: "Starting sync...",
+        total: 0,
+        current: 0,
+        updatedAt: Date.now(),
+      });
+    },
     onSuccess: (data) => {
-      const message = data.skipped && data.reason
-        ? data.reason
-        : `Synced ${data.scannedMessages} emails: ${data.processed} processed, ${data.duplicates} duplicates, ${data.failed} failed.`;
+      if (!hasGmailSyncSummary(data)) {
+        const message = data.message ?? (data.queued ? "Gmail sync queued." : "Gmail sync is running.");
+        setGmailMessage(message);
+        setGmailSyncProgress((current) => ({
+          phase: "reading",
+          progress: current?.progress ?? 0,
+          message,
+          total: current?.total ?? 0,
+          current: current?.current ?? 0,
+          updatedAt: Date.now(),
+        }));
+        setIsGmailSyncPolling(true);
+        return;
+      }
+
+      const message = formatGmailSyncSummary(data);
       setGmailMessage(message);
+      setIsGmailSyncPolling(false);
       setGmailSyncProgress((current) =>
         current
           ? {
@@ -357,6 +414,7 @@ export function SettingsPage() {
     onError: (error) => {
       const message = error instanceof Error ? error.message : "Gmail sync failed.";
       setGmailMessage(message);
+      setIsGmailSyncPolling(false);
       setGmailSyncProgress((current) =>
         current
           ? {
@@ -371,30 +429,40 @@ export function SettingsPage() {
   });
 
   useEffect(() => {
-    if (!syncGmail.isPending) {
-      if (gmailSyncProgress?.phase === "complete" || gmailSyncProgress?.phase === "error") {
-        const timeout = window.setTimeout(() => setGmailSyncProgress(null), 1200);
-        return () => window.clearTimeout(timeout);
-      }
-      return;
-    }
+    if (isGmailSyncPolling) return;
+    if (gmailSyncProgress?.phase !== "complete" && gmailSyncProgress?.phase !== "error") return;
+    const timeout = window.setTimeout(() => setGmailSyncProgress(null), 1200);
+    return () => window.clearTimeout(timeout);
+  }, [gmailSyncProgress?.phase, isGmailSyncPolling]);
 
+  useEffect(() => {
+    if (!isGmailSyncPolling) return;
     let cancelled = false;
-    setGmailMessage("Syncing Gmail inbox...");
-    setGmailSyncProgress({
-      phase: "reading",
-      progress: 0,
-      message: "Starting sync...",
-      total: 0,
-      current: 0,
-      updatedAt: Date.now(),
-    });
+    setGmailSyncProgress((current) =>
+      current ?? {
+        phase: "reading",
+        progress: 0,
+        message: "Starting sync...",
+        total: 0,
+        current: 0,
+        updatedAt: Date.now(),
+      },
+    );
 
     const poll = async () => {
       try {
         const progress = await fetchJson<GmailSyncProgress>("/api/gmail/sync");
         if (!cancelled) {
           setGmailSyncProgress(progress);
+          if (progress.phase === "complete" || progress.phase === "error") {
+            setGmailMessage(progress.message);
+            setIsGmailSyncPolling(false);
+            if (progress.phase === "complete") {
+              queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+              queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
+              queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+            }
+          }
         }
       } catch {}
     };
@@ -408,18 +476,18 @@ export function SettingsPage() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [syncGmail.isPending]);
+  }, [isGmailSyncPolling, queryClient]);
 
   useEffect(() => {
-    if (!gmailStatus.data?.connected || syncGmail.isPending) return;
+    if (!gmailStatus.data?.connected || syncGmail.isPending || isGmailSyncPolling) return;
 
     const interval = window.setInterval(() => {
-      if (document.visibilityState !== "visible" || syncGmail.isPending) return;
+      if (document.visibilityState !== "visible" || syncGmail.isPending || isGmailSyncPolling) return;
       syncGmail.mutate();
     }, GMAIL_SYNC_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
-  }, [gmailStatus.data?.connected, syncGmail]);
+  }, [gmailStatus.data?.connected, isGmailSyncPolling, syncGmail]);
 
   const disconnectGmail = useMutation({
     mutationFn: () =>
@@ -850,8 +918,8 @@ export function SettingsPage() {
           </div>
           {gmailStatus.data?.connected ? (
             <div className="gmail-alerts-actions">
-              <button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending}>
-                {syncGmail.isPending ? "Syncing..." : "Sync Inbox"}
+              <button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending || isGmailSyncPolling}>
+                {syncGmail.isPending || isGmailSyncPolling ? "Syncing..." : "Sync Inbox"}
               </button>
               <button className="btn btn-ghost btn-xs" onClick={() => disconnectGmail.mutate()} disabled={disconnectGmail.isPending}>
                 Disconnect

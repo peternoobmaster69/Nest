@@ -10,6 +10,7 @@ const CreateInvestmentAccountSchema = z.object({
   productName: z.string().min(1).max(160),
   inceptionDate: z.string().datetime(),
   divestedDate: z.string().datetime().nullable().optional(),
+  isLiquid: z.boolean().optional(),
 });
 
 export async function GET(request: Request) {
@@ -59,16 +60,22 @@ export async function POST(request: Request) {
         productName: parsed.data.productName.trim(),
         inceptionDate: new Date(parsed.data.inceptionDate),
         divestedDate: parsed.data.divestedDate ? new Date(parsed.data.divestedDate) : null,
+        isLiquid: parsed.data.isLiquid ?? false,
       },
     });
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("Unknown argument `displayName`") || message.includes("Invalid column name 'displayName'")) {
+    if (
+      message.includes("Unknown argument `displayName`") ||
+      message.includes("Invalid column name 'displayName'") ||
+      message.includes("Unknown argument `isLiquid`") ||
+      message.includes("Invalid column name 'isLiquid'")
+    ) {
       return NextResponse.json(
         {
-          error: "Database schema is out of sync for investments displayName.",
+          error: "Database schema is out of sync for investment account fields.",
           message: "Run `node scripts/run-prisma.mjs db push`, then restart the app server.",
         },
         { status: 500 },

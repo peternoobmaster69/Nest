@@ -9,6 +9,7 @@ const UpdateInvestmentAccountSchema = z.object({
   productName: z.string().min(1).max(160).optional(),
   inceptionDate: z.string().datetime().optional(),
   divestedDate: z.string().datetime().nullable().optional(),
+  isLiquid: z.boolean().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -37,16 +38,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         productName: parsed.data.productName?.trim(),
         inceptionDate: parsed.data.inceptionDate ? new Date(parsed.data.inceptionDate) : undefined,
         divestedDate: parsed.data.divestedDate === undefined ? undefined : parsed.data.divestedDate ? new Date(parsed.data.divestedDate) : null,
+        isLiquid: parsed.data.isLiquid,
       },
     });
 
     return NextResponse.json(updated);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("Unknown argument `displayName`") || message.includes("Invalid column name 'displayName'")) {
+    if (
+      message.includes("Unknown argument `displayName`") ||
+      message.includes("Invalid column name 'displayName'") ||
+      message.includes("Unknown argument `isLiquid`") ||
+      message.includes("Invalid column name 'isLiquid'")
+    ) {
       return NextResponse.json(
         {
-          error: "Database schema is out of sync for investments displayName.",
+          error: "Database schema is out of sync for investment account fields.",
           message: "Run `node scripts/run-prisma.mjs db push`, then restart the app server.",
         },
         { status: 500 },

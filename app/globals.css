@@ -2274,6 +2274,228 @@ body[data-modal-scroll-lock="true"] {
   min-width: 0;
 }
 
+.rewards-overview {
+  display: grid;
+  gap: 28px;
+  margin-bottom: 28px;
+}
+
+.rewards-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rewards-overview-card {
+  min-width: 0;
+  padding: 20px 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+
+.rewards-overview-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rewards-overview-value {
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.rewards-overview-sub,
+.rewards-overview-value-sub {
+  margin-top: 5px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rewards-overview-value-sub,
+.rewards-metric-accent {
+  color: var(--brand-500);
+}
+
+.rewards-total-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+  padding: 28px 32px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+
+.rewards-total-divider {
+  width: 1px;
+  height: 52px;
+  background: var(--border-subtle);
+}
+
+.rewards-total-label {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rewards-total-value {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.rewards-total-sub {
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rewards-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.rewards-tabs {
+  flex: 0 1 auto;
+  gap: 4px;
+}
+
+.rewards-tabs .segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rewards-tab-icon {
+  display: none;
+  flex: 0 0 auto;
+}
+
+.rewards-tab-action {
+  min-height: 44px;
+  padding-inline: 20px;
+}
+
+.rewards-tab-action-skeleton {
+  flex: 0 0 auto;
+}
+
+.rewards-program-card {
+  display: grid;
+  gap: 18px;
+}
+
+.rewards-program-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rewards-program-title-wrap,
+.rewards-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rewards-program-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.rewards-program-title {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.rewards-program-subtitle,
+.rewards-program-notes {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rewards-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+}
+
+.rewards-metric {
+  min-width: 0;
+  padding: 16px 20px;
+}
+
+.rewards-metric + .rewards-metric {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.rewards-metric-label {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rewards-metric-value {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.rewards-metric-accent,
+.rewards-metric-sub {
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rewards-metric-sub {
+  color: var(--text-tertiary);
+}
+
 /* ============================================================
    STAT CARD
    ============================================================ */
@@ -3430,6 +3652,22 @@ body[data-modal-scroll-lock="true"] {
   .rewards-cc-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
+
+  .rewards-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rewards-overview-card {
+    padding: 18px 20px;
+  }
+
+  .rewards-overview-value {
+    font-size: 26px;
+  }
+
+  .rewards-total-panel {
+    padding: 24px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -3456,6 +3694,125 @@ body[data-modal-scroll-lock="true"] {
 
   .rewards-cc-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .rewards-overview {
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+
+  .rewards-overview-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px;
+  }
+
+  .rewards-overview-card {
+    min-width: 0;
+    padding: 10px 12px;
+  }
+
+  .rewards-overview-label {
+    gap: 5px;
+    min-width: 0;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+
+  .rewards-overview-label svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .rewards-overview-value {
+    margin-top: 5px;
+    font-size: 19px;
+    overflow-wrap: anywhere;
+  }
+
+  .rewards-overview-sub,
+  .rewards-overview-value-sub {
+    margin-top: 2px;
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .rewards-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rewards-total-panel {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .rewards-total-divider {
+    width: 100%;
+    height: 1px;
+  }
+
+  .rewards-total-label {
+    font-size: 12px;
+  }
+
+  .rewards-total-value {
+    font-size: 24px;
+  }
+
+  .rewards-total-sub {
+    margin-top: 3px;
+    font-size: 11px;
+  }
+
+  .rewards-tabs-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rewards-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    overflow-x: visible;
+  }
+
+  .rewards-tabs .segmented-btn {
+    min-width: 0;
+    padding: 9px 10px;
+  }
+
+  .rewards-tab-icon {
+    display: block;
+  }
+
+  .rewards-tab-label {
+    display: none;
+  }
+
+  .rewards-tab-action {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .rewards-tab-action-skeleton {
+    width: 100% !important;
+  }
+
+  .rewards-program-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rewards-card-actions {
+    justify-content: flex-end;
+  }
+
+  .rewards-metric + .rewards-metric {
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
   }
 
   .hero-amount {
@@ -3588,6 +3945,60 @@ body[data-modal-scroll-lock="true"] {
 }
 
 @media (max-width: 480px) {
+  .rewards-overview-card,
+  .rewards-total-panel,
+  .rewards-program-card {
+    padding: 16px;
+  }
+
+  .rewards-total-panel {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .rewards-overview-card {
+    padding: 8px 9px;
+  }
+
+  .rewards-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px;
+  }
+
+  .rewards-overview-label {
+    font-size: 9px;
+  }
+
+  .rewards-overview-value {
+    font-size: 17px;
+  }
+
+  .rewards-total-value {
+    font-size: 22px;
+  }
+
+  .rewards-overview-sub,
+  .rewards-overview-value-sub {
+    font-size: 9px;
+  }
+
+  .rewards-tabs .segmented-btn {
+    min-height: 36px;
+    padding: 7px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .rewards-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rewards-card-actions .btn {
+    justify-content: center;
+    width: 100%;
+  }
+
   .toast-stack {
     right: 12px;
     left: 12px;
@@ -4549,6 +4960,19 @@ body[data-modal-scroll-lock="true"] {
   white-space: nowrap;
 }
 
+.inv-liquid-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 23px;
+  height: 23px;
+  border: 1px solid color-mix(in srgb, var(--brand-500) 40%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-500) 10%, var(--bg-surface));
+  color: var(--brand-600);
+  flex: 0 0 auto;
+}
+
 .inv-account-actions .btn {
   margin-left: 0;
 }
@@ -4562,6 +4986,27 @@ body[data-modal-scroll-lock="true"] {
   align-items: center;
   gap: 24px;
   flex-wrap: wrap;
+}
+
+.inv-withdrawable-summary {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.inv-withdrawable-summary span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.inv-withdrawable-summary strong {
+  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .inv-edit-icon {
@@ -5269,6 +5714,15 @@ body[data-modal-scroll-lock="true"] {
 .inv-modal-body .input {
   width: 100%;
   min-width: 0;
+}
+
+.inv-liquidity-toggle {
+  margin-top: 4px;
+}
+
+.inv-liquidity-toggle-btn.is-active {
+  background: var(--brand-500);
+  color: #fff;
 }
 
 .inv-modal-actions {
