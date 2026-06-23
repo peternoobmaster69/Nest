@@ -62,8 +62,13 @@ export async function GET(request: Request) {
       cardCountWhere.statementMonth = parseInt(month, 10);
     }
 
-    // Get unaccounted counts per card for the selected statement period.
-    const [transactions, total, cardCounts] = await Promise.all([
+    const unaccountedWhere: Prisma.CreditCardTransactionWhereInput = {
+      ...where,
+      isAllocated: false,
+    };
+
+    // Get the visible page plus aggregate totals for every matching transaction.
+    const [transactions, total, summary, unaccountedSummary, cardCounts] = await Promise.all([
       prisma.creditCardTransaction.findMany({
         where,
         ...(cursor
@@ -102,6 +107,15 @@ export async function GET(request: Request) {
         },
       }),
       prisma.creditCardTransaction.count({ where }),
+      prisma.creditCardTransaction.aggregate({
+        where,
+        _sum: { amountCents: true },
+        _min: { paymentDueDate: true },
+      }),
+      prisma.creditCardTransaction.aggregate({
+        where: unaccountedWhere,
+        _sum: { amountCents: true },
+      }),
       prisma.creditCardTransaction.groupBy({
         by: ["creditCardId"],
         where: cardCountWhere,
@@ -120,6 +134,11 @@ export async function GET(request: Request) {
       limit,
       hasMore,
       nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+      summary: {
+        totalAmountCents: summary._sum.amountCents ?? 0,
+        unaccountedAmountCents: unaccountedSummary._sum.amountCents ?? 0,
+        earliestPaymentDueDate: summary._min.paymentDueDate?.toISOString() ?? null,
+      },
     });
   } catch (error) {
     if (error instanceof ApiAuthError) {

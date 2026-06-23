@@ -42,6 +42,12 @@ type CardCount = {
   _count: { id: number };
 };
 
+type CreditTransactionSummary = {
+  totalAmountCents: number;
+  unaccountedAmountCents: number;
+  earliestPaymentDueDate: string | null;
+};
+
 type AppContext = {
   workspaceId: string | null;
   baseCurrency?: string | null;
@@ -72,6 +78,12 @@ type Budget = {
 type CreditTransactionsQueryData = {
   transactions: CreditCardTransaction[];
   cardCounts: CardCount[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  summary: CreditTransactionSummary;
 };
 
 type CreditCardPaymentResponse = {
@@ -91,6 +103,11 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const CREDIT_TX_MONTH_COOKIE = "nest_credit_tx_month";
 const CREDIT_TX_CARD_COOKIE = "nest_credit_tx_card";
+const EMPTY_CREDIT_TRANSACTION_SUMMARY: CreditTransactionSummary = {
+  totalAmountCents: 0,
+  unaccountedAmountCents: 0,
+  earliestPaymentDueDate: null,
+};
 
 function getAmountToneClass(valueCents: number) {
   if (valueCents < 0) return "negative";
@@ -386,10 +403,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: currentCreditTransactionsKey,
     queryFn: () =>
-      fetchJson<{
-        transactions: CreditCardTransaction[];
-        cardCounts: CardCount[];
-      }>(`/api/credit-transactions?${new URLSearchParams({
+      fetchJson<CreditTransactionsQueryData>(`/api/credit-transactions?${new URLSearchParams({
         cardId: selectedCardId,
         year: String(selectedYear),
         ...(selectedMonth >= 0 ? { month: String(selectedMonth + 1) } : {}),
@@ -466,6 +480,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           )
         : withoutPrevious;
       queryClient.setQueryData<CreditTransactionsQueryData>(queryKey, {
+        ...value,
         transactions: nextTransactions,
         cardCounts: updateCardCounts(value.cardCounts, previousTx, nextTx, year, month),
       });
@@ -474,6 +489,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   const transactions = data?.transactions || [];
   const cardCounts = data?.cardCounts || [];
+  const transactionSummary = data?.summary ?? EMPTY_CREDIT_TRANSACTION_SUMMARY;
   const unaccountedCardCountTotal = useMemo(
     () => cardCounts.reduce((sum, entry) => sum + entry._count.id, 0),
     [cardCounts],
@@ -490,15 +506,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     return transactions.filter((t) => !t.isAllocated);
   }, [transactions, showUnaccountedOnly]);
 
+  const statementTotalAmountCents = transactionSummary.totalAmountCents;
+  const unaccountedAmountCents = transactionSummary.unaccountedAmountCents;
   const totals = useMemo(() => {
-    const total = filteredTransactions.reduce((sum, t) => sum + t.amountCents, 0);
-    const unaccounted = filteredTransactions.filter((t) => !t.isAllocated).reduce((sum, t) => sum + t.amountCents, 0);
-    return { total, unaccounted };
-  }, [filteredTransactions]);
-  const payableAmountCents = useMemo(
-    () => transactions.reduce((sum, t) => sum + t.amountCents, 0),
-    [transactions],
-  );
+    return { total: statementTotalAmountCents, unaccounted: unaccountedAmountCents };
+  }, [statementTotalAmountCents, unaccountedAmountCents]);
+  const payableAmountCents = statementTotalAmountCents;
 
   const totalReceivableCents = receivablesSummary.data?.totalCents ?? 0;
   const workspacesForReceivableSource = useMemo(
@@ -550,15 +563,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     formatCurrency,
   ]);
 
-  const earliestPaymentDue = useMemo(() => {
-    const dueTransactions = transactions.filter((t) => t.paymentDueDate);
-    if (dueTransactions.length === 0) return null;
-
-    return dueTransactions.reduce((earliest, tx) => {
-      if (!earliest.paymentDueDate) return tx;
-      return new Date(tx.paymentDueDate!).getTime() < new Date(earliest.paymentDueDate).getTime() ? tx : earliest;
-    });
-  }, [transactions]);
+  const earliestPaymentDueDate = transactionSummary.earliestPaymentDueDate;
 
   const createTransaction = useMutation({
     mutationFn: (payload: {
@@ -952,8 +957,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   ]);
 
   useEffect(() => {
-    setSharedPaymentDueDate(earliestPaymentDue?.paymentDueDate ? toDateInputValue(earliestPaymentDue.paymentDueDate) : "");
-  }, [earliestPaymentDue?.paymentDueDate, selectedCardId, selectedMonth, selectedYear]);
+    setSharedPaymentDueDate(earliestPaymentDueDate ? toDateInputValue(earliestPaymentDueDate) : "");
+  }, [earliestPaymentDueDate, selectedCardId, selectedMonth, selectedYear]);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -1001,7 +1006,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     }, 180);
   };
 
-  const earliestDueDays = earliestPaymentDue?.paymentDueDate ? getDaysUntil(earliestPaymentDue.paymentDueDate) : null;
+  const earliestDueDays = earliestPaymentDueDate ? getDaysUntil(earliestPaymentDueDate) : null;
   const earliestDueIsOverdue = earliestDueDays !== null && earliestDueDays < 0;
   const earliestDueIsUrgent = earliestDueDays !== null && earliestDueDays >= 0 && earliestDueDays <= 3;
   const canEditSharedPaymentDue = selectedMonth >= 0;
@@ -1185,10 +1190,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         <div className="cct-due-panel">
           <div className="cct-due-panel-meta">
             <span className="cct-summary-label">Payment Due</span>
-            {earliestPaymentDue?.paymentDueDate ? (
+            {earliestPaymentDueDate ? (
               <span className={`cct-due-badge ${earliestDueIsOverdue ? "overdue" : earliestDueIsUrgent ? "urgent" : ""}`}>
                 {earliestDueIsOverdue ? "⚠️ " : earliestDueIsUrgent ? "⏰ " : ""}
-                {formatDate(earliestPaymentDue.paymentDueDate)}
+                {formatDate(earliestPaymentDueDate)}
               </span>
             ) : (
               <span className="cct-summary-meta">—</span>
