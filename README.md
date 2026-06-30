@@ -62,6 +62,25 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Credit Card Payment Reminders
+
+Credit card payment reminders are sent by a protected cron endpoint:
+
+```bash
+POST /api/credit-card-payment-reminders/run
+Authorization: Bearer $CRON_SECRET
+```
+
+Configure a daily scheduler to call the endpoint and set these environment variables:
+
+```env
+CRON_SECRET="***"
+RESEND_API_KEY="***"
+EMAIL_FROM="Nest <notifications@example.com>"
+```
+
+The job emails workspace members when a credit card statement has a positive outstanding balance and the payment due date is within 3 days or already overdue. A reminder is recorded in `BackgroundJob` so the same statement is emailed at most once per day, and daily reminders continue until the outstanding balance is no longer positive.
+
 ## Legacy Mapping Notes
 
 The new Prisma schema keeps migration traceability through `LegacyRecordLink`.
