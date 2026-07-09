@@ -619,6 +619,8 @@ model FrequentFlyerAccount {
   currentMiles    Int      @default(0)
   targetMiles     Int?
   expiryWarning   Int?     @default(6) // months before expiry to warn
+  mileNeverExpire     Boolean  @default(false)
+  validityPeriodYears Int      @default(3)
   notes           String?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())

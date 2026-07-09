@@ -10,6 +10,8 @@ const CreateFrequentFlyerSchema = z.object({
   currentMiles: z.number().int().min(0).default(0),
   targetMiles: z.number().int().min(0).optional(),
   expiryWarning: z.number().int().min(1).max(24).default(6),
+  mileNeverExpire: z.boolean().default(false),
+  validityPeriodYears: z.number().int().min(1).default(3),
   notes: z.string().optional(),
 });
 
@@ -21,6 +23,8 @@ const UpdateFrequentFlyerSchema = z.object({
   currentMiles: z.number().int().min(0).optional(),
   targetMiles: z.number().int().min(0).optional().nullable(),
   expiryWarning: z.number().int().min(1).max(24).optional(),
+  mileNeverExpire: z.boolean().optional(),
+  validityPeriodYears: z.number().int().min(1).optional(),
   notes: z.string().optional(),
   isActive: z.boolean().optional(),
 });
@@ -36,7 +40,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { programName, airlineName, accountNumber, currentMiles, targetMiles, expiryWarning, notes } = parsed.data;
+    const {
+      programName,
+      airlineName,
+      accountNumber,
+      currentMiles,
+      targetMiles,
+      expiryWarning,
+      mileNeverExpire,
+      validityPeriodYears,
+      notes,
+    } = parsed.data;
 
     const existing = await prisma.frequentFlyerAccount.findFirst({
       where: { workspaceId, programName },
@@ -55,6 +69,8 @@ export async function POST(request: Request) {
         currentMiles,
         targetMiles,
         expiryWarning,
+        mileNeverExpire,
+        validityPeriodYears,
         notes,
       },
     });
