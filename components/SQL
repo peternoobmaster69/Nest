@@ -1,4 +1,0 @@
-SELECT *
-  FROM [dbo].[CreditCardTransaction]
-
-DELETE dbo.CreditCardTransaction
