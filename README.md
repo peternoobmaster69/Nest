@@ -62,6 +62,45 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Credit Card Payment Reminders
+
+Credit card payment reminder emails are sent by calling:
+
+```bash
+POST /api/credit-card-payment-reminders
+```
+
+Schedule this endpoint to run once per day. It sends reminders for outstanding credit card statement balances that are due in the next 3 days or already overdue, and stops once the statement balance is no longer outstanding.
+
+Required environment variables:
+
+```env
+CREDIT_CARD_REMINDER_SECRET="***"
+RESEND_API_KEY="***"
+CREDIT_CARD_REMINDER_FROM="Nest <billing@example.com>"
+```
+
+Optional environment variables:
+
+```env
+CREDIT_CARD_REMINDER_CURRENCY="SGD"
+APP_URL="https://your-app.example.com"
+```
+
+Authenticate scheduler requests with either:
+
+```http
+Authorization: Bearer ${CREDIT_CARD_REMINDER_SECRET}
+```
+
+or:
+
+```http
+x-cron-secret: ${CREDIT_CARD_REMINDER_SECRET}
+```
+
+Use `?dryRun=1` to count pending reminders without sending email.
+
 ## Legacy Mapping Notes
 
 The new Prisma schema keeps migration traceability through `LegacyRecordLink`.
