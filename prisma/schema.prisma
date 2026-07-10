@@ -31,6 +31,7 @@ model User {
   workspaceAuditLogs WorkspaceAuditLog[]
   budgetSources   BudgetSource[]
   monthlyBudgetSources MonthlyBudgetSource[]
+  monthlyBudgetPlanSources MonthlyBudgetPlanSource[]
 }
 
 model Account {
@@ -113,6 +114,7 @@ model Workspace {
   budgetSources       BudgetSource[]
   monthlyBudgetSources MonthlyBudgetSource[]
   monthlyBudgets      MonthlyBudget[]
+  monthlyBudgetPlans  MonthlyBudgetPlan[]
 
   @@index([publicNetWorthToken])
 }
@@ -263,6 +265,7 @@ model BudgetEnvelope {
   createdBy      User              @relation("BudgetCreatedBy", fields: [createdById], references: [id], onDelete: NoAction)
   receivableDefaultForWorkspaces Workspace[] @relation("WorkspaceReceivableDefaultBudget")
   incomingBudgetItems BudgetItem[]
+  incomingMonthlyBudgetPlanItems MonthlyBudgetPlanItem[]
   expenseTypes   ExpenseType[]
   transactions   Transaction[]
   receivables    Receivable[]
@@ -285,6 +288,7 @@ model BudgetItem {
   workspace              Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   destinationSubAccount    BudgetEnvelope? @relation(fields: [destinationSubAccountId], references: [id], onDelete: SetNull)
   monthlyBudgets         MonthlyBudget[]
+  monthlyBudgetPlanItems MonthlyBudgetPlanItem[]
 
   @@index([workspaceId])
 }
@@ -303,6 +307,7 @@ model BudgetSource {
   owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   monthlyBudgets MonthlyBudget[]
   monthlyBudgetSources MonthlyBudgetSource[]
+  monthlyBudgetPlanSources MonthlyBudgetPlanSource[]
 
   @@index([workspaceId])
 }
@@ -351,6 +356,62 @@ model MonthlyBudget {
 
   @@unique([workspaceId, year, month, budgetItemId, budgetSourceId])
   @@index([workspaceId, year, month])
+}
+
+model MonthlyBudgetPlan {
+  id          String                    @id @default(cuid())
+  workspaceId String
+  year        Int
+  month       Int
+  status      String                    @default("DRAFT")
+  confirmedAt DateTime?
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+  workspace   Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sources     MonthlyBudgetPlanSource[]
+  items       MonthlyBudgetPlanItem[]
+
+  @@unique([workspaceId, year, month])
+  @@index([workspaceId, status])
+}
+
+model MonthlyBudgetPlanSource {
+  id               String             @id @default(cuid())
+  planId           String
+  templateSourceId String?
+  title            String
+  ownerId          String
+  amountCents      Int                @default(0)
+  sortOrder        Int                @default(0)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  plan             MonthlyBudgetPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  templateSource   BudgetSource?      @relation(fields: [templateSourceId], references: [id], onDelete: SetNull)
+  owner            User               @relation(fields: [ownerId], references: [id], onDelete: NoAction)
+
+  @@index([planId, sortOrder])
+  @@index([templateSourceId])
+  @@index([ownerId])
+}
+
+model MonthlyBudgetPlanItem {
+  id                      String             @id @default(cuid())
+  planId                  String
+  templateItemId          String?
+  title                   String
+  amountCents             Int                @default(0)
+  destinationSubAccountId String?
+  sortOrder               Int                @default(0)
+  appliedCents            Int                @default(0)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  plan                    MonthlyBudgetPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  templateItem            BudgetItem?        @relation(fields: [templateItemId], references: [id], onDelete: SetNull)
+  destinationSubAccount   BudgetEnvelope?    @relation(fields: [destinationSubAccountId], references: [id], onDelete: SetNull)
+
+  @@index([planId, sortOrder])
+  @@index([templateItemId])
+  @@index([destinationSubAccountId])
 }
 
 model ExpenseType {

@@ -1,106 +1,100 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState, GeneratingState } from "@/components/ui-skeleton";
 import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPlanSkeleton";
+import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
-import { Lock } from "lucide-react";
-
-type BudgetItem = {
-  id: string;
-  title: string;
-  amountCents: number;
-  isMonthly: boolean;
-  destinationSubAccountId: string | null;
-  destinationSubAccount: { id: string; name: string } | null;
-};
-
-type BudgetSource = {
-  id: string;
-  title: string;
-  amountCents: number;
-  ownerId: string;
-  owner: { id: string; name: string | null; email: string | null };
-};
-
-type MonthlyBudgetSource = {
-  id: string;
-  budgetSourceId: string;
-  year: number;
-  month: number;
-  title: string;
-  ownerId: string;
-  amountCents: number;
-  isDraft: boolean;
-  owner: { id: string; name: string | null; email: string | null };
-};
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  CalendarRange,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleDollarSign,
+  FilePlus2,
+  LayoutTemplate,
+  ListChecks,
+  Lock,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Users,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
 type WorkspaceMember = {
   user: { id: string; name: string | null; email: string | null };
 };
 
-type MonthlyBudget = {
+type SubAccount = {
   id: string;
-  budgetItemId: string;
-  budgetSourceId: string;
-  year: number;
-  month: number;
-  isDraft: boolean;
-  allocatedCents: number;
-  destinationSubAccountId?: string | null;
-  budgetItemTitle?: string | null;
-  budgetSourceTitle?: string | null;
-  budgetItem: { id: string; title: string };
-  budgetSource: { id: string; title: string };
+  name: string;
 };
 
-type AllocationPreview = {
-  id?: string;
-  budgetItemId: string;
-  budgetItemTitle: string;
-  budgetSourceId: string;
-  budgetSourceTitle: string;
-  allocatedCents: number;
-  isDraft: boolean;
-  destinationSubAccountId?: string | null;
-};
-
-type AllocationSummary = {
+type SetupItem = {
   id: string;
   title: string;
-  allocatedCents: number;
-  hasDraft: boolean;
-  hasProtected: boolean;
-  destinationSubAccountId?: string | null;
-  sourceTitle?: string;
+  amountCents: number;
+  isMonthly: boolean;
+  destinationSubAccountId: string | null;
+  destinationSubAccount?: SubAccount | null;
 };
 
-type SourceModalScope = "template" | "monthly";
+type SetupSource = {
+  id: string;
+  title: string;
+  amountCents: number;
+  ownerId: string;
+  owner?: { id: string; name: string | null; email: string | null } | null;
+};
 
-type AllocationEditTarget = { type: "source" | "item"; id: string };
+type MonthlyBudgetPlanItem = {
+  id: string;
+  planId: string;
+  templateItemId?: string | null;
+  title: string;
+  amountCents: number;
+  destinationSubAccountId: string | null;
+  destinationSubAccount?: SubAccount | null;
+  sortOrder?: number;
+  appliedCents?: number;
+};
 
-type GenerateMonthlyPayload = {
-  workspaceId: string;
-  action: "generateMonthly";
+type MonthlyBudgetPlanSource = {
+  id: string;
+  planId: string;
+  templateSourceId?: string | null;
+  title: string;
+  amountCents: number;
+  ownerId: string;
+  owner?: { id: string; name: string | null; email: string | null } | null;
+  sortOrder?: number;
+};
+
+type MonthlyBudgetPlan = {
+  id: string;
   year: number;
   month: number;
+  status: "DRAFT" | "CONFIRMING" | "CONFIRMED" | "REVIEW";
+  confirmedAt: string | null;
+  sources: MonthlyBudgetPlanSource[];
+  items: MonthlyBudgetPlanItem[];
 };
 
-type GenerateMonthlyResponse = {
-  monthlyBudgets: Array<{
-    id: string;
-    budgetItemId: string;
-    budgetSourceId: string;
-    budgetItemTitle?: string | null;
-    budgetSourceTitle?: string | null;
-    allocatedCents: number;
-    isDraft: boolean;
-    destinationSubAccountId?: string | null;
-  }>;
+type BudgetPlanData = {
+  setup: {
+    items: SetupItem[];
+    sources: SetupSource[];
+  };
+  monthlyPlan: MonthlyBudgetPlan | null;
+  members: WorkspaceMember[];
+  subAccounts: SubAccount[];
 };
 
 type AppContext = {
@@ -108,1873 +102,1079 @@ type AppContext = {
   baseCurrency?: string | null;
 };
 
-type BudgetPlanData = {
-  budgetItems: BudgetItem[];
-  budgetSources: BudgetSource[];
-  monthlyBudgetSources: MonthlyBudgetSource[];
-  monthlyBudgets: MonthlyBudget[];
-  members: WorkspaceMember[];
-  subAccounts: { id: string; name: string }[];
+type ModalScope = "template" | "monthly";
+type EditModalState = { scope: ModalScope; id: string | null };
+type DeleteType = "templateItem" | "templateSource" | "monthlyItem" | "monthlySource";
+
+type ItemFields = {
+  title: string;
+  amountCents: number;
+  isMonthly: boolean;
+  destinationSubAccountId: string | null;
 };
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
-    try {
-      const body = await res.json();
-      if (body?.message) {
-        detail = `${detail}: ${body.message}`;
-      } else if (body?.error && typeof body.error === "string") {
-        detail = `${detail}: ${body.error}`;
-      }
-    } catch {
-      // Ignore non-JSON error bodies and fall back to status code.
-    }
-    throw new Error(detail);
-  }
-  return res.json();
-}
+type SourceFields = {
+  title: string;
+  amountCents: number;
+  ownerId: string;
+};
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function allocationPreviewKey(allocation: Pick<AllocationPreview, "budgetItemId" | "budgetSourceId">) {
-  return `${allocation.budgetItemId}::${allocation.budgetSourceId}`;
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      if (typeof body?.message === "string") {
+        detail = body.message;
+      } else if (typeof body?.error === "string") {
+        detail = body.error;
+      }
+    } catch {
+      // Keep the HTTP status when the response is not JSON.
+    }
+    throw new Error(detail);
+  }
+  return response.json();
+}
+
+function requestBody(action: string, workspaceId: string, payload: Record<string, unknown> = {}) {
+  return JSON.stringify({ workspaceId, action, ...payload });
+}
+
+function toCents(value: string) {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : null;
+}
+
+function personLabel(person?: { name: string | null; email: string | null } | null) {
+  return person?.name || person?.email || "Unknown member";
+}
+
+function ModalShell({
+  title,
+  onClose,
+  children,
+  closeDisabled = false,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  closeDisabled?: boolean;
+}) {
+  return (
+    <div
+      className="st-modal-overlay"
+      onDoubleClick={(event) => {
+        if (!closeDisabled) closeOnBackdropDoubleClick(event, onClose);
+      }}
+    >
+      <div className="st-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="st-modal-header">
+          <h3>{title}</h3>
+          <button className="st-close-btn" type="button" onClick={onClose} disabled={closeDisabled} aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function IconTile({ icon: Icon, tone }: { icon: LucideIcon; tone: "source" | "item" }) {
+  return (
+    <span
+      className="st-bank-fallback"
+      style={{
+        backgroundColor: tone === "source" ? "#b45309" : "#15803d",
+        width: "24px",
+        height: "24px",
+        minWidth: "24px",
+      }}
+      aria-hidden="true"
+    >
+      <Icon size={14} />
+    </span>
+  );
+}
+
+function ErrorMessage({ error }: { error: Error | null | undefined }) {
+  if (!error) return null;
+  return <div className="st-error">{error.message}</div>;
 }
 
 export function BudgetPlanPage() {
   const queryClient = useQueryClient();
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [showSetup, setShowSetup] = useState(false);
+  const [itemModal, setItemModal] = useState<EditModalState | null>(null);
+  const [sourceModal, setSourceModal] = useState<EditModalState | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // Template management visibility
-  const [showTemplate, setShowTemplate] = useState(false);
-
-  // Modal states
-  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
-  const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
-  const [editingMonthlySourceId, setEditingMonthlySourceId] = useState<string | null>(null);
-  const [sourceModalScope, setSourceModalScope] = useState<SourceModalScope>("template");
-
-  // Form states for budget items
   const [itemTitle, setItemTitle] = useState("");
   const [itemAmount, setItemAmount] = useState("");
   const [itemIsMonthly, setItemIsMonthly] = useState(true);
   const [itemDestinationId, setItemDestinationId] = useState("");
 
-  // Form states for budget sources
   const [sourceTitle, setSourceTitle] = useState("");
   const [sourceAmount, setSourceAmount] = useState("");
   const [sourceOwnerId, setSourceOwnerId] = useState("");
 
-  // Month/year for generation
-  const now = new Date();
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
-
-  // Preview state for editable allocation
-  const [previewAllocations, setPreviewAllocations] = useState<AllocationPreview[] | null>(null);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [editingAllocationTarget, setEditingAllocationTarget] = useState<AllocationEditTarget | null>(null);
-  const [editingAllocationAmount, setEditingAllocationAmount] = useState("");
-  const [isAddAllocationModalOpen, setIsAddAllocationModalOpen] = useState(false);
-  const [allocationItemId, setAllocationItemId] = useState("");
-  const [allocationSourceId, setAllocationSourceId] = useState("");
-  const [allocationAmount, setAllocationAmount] = useState("");
-  const [quickEditTarget, setQuickEditTarget] = useState<{ type: "item" | "source"; id: string } | null>(null);
-  const [quickEditDescription, setQuickEditDescription] = useState("");
-  const [quickEditAmount, setQuickEditAmount] = useState("");
-
-  // Confirmation dialog state
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [confirmProgress, setConfirmProgress] = useState(0);
-  const [confirmStage, setConfirmStage] = useState("");
-  const [pendingConfirmApplyToSubAccounts, setPendingConfirmApplyToSubAccounts] = useState(false);
-  const confirmProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-
-  const context = useQuery({
+  const contextQuery = useQuery({
     queryKey: ["app-context"],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
-  const workspaceId = context.data?.workspaceId;
-  const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const workspaceId = contextQuery.data?.workspaceId ?? null;
+  const baseCurrency = normalizeCurrency(contextQuery.data?.baseCurrency);
   const formatCents = (cents: number) => formatMoney(cents, baseCurrency);
 
-  const budgetData = useQuery({
+  const planQuery = useQuery({
     queryKey: ["budget-plan", workspaceId, selectedYear, selectedMonth],
     queryFn: () =>
-      fetchJson<{
-        budgetItems: BudgetItem[];
-        budgetSources: BudgetSource[];
-        monthlyBudgetSources: MonthlyBudgetSource[];
-        monthlyBudgets: MonthlyBudget[];
-        members: WorkspaceMember[];
-        subAccounts: { id: string; name: string }[];
-      }>(`/api/budgets/plan?workspaceId=${workspaceId}&year=${selectedYear}&month=${selectedMonth}`),
+      fetchJson<BudgetPlanData>(
+        `/api/budgets/plan?workspaceId=${encodeURIComponent(workspaceId ?? "")}&year=${selectedYear}&month=${selectedMonth}`,
+      ),
     enabled: Boolean(workspaceId),
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const budgetItems = budgetData.data?.budgetItems || [];
-  const budgetSources = budgetData.data?.budgetSources || [];
-  const monthlyBudgetSources = budgetData.data?.monthlyBudgetSources || [];
-  const monthlyBudgets = budgetData.data?.monthlyBudgets || [];
-  const members: WorkspaceMember[] = budgetData.data?.members || [];
-  const subAccounts = budgetData.data?.subAccounts || [];
-  const budgetDataError = budgetData.error instanceof Error ? budgetData.error.message : null;
-  const isTemplateReady = budgetItems.length > 0 && budgetSources.length > 0;
-  const hasDraftMonthlyBudgets = monthlyBudgets.some((budget) => budget.isDraft);
+  const setupItems = planQuery.data?.setup.items ?? [];
+  const setupSources = planQuery.data?.setup.sources ?? [];
+  const monthlyPlan = planQuery.data?.monthlyPlan ?? null;
+  const members = planQuery.data?.members ?? [];
+  const subAccounts = planQuery.data?.subAccounts ?? [];
+  const monthlyItems = monthlyPlan?.items ?? [];
+  const monthlySources = monthlyPlan?.sources ?? [];
+  const isDraft = monthlyPlan?.status === "DRAFT";
+  const isConfirming = monthlyPlan?.status === "CONFIRMING";
+  const isConfirmed = monthlyPlan?.status === "CONFIRMED";
+  const isReview = monthlyPlan?.status === "REVIEW";
+
   const subAccountNameById = useMemo(
     () => new Map(subAccounts.map((subAccount) => [subAccount.id, subAccount.name])),
     [subAccounts],
   );
-
-  // Template counts for display
-  const templateCounts = useMemo(() => ({
-    items: budgetItems.length,
-    sources: budgetSources.length,
-  }), [budgetItems, budgetSources]);
-
-  const persistedAllocations = useMemo(
-    () =>
-      monthlyBudgets.map((mb) => ({
-        id: mb.id,
-        budgetItemId: mb.budgetItemId,
-        budgetItemTitle: mb.budgetItemTitle || mb.budgetItem.title,
-        budgetSourceId: mb.budgetSourceId,
-        budgetSourceTitle: mb.budgetSourceTitle || mb.budgetSource.title,
-        allocatedCents: mb.allocatedCents,
-        isDraft: mb.isDraft,
-        destinationSubAccountId:
-          mb.destinationSubAccountId ??
-          budgetItems.find((item) => item.id === mb.budgetItemId)?.destinationSubAccountId ??
-          null,
-      })),
-    [budgetItems, monthlyBudgets],
+  const memberById = useMemo(
+    () => new Map(members.map((member) => [member.user.id, member.user])),
+    [members],
   );
-
-  const displayAllocations = isPreviewMode && previewAllocations ? previewAllocations : persistedAllocations;
-
-  const sourceAllocationSummaries = useMemo(() => {
-    const grouped = new Map<string, AllocationSummary>();
-    for (const allocation of displayAllocations) {
-      const current = grouped.get(allocation.budgetSourceId);
-      if (current) {
-        current.allocatedCents += allocation.allocatedCents;
-      } else {
-        grouped.set(allocation.budgetSourceId, {
-          id: allocation.budgetSourceId,
-          title: allocation.budgetSourceTitle,
-          allocatedCents: allocation.allocatedCents,
-          hasDraft: allocation.isDraft,
-          hasProtected: !allocation.isDraft,
-          destinationSubAccountId: allocation.destinationSubAccountId ?? null,
-        });
-      }
-      if (current) {
-        current.hasDraft ||= allocation.isDraft;
-        current.hasProtected ||= !allocation.isDraft;
-      }
-    }
-    return Array.from(grouped.values()).sort((a, b) => a.title.localeCompare(b.title));
-  }, [displayAllocations]);
-
-  const budgetItemAllocationSummaries = useMemo(() => {
-    const grouped = new Map<string, AllocationSummary>();
-    for (const allocation of displayAllocations) {
-      const key = allocationPreviewKey(allocation);
-      const current = grouped.get(key);
-      if (current) {
-        current.allocatedCents += allocation.allocatedCents;
-      } else {
-        grouped.set(key, {
-          id: key,
-          title: allocation.budgetItemTitle,
-          allocatedCents: allocation.allocatedCents,
-          hasDraft: allocation.isDraft,
-          hasProtected: !allocation.isDraft,
-          destinationSubAccountId: allocation.destinationSubAccountId ?? null,
-          sourceTitle: allocation.budgetSourceTitle,
-        });
-      }
-      if (current) {
-        current.hasDraft ||= allocation.isDraft;
-        current.hasProtected ||= !allocation.isDraft;
-      }
-    }
-    return Array.from(grouped.values()).sort((a, b) => {
-      const titleCompare = a.title.localeCompare(b.title);
-      return titleCompare === 0 ? (a.sourceTitle ?? "").localeCompare(b.sourceTitle ?? "") : titleCompare;
-    });
-  }, [displayAllocations]);
-
-  const editingAllocationSummary = useMemo(() => {
-    if (!editingAllocationTarget) return null;
-    return editingAllocationTarget.type === "source"
-      ? sourceAllocationSummaries.find((entry) => entry.id === editingAllocationTarget.id) ?? null
-      : budgetItemAllocationSummaries.find((entry) => entry.id === editingAllocationTarget.id) ?? null;
-  }, [budgetItemAllocationSummaries, editingAllocationTarget, sourceAllocationSummaries]);
-  const monthlyTotal = useMemo(
-    () => displayAllocations.reduce((sum, allocation) => sum + allocation.allocatedCents, 0),
-    [displayAllocations],
+  const sourceTotalCents = useMemo(
+    () => monthlySources.reduce((total, source) => total + source.amountCents, 0),
+    [monthlySources],
   );
+  const itemTotalCents = useMemo(
+    () => monthlyItems.reduce((total, item) => total + item.amountCents, 0),
+    [monthlyItems],
+  );
+  const differenceCents = sourceTotalCents - itemTotalCents;
+  const canConfirm =
+    isDraft && monthlySources.length > 0 && monthlyItems.length > 0 && differenceCents === 0;
+  const hasSetupSeed = setupSources.length > 0 || setupItems.some((item) => item.isMonthly);
 
-  const planningSources = useMemo(
-    () =>
-      monthlyBudgetSources.length > 0
-        ? monthlyBudgetSources
-        : budgetSources.map((source) => ({
-            id: `template-${source.id}`,
-            budgetSourceId: source.id,
-            year: selectedYear,
-            month: selectedMonth,
-            title: source.title,
-            ownerId: source.ownerId,
-            amountCents: source.amountCents,
-            isDraft: true,
-            owner: source.owner,
-          })),
-    [monthlyBudgetSources, budgetSources, selectedYear, selectedMonth],
-  );
-  const templateSourceTotal = useMemo(
-    () => planningSources.reduce((sum, source) => sum + source.amountCents, 0),
-    [planningSources],
-  );
-  const templateItemTotal = useMemo(
-    () => budgetItems.filter((item) => item.isMonthly).reduce((sum, item) => sum + item.amountCents, 0),
-    [budgetItems],
-  );
-  const itemAllocatedById = useMemo(() => {
-    const grouped = new Map<string, number>();
-    for (const allocation of displayAllocations) {
-      grouped.set(allocation.budgetItemId, (grouped.get(allocation.budgetItemId) ?? 0) + allocation.allocatedCents);
-    }
-    return grouped;
-  }, [displayAllocations]);
-  const itemTargetMismatches = useMemo(
-    () => budgetItems
-      .filter((item) => item.isMonthly)
-      .filter((item) => (itemAllocatedById.get(item.id) ?? 0) !== item.amountCents),
-    [budgetItems, itemAllocatedById],
-  );
-  const planBalanceDeltaCents = templateSourceTotal - monthlyTotal;
-  const planBalanceAbsCents = Math.abs(planBalanceDeltaCents);
-  const hasEditableMonthlySources = monthlyBudgetSources.some((source) => source.isDraft);
-  const hasPendingMonthlyChanges = hasDraftMonthlyBudgets || hasEditableMonthlySources;
-  const hasApprovedMonthlyPlan =
-    monthlyBudgets.some((budget) => !budget.isDraft) || monthlyBudgetSources.some((source) => !source.isDraft);
-  const canAddMonthlyPlanEntries = isPreviewMode || hasPendingMonthlyChanges;
-  // Approve allowed when total budget items equals total sources.
-  const canApproveMonthly = monthlyTotal === templateSourceTotal && hasPendingMonthlyChanges;
-  const editableBudgetItemIds = useMemo(
-    () => new Set(budgetItemAllocationSummaries.filter((entry) => entry.hasDraft).map((entry) => entry.id)),
-    [budgetItemAllocationSummaries],
-  );
-  const availableAllocationItems = useMemo(
-    () => budgetItems,
-    [budgetItems],
-  );
-  const availableAllocationItemGroups = useMemo(() => {
-    const grouped = new Map<string, { label: string; items: BudgetItem[] }>();
-    for (const item of availableAllocationItems) {
-      const key = item.destinationSubAccountId ?? "none";
-      const label = item.destinationSubAccountId
-        ? (subAccountNameById.get(item.destinationSubAccountId) ?? "Unknown sub-account")
-        : "No sub-account";
-      const group = grouped.get(key);
-      if (group) {
-        group.items.push(item);
-      } else {
-        grouped.set(key, { label, items: [item] });
-      }
-    }
-    return Array.from(grouped.entries())
-      .sort(([, a], [, b]) => a.label.localeCompare(b.label))
-      .map(([id, group]) => ({
-        id,
-        label: group.label,
-        items: [...group.items].sort((a, b) => a.title.localeCompare(b.title)),
-      }));
-  }, [availableAllocationItems, subAccountNameById]);
-  const availableAllocationSources = useMemo(
-    () => planningSources.filter((source) => !hasApprovedMonthlyPlan || source.isDraft),
-    [hasApprovedMonthlyPlan, planningSources],
-  );
+  const invalidateCurrentPlan = () =>
+    queryClient.invalidateQueries({ queryKey: ["budget-plan", workspaceId, selectedYear, selectedMonth] });
+  const invalidateAllPlanData = () => queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
 
-  const createBudgetItem = useMutation<BudgetItem, Error, {
-    workspaceId: string;
-    action: "createItem";
-    title: string;
-    amountCents: number;
-    isMonthly: boolean;
-    destinationSubAccountId?: string;
-  }>({
-    mutationFn: (payload) =>
-      fetchJson<BudgetItem>("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: (data) => {
-      // Optimistically add the new item to the cache
-      queryClient.setQueryData<BudgetPlanData>(
-        ["budget-plan", workspaceId, selectedYear, selectedMonth],
-        (old) => {
-          if (!old) return old;
-          return { ...old, budgetItems: [...old.budgetItems, data] };
-        }
-      );
-      closeItemModal();
-    },
-  });
-
-  const createBudgetSource = useMutation<BudgetSource, Error, {
-    workspaceId: string;
-    action: "createSource";
-    title: string;
-    amountCents: number;
-    ownerId: string;
-  }>({
-    mutationFn: (payload) =>
-      fetchJson<BudgetSource>("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: (data) => {
-      // Optimistically add the new source to the cache
-      queryClient.setQueryData<BudgetPlanData>(
-        ["budget-plan", workspaceId, selectedYear, selectedMonth],
-        (old) => {
-          if (!old) return old;
-          return { ...old, budgetSources: [...old.budgetSources, data] };
-        }
-      );
-      closeSourceModal();
-    },
-  });
-
-  const createMonthlyBudgetSource = useMutation<
-    MonthlyBudgetSource,
-    Error,
-    {
-      workspaceId: string;
-      action: "createMonthlySource";
-      year: number;
-      month: number;
-      title: string;
-      amountCents: number;
-      ownerId: string;
-    }
-  >({
-    mutationFn: (payload) =>
-      fetchJson<MonthlyBudgetSource>("/api/budgets/plan", {
+  const startPlan = useMutation<MonthlyBudgetPlan, Error, "startBlank" | "startFromSetup">({
+    mutationFn: (action) =>
+      fetchJson<MonthlyBudgetPlan>("/api/budgets/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: requestBody(action, workspaceId ?? "", { year: selectedYear, month: selectedMonth }),
       }),
-    onSuccess: (data) => {
-      queryClient.setQueryData<BudgetPlanData>(
-        ["budget-plan", workspaceId, selectedYear, selectedMonth],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            budgetSources: old.budgetSources.some((source) => source.id === data.budgetSourceId)
-              ? old.budgetSources
-              : [
-                  ...old.budgetSources,
-                  {
-                    id: data.budgetSourceId,
-                    title: data.title,
-                    amountCents: data.amountCents,
-                    ownerId: data.ownerId,
-                    owner: data.owner,
-                  },
-                ],
-            monthlyBudgetSources: [...old.monthlyBudgetSources, data],
-          };
-        },
-      );
-      if (!isPreviewMode) {
-        setPreviewAllocations(persistedAllocations);
-        setIsPreviewMode(true);
-      }
-      closeSourceModal();
+    onSuccess: invalidateCurrentPlan,
+  });
+
+  const createTemplateItem = useMutation<SetupItem, Error, ItemFields>({
+    mutationFn: (fields) =>
+      fetchJson<SetupItem>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("createTemplateItem", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setItemModal(null);
+      invalidateAllPlanData();
     },
   });
 
-  const confirmMonthly = useMutation({
-    mutationFn: (payload: {
-      workspaceId: string;
-      action: "confirmMonthly";
-      year: number;
-      month: number;
-      allocations: AllocationPreview[];
-      applyToSubAccounts: boolean;
-    }) => fetchJson("/api/budgets/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+  const updateTemplateItem = useMutation<SetupItem, Error, ItemFields & { id: string }>({
+    mutationFn: (fields) =>
+      fetchJson<SetupItem>("/api/budgets/plan", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("updateTemplateItem", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setItemModal(null);
+      invalidateAllPlanData();
+    },
+  });
+
+  const createMonthlyItem = useMutation<MonthlyBudgetPlanItem, Error, ItemFields & { planId: string }>({
+    mutationFn: ({ isMonthly: _isMonthly, ...fields }) =>
+      fetchJson<MonthlyBudgetPlanItem>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("createMonthlyItem", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setItemModal(null);
+      invalidateCurrentPlan();
+    },
+  });
+
+  const updateMonthlyItem = useMutation<MonthlyBudgetPlanItem, Error, ItemFields & { id: string; planId: string }>({
+    mutationFn: ({ isMonthly: _isMonthly, ...fields }) =>
+      fetchJson<MonthlyBudgetPlanItem>("/api/budgets/plan", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("updateMonthlyItem", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setItemModal(null);
+      invalidateCurrentPlan();
+    },
+  });
+
+  const createTemplateSource = useMutation<SetupSource, Error, SourceFields>({
+    mutationFn: (fields) =>
+      fetchJson<SetupSource>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("createTemplateSource", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setSourceModal(null);
+      invalidateAllPlanData();
+    },
+  });
+
+  const updateTemplateSource = useMutation<SetupSource, Error, SourceFields & { id: string }>({
+    mutationFn: (fields) =>
+      fetchJson<SetupSource>("/api/budgets/plan", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("updateTemplateSource", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setSourceModal(null);
+      invalidateAllPlanData();
+    },
+  });
+
+  const createMonthlySource = useMutation<MonthlyBudgetPlanSource, Error, SourceFields & { planId: string }>({
+    mutationFn: (fields) =>
+      fetchJson<MonthlyBudgetPlanSource>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("createMonthlySource", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setSourceModal(null);
+      invalidateCurrentPlan();
+    },
+  });
+
+  const updateMonthlySource = useMutation<MonthlyBudgetPlanSource, Error, SourceFields & { id: string; planId: string }>({
+    mutationFn: (fields) =>
+      fetchJson<MonthlyBudgetPlanSource>("/api/budgets/plan", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("updateMonthlySource", workspaceId ?? "", fields),
+      }),
+    onSuccess: () => {
+      setSourceModal(null);
+      invalidateCurrentPlan();
+    },
+  });
+
+  const deleteEntity = useMutation<{ success: boolean }, Error, { id: string; type: DeleteType }>({
+    mutationFn: ({ id, type }) =>
+      fetchJson<{ success: boolean }>(
+        `/api/budgets/plan?workspaceId=${encodeURIComponent(workspaceId ?? "")}&id=${encodeURIComponent(id)}&type=${type}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_data, variables) => {
+      setItemModal(null);
+      setSourceModal(null);
+      if (variables.type.startsWith("template")) {
+        invalidateAllPlanData();
+      } else {
+        invalidateCurrentPlan();
+      }
+    },
+  });
+
+  const discardDraft = useMutation<{ success: boolean }, Error, { planId: string }>({
+    mutationFn: ({ planId }) =>
+      fetchJson<{ success: boolean }>("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("discardMonthlyDraft", workspaceId ?? "", { planId }),
+      }),
+    onSuccess: invalidateCurrentPlan,
+  });
+
+  const confirmPlan = useMutation<unknown, Error, { planId: string }>({
+    mutationFn: ({ planId }) =>
+      fetchJson("/api/budgets/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody("confirmMonthly", workspaceId ?? "", { planId, applyToSubAccounts: true }),
+      }),
+    onSuccess: () => {
+      setShowConfirmModal(false);
+      invalidateCurrentPlan();
       queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-      setIsPreviewMode(false);
-      setPreviewAllocations(null);
     },
   });
 
-  const addMonthlyAllocation = useMutation({
-    mutationFn: (payload: {
-      workspaceId: string;
-      action: "addAllocation";
-      year: number;
-      month: number;
-      budgetItemId: string;
-      budgetSourceId: string;
-      allocatedCents: number;
-    }) =>
-      fetchJson<{
-        id: string;
-        budgetItemId: string;
-        budgetSourceId: string;
-        budgetItemTitle?: string | null;
-        budgetSourceTitle?: string | null;
-        allocatedCents: number;
-        isDraft: boolean;
-        destinationSubAccountId?: string | null;
-      }>("/api/budgets/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: (allocation) => {
-      const itemTitle =
-        allocation.budgetItemTitle || budgetItems.find((item) => item.id === allocation.budgetItemId)?.title || "Unknown";
-      const sourceTitle =
-        allocation.budgetSourceTitle ||
-        planningSources.find((source) => source.budgetSourceId === allocation.budgetSourceId)?.title ||
-        "Unknown";
-      setPreviewAllocations((current) => {
-        const next = current ? [...current] : [...persistedAllocations];
-        const nextAllocation = {
-          id: allocation.id,
-          budgetItemId: allocation.budgetItemId,
-          budgetItemTitle: itemTitle,
-          budgetSourceId: allocation.budgetSourceId,
-          budgetSourceTitle: sourceTitle,
-          allocatedCents: allocation.allocatedCents,
-          isDraft: allocation.isDraft,
-          destinationSubAccountId:
-            allocation.destinationSubAccountId ??
-            budgetItems.find((item) => item.id === allocation.budgetItemId)?.destinationSubAccountId ??
-            null,
-        };
-        const existingIndex = next.findIndex(
-          (entry) =>
-            entry.budgetItemId === allocation.budgetItemId && entry.budgetSourceId === allocation.budgetSourceId,
-        );
-        if (existingIndex >= 0) {
-          next[existingIndex] = nextAllocation;
-        } else {
-          next.push(nextAllocation);
-        }
-        return next;
-      });
-      setIsPreviewMode(true);
-      closeAddAllocationModal();
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-    },
-  });
+  const resetItemMutationErrors = () => {
+    createTemplateItem.reset();
+    updateTemplateItem.reset();
+    createMonthlyItem.reset();
+    updateMonthlyItem.reset();
+    deleteEntity.reset();
+  };
 
-  const deleteMonthlyAllocation = useMutation({
-    mutationFn: ({ id }: { id: string }) =>
-      fetchJson(`/api/budgets/plan?id=${id}&type=allocation&workspaceId=${workspaceId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-    },
-  });
+  const resetSourceMutationErrors = () => {
+    createTemplateSource.reset();
+    updateTemplateSource.reset();
+    createMonthlySource.reset();
+    updateMonthlySource.reset();
+    deleteEntity.reset();
+  };
 
-  const deleteItem = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/budgets/plan?id=${id}&type=item`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["budget-plan"] }),
-  });
-
-  const deleteSource = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/budgets/plan?id=${id}&type=source`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["budget-plan"] }),
-  });
-
-  const deleteMonthlySource = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/budgets/plan?id=${id}&type=monthlySource&workspaceId=${workspaceId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeSourceModal();
-    },
-  });
-
-  const updateBudgetItem = useMutation({
-    mutationFn: (payload: {
-      id: string;
-      workspaceId: string;
-      action: "updateItem";
-      title: string;
-      amountCents: number;
-      isMonthly: boolean;
-      destinationSubAccountId?: string;
-    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeItemModal();
-    },
-  });
-
-  const updateBudgetSource = useMutation({
-    mutationFn: (payload: {
-      id: string;
-      workspaceId: string;
-      action: "updateSource";
-      title: string;
-      amountCents: number;
-      ownerId: string;
-    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeSourceModal();
-    },
-  });
-
-  const updateMonthlyBudgetSource = useMutation({
-    mutationFn: (payload: {
-      id: string;
-      workspaceId: string;
-      action: "updateMonthlySource";
-      year: number;
-      month: number;
-      title: string;
-      amountCents: number;
-      ownerId: string;
-    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeSourceModal();
-    },
-  });
-  const quickUpdateBudgetItem = useMutation({
-    mutationFn: (payload: {
-      id: string;
-      workspaceId: string;
-      action: "updateItem";
-      title: string;
-      amountCents: number;
-      isMonthly: boolean;
-      destinationSubAccountId?: string;
-    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeQuickEditModal();
-    },
-  });
-
-  const quickUpdateBudgetSource = useMutation({
-    mutationFn: (payload: {
-      id: string;
-      workspaceId: string;
-      action: "updateSource";
-      title: string;
-      amountCents: number;
-      ownerId: string;
-    }) => fetchJson("/api/budgets/plan", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-      closeQuickEditModal();
-    },
-  });
-
-  const openAddItemModal = () => {
-    setEditingItemId(null);
+  const openNewItem = (scope: ModalScope) => {
+    resetItemMutationErrors();
     setItemTitle("");
     setItemAmount("");
     setItemIsMonthly(true);
     setItemDestinationId("");
-    setIsAddItemModalOpen(true);
+    setItemModal({ scope, id: null });
   };
 
-  const openEditItemModal = (item: BudgetItem) => {
-    setEditingItemId(item.id);
+  const openSetupItem = (item: SetupItem) => {
+    resetItemMutationErrors();
     setItemTitle(item.title);
     setItemAmount((item.amountCents / 100).toFixed(2));
     setItemIsMonthly(item.isMonthly);
-    setItemDestinationId(item.destinationSubAccountId || "");
-    setIsAddItemModalOpen(true);
+    setItemDestinationId(item.destinationSubAccountId ?? "");
+    setItemModal({ scope: "template", id: item.id });
+  };
+
+  const openMonthlyItem = (item: MonthlyBudgetPlanItem) => {
+    if (!isDraft) return;
+    resetItemMutationErrors();
+    setItemTitle(item.title);
+    setItemAmount((item.amountCents / 100).toFixed(2));
+    setItemIsMonthly(true);
+    setItemDestinationId(item.destinationSubAccountId ?? "");
+    setItemModal({ scope: "monthly", id: item.id });
   };
 
   const closeItemModal = () => {
-    setIsAddItemModalOpen(false);
-    setEditingItemId(null);
+    setItemModal(null);
     setItemTitle("");
     setItemAmount("");
     setItemDestinationId("");
   };
 
-  const openAddSourceModal = (scope: SourceModalScope = "template") => {
-    setSourceModalScope(scope);
-    setEditingSourceId(null);
-    setEditingMonthlySourceId(null);
+  const openNewSource = (scope: ModalScope) => {
+    resetSourceMutationErrors();
     setSourceTitle("");
     setSourceAmount("");
-    setSourceOwnerId(members[0]?.user.id || "");
-    setIsAddSourceModalOpen(true);
+    setSourceOwnerId(members[0]?.user.id ?? "");
+    setSourceModal({ scope, id: null });
   };
 
-  const openEditSourceModal = (source: BudgetSource) => {
-    setSourceModalScope("template");
-    setEditingSourceId(source.id);
-    setEditingMonthlySourceId(null);
+  const openSetupSource = (source: SetupSource) => {
+    resetSourceMutationErrors();
     setSourceTitle(source.title);
     setSourceAmount((source.amountCents / 100).toFixed(2));
     setSourceOwnerId(source.ownerId);
-    setIsAddSourceModalOpen(true);
+    setSourceModal({ scope: "template", id: source.id });
   };
 
-  const openEditMonthlySourceModal = (source: MonthlyBudgetSource) => {
-    setSourceModalScope("monthly");
-    setEditingSourceId(null);
-    setEditingMonthlySourceId(source.id);
+  const openMonthlySource = (source: MonthlyBudgetPlanSource) => {
+    if (!isDraft) return;
+    resetSourceMutationErrors();
     setSourceTitle(source.title);
     setSourceAmount((source.amountCents / 100).toFixed(2));
     setSourceOwnerId(source.ownerId);
-    setIsAddSourceModalOpen(true);
+    setSourceModal({ scope: "monthly", id: source.id });
   };
 
   const closeSourceModal = () => {
-    setIsAddSourceModalOpen(false);
-    setEditingSourceId(null);
-    setEditingMonthlySourceId(null);
-    setSourceModalScope("template");
+    setSourceModal(null);
     setSourceTitle("");
     setSourceAmount("");
     setSourceOwnerId("");
   };
 
-  const onSubmitItem = (e: FormEvent) => {
-    e.preventDefault();
-    if (!workspaceId || !itemTitle || !itemAmount) return;
-    if (editingItemId) {
-      updateBudgetItem.mutate({
-        id: editingItemId,
-        workspaceId,
-        action: "updateItem",
-        title: itemTitle,
-        amountCents: Math.round(parseFloat(itemAmount) * 100),
-        isMonthly: itemIsMonthly,
-        destinationSubAccountId: itemDestinationId || undefined,
-      });
-    } else {
-      createBudgetItem.mutate({
-        workspaceId,
-        action: "createItem",
-        title: itemTitle,
-        amountCents: Math.round(parseFloat(itemAmount) * 100),
-        isMonthly: itemIsMonthly,
-        destinationSubAccountId: itemDestinationId || undefined,
-      });
-    }
-  };
+  const saveItem = (event: FormEvent) => {
+    event.preventDefault();
+    if (!itemModal || !workspaceId) return;
+    const amountCents = toCents(itemAmount);
+    if (!itemTitle.trim() || amountCents === null) return;
 
-  const onSubmitSource = (e: FormEvent) => {
-    e.preventDefault();
-    if (!workspaceId || !sourceTitle || !sourceAmount || !sourceOwnerId) return;
-    const amountCents = Math.round(parseFloat(sourceAmount) * 100);
-    if (editingMonthlySourceId) {
-      updateMonthlyBudgetSource.mutate({
-        id: editingMonthlySourceId,
-        workspaceId,
-        action: "updateMonthlySource",
-        year: selectedYear,
-        month: selectedMonth,
-        title: sourceTitle,
-        amountCents,
-        ownerId: sourceOwnerId,
-      });
-    } else if (editingSourceId) {
-      updateBudgetSource.mutate({
-        id: editingSourceId,
-        workspaceId,
-        action: "updateSource",
-        title: sourceTitle,
-        amountCents,
-        ownerId: sourceOwnerId,
-      });
-    } else if (sourceModalScope === "monthly") {
-      createMonthlyBudgetSource.mutate({
-        workspaceId,
-        action: "createMonthlySource",
-        year: selectedYear,
-        month: selectedMonth,
-        title: sourceTitle,
-        amountCents,
-        ownerId: sourceOwnerId,
-      });
-    } else {
-      createBudgetSource.mutate({
-        workspaceId,
-        action: "createSource",
-        title: sourceTitle,
-        amountCents,
-        ownerId: sourceOwnerId,
-      });
-    }
-  };
+    const fields: ItemFields = {
+      title: itemTitle.trim(),
+      amountCents,
+      isMonthly: itemModal.scope === "template" ? itemIsMonthly : true,
+      destinationSubAccountId: itemDestinationId || null,
+    };
 
-  const generateMonthly = useMutation<GenerateMonthlyResponse, Error, GenerateMonthlyPayload>({
-    mutationFn: (payload) =>
-      fetchJson<GenerateMonthlyResponse>("/api/budgets/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: (data) => {
-      const allocations: AllocationPreview[] = data.monthlyBudgets.map((mb) => ({
-        id: mb.id,
-        budgetItemId: mb.budgetItemId,
-        budgetItemTitle: mb.budgetItemTitle || budgetItems.find(i => i.id === mb.budgetItemId)?.title || "Unknown",
-        budgetSourceId: mb.budgetSourceId,
-        budgetSourceTitle: mb.budgetSourceTitle || planningSources.find((s) => s.budgetSourceId === mb.budgetSourceId)?.title || "Unknown",
-        allocatedCents: mb.allocatedCents,
-        isDraft: mb.isDraft,
-        destinationSubAccountId:
-          mb.destinationSubAccountId ??
-          budgetItems.find((item) => item.id === mb.budgetItemId)?.destinationSubAccountId ??
-          null,
-      }));
-      setPreviewAllocations(allocations);
-      setIsPreviewMode(true);
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-    },
-  });
-
-  const generatePreview = () => {
-    if (!workspaceId || budgetItems.length === 0 || planningSources.length === 0) return;
-    generateMonthly.mutate({
-      workspaceId,
-      action: "generateMonthly",
-      year: selectedYear,
-      month: selectedMonth,
-    });
-  };
-
-  const openMonthlyReview = () => {
-    setPreviewAllocations(persistedAllocations);
-    setIsPreviewMode(true);
-  };
-
-  const persistAllocations = (allocations: AllocationPreview[]) => {
-    if (!workspaceId) return;
-    for (const alloc of allocations) {
-      fetch("/api/budgets/plan", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          action: "updateAllocation",
-          id: alloc.id,
-          year: selectedYear,
-          month: selectedMonth,
-          budgetItemId: alloc.budgetItemId,
-          budgetSourceId: alloc.budgetSourceId,
-          allocatedCents: alloc.allocatedCents,
-        }),
-      });
-    }
-  };
-
-  const distributeTotal = (rows: AllocationPreview[], totalCents: number) => {
-    if (rows.length === 0) return [] as AllocationPreview[];
-    if (totalCents <= 0) {
-      return rows.map((row) => ({ ...row, allocatedCents: 0 }));
-    }
-
-    const existingTotal = rows.reduce((sum, row) => sum + row.allocatedCents, 0);
-    let allocatedSoFar = 0;
-
-    return rows.map((row, index) => {
-      const allocatedCents =
-        index === rows.length - 1
-          ? totalCents - allocatedSoFar
-          : existingTotal > 0
-            ? Math.round((totalCents * row.allocatedCents) / existingTotal)
-            : Math.floor(totalCents / rows.length);
-      allocatedSoFar += allocatedCents;
-      return { ...row, allocatedCents };
-    });
-  };
-
-  const allocationMatchesTarget = (allocation: AllocationPreview, target: AllocationEditTarget) =>
-    target.type === "source" ? allocation.budgetSourceId === target.id : allocationPreviewKey(allocation) === target.id;
-
-  const updateAllocationSummary = (target: AllocationEditTarget, newCents: number) => {
-    if (!previewAllocations || !workspaceId) return;
-    const matchingRows = previewAllocations.filter((allocation) => allocationMatchesTarget(allocation, target));
-    const draftRows = matchingRows.filter((allocation) => allocation.isDraft);
-    if (draftRows.length === 0) return;
-
-    const protectedCents = matchingRows
-      .filter((allocation) => !allocation.isDraft)
-      .reduce((sum, allocation) => sum + allocation.allocatedCents, 0);
-    const redistributedRows = distributeTotal(draftRows, Math.max(0, newCents - protectedCents));
-    const redistributedById = new Map(
-      redistributedRows.map((allocation) => [
-        allocationPreviewKey(allocation),
-        allocation.allocatedCents,
-      ]),
-    );
-    const updated = previewAllocations.map((allocation) => {
-      const key = allocationPreviewKey(allocation);
-      const nextCents = redistributedById.get(key);
-      return nextCents === undefined ? allocation : { ...allocation, allocatedCents: nextCents };
-    });
-    setPreviewAllocations(updated);
-    persistAllocations(updated.filter((allocation) => allocation.isDraft && allocationMatchesTarget(allocation, target)));
-  };
-
-  const openConfirmDialog = () => {
-    setShowConfirmDialog(true);
-    setConfirmProgress(0);
-    setConfirmStage("Click Save to finalize...");
-  };
-
-  const clearConfirmProgressTimer = () => {
-    if (confirmProgressTimerRef.current) {
-      clearInterval(confirmProgressTimerRef.current);
-      confirmProgressTimerRef.current = null;
-    }
-  };
-
-  const resetConfirmDialog = () => {
-    clearConfirmProgressTimer();
-    setShowConfirmDialog(false);
-    setConfirmProgress(0);
-    setConfirmStage("");
-    setPendingConfirmApplyToSubAccounts(false);
-  };
-
-  const executeConfirmMonthly = () => {
-    if (!workspaceId || !previewAllocations) return;
-    clearConfirmProgressTimer();
-    setConfirmProgress(12);
-    setConfirmStage("Sending approval request...");
-
-    confirmProgressTimerRef.current = setInterval(() => {
-      setConfirmProgress((current) => {
-        if (current >= 90) return current;
-        return Math.min(90, current + (current < 50 ? 12 : 5));
-      });
-    }, 450);
-
-    confirmMonthly.mutate({
-      workspaceId,
-      action: "confirmMonthly",
-      year: selectedYear,
-      month: selectedMonth,
-      allocations: previewAllocations,
-      applyToSubAccounts: pendingConfirmApplyToSubAccounts,
-    }, {
-      onSuccess: () => {
-        clearConfirmProgressTimer();
-        setConfirmStage("Complete!");
-        setConfirmProgress(100);
-        setTimeout(() => {
-          resetConfirmDialog();
-        }, 400);
-      },
-      onError: (error) => {
-        clearConfirmProgressTimer();
-        setConfirmStage(error instanceof Error ? error.message : "Error occurred.");
-        setTimeout(() => {
-          resetConfirmDialog();
-        }, 2000);
-      },
-    });
-  };
-
-  const onConfirmMonthly = (applyToSubAccounts: boolean) => {
-    setPendingConfirmApplyToSubAccounts(applyToSubAccounts);
-    openConfirmDialog();
-  };
-
-  const cancelPreview = () => {
-    if (!workspaceId) return;
-    fetchJson("/api/budgets/plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workspaceId,
-        action: "cancelDraft",
-        year: selectedYear,
-        month: selectedMonth,
-      }),
-    }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-    });
-    setIsPreviewMode(false);
-    setPreviewAllocations(null);
-  };
-
-  const openEditAllocationModal = (target: AllocationEditTarget) => {
-    const summary =
-      target.type === "source"
-        ? sourceAllocationSummaries.find((entry) => entry.id === target.id)
-        : budgetItemAllocationSummaries.find((entry) => entry.id === target.id);
-    if (!summary) return;
-    setEditingAllocationTarget(target);
-    setEditingAllocationAmount((summary.allocatedCents / 100).toFixed(2));
-  };
-
-  const closeEditAllocationModal = () => {
-    setEditingAllocationTarget(null);
-    setEditingAllocationAmount("");
-  };
-
-  const saveAllocationEdit = () => {
-    if (!editingAllocationTarget || !previewAllocations) return;
-    const value = parseFloat(editingAllocationAmount || "0");
-    if (Number.isNaN(value) || value < 0) return;
-    updateAllocationSummary(editingAllocationTarget, Math.round(value * 100));
-    closeEditAllocationModal();
-  };
-
-  const removeAllocation = () => {
-    if (!editingAllocationTarget || !previewAllocations) return;
-    const matchingAllocations = previewAllocations.filter((allocation) =>
-      allocation.isDraft &&
-      allocationMatchesTarget(allocation, editingAllocationTarget),
-    );
-    if (matchingAllocations.length === 0) return;
-    for (const allocation of matchingAllocations) {
-      if (allocation.id) {
-        deleteMonthlyAllocation.mutate({ id: allocation.id });
+    if (itemModal.scope === "template") {
+      if (itemModal.id) {
+        updateTemplateItem.mutate({ ...fields, id: itemModal.id });
+      } else {
+        createTemplateItem.mutate(fields);
       }
-    }
-    setPreviewAllocations(
-      previewAllocations.filter((allocation) =>
-        !allocation.isDraft ||
-        !allocationMatchesTarget(allocation, editingAllocationTarget),
-      ),
-    );
-    closeEditAllocationModal();
-  };
-
-  const openAddAllocationModal = () => {
-    if (!isPreviewMode) {
-      setPreviewAllocations(persistedAllocations);
-      setIsPreviewMode(true);
-    }
-    const defaultSource = availableAllocationSources.find((source) => source.isDraft) ?? availableAllocationSources[0];
-    setAllocationItemId(availableAllocationItems[0]?.id || "");
-    setAllocationSourceId(defaultSource?.budgetSourceId || "");
-    setAllocationAmount("");
-    setIsAddAllocationModalOpen(true);
-  };
-
-  const closeAddAllocationModal = () => {
-    setIsAddAllocationModalOpen(false);
-    setAllocationItemId("");
-    setAllocationSourceId("");
-    setAllocationAmount("");
-  };
-
-  const saveAddedAllocation = (e: FormEvent) => {
-    e.preventDefault();
-    const sourceId = allocationSourceId || availableAllocationSources[0]?.budgetSourceId || "";
-    if (!workspaceId || !allocationItemId || !sourceId || !allocationAmount) return;
-    const amountCents = Math.round(parseFloat(allocationAmount) * 100);
-    if (Number.isNaN(amountCents) || amountCents < 0) return;
-    addMonthlyAllocation.mutate({
-      workspaceId,
-      action: "addAllocation",
-      year: selectedYear,
-      month: selectedMonth,
-      budgetItemId: allocationItemId,
-      budgetSourceId: sourceId,
-      allocatedCents: amountCents,
-    });
-  };
-
-  const openQuickEditItemModal = (itemId: string) => {
-    const item = budgetItems.find((entry) => entry.id === itemId);
-    if (!item) return;
-    setQuickEditTarget({ type: "item", id: item.id });
-    setQuickEditDescription(item.title);
-    setQuickEditAmount((item.amountCents / 100).toFixed(2));
-  };
-
-  const openQuickEditSourceModal = (sourceId: string) => {
-    const source = budgetSources.find((entry) => entry.id === sourceId);
-    if (!source) return;
-    setQuickEditTarget({ type: "source", id: source.id });
-    setQuickEditDescription(source.title);
-    setQuickEditAmount((source.amountCents / 100).toFixed(2));
-  };
-
-  const confirmDeleteItem = (itemId: string) => {
-    if (!confirmDestructiveAction("Delete this budget item?")) return;
-    deleteItem.mutate(itemId);
-  };
-
-  const confirmDeleteSource = (sourceId: string) => {
-    if (!confirmDestructiveAction("Delete this budget source?")) return;
-    deleteSource.mutate(sourceId);
-  };
-
-  const confirmDeleteMonthlySource = (monthlySourceId: string) => {
-    if (!confirmDestructiveAction("Delete this monthly budget source?")) return;
-    deleteMonthlySource.mutate(monthlySourceId);
-  };
-
-  const closeQuickEditModal = () => {
-    setQuickEditTarget(null);
-    setQuickEditDescription("");
-    setQuickEditAmount("");
-  };
-
-  const saveQuickEdit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!workspaceId || !quickEditTarget || !quickEditDescription || !quickEditAmount) return;
-    const amountCents = Math.round(parseFloat(quickEditAmount) * 100);
-    if (Number.isNaN(amountCents) || amountCents < 0) return;
-
-    if (quickEditTarget.type === "item") {
-      const item = budgetItems.find((entry) => entry.id === quickEditTarget.id);
-      if (!item) return;
-      quickUpdateBudgetItem.mutate({
-        id: item.id,
-        workspaceId,
-        action: "updateItem",
-        title: quickEditDescription,
-        amountCents,
-        isMonthly: item.isMonthly,
-        destinationSubAccountId: item.destinationSubAccountId || undefined,
-      });
       return;
     }
 
-    const source = budgetSources.find((entry) => entry.id === quickEditTarget.id);
-    if (!source) return;
-    quickUpdateBudgetSource.mutate({
-      id: source.id,
-      workspaceId,
-      action: "updateSource",
-      title: quickEditDescription,
+    if (!monthlyPlan || !isDraft) return;
+    if (itemModal.id) {
+      updateMonthlyItem.mutate({ ...fields, id: itemModal.id, planId: monthlyPlan.id });
+    } else {
+      createMonthlyItem.mutate({ ...fields, planId: monthlyPlan.id });
+    }
+  };
+
+  const saveSource = (event: FormEvent) => {
+    event.preventDefault();
+    if (!sourceModal || !workspaceId) return;
+    const amountCents = toCents(sourceAmount);
+    if (!sourceTitle.trim() || !sourceOwnerId || amountCents === null) return;
+
+    const fields: SourceFields = {
+      title: sourceTitle.trim(),
       amountCents,
-      ownerId: source.ownerId,
-    });
+      ownerId: sourceOwnerId,
+    };
+
+    if (sourceModal.scope === "template") {
+      if (sourceModal.id) {
+        updateTemplateSource.mutate({ ...fields, id: sourceModal.id });
+      } else {
+        createTemplateSource.mutate(fields);
+      }
+      return;
+    }
+
+    if (!monthlyPlan || !isDraft) return;
+    if (sourceModal.id) {
+      updateMonthlySource.mutate({ ...fields, id: sourceModal.id, planId: monthlyPlan.id });
+    } else {
+      createMonthlySource.mutate({ ...fields, planId: monthlyPlan.id });
+    }
+  };
+
+  const removeEntity = (id: string, type: DeleteType, label: string) => {
+    if (!confirmDestructiveAction(`Delete ${label}?`)) return;
+    deleteEntity.mutate({ id, type });
+  };
+
+  const handleDiscardDraft = () => {
+    if (!monthlyPlan || !isDraft) return;
+    if (!confirmDestructiveAction(`Discard the draft for ${MONTHS[selectedMonth - 1]} ${selectedYear}?`)) return;
+    discardDraft.mutate({ planId: monthlyPlan.id });
   };
 
   useEffect(() => {
-    if (hasDraftMonthlyBudgets || hasEditableMonthlySources) {
-      setPreviewAllocations(persistedAllocations);
-      setIsPreviewMode(true);
-      return;
-    }
-    setPreviewAllocations(null);
-    setIsPreviewMode(false);
-  }, [hasDraftMonthlyBudgets, hasEditableMonthlySources, persistedAllocations]);
+    setItemModal(null);
+    setSourceModal(null);
+    setShowConfirmModal(false);
+    setItemTitle("");
+    setItemAmount("");
+    setItemIsMonthly(true);
+    setItemDestinationId("");
+    setSourceTitle("");
+    setSourceAmount("");
+    setSourceOwnerId("");
+  }, [selectedMonth, selectedYear]);
+
+  const itemSaving =
+    createTemplateItem.isPending ||
+    updateTemplateItem.isPending ||
+    createMonthlyItem.isPending ||
+    updateMonthlyItem.isPending;
+  const sourceSaving =
+    createTemplateSource.isPending ||
+    updateTemplateSource.isPending ||
+    createMonthlySource.isPending ||
+    updateMonthlySource.isPending;
+  const itemError =
+    createTemplateItem.error || updateTemplateItem.error || createMonthlyItem.error || updateMonthlyItem.error || deleteEntity.error;
+  const sourceError =
+    createTemplateSource.error || updateTemplateSource.error || createMonthlySource.error || updateMonthlySource.error || deleteEntity.error;
+  const planActionError = startPlan.error || discardDraft.error;
 
   return (
     <div className="bp-container">
-      {/* Monthly Budget Section - Primary */}
-      <section className="card">
-        <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+      <section className="card" style={{ padding: "18px 20px" }}>
+        <div
+          className="card-header"
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "18px" }}
+        >
           <div>
             <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0 }}>
-              {isPreviewMode ? "Preview Monthly Budget" : `${MONTHS[selectedMonth - 1]} ${selectedYear} Budget`}
+              {MONTHS[selectedMonth - 1]} {selectedYear} Monthly Budget
             </h3>
             <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
-              {isPreviewMode ? "Review and edit sources and budget items before confirming" : "View and manage monthly sources and budget items"}
+              Manage this month without changing Budget Setup.
             </p>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {!isPreviewMode && (
-              <button
-                className="btn btn-ghost"
-                onClick={() => setShowTemplate(!showTemplate)}
-                disabled={budgetData.isLoading}
-              >
-                {showTemplate ? "Hide Setup" : "Edit Setup"}
-              </button>
-            )}
-          </div>
+          <button className="btn btn-ghost" type="button" onClick={() => setShowSetup((visible) => !visible)}>
+            <LayoutTemplate size={16} />
+            {showSetup ? "Hide Setup" : "Budget Setup"}
+            {showSetup ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </button>
         </div>
 
-        {/* Month/Year Selection - Always visible */}
-        <div className="bp-form" style={{ marginBottom: "20px", paddingBottom: "20px", borderBottom: "1px solid var(--border-subtle)" }}>
+        <div className="bp-form" style={{ paddingBottom: "18px", borderBottom: "1px solid var(--border-subtle)" }}>
           <div className="form-row">
             <div className="form-group">
-              <label className="label">Month</label>
-              <select className="input" value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))}>
-                {MONTHS.map((m, i) => (
-                  <option key={i + 1} value={i + 1}>{m}</option>
+              <label className="label" htmlFor="budget-plan-month">Month</label>
+              <select
+                id="budget-plan-month"
+                className="input"
+                value={selectedMonth}
+                onChange={(event) => setSelectedMonth(Number(event.target.value))}
+              >
+                {MONTHS.map((month, index) => (
+                  <option key={month} value={index + 1}>{month}</option>
                 ))}
               </select>
             </div>
             <div className="form-group">
               <label className="label">Year</label>
-              <NumericCalculatorInput value={selectedYear} allowDecimal={false} onValueChange={(value) => setSelectedYear(parseInt(value || "2024", 10))} min={2024} max={2030} />
+              <NumericCalculatorInput
+                value={selectedYear}
+                allowDecimal={false}
+                min={2024}
+                max={2100}
+                onValueChange={(value) => setSelectedYear(Number.parseInt(value || String(now.getFullYear()), 10))}
+              />
             </div>
           </div>
         </div>
 
-        {/* Preview Controls */}
-        {isPreviewMode && (
-          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--warning-bg)", borderRadius: "var(--r-md)" }}>
-            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ flex: 1, fontSize: "14px" }} />
-              <button
-                className="btn btn-ghost"
-                onClick={openAddAllocationModal}
-                disabled={availableAllocationItems.length === 0 || availableAllocationSources.length === 0}
-              >
-                Add Allocation
-              </button>
-              <button className="btn btn-ghost" onClick={() => openAddSourceModal("monthly")}>
-                Add Source
-              </button>
-              <button className="btn btn-ghost" onClick={cancelPreview}>
-                Cancel
-              </button>
+        {planQuery.isLoading && (
+          <div className="bp-two-col" aria-busy="true">
+            <div className="bp-col"><BudgetPlanCompactCardsSkeleton /></div>
+            <div className="bp-col"><BudgetPlanCompactCardsSkeleton /></div>
+          </div>
+        )}
+
+        {planQuery.isError && (
+          <div
+            role="alert"
+            style={{ marginTop: "18px", padding: "14px", color: "var(--danger)", background: "var(--danger-bg)", borderRadius: "var(--r-md)" }}
+          >
+            {planQuery.error instanceof Error ? planQuery.error.message : "Could not load the monthly budget."}
+          </div>
+        )}
+
+        {!planQuery.isLoading && !planQuery.isError && !monthlyPlan && (
+          <div className="empty-state" style={{ padding: "36px 16px 24px" }}>
+            <div className="empty-state-icon" aria-hidden="true"><CalendarRange size={28} /></div>
+            <h3 className="empty-state-title">No monthly budget</h3>
+            <p className="empty-state-desc">Start with Budget Setup or create an empty monthly plan.</p>
+            <div className="empty-state-action" style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
               <button
                 className="btn btn-primary"
-                onClick={() => onConfirmMonthly(true)}
-                disabled={confirmMonthly.isPending || !canApproveMonthly}
+                type="button"
+                onClick={() => startPlan.mutate("startFromSetup")}
+                disabled={!workspaceId || !hasSetupSeed || startPlan.isPending}
+                title={hasSetupSeed ? "Create this month from Budget Setup" : "Add recurring items or sources to Budget Setup first"}
               >
-                {confirmMonthly.isPending ? "Saving..." : "Confirm & Save"}
-              </button>
-            </div>
-            {!canApproveMonthly && (
-              <p style={{ fontSize: "12px", color: "var(--danger)", marginTop: "8px" }}>
-                {hasPendingMonthlyChanges
-                  ? `Approval disabled: sources ${formatCents(templateSourceTotal)} must equal budget items ${formatCents(monthlyTotal)} (${formatCents(planBalanceAbsCents)} ${planBalanceDeltaCents > 0 ? "left to budget" : "over budget"})`
-                  : "Add a source or allocation before saving changes."}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Monthly Budget Stats */}
-        {(displayAllocations.length > 0 || planningSources.length > 0 || isPreviewMode) && (
-          <div className="bp-stat-grid" style={{ marginBottom: "24px" }}>
-            <div className="bp-stat">
-              <div className="bp-stat-label">Budget Items</div>
-              <div className="bp-stat-value">{formatCents(monthlyTotal)}</div>
-            </div>
-            <div className="bp-stat">
-              <div className="bp-stat-label">Sources</div>
-              <div className="bp-stat-value">{formatCents(templateSourceTotal)}</div>
-              <div className="bp-stat-sub">
-                {canApproveMonthly ? "Balanced" : `${formatCents(planBalanceAbsCents)} ${planBalanceDeltaCents > 0 ? "left to budget" : "over budget"}`}
-              </div>
-            </div>
-            <div className="bp-stat">
-              <div className="bp-stat-label">Template Targets</div>
-              <div className="bp-stat-value">{formatCents(templateItemTotal)}</div>
-              <div className="bp-stat-sub">{itemTargetMismatches.length} items need review</div>
-            </div>
-          </div>
-        )}
-
-        {/* Generate Button when empty - only show if no monthly budgets exist */}
-        {!isPreviewMode && displayAllocations.length === 0 && !generateMonthly.isPending && monthlyBudgets.length === 0 && (
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button
-                className="btn btn-ghost"
-                onClick={openAddAllocationModal}
-                disabled={budgetData.isLoading || !isTemplateReady}
-              >
-                + Add Allocation
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={generatePreview}
-                disabled={budgetData.isLoading || !isTemplateReady}
-              >
-                {budgetData.isLoading ? "Loading..." : "Generate from Template"}
-              </button>
-            </div>
-            {!budgetData.isLoading && !isTemplateReady && (
-              <p className="bp-hint">Add source and budget item templates first, then build the monthly plan here.</p>
-            )}
-          </div>
-        )}
-
-        {/* Review & Confirm section when there are existing monthly budgets */}
-        {!isPreviewMode && displayAllocations.length > 0 && monthlyBudgets.length > 0 && (
-          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--success-bg)", borderRadius: "var(--r-md)", border: "1px solid var(--success)" }}>
-            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ flex: 1, fontSize: "14px", color: "var(--success)" }}>
-                A monthly budget already exists for this period. Open it again to review the source and budget item totals.
-              </span>
-              <button
-                className="btn btn-ghost"
-                onClick={openAddAllocationModal}
-                disabled={availableAllocationItems.length === 0 || availableAllocationSources.length === 0}
-              >
-                Add Allocation
+                <LayoutTemplate size={16} />
+                {startPlan.isPending && startPlan.variables === "startFromSetup" ? "Starting..." : "Start from Setup"}
               </button>
               <button
                 className="btn btn-ghost"
-                onClick={() => {
-                  openMonthlyReview();
-                  openAddSourceModal("monthly");
+                type="button"
+                onClick={() => startPlan.mutate("startBlank")}
+                disabled={!workspaceId || startPlan.isPending}
+              >
+                <FilePlus2 size={16} />
+                {startPlan.isPending && startPlan.variables === "startBlank" ? "Starting..." : "Start Blank"}
+              </button>
+            </div>
+            {planActionError && <p style={{ marginTop: "12px", color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
+          </div>
+        )}
+
+        {!planQuery.isLoading && !planQuery.isError && monthlyPlan && (
+          <>
+            {isConfirmed && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginTop: "18px",
+                  padding: "12px 14px",
+                  color: "var(--success)",
+                  background: "var(--success-bg)",
+                  border: "1px solid var(--success)",
+                  borderRadius: "var(--r-md)",
                 }}
               >
-                Add Source
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={openMonthlyReview}
+                <Lock size={16} />
+                <span style={{ fontSize: "13px" }}>This monthly budget is confirmed and read-only.</span>
+              </div>
+            )}
+
+            {isReview && (
+              <div
+                role="alert"
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  marginTop: "18px",
+                  padding: "12px 14px",
+                  color: "var(--warning)",
+                  background: "var(--warning-bg)",
+                  border: "1px solid var(--warning)",
+                  borderRadius: "var(--r-md)",
+                }}
               >
-                Review Monthly Budget
-              </button>
+                <AlertTriangle size={17} style={{ flexShrink: 0, marginTop: "1px" }} />
+                <span style={{ fontSize: "13px" }}>This migrated monthly budget needs review and is read-only.</span>
+              </div>
+            )}
+
+            {isConfirming && (
+              <div
+                role="status"
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  marginTop: "18px",
+                  padding: "12px 14px",
+                  color: "var(--warning)",
+                  background: "var(--warning-bg)",
+                  border: "1px solid var(--warning)",
+                  borderRadius: "var(--r-md)",
+                }}
+              >
+                <RefreshCw size={17} style={{ flexShrink: 0, marginTop: "1px" }} />
+                <span style={{ fontSize: "13px" }}>This monthly budget is being confirmed and is temporarily read-only.</span>
+              </div>
+            )}
+
+            <div className="bp-stat-grid" style={{ marginTop: "18px" }}>
+              <div className="bp-stat">
+                <div className="bp-stat-label">Sources</div>
+                <div className="bp-stat-value">{formatCents(sourceTotalCents)}</div>
+                <div className="bp-stat-sub">{monthlySources.length} {monthlySources.length === 1 ? "source" : "sources"}</div>
+              </div>
+              <div className="bp-stat">
+                <div className="bp-stat-label">Budget Items</div>
+                <div className="bp-stat-value">{formatCents(itemTotalCents)}</div>
+                <div className="bp-stat-sub">{monthlyItems.length} {monthlyItems.length === 1 ? "item" : "items"}</div>
+              </div>
+              <div className={`bp-stat ${differenceCents === 0 ? "positive" : "negative"}`}>
+                <div className="bp-stat-label">Difference</div>
+                <div className="bp-stat-value">{formatCents(Math.abs(differenceCents))}</div>
+                <div className="bp-stat-sub">
+                  {differenceCents === 0 ? "Balanced" : differenceCents > 0 ? "Left to budget" : "Over budget"}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* Generating animation */}
-        {generateMonthly.isPending && (
-          <div style={{ marginBottom: "20px" }}>
-            <GeneratingState title="Generating monthly budget..." />
-          </div>
-        )}
-
-        {/* Generation error */}
-        {generateMonthly.isError && (
-          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--danger-bg)", borderRadius: "var(--r-md)", color: "var(--danger)" }}>
-            Failed to generate: {generateMonthly.error?.message || "Unknown error"}
-          </div>
-        )}
-
-        {budgetData.isError && (
-          <div style={{ marginBottom: "20px", padding: "16px", background: "var(--danger-bg)", borderRadius: "var(--r-md)", color: "var(--danger)" }}>
-            Failed to load budget plan data: {budgetDataError || "Unknown error"}
-          </div>
-        )}
-
-
-        {/* Two Column Layout for Monthly Budget */}
-        {(displayAllocations.length > 0 || planningSources.length > 0 || isPreviewMode) && (
-          <div className="bp-two-col">
-            {/* Budget Sources Column - Left */}
-            <div className="bp-col">
-              <div className="st-header" style={{ marginBottom: "12px" }}>
-                <h4 className="st-title">Sources</h4>
-                {canAddMonthlyPlanEntries && (
-                  <button className="btn btn-ghost btn-xs" onClick={() => openAddSourceModal("monthly")}>
-                    + Add Source
+            {isDraft && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                  marginTop: "18px",
+                  paddingTop: "18px",
+                  borderTop: "1px solid var(--border-subtle)",
+                }}
+              >
+                <p style={{ margin: 0, color: canConfirm ? "var(--success)" : "var(--text-tertiary)", fontSize: "12px" }}>
+                  {canConfirm
+                    ? "Source and budget item totals match."
+                    : monthlySources.length === 0 || monthlyItems.length === 0
+                      ? "Add at least one source and one budget item before confirming."
+                      : `Totals must match before confirming (${formatCents(Math.abs(differenceCents))} ${differenceCents > 0 ? "left to budget" : "over budget"}).`}
+                </p>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {monthlySources.length === 0 && monthlyItems.length === 0 && (
+                    <button
+                      className="btn btn-ghost"
+                      type="button"
+                      onClick={() => startPlan.mutate("startFromSetup")}
+                      disabled={!hasSetupSeed || startPlan.isPending || discardDraft.isPending}
+                      title={hasSetupSeed ? "Fill this empty draft from Budget Setup" : "Add recurring items or sources to Budget Setup first"}
+                    >
+                      <LayoutTemplate size={15} />
+                      {startPlan.isPending ? "Applying..." : "Start from Setup"}
+                    </button>
+                  )}
+                  <button className="btn btn-danger" type="button" onClick={handleDiscardDraft} disabled={discardDraft.isPending}>
+                    <Trash2 size={15} />
+                    {discardDraft.isPending ? "Discarding..." : "Discard Draft"}
                   </button>
-                )}
-              </div>
-              <div className="st-grid">
-                {planningSources.map((source) => (
-                  <div
-                    key={source.budgetSourceId}
-                    className={`st-card bp-two-line-card ${source.isDraft ? "bp-editable-card" : ""}`}
-                    onClick={source.isDraft ? () => openEditMonthlySourceModal(source as MonthlyBudgetSource) : undefined}
-                    style={source.isDraft ? { cursor: "pointer" } : undefined}
-                  >
-                    <div className="bp-two-line-head">
-                      <div className="bp-two-line-title-wrap">
-                        <span className="st-bank-fallback" style={{ backgroundColor: "#d97706", width: "24px", height: "24px", fontSize: "12px" }}>
-                          💰
-                        </span>
-                        <h5 className="bp-two-line-title">{source.title}</h5>
-                        {!source.isDraft && (
-                          <span title="Locked approved source" style={{ display: "inline-flex", color: "var(--text-tertiary)" }}>
-                            <Lock size={14} aria-label="Locked approved source" />
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="bp-two-line-amount">
-                      {formatCents(source.amountCents)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Budget Items Column - Right */}
-            <div className="bp-col">
-              <div className="st-header" style={{ marginBottom: "12px" }}>
-                <h4 className="st-title">Budget Items</h4>
-                {canAddMonthlyPlanEntries && (
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={openAddAllocationModal}
-                    disabled={availableAllocationItems.length === 0 || availableAllocationSources.length === 0}
-                  >
-                    + Add Allocation
+                  <button className="btn btn-primary" type="button" onClick={() => setShowConfirmModal(true)} disabled={!canConfirm}>
+                    <Check size={16} />
+                    Confirm Monthly Budget
                   </button>
-                )}
+                </div>
+                {planActionError && <p style={{ width: "100%", margin: 0, color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
               </div>
-              <div className="st-grid">
-                {budgetItemAllocationSummaries.map((alloc) => {
-                  const isEditable = editableBudgetItemIds.has(alloc.id);
-                  return (
-                  <div
-                    key={alloc.id}
-                    className={`st-card bp-two-line-card ${isEditable ? 'bp-editable-card' : ''}`}
-                    onClick={isEditable ? () => openEditAllocationModal({ type: "item", id: alloc.id }) : undefined}
-                    style={isEditable ? { cursor: 'pointer' } : undefined}
-                  >
-                    <div className="bp-two-line-head">
-                      <div className="bp-two-line-title-wrap">
-                        <span className="st-bank-fallback" style={{ backgroundColor: "#1a8f58", width: "24px", height: "24px", fontSize: "12px" }}>
-                          📋
-                        </span>
-                        <h5 className="bp-two-line-title">{alloc.title}</h5>
-                        {alloc.hasProtected && (
-                          <span title="Locked approved budget item" style={{ display: "inline-flex", color: "var(--text-tertiary)" }}>
-                            <Lock size={14} aria-label="Locked approved budget item" />
-                          </span>
-                        )}
+            )}
+
+            <div className="bp-two-col">
+              <div className="bp-col">
+                <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
+                  <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Sources</h4>
+                  {isDraft && (
+                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")}>
+                      <Plus size={14} /> Add Source
+                    </button>
+                  )}
+                </div>
+                <div className="st-grid">
+                  {monthlySources.map((source) => {
+                    const owner = source.owner ?? memberById.get(source.ownerId);
+                    return (
+                      <div key={source.id} className="st-card bp-compact-card">
+                        <div className="bp-compact-row">
+                          <div className="bp-compact-left">
+                            <IconTile icon={WalletCards} tone="source" />
+                            <div className="bp-compact-info">
+                              <span className="bp-compact-title">{source.title}</span>
+                              <span className="bp-compact-meta"><Users size={11} /> {personLabel(owner)}</span>
+                            </div>
+                          </div>
+                          <div className="bp-compact-right">
+                            <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
+                            {isDraft ? (
+                              <button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlySource(source)} title="Edit source" aria-label={`Edit ${source.title}`}>
+                                <Pencil size={13} />
+                              </button>
+                            ) : (
+                              <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only source" />
+                            )}
+                          </div>
+                        </div>
                       </div>
+                    );
+                  })}
+                  {monthlySources.length === 0 && (
+                    <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
+                      <CircleDollarSign size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly sources</div>
+                      {isDraft && <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Source</button>}
                     </div>
-                    <div style={{ marginTop: "3px", fontSize: "11px", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {alloc.sourceTitle ? `Source: ${alloc.sourceTitle}` : "Source not set"}
-                      {alloc.destinationSubAccountId ? ` -> ${subAccountNameById.get(alloc.destinationSubAccountId) ?? "Unknown sub-account"}` : ""}
+                  )}
+                </div>
+              </div>
+
+              <div className="bp-col">
+                <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
+                  <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Budget Items</h4>
+                  {isDraft && (
+                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")}>
+                      <Plus size={14} /> Add Item
+                    </button>
+                  )}
+                </div>
+                <div className="st-grid">
+                  {monthlyItems.map((item) => {
+                    const destinationName = item.destinationSubAccount?.name ?? (item.destinationSubAccountId ? subAccountNameById.get(item.destinationSubAccountId) : null);
+                    return (
+                      <div key={item.id} className="st-card bp-compact-card">
+                        <div className="bp-compact-row">
+                          <div className="bp-compact-left">
+                            <IconTile icon={ListChecks} tone="item" />
+                            <div className="bp-compact-info">
+                              <span className="bp-compact-title">{item.title}</span>
+                              <span className="bp-compact-meta">{destinationName || "No destination sub-account"}</span>
+                            </div>
+                          </div>
+                          <div className="bp-compact-right">
+                            <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
+                            {isDraft ? (
+                              <button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlyItem(item)} title="Edit budget item" aria-label={`Edit ${item.title}`}>
+                                <Pencil size={13} />
+                              </button>
+                            ) : (
+                              <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only budget item" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {monthlyItems.length === 0 && (
+                    <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
+                      <ListChecks size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly budget items</div>
+                      {isDraft && <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Item</button>}
                     </div>
-                    <div className="bp-two-line-amount">
-                      {formatCents(alloc.allocatedCents)}
-                    </div>
-                  </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {!budgetData.isLoading && displayAllocations.length === 0 && planningSources.length === 0 && !isPreviewMode && (
-          <EmptyState
-            icon="📅"
-            title="No monthly budget"
-            description="Add sources and budget items, or generate from setup to start faster."
-          />
+          </>
         )}
       </section>
 
-      {/* Setup Section - Hidden by default */}
-      {showTemplate && (
-        <>
-          {/* Setup Header */}
-          <section className="card" style={{ marginTop: "24px", padding: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>Budget Setup</h3>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  className="btn btn-ghost btn-xs"
-                  onClick={() => budgetData.refetch()}
-                  disabled={budgetData.isLoading}
-                >
-                  {budgetData.isLoading ? "Refreshing..." : "Refresh"}
-                </button>
-                <button className="btn btn-ghost btn-xs" onClick={() => setShowTemplate(false)}>
-                  Hide
-                </button>
-              </div>
+      {showSetup && (
+        <section className="card" style={{ padding: "18px 20px" }}>
+          <div
+            className="card-header"
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "16px" }}
+          >
+            <div>
+              <h3 style={{ fontSize: "17px", fontWeight: 600, margin: 0 }}>Budget Setup</h3>
+              <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
+                Reusable templates for starting future monthly budgets.
+              </p>
             </div>
-            <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
-              Budget item and source templates are accelerators for new monthly plans
-              {budgetData.data && (
-                <span style={{ marginLeft: "8px", color: "var(--text-secondary)" }}>
-                  ({budgetItems.length} items, {budgetSources.length} sources)
-                </span>
-              )}
-            </p>
-          </section>
+            <button className="btn btn-ghost btn-icon" type="button" onClick={() => planQuery.refetch()} disabled={planQuery.isFetching} title="Refresh setup" aria-label="Refresh setup">
+              <RefreshCw size={15} className={planQuery.isFetching ? "spin" : undefined} />
+            </button>
+          </div>
 
-          {budgetData.isError && (
-            <section className="card" style={{ marginTop: "12px", padding: "16px", background: "var(--danger-bg)", color: "var(--danger)" }}>
-              Could not load template data: {budgetDataError || "Unknown error"}
-            </section>
+          {planQuery.isError && (
+            <div role="alert" style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "12px" }}>
+              Could not load Budget Setup.
+            </div>
           )}
 
-          {/* Two Column Layout: Budget Sources and Budget Items */}
-          <div className="bp-two-col">
-            {/* Budget Sources Column */}
+          <div className="bp-two-col" style={{ marginTop: 0 }}>
             <div className="bp-col">
-              <div className="st-header" style={{ marginBottom: '16px' }}>
-                <h2 className="st-title">Sources</h2>
-                <button className="btn btn-primary" onClick={() => openAddSourceModal("template")}>
-                  + Add Source
+              <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
+                <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Sources</h4>
+                <button className="btn btn-primary btn-xs" type="button" onClick={() => openNewSource("template")}>
+                  <Plus size={14} /> Add Source
                 </button>
               </div>
-
               <div className="st-grid">
-                {budgetData.isLoading && <BudgetPlanCompactCardsSkeleton />}
-
-                {!budgetData.isLoading && !budgetData.isError && budgetSources.map((source) => (
-                  <div key={source.id} className="st-card bp-compact-card" onClick={() => openEditSourceModal(source)} style={{ cursor: 'pointer' }}>
-                    <div className="bp-two-line-head">
-                      <div className="bp-two-line-title-wrap">
-                        <span className="st-bank-fallback" style={{ backgroundColor: '#d97706', width: '24px', height: '24px', fontSize: '12px' }}>
-                          💰
-                        </span>
-                        <h5 className="bp-two-line-title">{source.title}</h5>
+                {planQuery.isLoading && <BudgetPlanCompactCardsSkeleton />}
+                {!planQuery.isLoading && setupSources.map((source) => {
+                  const owner = source.owner ?? memberById.get(source.ownerId);
+                  return (
+                    <div key={source.id} className="st-card bp-compact-card">
+                      <div className="bp-compact-row">
+                        <div className="bp-compact-left">
+                          <IconTile icon={WalletCards} tone="source" />
+                          <div className="bp-compact-info">
+                            <span className="bp-compact-title">{source.title}</span>
+                            <span className="bp-compact-meta"><Users size={11} /> {personLabel(owner)}</span>
+                          </div>
+                        </div>
+                        <div className="bp-compact-right">
+                          <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
+                          <button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupSource(source)} title="Edit setup source" aria-label={`Edit ${source.title}`}>
+                            <Pencil size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditSourceModal(source); }} title="Edit">
-                        ✏️
-                      </button>
                     </div>
-                    <div className="bp-two-line-amount">{formatCents(source.amountCents)}</div>
-                  </div>
-                ))}
-
-                {!budgetData.isLoading && !budgetData.isError && budgetSources.length === 0 && (
-                  <div className="st-grid-empty">
-                    <EmptyState
-                      icon="💰"
-                      title="No budget sources"
-                      description="Add your first source amount to start balancing the monthly plan."
-                      action={
-                        <button className="btn btn-primary" onClick={() => openAddSourceModal("template")}>
-                          + Add First Source
-                        </button>
-                      }
-                    />
+                  );
+                })}
+                {!planQuery.isLoading && setupSources.length === 0 && (
+                  <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center", color: "var(--text-secondary)", fontSize: "13px" }}>
+                    No setup sources
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Budget Items Column */}
             <div className="bp-col">
-              <div className="st-header" style={{ marginBottom: '16px' }}>
-                <h2 className="st-title">Budget Items</h2>
-                <button className="btn btn-primary" onClick={openAddItemModal}>
-                  + Add Item
+              <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
+                <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Budget Items</h4>
+                <button className="btn btn-primary btn-xs" type="button" onClick={() => openNewItem("template")}>
+                  <Plus size={14} /> Add Item
                 </button>
               </div>
-
               <div className="st-grid">
-                {budgetData.isLoading && <BudgetPlanCompactCardsSkeleton />}
-
-                {/* Debug info */}
-                {!budgetData.isLoading && !budgetData.isError && budgetItems.length === 0 && (
-                  <div style={{ padding: "12px", background: "var(--warning-bg)", borderRadius: "var(--r-md)", fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
-                    No budget items found. Add your first item using the + Add Item button.
-                  </div>
-                )}
-
-                {!budgetData.isLoading && !budgetData.isError && budgetItems.map((item) => (
-                  <div key={item.id} className="st-card bp-compact-card" onClick={() => openEditItemModal(item)} style={{ cursor: 'pointer' }}>
-                    <div className="bp-two-line-head">
-                      <div className="bp-two-line-title-wrap">
-                        <span className="st-bank-fallback" style={{ backgroundColor: '#1a8f58', width: '24px', height: '24px', fontSize: '12px' }}>
-                          📋
-                        </span>
-                        <h5 className="bp-two-line-title">{item.title}</h5>
+                {planQuery.isLoading && <BudgetPlanCompactCardsSkeleton />}
+                {!planQuery.isLoading && setupItems.map((item) => {
+                  const destinationName = item.destinationSubAccount?.name ?? (item.destinationSubAccountId ? subAccountNameById.get(item.destinationSubAccountId) : null);
+                  return (
+                    <div key={item.id} className="st-card bp-compact-card">
+                      <div className="bp-compact-row">
+                        <div className="bp-compact-left">
+                          <IconTile icon={ListChecks} tone="item" />
+                          <div className="bp-compact-info">
+                            <span className="bp-compact-title">{item.title}</span>
+                            <span className="bp-compact-meta">
+                              {item.isMonthly ? "Recurring monthly" : "Optional template"}
+                              {destinationName ? ` | ${destinationName}` : ""}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="bp-compact-right">
+                          <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
+                          <button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupItem(item)} title="Edit setup item" aria-label={`Edit ${item.title}`}>
+                            <Pencil size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); openEditItemModal(item); }} title="Edit">
-                        ✏️
-                      </button>
                     </div>
-                    <div className="bp-two-line-amount">{formatCents(item.amountCents)}</div>
-                  </div>
-                ))}
-
-                {!budgetData.isLoading && !budgetData.isError && budgetItems.length === 0 && (
-                  <div className="st-grid-empty">
-                    <EmptyState
-                      icon="📋"
-                      title="No budget items"
-                      description="Add your first budget item to start planning where money should be allocated."
-                      action={
-                        <button className="btn btn-primary" onClick={openAddItemModal}>
-                          + Add First Item
-                        </button>
-                      }
-                    />
+                  );
+                })}
+                {!planQuery.isLoading && setupItems.length === 0 && (
+                  <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center", color: "var(--text-secondary)", fontSize: "13px" }}>
+                    No setup budget items
                   </div>
                 )}
               </div>
             </div>
           </div>
-        </>
+        </section>
       )}
 
-      {/* Budget Item Modal - Add/Edit */}
-      {isAddItemModalOpen && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeItemModal)}>
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="st-modal-header">
-              <h3>{editingItemId ? "Edit Budget Item" : "Add Budget Item"}</h3>
-              <button className="st-close-btn" onClick={closeItemModal}>✕</button>
-            </div>
-            <form className="st-modal-form" onSubmit={onSubmitItem}>
-              <div className="st-form-grid">
+      {itemModal && (
+        <ModalShell
+          title={`${itemModal.id ? "Edit" : "Add"} ${itemModal.scope === "template" ? "Setup" : "Monthly"} Item`}
+          onClose={closeItemModal}
+          closeDisabled={itemSaving || deleteEntity.isPending}
+        >
+          <form className="st-modal-form" onSubmit={saveItem}>
+            <div className="st-form-grid">
+              <div className="form-group st-span-2">
+                <label className="label" htmlFor="budget-item-title">Title</label>
+                <input id="budget-item-title" className="input" value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} maxLength={200} required autoFocus />
+              </div>
+              <div className="form-group st-span-2">
+                <label className="label">Amount</label>
+                <NumericCalculatorInput value={itemAmount} onValueChange={setItemAmount} min="0" step="0.01" placeholder="0.00" required />
+              </div>
+              {itemModal.scope === "template" && (
                 <div className="form-group st-span-2">
-                  <label className="label">Title</label>
-                  <input
-                    className="input"
-                    placeholder="e.g., Groceries"
-                    value={itemTitle}
-                    onChange={(e) => setItemTitle(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="label">Amount</label>
-                  <NumericCalculatorInput
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={itemAmount}
-                    onValueChange={setItemAmount}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="label">
-                    <input type="checkbox" checked={itemIsMonthly} onChange={(e) => setItemIsMonthly(e.target.checked)} /> Monthly recurring
+                  <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <input type="checkbox" checked={itemIsMonthly} onChange={(event) => setItemIsMonthly(event.target.checked)} />
+                    Include when starting a month from Setup
                   </label>
                 </div>
-                <div className="form-group st-span-2">
-                  <label className="label">Destination Sub-Account (optional)</label>
-                  <select className="input" value={itemDestinationId} onChange={(e) => setItemDestinationId(e.target.value)}>
-                    <option value="">Select sub-account...</option>
-                    {subAccounts.map((sa) => (
-                      <option key={sa.id} value={sa.id}>{sa.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {(createBudgetItem.isError || updateBudgetItem.isError) && (
-                <div className="st-error">
-                  Failed to save: {(createBudgetItem.error as Error)?.message || (updateBudgetItem.error as Error)?.message || "Unknown error"}
-                </div>
               )}
-              <div className="st-modal-actions">
-                {editingItemId && (
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => editingItemId && confirmDeleteItem(editingItemId)}
-                    disabled={deleteItem.isPending}
-                  >
-                    {deleteItem.isPending ? "Deleting..." : "Delete"}
-                  </button>
-                )}
-                <div style={{ flex: 1 }} />
-                <button type="button" className="btn btn-ghost" onClick={closeItemModal}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={createBudgetItem.isPending || updateBudgetItem.isPending}
-                >
-                  {editingItemId
-                    ? (updateBudgetItem.isPending ? "Saving..." : "Save Changes")
-                    : (createBudgetItem.isPending ? "Adding..." : "Add Item")}
-                </button>
+              <div className="form-group st-span-2">
+                <label className="label" htmlFor="budget-item-destination">Destination Sub-Account (optional)</label>
+                <select id="budget-item-destination" className="input" value={itemDestinationId} onChange={(event) => setItemDestinationId(event.target.value)}>
+                  <option value="">No destination</option>
+                  {subAccounts.map((subAccount) => <option key={subAccount.id} value={subAccount.id}>{subAccount.name}</option>)}
+                </select>
               </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <ErrorMessage error={itemError} />
+            <div className="st-modal-actions">
+              {itemModal.id && (
+                <button
+                  className="btn btn-danger"
+                  type="button"
+                  onClick={() => removeEntity(itemModal.id!, itemModal.scope === "template" ? "templateItem" : "monthlyItem", "this budget item")}
+                  disabled={itemSaving || deleteEntity.isPending}
+                >
+                  <Trash2 size={15} /> {deleteEntity.isPending ? "Deleting..." : "Delete"}
+                </button>
+              )}
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-ghost" type="button" onClick={closeItemModal} disabled={itemSaving || deleteEntity.isPending}>Cancel</button>
+              <button className="btn btn-primary" type="submit" disabled={itemSaving || deleteEntity.isPending}>
+                {itemSaving ? "Saving..." : itemModal.id ? "Save Changes" : "Add Item"}
+              </button>
+            </div>
+          </form>
+        </ModalShell>
       )}
 
-      {/* Budget Source Modal - Add/Edit */}
-      {isAddSourceModalOpen && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeSourceModal)}>
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="st-modal-header">
-              <h3>
-                {editingSourceId || editingMonthlySourceId
-                  ? "Edit Source"
-                  : sourceModalScope === "monthly"
-                    ? "Add Source"
-                    : "Add Template Source"}
-              </h3>
-              <button className="st-close-btn" onClick={closeSourceModal}>✕</button>
-            </div>
-            <form className="st-modal-form" onSubmit={onSubmitSource}>
-              <div className="st-form-grid">
-                <div className="form-group st-span-2">
-                  <label className="label">Title</label>
-                  <input
-                    className="input"
-                    placeholder="e.g., Salary"
-                    value={sourceTitle}
-                    onChange={(e) => setSourceTitle(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group st-span-2">
-                  <label className="label">Amount</label>
-                  <NumericCalculatorInput
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={sourceAmount}
-                    onValueChange={setSourceAmount}
-                    required
-                  />
-                </div>
-                <div className="form-group st-span-2">
-                  <label className="label">Owner <span style={{ color: 'var(--danger)' }}>*</span></label>
-                  <select className="input" value={sourceOwnerId} onChange={(e) => setSourceOwnerId(e.target.value)} required>
-                    <option value="">Select workspace member...</option>
-                    {members.map((m) => (
-                      <option key={m.user.id} value={m.user.id}>{m.user.name || m.user.email || 'Unknown'}</option>
-                    ))}
-                  </select>
-                  <small style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                    This source is tied to the selected workspace member
-                  </small>
-                </div>
+      {sourceModal && (
+        <ModalShell
+          title={`${sourceModal.id ? "Edit" : "Add"} ${sourceModal.scope === "template" ? "Setup" : "Monthly"} Source`}
+          onClose={closeSourceModal}
+          closeDisabled={sourceSaving || deleteEntity.isPending}
+        >
+          <form className="st-modal-form" onSubmit={saveSource}>
+            <div className="st-form-grid">
+              <div className="form-group st-span-2">
+                <label className="label" htmlFor="budget-source-title">Title</label>
+                <input id="budget-source-title" className="input" value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} maxLength={200} required autoFocus />
               </div>
-              {(createBudgetSource.isError || createMonthlyBudgetSource.isError || updateBudgetSource.isError || updateMonthlyBudgetSource.isError) && (
-                <div className="st-error">
-                  Failed to save: {(createMonthlyBudgetSource.error as Error)?.message || (createBudgetSource.error as Error)?.message || (updateMonthlyBudgetSource.error as Error)?.message || (updateBudgetSource.error as Error)?.message || "Unknown error"}
-                </div>
-              )}
-              <div className="st-modal-actions">
-                {editingSourceId && (
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => editingSourceId && confirmDeleteSource(editingSourceId)}
-                    disabled={deleteSource.isPending}
-                  >
-                    {deleteSource.isPending ? "Deleting..." : "Delete"}
-                  </button>
-                )}
-                {editingMonthlySourceId && (
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => editingMonthlySourceId && confirmDeleteMonthlySource(editingMonthlySourceId)}
-                    disabled={deleteMonthlySource.isPending}
-                  >
-                    {deleteMonthlySource.isPending ? "Deleting..." : "Delete"}
-                  </button>
-                )}
-                <div style={{ flex: 1 }} />
-                <button type="button" className="btn btn-ghost" onClick={closeSourceModal}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={createBudgetSource.isPending || createMonthlyBudgetSource.isPending || updateBudgetSource.isPending || updateMonthlyBudgetSource.isPending || !sourceOwnerId}
-                >
-                  {editingSourceId || editingMonthlySourceId
-                    ? ((updateBudgetSource.isPending || updateMonthlyBudgetSource.isPending) ? "Saving..." : "Save Changes")
-                    : ((createBudgetSource.isPending || createMonthlyBudgetSource.isPending) ? "Adding..." : "Add Source")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Allocation Modal */}
-      {editingAllocationTarget !== null && editingAllocationSummary && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditAllocationModal)}>
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="st-modal-header">
-              <h3>Edit Budget Item</h3>
-              <button className="st-close-btn" onClick={closeEditAllocationModal}>✕</button>
-            </div>
-            <div className="st-modal-form">
-              <div className="form-group">
-                <label className="label">Budget Item</label>
-                <div className="input" style={{ background: "var(--bg-subtle)" }}>
-                  {editingAllocationSummary.title}
-                </div>
-              </div>
-              <div className="form-group">
+              <div className="form-group st-span-2">
                 <label className="label">Amount</label>
-                <NumericCalculatorInput
-                  min="0"
-                  step="0.01"
-                  value={editingAllocationAmount}
-                  onValueChange={setEditingAllocationAmount}
-                  autoFocus
-                />
+                <NumericCalculatorInput value={sourceAmount} onValueChange={setSourceAmount} min="0" step="0.01" placeholder="0.00" required />
               </div>
-              <div className="st-modal-actions" style={{ marginTop: "16px" }}>
-                <button type="button" className="btn btn-danger" onClick={removeAllocation}>
-                  Remove Budget Item
-                </button>
-                <div style={{ flex: 1 }} />
-                <button type="button" className="btn btn-ghost" onClick={closeEditAllocationModal}>
-                  Cancel
-                </button>
-                <button type="button" className="btn btn-primary" onClick={saveAllocationEdit}>
-                  Save Changes
-                </button>
+              <div className="form-group st-span-2">
+                <label className="label" htmlFor="budget-source-owner">Owner</label>
+                <select id="budget-source-owner" className="input" value={sourceOwnerId} onChange={(event) => setSourceOwnerId(event.target.value)} required>
+                  <option value="">Select workspace member</option>
+                  {members.map((member) => <option key={member.user.id} value={member.user.id}>{personLabel(member.user)}</option>)}
+                </select>
               </div>
             </div>
-          </div>
-        </div>
+            <ErrorMessage error={sourceError} />
+            <div className="st-modal-actions">
+              {sourceModal.id && (
+                <button
+                  className="btn btn-danger"
+                  type="button"
+                  onClick={() => removeEntity(sourceModal.id!, sourceModal.scope === "template" ? "templateSource" : "monthlySource", "this budget source")}
+                  disabled={sourceSaving || deleteEntity.isPending}
+                >
+                  <Trash2 size={15} /> {deleteEntity.isPending ? "Deleting..." : "Delete"}
+                </button>
+              )}
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-ghost" type="button" onClick={closeSourceModal} disabled={sourceSaving || deleteEntity.isPending}>Cancel</button>
+              <button className="btn btn-primary" type="submit" disabled={sourceSaving || deleteEntity.isPending || !sourceOwnerId}>
+                {sourceSaving ? "Saving..." : sourceModal.id ? "Save Changes" : "Add Source"}
+              </button>
+            </div>
+          </form>
+        </ModalShell>
       )}
 
-      {isAddAllocationModalOpen && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAddAllocationModal)}>
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="st-modal-header">
-              <h3>Add Allocation</h3>
-              <button className="st-close-btn" onClick={closeAddAllocationModal}>âœ•</button>
-            </div>
-            <form className="st-modal-form" onSubmit={saveAddedAllocation}>
-              <div className="st-form-grid">
-                <div className="form-group st-span-2">
-                  <label className="label">Budget Item</label>
-                  <select className="input" value={allocationItemId} onChange={(e) => setAllocationItemId(e.target.value)} required>
-                    <option value="">Select budget item...</option>
-                    {availableAllocationItemGroups.map((group) => (
-                      <optgroup key={group.id} label={group.label}>
-                        {group.items.map((item) => (
-                          <option key={item.id} value={item.id}>{item.title}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group st-span-2">
-                  <label className="label">Source</label>
-                  <select className="input" value={allocationSourceId} onChange={(e) => setAllocationSourceId(e.target.value)} required>
-                    <option value="">Select source...</option>
-                    {availableAllocationSources.map((source) => (
-                      <option key={source.budgetSourceId} value={source.budgetSourceId}>
-                        {source.title}{source.isDraft ? " (new)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group st-span-2">
-                  <label className="label">Amount</label>
-                  <NumericCalculatorInput
-                    min="0"
-                    step="0.01"
-                    value={allocationAmount}
-                    onValueChange={setAllocationAmount}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeAddAllocationModal}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={addMonthlyAllocation.isPending || availableAllocationItems.length === 0 || availableAllocationSources.length === 0}
-                >
-                  {addMonthlyAllocation.isPending ? "Adding..." : "Add Allocation"}
-                </button>
-              </div>
-              <p className="bp-hint" style={{ marginTop: "8px" }}>
-                This saves a draft allocation for {MONTHS[selectedMonth - 1]} {selectedYear}. Only the total sources and total budget items need to match.
+      {showConfirmModal && monthlyPlan && (
+        <ModalShell title="Confirm Monthly Budget" onClose={() => setShowConfirmModal(false)} closeDisabled={confirmPlan.isPending}>
+          <div className="st-modal-form">
+            <div style={{ padding: "20px", display: "grid", gap: "16px" }}>
+              <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.5 }}>
+                Confirm {MONTHS[selectedMonth - 1]} {selectedYear}. Confirmed plans are read-only, and linked budget item amounts will be applied to their destination sub-accounts.
               </p>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Edit Modal - opened from Source Breakdown and Budgeted Items cards */}
-      {quickEditTarget && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeQuickEditModal)}>
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="st-modal-header">
-              <h3>{quickEditTarget.type === "item" ? "Edit Budgeted Item" : "Edit Source"}</h3>
-              <button className="st-close-btn" onClick={closeQuickEditModal}>✕</button>
-            </div>
-            <form className="st-modal-form" onSubmit={saveQuickEdit}>
-              <div className="st-form-grid">
-                <div className="form-group st-span-2">
-                  <label className="label">Description</label>
-                  <input
-                    className="input"
-                    value={quickEditDescription}
-                    onChange={(e) => setQuickEditDescription(e.target.value)}
-                    required
-                  />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div className="bp-stat">
+                  <div className="bp-stat-label">Sources</div>
+                  <div className="bp-item-amount" style={{ marginTop: "4px" }}>{formatCents(sourceTotalCents)}</div>
                 </div>
-                <div className="form-group st-span-2">
-                  <label className="label">Amount</label>
-                  <NumericCalculatorInput
-                    step="0.01"
-                    min="0"
-                    value={quickEditAmount}
-                    onValueChange={setQuickEditAmount}
-                    required
-                  />
+                <div className="bp-stat">
+                  <div className="bp-stat-label">Budget Items</div>
+                  <div className="bp-item-amount" style={{ marginTop: "4px" }}>{formatCents(itemTotalCents)}</div>
                 </div>
               </div>
-              {(quickUpdateBudgetItem.isError || quickUpdateBudgetSource.isError) && (
-                <div className="st-error">
-                  Failed to save: {(quickUpdateBudgetItem.error as Error)?.message || (quickUpdateBudgetSource.error as Error)?.message || "Unknown error"}
-                </div>
-              )}
-              <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeQuickEditModal}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={quickUpdateBudgetItem.isPending || quickUpdateBudgetSource.isPending}
-                >
-                  {quickUpdateBudgetItem.isPending || quickUpdateBudgetSource.isPending ? "Saving..." : "Save"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Confirm & Save Progress Dialog */}
-      {showConfirmDialog && (
-        <div className="st-modal-overlay">
-          <div className="st-modal" style={{ maxWidth: "400px" }}>
-            <div className="st-modal-header">
-              <h3>{confirmProgress === 0 ? "Confirm Monthly Budget" : "Finalizing..."}</h3>
+              {confirmPlan.error && <div role="alert" style={{ color: "var(--danger)", fontSize: "13px" }}>{confirmPlan.error.message}</div>}
             </div>
-            <div className="st-modal-form" style={{ padding: "24px" }}>
-              {confirmProgress === 0 ? (
-                <>
-                  <p style={{ marginBottom: "20px", fontSize: "14px", color: "var(--text-secondary)" }}>
-                    This will finalize the monthly budget for {MONTHS[selectedMonth - 1]} {selectedYear}.
-                    {pendingConfirmApplyToSubAccounts && " Allocated amounts will be added to sub-accounts."}
-                  </p>
-                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-                    <button className="btn btn-ghost" onClick={resetConfirmDialog}>
-                      Cancel
-                    </button>
-                    <button className="btn btn-primary" onClick={executeConfirmMonthly}>
-                      Save & Finalize
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ textAlign: "center", marginBottom: "20px" }}>
-                    <div className="generating-spinner" style={{ margin: "0 auto 16px" }} />
-                    <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{confirmStage}</div>
-                  </div>
-                  <div className="progress-track">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${confirmProgress}%` }}
-                    />
-                  </div>
-                  <div style={{ textAlign: "center", marginTop: "8px", fontSize: "12px", color: "var(--text-tertiary)" }}>
-                    {confirmProgress}%
-                  </div>
-                </>
-              )}
+            <div className="st-modal-actions">
+              <button className="btn btn-ghost" type="button" onClick={() => setShowConfirmModal(false)} disabled={confirmPlan.isPending}>Cancel</button>
+              <button className="btn btn-primary" type="button" onClick={() => confirmPlan.mutate({ planId: monthlyPlan.id })} disabled={confirmPlan.isPending || !canConfirm}>
+                <Check size={16} /> {confirmPlan.isPending ? "Confirming..." : "Confirm"}
+              </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   );
