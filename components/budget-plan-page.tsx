@@ -5,6 +5,7 @@ import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPla
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { summarizeMonthlyBudgetPlan } from "@/lib/monthly-budget-plan.mjs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -264,17 +265,12 @@ export function BudgetPlanPage() {
     () => new Map(members.map((member) => [member.user.id, member.user])),
     [members],
   );
-  const sourceTotalCents = useMemo(
-    () => monthlySources.reduce((total, source) => total + source.amountCents, 0),
-    [monthlySources],
+  const planSummary = useMemo(
+    () => summarizeMonthlyBudgetPlan(monthlySources, monthlyItems),
+    [monthlyItems, monthlySources],
   );
-  const itemTotalCents = useMemo(
-    () => monthlyItems.reduce((total, item) => total + item.amountCents, 0),
-    [monthlyItems],
-  );
-  const differenceCents = sourceTotalCents - itemTotalCents;
-  const canConfirm =
-    isDraft && monthlySources.length > 0 && monthlyItems.length > 0 && differenceCents === 0;
+  const { sourceTotalCents, itemTotalCents, differenceCents } = planSummary;
+  const canConfirm = isDraft && planSummary.canConfirm;
   const hasSetupSeed = setupSources.length > 0 || setupItems.some((item) => item.isMonthly);
 
   const invalidateCurrentPlan = () =>

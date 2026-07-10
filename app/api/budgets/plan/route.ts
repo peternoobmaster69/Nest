@@ -1,4 +1,8 @@
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
+import {
+  getUnappliedMonthlyBudgetItemCents,
+  summarizeMonthlyBudgetPlan,
+} from "@/lib/monthly-budget-plan.mjs";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
@@ -583,12 +587,11 @@ export async function POST(request: Request) {
             );
           }
 
-          const sourceTotalCents = plan.sources.reduce((sum, source) => sum + source.amountCents, 0);
-          const itemTotalCents = plan.items.reduce((sum, item) => sum + item.amountCents, 0);
-          if (sourceTotalCents !== itemTotalCents) {
+          const planSummary = summarizeMonthlyBudgetPlan(plan.sources, plan.items);
+          if (!planSummary.isBalanced) {
             throw new BudgetPlanRequestError(
               400,
-              `Budget source total (${sourceTotalCents}) must equal budget item total (${itemTotalCents}).`,
+              `Budget source total (${planSummary.sourceTotalCents}) must equal budget item total (${planSummary.itemTotalCents}).`,
             );
           }
 
@@ -637,7 +640,7 @@ export async function POST(request: Request) {
             const deltaByDestination = new Map<string, number>();
             const transactionRows: Prisma.TransactionCreateManyInput[] = [];
             for (const item of plan.items) {
-              const deltaCents = Math.max(0, item.amountCents - item.appliedCents);
+              const deltaCents = getUnappliedMonthlyBudgetItemCents(item.amountCents, item.appliedCents);
               if (!item.destinationSubAccountId || deltaCents <= 0) continue;
               const destination = destinationById.get(item.destinationSubAccountId);
               if (!destination) {
