@@ -31,6 +31,8 @@ type FrequentFlyer = {
   currentMiles: number;
   targetMiles: number | null;
   expiryWarning: number;
+  mileNeverExpire: boolean;
+  validityPeriodYears: number;
   notes: string | null;
   isActive: boolean;
   expirySummary: Array<{
@@ -144,6 +146,17 @@ function toDateInputValue(value: string): string {
   return value.slice(0, 10);
 }
 
+function todayDateInputValue(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function calculateExpiryDateInputValue(dateValue: string, years: number): string {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return "";
+  const expiryDate = new Date(Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth() + 1, 0));
+  return expiryDate.toISOString().slice(0, 10);
+}
+
 const EARN_PAGE_SIZE = 8;
 const REDEMPTION_PAGE_SIZE = 6;
 
@@ -207,9 +220,11 @@ export function RewardsPage({
   const [ffFormMiles, setFFFormMiles] = useState("");
   const [ffFormTarget, setFFFormTarget] = useState("");
   const [ffFormExpiry, setFFFormExpiry] = useState("6");
+  const [ffFormMileNeverExpire, setFFFormMileNeverExpire] = useState(false);
+  const [ffFormValidityPeriodYears, setFFFormValidityPeriodYears] = useState("3");
   const [ffFormNotes, setFFFormNotes] = useState("");
   const [openHistoryFFId, setOpenHistoryFFId] = useState<string | null>(null);
-  const [earnDate, setEarnDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [earnDate, setEarnDate] = useState(todayDateInputValue);
   const [earnMiles, setEarnMiles] = useState("");
   const [earnTitle, setEarnTitle] = useState("");
   const [earnExpiryDate, setEarnExpiryDate] = useState("");
@@ -322,6 +337,8 @@ export function RewardsPage({
       currentMiles: number;
       targetMiles?: number;
       expiryWarning?: number;
+      mileNeverExpire: boolean;
+      validityPeriodYears: number;
       notes?: string;
     }) =>
       fetch("/api/rewards/frequent-flyer", {
@@ -344,6 +361,8 @@ export function RewardsPage({
       currentMiles: number;
       targetMiles?: number;
       expiryWarning?: number;
+      mileNeverExpire: boolean;
+      validityPeriodYears: number;
       notes?: string;
     }) =>
       fetch("/api/rewards/frequent-flyer", {
@@ -639,6 +658,8 @@ export function RewardsPage({
     setFFFormMiles("");
     setFFFormTarget("");
     setFFFormExpiry("6");
+    setFFFormMileNeverExpire(false);
+    setFFFormValidityPeriodYears("3");
     setFFFormNotes("");
   };
 
@@ -662,6 +683,8 @@ export function RewardsPage({
     setFFFormMiles(String(ff.currentMiles));
     setFFFormTarget(ff.targetMiles ? String(ff.targetMiles) : "");
     setFFFormExpiry(String(ff.expiryWarning));
+    setFFFormMileNeverExpire(ff.mileNeverExpire);
+    setFFFormValidityPeriodYears(String(ff.validityPeriodYears));
     setFFFormNotes(ff.notes || "");
     setIsFFModalOpen(true);
   };
@@ -676,6 +699,8 @@ export function RewardsPage({
       currentMiles: parseInt(ffFormMiles) || 0,
       targetMiles: ffFormTarget ? parseInt(ffFormTarget) : undefined,
       expiryWarning: parseInt(ffFormExpiry) || 6,
+      mileNeverExpire: ffFormMileNeverExpire,
+      validityPeriodYears: parseInt(ffFormValidityPeriodYears, 10) || 3,
       notes: ffFormNotes || undefined,
     };
     if (editingFFId) {
@@ -809,6 +834,21 @@ export function RewardsPage({
   useEffect(() => {
     if (redemptionPage > redemptionTotalPages) setRedemptionPage(redemptionTotalPages);
   }, [redemptionPage, redemptionTotalPages]);
+
+  useEffect(() => {
+    if (!isAddEarnModalOpen || !selectedHistoryFrequentFlyer) return;
+    if (selectedHistoryFrequentFlyer.mileNeverExpire) {
+      setEarnExpiryDate("");
+      return;
+    }
+    setEarnExpiryDate(
+      calculateExpiryDateInputValue(earnDate, selectedHistoryFrequentFlyer.validityPeriodYears),
+    );
+  }, [
+    earnDate,
+    isAddEarnModalOpen,
+    selectedHistoryFrequentFlyer,
+  ]);
 
   const activeTabAction =
     activeTab === "credit-cards" && data?.cardsWithoutRewards.length ? (
@@ -1094,6 +1134,7 @@ export function RewardsPage({
                   <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
                     miles
                     {ff.targetMiles && ` / ${formatNumber(ff.targetMiles)} goal`}
+                    {` • ${ff.mileNeverExpire ? "never expires" : `valid ${ff.validityPeriodYears} years`}`}
                   </div>
                 </div>
                 {ff.expirySummary.length > 0 && (
@@ -1928,6 +1969,40 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
+                  <label className="label" htmlFor="ff-mile-never-expire">Miles Never Expire</label>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      minHeight: "36px",
+                      fontSize: "13px",
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    <input
+                      id="ff-mile-never-expire"
+                      type="checkbox"
+                      checked={ffFormMileNeverExpire}
+                      onChange={(e) => setFFFormMileNeverExpire(e.target.checked)}
+                    />
+                    Never expire
+                  </label>
+                </div>
+                {!ffFormMileNeverExpire && (
+                  <div className="form-group st-span-2">
+                    <label className="label">Validity Period (years)</label>
+                    <NumericCalculatorInput
+                      min="1"
+                      allowDecimal={false}
+                      placeholder="3"
+                      value={ffFormValidityPeriodYears}
+                      onValueChange={setFFFormValidityPeriodYears}
+                      required
+                    />
+                  </div>
+                )}
+                <div className="form-group st-span-2">
                   <label className="label">Notes</label>
                   <textarea
                     className="input"
@@ -2023,12 +2098,13 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Expiry Date (optional)</label>
+                  <label className="label">Expiry Date</label>
                   <input
                     className="input"
                     type="date"
                     value={earnExpiryDate}
                     onChange={(e) => setEarnExpiryDate(e.target.value)}
+                    disabled={selectedHistoryFrequentFlyer.mileNeverExpire}
                   />
                 </div>
               </div>

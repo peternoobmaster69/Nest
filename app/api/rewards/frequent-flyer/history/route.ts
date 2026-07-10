@@ -50,10 +50,15 @@ function toDate(value?: string | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function expiryLastDayOfEarnMonth(earnDate: string, years: number): Date {
+  const date = new Date(earnDate);
+  return new Date(Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth() + 1, 0));
+}
+
 async function ensureFrequentFlyer(workspaceId: string, frequentFlyerId: string) {
   const frequentFlyer = await prisma.frequentFlyerAccount.findFirst({
     where: { id: frequentFlyerId, workspaceId, isActive: true },
-    select: { id: true, programName: true },
+    select: { id: true, programName: true, mileNeverExpire: true, validityPeriodYears: true },
   });
   if (!frequentFlyer) {
     throw new Error("Frequent flyer account not found");
@@ -225,10 +230,16 @@ export async function POST(request: Request) {
     }
 
     const payload = parsed.data;
-    await ensureFrequentFlyer(workspaceId, payload.frequentFlyerId);
+    const frequentFlyer = await ensureFrequentFlyer(workspaceId, payload.frequentFlyerId);
 
     await prisma.$transaction(async (tx) => {
       if (payload.type === "earn") {
+        const expiryDate = frequentFlyer.mileNeverExpire
+          ? null
+          : payload.expiryDate
+            ? toDate(payload.expiryDate)
+            : expiryLastDayOfEarnMonth(payload.date, frequentFlyer.validityPeriodYears);
+
         await tx.mileProgram.create({
           data: {
             workspaceId,
@@ -237,7 +248,7 @@ export async function POST(request: Request) {
             miles: payload.miles,
             balanceMiles: payload.miles,
             title: payload.title ?? null,
-            expiryDate: toDate(payload.expiryDate),
+            expiryDate,
             firstRedeemedDate: toDate(payload.firstRedeemedDate),
           },
         });
