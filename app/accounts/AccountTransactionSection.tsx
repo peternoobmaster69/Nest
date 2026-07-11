@@ -2,6 +2,9 @@
 "use client";
 
 import { useState } from "react";
+import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { formatCurrencyAmount, formatLocalDate } from "@/lib/presentation";
+import { useToast } from "@/components/toast-provider";
 
 type Transaction = {
   Id: string;
@@ -25,6 +28,7 @@ export default function AccountTransactionsSection({
   currency,
   initialTransactions,
 }: Props) {
+  const toast = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>(
     initialTransactions
   );
@@ -108,7 +112,7 @@ export default function AccountTransactionsSection({
 
   // ---------- DELETE ----------
   async function handleDelete(id: string) {
-    if (!confirm("Delete this transaction?")) return;
+    if (!(await confirmDestructiveAction("Delete this transaction?"))) return;
 
     setLoadingDeleteId(id);
     setError(null);
@@ -127,6 +131,7 @@ export default function AccountTransactionsSection({
       }
 
       setTransactions((prev) => prev.filter((t) => t.Id !== id));
+      toast.success("Transaction deleted");
     } catch (err) {
       console.error(err);
       setError("Something went wrong");
@@ -207,40 +212,40 @@ export default function AccountTransactionsSection({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="page-stack">
       {/* Header + add form */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">
+      <div className="section-header">
+        <h2 className="section-title">
           Transactions
         </h2>
-        <p className="text-xs text-slate-500">
+        <p className="page-header-description">
           Add, edit, or delete transactions for this account.
         </p>
       </div>
 
       <form
         onSubmit={handleAdd}
-        className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-sm sm:grid-cols-5"
+        className="form-grid account-transaction-form"
       >
         <div className="sm:col-span-1">
-          <label className="mb-1 block text-xs text-slate-600">Amount</label>
+          <label className="label">Amount</label>
           <input
             type="number"
             step="0.01"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded-md border px-2 py-1"
+            className="input"
             placeholder="0.00"
             required
           />
         </div>
 
         <div className="sm:col-span-1">
-          <label className="mb-1 block text-xs text-slate-600">Type</label>
+          <label className="label">Type</label>
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="w-full rounded-md border px-2 py-1"
+            className="input"
           >
             <option value="expense">Expense (-)</option>
             <option value="income">Income (+)</option>
@@ -249,42 +254,42 @@ export default function AccountTransactionsSection({
         </div>
 
         <div className="sm:col-span-1">
-          <label className="mb-1 block text-xs text-slate-600">
+          <label className="label">
             Category
           </label>
           <input
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="w-full rounded-md border px-2 py-1"
+            className="input"
             placeholder="Food, Salary, etc."
             required
           />
         </div>
 
         <div className="sm:col-span-1">
-          <label className="mb-1 block text-xs text-slate-600">Date</label>
+          <label className="label">Date</label>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-md border px-2 py-1"
+            className="input"
             required
           />
         </div>
 
         <div className="sm:col-span-1">
-          <label className="mb-1 block text-xs text-slate-600">Note</label>
+          <label className="label">Note</label>
           <div className="flex gap-2">
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full rounded-md border px-2 py-1"
+              className="input"
               placeholder="Optional"
             />
             <button
               type="submit"
               disabled={loadingAdd}
-              className="whitespace-nowrap rounded-md bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:shadow-[0_0_10px_rgba(15,23,42,0.6)] transition disabled:opacity-60"
+              className="btn btn-primary btn-md"
             >
               {loadingAdd ? "Adding…" : "Add"}
             </button>
@@ -293,20 +298,18 @@ export default function AccountTransactionsSection({
       </form>
 
       {error && (
-        <p className="text-xs text-red-600">
+        <p className="form-error" role="alert">
           {error}
         </p>
       )}
 
       {/* Transactions list */}
       {transactions.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          No transactions yet for this account.
-        </p>
+        <div className="empty-state"><p className="empty-state-desc">No transactions yet for this account.</p></div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+        <div className="cct-table-wrapper">
+          <table className="cct-table responsive-data-table">
+            <thead>
               <tr>
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">Category</th>
@@ -323,29 +326,29 @@ export default function AccountTransactionsSection({
                 return (
                   <tr
                     key={t.Id}
-                    className="border-t border-slate-100 hover:bg-slate-50/70"
+                    className="account-transaction-row"
                   >
                     {/* DATE */}
-                    <td className="px-3 py-2 text-xs text-slate-600">
+                    <td data-label="Date">
                       {isEditing ? (
                         <input
                           type="date"
                           value={editDate}
                           onChange={(e) => setEditDate(e.target.value)}
-                          className="rounded-md border px-2 py-1 text-xs"
+                          className="input"
                         />
                       ) : (
-                        new Date(t.Date).toLocaleDateString()
+                        formatLocalDate(t.Date)
                       )}
                     </td>
 
                     {/* CATEGORY */}
-                    <td className="px-3 py-2 text-xs text-slate-800">
+                    <td data-label="Category">
                       {isEditing ? (
                         <input
                           value={editCategory}
                           onChange={(e) => setEditCategory(e.target.value)}
-                          className="w-full rounded-md border px-2 py-1 text-xs"
+                          className="input"
                         />
                       ) : (
                         t.Category
@@ -353,12 +356,12 @@ export default function AccountTransactionsSection({
                     </td>
 
                     {/* NOTE */}
-                    <td className="px-3 py-2 text-xs text-slate-500">
+                    <td data-label="Note">
                       {isEditing ? (
                         <input
                           value={editNote}
                           onChange={(e) => setEditNote(e.target.value)}
-                          className="w-full rounded-md border px-2 py-1 text-xs"
+                          className="input"
                         />
                       ) : (
                         t.Note || "\u2014"
@@ -366,17 +369,13 @@ export default function AccountTransactionsSection({
                     </td>
 
                     {/* AMOUNT */}
-                    <td
-                      className={`px-3 py-2 text-right text-xs font-semibold ${
-                        isNegative ? "text-red-600" : "text-emerald-600"
-                      }`}
-                    >
+                    <td data-label="Amount" className={isNegative ? "negative" : "positive"}>
                       {isEditing ? (
                         <div className="flex items-center justify-end gap-2">
                           <select
                             value={editType}
                             onChange={(e) => setEditType(e.target.value)}
-                            className="rounded-md border px-2 py-1 text-[11px]"
+                            className="input"
                           >
                             <option value="expense">Expense (-)</option>
                             <option value="income">Income (+)</option>
@@ -389,30 +388,25 @@ export default function AccountTransactionsSection({
                             onChange={(e) =>
                               setEditAmount(e.target.value)
                             }
-                            className="w-24 rounded-md border px-2 py-1 text-xs text-right"
+                            className="input"
                           />
                         </div>
                       ) : (
                         <>
-                          {isNegative ? "-" : "+"}{" "}
-                          {currency}{" "}
-                          {Math.abs(t.Amount).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
+                          {isNegative ? "−" : "+"}{formatCurrencyAmount(Math.abs(t.Amount), currency)}
                         </>
                       )}
                     </td>
 
                     {/* ACTIONS */}
-                    <td className="px-3 py-2 text-right text-xs">
+                    <td data-label="Actions" className="cct-tx-actions">
                       {isEditing ? (
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => handleEditSave(t.Id)}
                             disabled={loadingEditId === t.Id}
-                            className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 transition disabled:opacity-60"
+                            className="btn btn-primary btn-sm"
                           >
                             {loadingEditId === t.Id
                               ? "Saving…"
@@ -421,7 +415,7 @@ export default function AccountTransactionsSection({
                           <button
                             type="button"
                             onClick={handleEditCancel}
-                            className="rounded-md border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100 transition"
+                            className="btn btn-ghost btn-sm"
                           >
                             Cancel
                           </button>
@@ -431,7 +425,7 @@ export default function AccountTransactionsSection({
                           <button
                             type="button"
                             onClick={() => handleEditClick(t)}
-                            className="rounded-md border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100 transition"
+                            className="btn btn-ghost btn-sm"
                           >
                             Edit
                           </button>
@@ -439,7 +433,7 @@ export default function AccountTransactionsSection({
                             type="button"
                             onClick={() => handleDelete(t.Id)}
                             disabled={loadingDeleteId === t.Id}
-                            className="rounded-md border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition disabled:opacity-60"
+                            className="btn btn-destructive btn-sm"
                           >
                             {loadingDeleteId === t.Id
                               ? "Deleting…"

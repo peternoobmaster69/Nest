@@ -4,7 +4,7 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPlanSkeleton";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { summarizeMonthlyBudgetPlan } from "@/lib/monthly-budget-plan.mjs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -167,8 +167,8 @@ function ModalShell({
   return (
     <div
       className="st-modal-overlay"
-      onDoubleClick={(event) => {
-        if (!closeDisabled) closeOnBackdropDoubleClick(event, onClose);
+      onMouseDown={(event) => {
+        if (!closeDisabled) closeOnBackdropClick(event, onClose);
       }}
     >
       <div className="st-modal" onClick={(event) => event.stopPropagation()}>
@@ -575,14 +575,14 @@ export function BudgetPlanPage() {
     }
   };
 
-  const removeEntity = (id: string, type: DeleteType, label: string) => {
-    if (!confirmDestructiveAction(`Delete ${label}?`)) return;
+  const removeEntity = async (id: string, type: DeleteType, label: string) => {
+    if (!(await confirmDestructiveAction(`Delete ${label}?`))) return;
     deleteEntity.mutate({ id, type });
   };
 
-  const handleDiscardDraft = () => {
+  const handleDiscardDraft = async () => {
     if (!monthlyPlan || !isDraft) return;
-    if (!confirmDestructiveAction(`Discard the draft for ${MONTHS[selectedMonth - 1]} ${selectedYear}?`)) return;
+    if (!(await confirmDestructiveAction(`Discard the draft for ${MONTHS[selectedMonth - 1]} ${selectedYear}?`))) return;
     discardDraft.mutate({ planId: monthlyPlan.id });
   };
 

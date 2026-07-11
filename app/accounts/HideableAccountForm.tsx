@@ -14,12 +14,12 @@ export default function HideableAccountForm({ mode, account, defaultVisible = fa
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">{account?.Name}</h2>
+      <div className="account-card-head">
+        <h2 className="account-card-title">Account details</h2>
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          className="text-sm text-slate-600 hover:text-slate-900"
+          className="btn btn-ghost btn-sm"
         >
           {visible ? "Done" : "Edit"}
         </button>

@@ -4,6 +4,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AccountsGridSkeleton } from "@/components/skeletons/AccountsSkeleton";
+import { PageHeader } from "@/components/ui/page-header";
+import { Plus } from "lucide-react";
+import { formatCurrencyAmount } from "@/lib/presentation";
 
 type Account = {
   Id: string;
@@ -54,135 +57,57 @@ export default function AccountsPageClient() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-8xl px-4 py-8">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Accounts</h1>
-
-            {/* Totals */}
-            {accounts.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-2 text-2xl text-emerald-600">
-                {Object.entries(totalsByCurrency).map(([currency, total]) => (
-                  <div
-                    key={currency}
-                    className="inline-flex items-center rounded-full bg-slate-100"
-                  >
-                    <span className="font-semibold">
-                      {currency}{" "}
-                      {total.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <Link
-            href="/accounts/create"
-            className="
-              inline-flex items-center gap-2 rounded-xl
-              bg-slate-900 px-4 py-2 text-sm font-medium text-white
-              shadow-md shadow-slate-400/40
-              transition
-              hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-500/50
-              active:translate-y-0 active:shadow-md
-            "
-          >
-            <span className="text-lg leading-none">+</span>
-            <span>Add account</span>
+    <div className="page-stack">
+      <PageHeader
+        title="Accounts"
+        description="Manage account balances and activity."
+        actions={
+          <Link href="/accounts/create" className="btn btn-primary btn-md">
+            <Plus size={16} aria-hidden="true" /> Add account
           </Link>
-        </div>
-
-        {/* Loading / error */}
-        {loading && <AccountsGridSkeleton />}
-
-        {error && !loading && (
-          <div className="rounded-2xl bg-white p-6 text-sm text-red-600 shadow-sm">
-            {error}
+        }
+      />
+      <section className="card">
+        {accounts.length > 0 ? (
+          <div className="account-summary-row">
+            <span className="section-label">Total balance</span>
+            <div className="account-total-list">
+              {Object.entries(totalsByCurrency).map(([currency, total]) => (
+                <strong key={currency} className="account-total">
+                  {formatCurrencyAmount(total, currency)}
+                </strong>
+              ))}
+            </div>
           </div>
-        )}
+        ) : null}
 
-        {/* Empty state */}
-        {!loading && !error && accounts.length === 0 && (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-12">
-            <p className="mb-3 text-sm text-slate-500">
-              You haven&apos;t added any accounts yet.
-            </p>
-            <Link
-              href="/accounts/create"
-              className="
-                inline-flex items-center gap-2 rounded-xl
-                bg-slate-900 px-4 py-2 text-sm font-medium text-white
-                shadow-md shadow-slate-400/40
-                transition
-                hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-500/50
-              "
-            >
-              <span className="text-lg leading-none">+</span>
-              <span>Add your first account</span>
-            </Link>
+        {loading ? <AccountsGridSkeleton /> : null}
+        {error && !loading ? <div className="state-panel state-panel-error" role="alert">{error}</div> : null}
+
+        {!loading && !error && accounts.length === 0 ? (
+          <div className="empty-state">
+            <p className="empty-state-desc">You haven&apos;t added any accounts yet.</p>
+            <Link href="/accounts/create" className="btn btn-primary btn-md">Add your first account</Link>
           </div>
-        )}
+        ) : null}
 
-        {/* Grid */}
-        {!loading && !error && accounts.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            {accounts.map((acc) => (
-              <Link
-                key={acc.Id}
-                href={`/accounts/${acc.Id}/edit`}
-                className="
-                  group flex flex-col justify-between rounded-2xl border
-                  border-slate-200 bg-white p-4
-                  shadow-sm shadow-slate-200
-                  transition
-                  hover:-translate-y-1 hover:border-slate-300
-                  hover:shadow-lg hover:shadow-slate-300/70
-                "
-              >
-                {/* Top: name + type */}
-                <div className="mb-3 flex items-start justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-sm font-semibold text-slate-900 group-hover:text-slate-950">
-                      {acc.Name}
-                    </h2>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-400">
-                    {acc.Type}
-                  </span>
+        {!loading && !error && accounts.length > 0 ? (
+          <div className="account-grid">
+            {accounts.map((account) => (
+              <Link key={account.Id} href={`/accounts/${account.Id}/edit`} className="card card-interactive account-card">
+                <div className="account-card-head">
+                  <h2 className="account-card-title">{account.Name}</h2>
+                  <span className="badge badge-neutral">{account.Type}</span>
                 </div>
-
-                <div className="mb-3">
-                  <p
-                    className={`text-xl font-semibold ${
-                      Number(acc.CurrentAmount) <= 0
-                        ? "text-rose-600"
-                        : "text-emerald-600"
-                    }`}
-                  >
-                    {acc.Currency}{" "}
-                    {Number(acc.CurrentAmount).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </p>
-                </div>
-
-                {/* Bottom placeholder */}
-                <div className="mt-auto flex items-center justify-between text-xs text-slate-500">
-                  <span>Tap to view activity</span>
-                  <span className="text-slate-400"></span>
-                </div>
+                <p className={`account-card-balance ${Number(account.CurrentAmount) <= 0 ? "negative" : "positive"}`}>
+                  {formatCurrencyAmount(Number(account.CurrentAmount), account.Currency)}
+                </p>
+                <div className="account-card-footer">View activity <span aria-hidden="true">→</span></div>
               </Link>
             ))}
           </div>
-        )}
-      </div>
-    </main>
+        ) : null}
+      </section>
+    </div>
   );
 }

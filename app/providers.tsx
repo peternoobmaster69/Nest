@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionProvider } from "next-auth/react";
 import { ReactNode, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -9,11 +9,17 @@ import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { NavigationLoader } from "@/components/navigation-loader";
 import { ConfirmDialogProvider } from "@/components/confirm-dialog";
 import { ModalViewportManager } from "@/components/modal-viewport-manager";
+import { notifyToast, ToastProvider } from "@/components/toast-provider";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
     () => {
       const client = new QueryClient({
+        mutationCache: new MutationCache({
+          onError: (error) => {
+            notifyToast(error instanceof Error ? error.message : "The action could not be completed.", "error");
+          },
+        }),
         defaultOptions: {
           queries: {
             staleTime: 30_000,
@@ -42,11 +48,13 @@ export function Providers({ children }: { children: ReactNode }) {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <ConfirmDialogProvider>
-            <ModalViewportManager />
-            {children}
-            <NavigationLoader />
-            <CollaborationBanner />
-            <CookieConsentBanner />
+            <ToastProvider>
+              <ModalViewportManager />
+              {children}
+              <NavigationLoader />
+              <CollaborationBanner />
+              <CookieConsentBanner />
+            </ToastProvider>
           </ConfirmDialogProvider>
         </QueryClientProvider>
       </ThemeProvider>

@@ -8,7 +8,8 @@ import Image from "next/image";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
+import { useToast } from "@/components/toast-provider";
 
 type AppContext = {
   workspaceId: string | null;
@@ -144,11 +145,10 @@ function normalizeSecurityCode(value: string | null | undefined) {
 
 export function CreditCardsPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [flippedCardId, setFlippedCardId] = useState<string | null>(null);
-  const [copyMessage, setCopyMessage] = useState("");
-  const [copyMessageKind, setCopyMessageKind] = useState<"success" | "error">("success");
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [formError, setFormError] = useState("");
   const [requireCardNumberInput, setRequireCardNumberInput] = useState(false);
@@ -278,15 +278,11 @@ export function CreditCardsPage() {
       return digits;
     },
     onSuccess: () => {
-      setCopyMessageKind("success");
-      setCopyMessage("Copied 16-digit card number");
-      setTimeout(() => setCopyMessage(""), 1800);
+      toast.success("Copied 16-digit card number");
     },
     onError: (error) => {
-      setCopyMessageKind("error");
       const message = error instanceof Error ? error.message : "Unable to copy 16-digit card number";
-      setCopyMessage(message);
-      setTimeout(() => setCopyMessage(""), 1800);
+      toast.error(message);
     },
   });
 
@@ -299,15 +295,11 @@ export function CreditCardsPage() {
       return cvv;
     },
     onSuccess: () => {
-      setCopyMessageKind("success");
-      setCopyMessage("Copied CVV");
-      setTimeout(() => setCopyMessage(""), 1800);
+      toast.success("Copied CVV");
     },
     onError: (error) => {
-      setCopyMessageKind("error");
       const message = error instanceof Error ? error.message : "Unable to copy CVV";
-      setCopyMessage(message);
-      setTimeout(() => setCopyMessage(""), 1800);
+      toast.error(message);
     },
   });
 
@@ -399,8 +391,8 @@ export function CreditCardsPage() {
     toggleCardFlip(cardId);
   };
 
-  const confirmDeleteCard = (cardId: string) => {
-    if (!confirmDestructiveAction("Delete this credit card?")) return;
+  const confirmDeleteCard = async (cardId: string) => {
+    if (!(await confirmDestructiveAction("Delete this credit card?"))) return;
     deleteCard.mutate(cardId, {
       onSuccess: () => {
         closeModal();
@@ -420,9 +412,7 @@ export function CreditCardsPage() {
         },
       }));
     } catch (error) {
-      setCopyMessageKind("error");
-      setCopyMessage(error instanceof Error ? error.message : "Unable to reveal card details");
-      setTimeout(() => setCopyMessage(""), 1800);
+      toast.error(error instanceof Error ? error.message : "Unable to reveal card details");
     } finally {
       setRevealingField((current) =>
         current?.cardId === cardId && current.field === field ? null : current
@@ -458,20 +448,6 @@ export function CreditCardsPage() {
           Add Card
         </button>
       </div>
-
-      {/* Copy Toast */}
-      {copyMessage && (
-        <div
-          className="cc-toast"
-          style={{
-            background: copyMessageKind === "error" ? "#991b1b" : "#14532d",
-            color: "#ffffff",
-            border: "1px solid rgba(255,255,255,0.2)",
-          }}
-        >
-          {copyMessage}
-        </div>
-      )}
 
       {/* Cards Grid - Apple Wallet Style (mobile only) */}
       <div className={`cc-grid${isMobileView && sortedCards.length > 1 && !isStackExpanded ? " cc-grid-stacked" : ""}`}>
@@ -677,7 +653,7 @@ export function CreditCardsPage() {
 
       {/* Add Card Modal */}
       {isModalOpen && (
-        <div className="cc-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeModal)}>
+        <div className="cc-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeModal)}>
           <div className="cc-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cc-modal-header">
               <h3>{editingCardId ? "Edit Credit Card" : "Add Credit Card"}</h3>

@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { ReceivablesListSkeleton, ReceivablesSummarySkeleton } from "@/components/skeletons/ReceivablesSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 
 type AppContext = {
   workspaceId: string | null;
@@ -591,8 +591,8 @@ export function ReceivablesPage() {
                   ) : r.status !== "PAID" ? (
                     <button
                       className="btn btn-primary btn-xs"
-                      onClick={() => {
-                        if (!confirmDestructiveAction("Close this receivable and mark it as paid?")) return;
+                      onClick={async () => {
+                        if (!(await confirmDestructiveAction("Close this receivable and mark it as paid?"))) return;
                         setCloseError(null);
                         setClosingReceivableId(r.id);
                         closeReceivable.mutate({ id: r.id });
@@ -620,8 +620,8 @@ export function ReceivablesPage() {
                   <button
                     className="btn btn-ghost btn-icon"
                     style={{ width: "32px", height: "32px", color: "var(--danger)" }}
-                    onClick={() => {
-                      if (confirmDestructiveAction("Delete this receivable?")) {
+                    onClick={async () => {
+                      if (await confirmDestructiveAction("Delete this receivable?")) {
                         if (deletingReceivableIds.includes(r.id)) return;
                         setDeletingReceivableIds((current) => [...current, r.id]);
                         window.setTimeout(() => {
@@ -658,7 +658,7 @@ export function ReceivablesPage() {
       {isModalOpen && typeof document !== "undefined" && createPortal(
         <div
           className="profile-modal-overlay"
-          onDoubleClick={isSavingReceivable ? undefined : (event) => closeOnBackdropDoubleClick(event, closeModal)}
+          onMouseDown={isSavingReceivable ? undefined : (event) => closeOnBackdropClick(event, closeModal)}
         >
           <div className="profile-modal recv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">

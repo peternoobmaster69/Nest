@@ -12,7 +12,7 @@ import { ArrowRight, ChevronDown, ChevronUp, Copy, Pencil, Play, Plus, RotateCcw
 import { DataImportSection } from "@/components/data-import-section";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 
 type Context = {
   workspaceId: string | null;
@@ -1171,7 +1171,7 @@ export function SettingsPage() {
       </div>
 
       {editingAutoRule && (
-        <div className="auto-rule-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeRuleEditor)}>
+        <div className="auto-rule-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeRuleEditor)}>
           <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className="auto-rule-modal-header">
               <div className="auto-rule-modal-title-wrap">
@@ -1606,7 +1606,7 @@ export function SettingsPage() {
 
       {/* Add Account Modal */}
       {isAddModalOpen && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAddModal)}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeAddModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Bank Account</h3>
@@ -1678,7 +1678,7 @@ export function SettingsPage() {
 
       {/* Edit Account Modal */}
       {isEditModalOpen && editingAccountId && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditModal)}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEditModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Edit Bank Account</h3>

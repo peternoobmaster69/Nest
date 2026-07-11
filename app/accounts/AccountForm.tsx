@@ -3,6 +3,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { SelectField, TextField } from "@/components/ui/form-field";
+import { useToast } from "@/components/toast-provider";
 
 export type AccountFormProps = {
   mode: "create" | "edit";
@@ -20,6 +23,7 @@ const ACCOUNT_TYPES = ["bank", "cash", "credit", "investment", "loan"];
 
 export default function AccountForm({ mode, account }: AccountFormProps) {
   const router = useRouter();
+  const toast = useToast();
 
   const [name, setName] = useState(account?.Name ?? "");
   const [type, setType] = useState(account?.Type ?? "bank");
@@ -69,6 +73,7 @@ export default function AccountForm({ mode, account }: AccountFormProps) {
 
       router.push("/accounts");
       router.refresh();
+      toast.success(mode === "create" ? "Account created" : "Account updated");
     } catch (err) {
       console.error(err);
       setError("Something went wrong");
@@ -77,30 +82,18 @@ export default function AccountForm({ mode, account }: AccountFormProps) {
   }
 
   return (
-    <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
-      <h1 className="mb-4 text-2xl font-semibold text-slate-900">
-        {mode === "create" ? "Add new account" : ""}
-      </h1>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Name */}
-        <div>
-          <label className="mb-1 block text-sm text-slate-700">Name</label>
-          <input
-            className="w-full rounded-md border px-3 py-2 text-sm"
+    <div className="card account-form-card">
+      <form onSubmit={handleSubmit} className="form-stack">
+          <TextField
+            label="Name"
             placeholder="e.g. DBS Savings"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
           />
-        </div>
-
-        {/* Type + Currency */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm text-slate-700">Type</label>
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
+        <div className="form-grid form-grid-2">
+            <SelectField
+              label="Type"
               value={type}
               onChange={(e) => setType(e.target.value)}
               required
@@ -110,65 +103,44 @@ export default function AccountForm({ mode, account }: AccountFormProps) {
                   {t.charAt(0).toUpperCase() + t.slice(1)}
                 </option>
               ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm text-slate-700">
-              Currency
-            </label>
-            <input
-              className="w-full rounded-md border px-3 py-2 text-sm"
+            </SelectField>
+            <TextField
+              label="Currency"
               value={currency}
               onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-              maxLength={10}
+              maxLength={3}
+              pattern="[A-Za-z]{3}"
+              hint="Three-letter currency code, for example SGD."
               required
             />
-          </div>
         </div>
-
-        {/* Initial Amount */}
-        <div>
-          <label className="mb-1 block text-sm text-slate-700">
-            Initial amount
-          </label>
-          <input
+          <TextField
+            label="Initial amount"
             type="number"
             step="0.01"
-            className="w-full rounded-md border px-3 py-2 text-sm"
             value={initialAmount}
             onChange={(e) => setInitialAmount(Number(e.target.value))}
           />
-        </div>
 
         {/* Active toggle only in edit */}
         {mode === "edit" && (
-          <div className="flex items-center gap-2">
+          <label className="checkbox-field">
             <input
-              id="isActive"
               type="checkbox"
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4"
             />
-            <label htmlFor="isActive" className="text-sm text-slate-700">
-              Active account
-            </label>
-          </div>
+            <span>Active account</span>
+          </label>
         )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
 
-        <div className="mt-4 flex gap-3">
-          <button
+        <div className="form-actions">
+          <Button
             type="submit"
-            disabled={loading}
-            className="
-              flex-1 rounded-md py-2 text-sm font-medium
-              bg-slate-900 text-white
-              hover:shadow-[0_0_12px_rgba(15,23,42,0.6)]
-              transition disabled:opacity-60
-            "
+            loading={loading}
+            variant="primary"
           >
             {loading
               ? mode === "create"
@@ -177,19 +149,15 @@ export default function AccountForm({ mode, account }: AccountFormProps) {
               : mode === "create"
               ? "Create account"
               : "Save changes"}
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
             onClick={() => router.push("/accounts")}
-            className="
-              flex-1 rounded-md py-2 text-sm font-medium
-              border border-slate-300 text-slate-700
-              hover:bg-slate-100 transition
-            "
+            variant="ghost"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     </div>

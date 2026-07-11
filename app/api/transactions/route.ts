@@ -52,6 +52,7 @@ export async function GET(request: Request) {
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
     const monthKey = searchParams.get("month");
+    const search = searchParams.get("search")?.trim().slice(0, 120) || "";
     const wantsPaginatedResponse =
       searchParams.get("paginated") === "1" ||
       pageParam !== null ||
@@ -61,7 +62,8 @@ export async function GET(request: Request) {
       budgetId !== null ||
       monthKey !== null ||
       fromDate !== null ||
-      toDate !== null;
+      toDate !== null ||
+      search !== "";
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
@@ -84,6 +86,15 @@ export async function GET(request: Request) {
       ...(accountId ? { accountId } : {}),
       ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
       ...(monthRange ? { date: { gte: monthRange.start, lt: monthRange.end } } : {}),
+      ...(search
+        ? {
+            OR: [
+              { subject: { contains: search } },
+              { details: { contains: search } },
+              { notes: { contains: search } },
+            ],
+          }
+        : {}),
     };
 
     if (fromDate || toDate) {

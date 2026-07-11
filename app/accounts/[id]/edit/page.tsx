@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/session";
 import { getDb } from "@/lib/db";
 import HideableAccountForm from "../../HideableAccountForm";
 import AccountTransactionsSection from "../../AccountTransactionSection";
+import { PageFrame } from "@/components/page-frame";
+import { PageHeader } from "@/components/ui/page-header";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -40,19 +42,16 @@ export default async function EditAccountPage({ params }: PageProps) {
 
   if (accountResult.recordset.length === 0) {
     return (
-      <main className="min-h-screen bg-slate-100">
-        <div className="mx-auto max-w-8xl px-4 py-8">
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <h1 className="text-lg font-semibold text-slate-900">
+      <PageFrame title="Account" current="/accounts" userName={user.Name || user.Email || "User"} userEmail={user.Email}>
+          <div className="card state-panel state-panel-error" role="alert">
+            <h1>
               Account not found
             </h1>
-            <p className="mt-2 text-sm text-slate-600">
-              We couldn&apos;t find an account with this ID for your user.
-              {user.Id}
+            <p>
+              We couldn&apos;t find this account.
             </p>
           </div>
-        </div>
-      </main>
+      </PageFrame>
     );
   }
 
@@ -96,15 +95,16 @@ export default async function EditAccountPage({ params }: PageProps) {
   }[];
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto  max-w-8xl px-4 py-8 space-y-6">
+    <PageFrame title={acc.Name} current="/accounts" userName={user.Name || user.Email || "User"} userEmail={user.Email}>
+      <div className="page-stack">
+        <PageHeader title={acc.Name} description={`${acc.Type} account · ${acc.Currency}`} />
         {/* Top ~10%: compact account update card */}
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="card">
           <HideableAccountForm mode="edit" account={acc} defaultVisible={false} />
         </section>
 
         {/* Bottom: full transaction management */}
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="card">
           <AccountTransactionsSection
             accountId={acc.Id}
             currency={acc.Currency}
@@ -112,6 +112,6 @@ export default async function EditAccountPage({ params }: PageProps) {
           />
         </section>
       </div>
-    </main>
+    </PageFrame>
   );
 }

@@ -4,10 +4,6 @@ export function TransactionsInitialSkeleton() {
   return (
     <>
       <TransactionsBankSelectorSkeleton />
-      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-        <Skeleton width="100%" height={40} borderRadius="var(--r-md)" />
-        <Skeleton width="100%" height={40} borderRadius="var(--r-md)" />
-      </div>
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
           <Skeleton width={112} height={16} borderRadius="4px" />
@@ -96,11 +92,17 @@ export function TransactionsAccountGridSkeleton() {
 export function TransactionsFilterBarSkeleton() {
   return (
     <div className="tx-filter-bar">
-      <div className="tx-filter-pills">
-        <Skeleton width={92} height={31} borderRadius="var(--r-pill)" />
-        <Skeleton width={86} height={31} borderRadius="var(--r-pill)" />
-        <Skeleton width={48} height={31} borderRadius="var(--r-pill)" />
-        <Skeleton width={86} height={31} borderRadius="var(--r-pill)" />
+      <div className="tx-filter-controls">
+        <div className="tx-filter-pills">
+          <Skeleton width={58} height={31} borderRadius="var(--r-pill)" />
+          <Skeleton width={58} height={31} borderRadius="var(--r-pill)" />
+          <Skeleton width={48} height={31} borderRadius="var(--r-pill)" />
+          <Skeleton width={86} height={31} borderRadius="var(--r-pill)" />
+        </div>
+        <div className="tx-primary-actions" aria-hidden="true">
+          <Skeleton width={36} height={36} borderRadius="var(--r-sm)" />
+          <Skeleton width={36} height={36} borderRadius="var(--r-sm)" />
+        </div>
       </div>
       <div className="tx-search-box">
         <Skeleton width="100%" height={32} borderRadius="var(--r-pill)" />

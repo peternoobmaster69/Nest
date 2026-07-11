@@ -10,7 +10,7 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditTransactionsTableRowsSkeleton } from "@/components/skeletons/CreditTransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
 
@@ -997,8 +997,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     return cardCounts.find((c) => c.creditCardId === cardId)?._count.id || 0;
   };
 
-  const confirmDeleteTransaction = (transactionId: string) => {
-    if (!confirmDestructiveAction("Delete this credit card transaction permanently? This cannot be undone.")) return;
+  const confirmDeleteTransaction = async (transactionId: string) => {
+    if (!(await confirmDestructiveAction("Delete this credit card transaction permanently? This cannot be undone."))) return;
     if (deletingTransactionIds.includes(transactionId)) return;
     setDeletingTransactionIds((current) => [...current, transactionId]);
     window.setTimeout(() => {
@@ -1287,7 +1287,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Transactions Table */}
       <div className="cct-table-wrapper">
-        <table className="cct-table">
+        <table className="cct-table responsive-data-table">
           <thead>
             <tr>
               <th>Date</th>
@@ -1321,16 +1321,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   key={tx.id}
                   className={`${tx.isAllocated ? "allocated" : "unallocated"}${isDeleting ? " cct-row-deleting" : ""}`}
                 >
-                  <td className="cct-tx-date">
+                  <td className="cct-tx-date" data-label="Date">
                     <span className="cct-tx-day">{formatDate(tx.transactionDate)}</span>
                   </td>
-                  <td className="cct-tx-subject">
+                  <td className="cct-tx-subject" data-label="Subject">
                     <div className="cct-subject-wrapper">
                       <span>{tx.subject}</span>
                     </div>
                   </td>
-                  <td className={`cct-tx-amount ${getAmountToneClass(tx.amountCents)}`}>{formatCurrency(tx.amountCents)}</td>
-                  <td className="cct-tx-card">
+                  <td className={`cct-tx-amount ${getAmountToneClass(tx.amountCents)}`} data-label="Amount">{formatCurrency(tx.amountCents)}</td>
+                  <td className="cct-tx-card" data-label="Card">
                     <label className="cct-card-checkbox">
                       <input
                         type="checkbox"
@@ -1341,7 +1341,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                       <span>{tx.creditCard.cardName}</span>
                     </label>
                   </td>
-                  <td className="cct-tx-actions">
+                  <td className="cct-tx-actions" data-label="Actions">
                     {!tx.isAllocated ? (
                       <>
                         <button
@@ -1410,7 +1410,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Add Transaction Modal */}
       {isModalOpen && (
-        <div className="cct-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeModal)}>
+        <div className="cct-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeModal)}>
           <div className="cct-modal cct-modal-wide" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>{editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}</h3>
@@ -1517,7 +1517,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       )}
 
       {isAccountingModalOpen && accountingTarget && (
-        <div className="cct-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAccountingModal)}>
+        <div className="cct-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeAccountingModal)}>
           <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Deduct Credit Transaction</h3>
@@ -1583,7 +1583,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       )}
 
       {isReceivableModalOpen && receivableTarget && (
-        <div className="cct-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeReceivableModal)}>
+        <div className="cct-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeReceivableModal)}>
           <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Create Receivable</h3>

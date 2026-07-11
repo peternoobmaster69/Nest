@@ -1,4 +1,5 @@
 import { PageFrame } from "@/components/page-frame";
+import { PageHeader } from "@/components/ui/page-header";
 import { RewardsPage } from "@/components/rewards-page";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/require-session";
@@ -146,11 +147,13 @@ export default async function RewardsRoute() {
       title="Rewards & Miles"
       current="/rewards"
       userName={userName}
+      userEmail={session.user?.email || undefined}
       userImage={session.user?.image || null}
       badgeCounts={{
         budgets: creditCards.length + frequentFlyers.length + hotelRewards.length,
       }}
     >
+      <PageHeader title="Rewards & Miles" description="Track card rewards, airline miles, hotel points, and conversion rates." />
       <RewardsPage
         initialCreditCards={creditCards}
         initialFrequentFlyers={frequentFlyers}

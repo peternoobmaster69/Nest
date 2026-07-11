@@ -9,8 +9,8 @@ import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
-import { AppSidebar } from "./app-sidebar";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
+import { AppShell } from "./app-shell";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/components/skeletons/DashboardSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
+import { useToast } from "@/components/toast-provider";
 
 const ALL_BANKS_FILTER = "ALL";
 const RECENT_TRANSACTION_LIMIT = 5;
@@ -178,12 +179,6 @@ type InvestmentAccountSummary = {
     investedCents: number;
     currentValueCents: number;
   }>;
-};
-
-type Toast = {
-  id: string;
-  kind: "success" | "error" | "info";
-  message: string;
 };
 
 function getAmountToneClass(valueCents: number) {
@@ -689,6 +684,7 @@ export function DashboardShell({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [displayName, setDisplayName] = useState(userName);
   const [budgetName, setBudgetName] = useState("");
   const [budgetTarget, setBudgetTarget] = useState("");
@@ -715,8 +711,6 @@ export function DashboardShell({
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [failedCreditCardBankLogos, setFailedCreditCardBankLogos] = useState<Record<string, boolean>>({});
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccountSummary | null>(null);
   const [editBankBalance, setEditBankBalance] = useState("");
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
@@ -825,11 +819,7 @@ export function DashboardShell({
   const transactionsKey = ["transactions", workspaceId] as const;
   const receivablesKey = ["receivables", workspaceId] as const;
 
-  const pushToast = (kind: Toast["kind"], message: string) => {
-    const id = `${Date.now()}-${Math.random()}`;
-    setToasts((prev) => [...prev, { id, kind, message }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2600);
-  };
+  const pushToast = (kind: "success" | "error" | "info", message: string) => toast.notify(message, kind);
 
   const openEditBankBalance = (bank: BankAccountSummary) => {
     setEditingBankAccount(bank);
@@ -1179,8 +1169,8 @@ export function DashboardShell({
     setEditingReceivableAmount("");
   };
 
-  const confirmDeleteBudget = (budgetId: string) => {
-    if (!confirmDestructiveAction("Delete this sub-account?")) return;
+  const confirmDeleteBudget = async (budgetId: string) => {
+    if (!(await confirmDestructiveAction("Delete this sub-account?"))) return;
     deleteBudget.mutate(budgetId);
     setEditingBudgetId(null);
     setEditingBudgetIcon("");
@@ -1368,25 +1358,6 @@ export function DashboardShell({
   }, [bankAccountsQuery.data, selectedBankFilterId]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.sessionStorage.getItem("nest:ui:sidebarOpen");
-    if (saved === "1") {
-      setSidebarOpen(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.sessionStorage.setItem("nest:ui:sidebarOpen", sidebarOpen ? "1" : "0");
-  }, [sidebarOpen]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const workspaceName = contextQuery.data?.workspaceName?.trim();
-    document.title = workspaceName ? `${workspaceName} [Dashboard]` : "Dashboard";
-  }, [contextQuery.data?.workspaceName]);
-
-  useEffect(() => {
     if (!isBankPickerOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
       if (!bankPickerRef.current?.contains(event.target as Node)) {
@@ -1398,37 +1369,22 @@ export function DashboardShell({
   }, [isBankPickerOpen]);
 
   return (
-    <div className="app-shell">
-      <AppSidebar
+    <>
+      <AppShell
+        title="Dashboard"
+        currentPath="/"
         userName={displayName}
         userEmail={userEmail}
         userImage={userImage}
         onDisplayNameUpdated={setDisplayName}
-        currentPath="/"
         badgeCounts={{
           budgets: summary.budgets.length,
           receivables: pendingReceivables.length,
         }}
-        sidebarOpen={sidebarOpen}
-        onSidebarChange={setSidebarOpen}
         contextData={contextQuery.data}
         contextLoading={isContextLoading}
-      />
-
-      <main className="main">
-        <header className="topbar">
-          <div className="tb-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
-              <span></span>
-              <span></span>
-              <span></span>
-            </button>
-            <div className="tb-title">{getGreeting()}, {displayName.split(" ")[0]} 👋</div>
-          </div>
-        </header>
-
-        {/* Body */}
-        <div className="body">
+        topbarTitle={<div className="tb-title">{getGreeting()}, {displayName.split(" ")[0]} 👋</div>}
+      >
           {bankAccountsQuery.isLoading || !isDataReady ? (
             <DashboardBankSelectorSkeleton />
           ) : (
@@ -1842,10 +1798,8 @@ export function DashboardShell({
             </div>
           </div>
 
-        </div>
-
         {createBudgetOpen && (
-          <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setCreateBudgetOpen(false))}>
+          <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setCreateBudgetOpen(false))}>
             <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>New Sub-Account</h3>
@@ -1896,7 +1850,7 @@ export function DashboardShell({
         )}
 
         {editingBudgetId && (
-          <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setEditingBudgetId(null))}>
+          <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setEditingBudgetId(null))}>
             <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>Edit Account</h3>
@@ -1980,7 +1934,7 @@ export function DashboardShell({
         )}
 
         {editingBankAccount && (
-          <div className="profile-modal-overlay txn-contained-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditBankBalance)}>
+          <div className="profile-modal-overlay txn-contained-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEditBankBalance)}>
             <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>Edit Bank Balance</h3>
@@ -2011,16 +1965,8 @@ export function DashboardShell({
             </div>
           </div>
         )}
-      </main>
+      </AppShell>
 
-      {/* Toast Stack */}
-      <div className="toast-stack">
-        {toasts.map((toast) => (
-          <div key={toast.id} className={`toast toast-${toast.kind}`}>
-            {toast.message}
-          </div>
-        ))}
-      </div>
-    </div>
+    </>
   );
 }

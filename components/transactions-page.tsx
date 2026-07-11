@@ -13,7 +13,8 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
+import { ArrowLeftRight, Plus } from "lucide-react";
 
 const ALL_BANKS_FILTER = "ALL";
 
@@ -321,8 +322,12 @@ export function TransactionsPage() {
   const [isCustomMonthOpen, setIsCustomMonthOpen] = useState(false);
   const customMonthBtnRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const currentMonthIndex = new Date().getMonth();
+  const currentMonthLabel = MONTH_NAMES[currentMonthIndex];
+  const previousMonthLabel = MONTH_NAMES[(currentMonthIndex + 11) % 12];
 
   // Convert dateFilter to month key format for API compatibility
   const transactionMonthFilter = useMemo(() => {
@@ -367,6 +372,14 @@ export function TransactionsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
+
   const handleQuickSelect = (type: string) => {
     setActiveQuickSelect(type);
     setSelectedMonth(null);
@@ -391,7 +404,7 @@ export function TransactionsPage() {
   };
 
   const transactions = useInfiniteQuery({
-    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionMonthFilter],
+    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionMonthFilter, debouncedSearchQuery],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
@@ -404,6 +417,7 @@ export function TransactionsPage() {
       if (dateFilter.from) params.set("from", dateFilter.from);
       if (dateFilter.to) params.set("to", dateFilter.to);
       if (transactionMonthFilter) params.set("month", transactionMonthFilter);
+      if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
       return fetchJson<TransactionsPageResponse>(`/api/transactions?${params.toString()}`);
     },
     initialPageParam: null as string | null,
@@ -779,12 +793,12 @@ export function TransactionsPage() {
   }, [budgets.data, editingTransaction]);
 
   const filteredTransactions = useMemo(() => {
-    let result = transactionList;
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter((tx) => tx.subject.toLowerCase().includes(query));
-    }
-    return result;
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (!query) return transactionList;
+
+    return transactionList.filter((tx) =>
+      [tx.subject, tx.details, tx.notes].some((value) => value?.toLocaleLowerCase().includes(query)),
+    );
   }, [transactionList, searchQuery]);
 
   // Get summary from API response (first page has totals for all matching records)
@@ -796,8 +810,8 @@ export function TransactionsPage() {
   }, [transactionSummary]);
 
   const getPeriodLabel = () => {
-    if (activeQuickSelect === "thisMonth") return "This Month";
-    if (activeQuickSelect === "lastMonth") return "Last Month";
+    if (activeQuickSelect === "thisMonth") return currentMonthLabel;
+    if (activeQuickSelect === "lastMonth") return previousMonthLabel;
     if (activeQuickSelect === "thisYear") return "This Year";
     if (activeQuickSelect === "custom" && selectedMonth !== null) {
       return `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
@@ -807,8 +821,8 @@ export function TransactionsPage() {
   };
 
   const transactionsByMonth = useMemo(() => {
-    return groupTransactionsByMonth(transactionList);
-  }, [transactionList]);
+    return groupTransactionsByMonth(filteredTransactions);
+  }, [filteredTransactions]);
 
   const transactionMonthSummaryByKey = useMemo(() => {
     return new Map((transactionMonths.data?.months ?? []).map((month) => [month.monthKey, month]));
@@ -950,8 +964,8 @@ export function TransactionsPage() {
     setTransferDestinationBudgetId("");
   };
 
-  const confirmDeleteTx = (transactionId: string) => {
-    if (!confirmDestructiveAction("Delete this transaction?")) return;
+  const confirmDeleteTx = async (transactionId: string) => {
+    if (!(await confirmDestructiveAction("Delete this transaction?"))) return;
     if (deletingTransactionIds.includes(transactionId)) return;
     setDeletingTransactionIds((current) => [...current, transactionId]);
     window.setTimeout(() => {
@@ -996,9 +1010,9 @@ export function TransactionsPage() {
     });
   };
 
-  const syncSelectedBankBalance = () => {
+  const syncSelectedBankBalance = async () => {
     if (!selectedBank) return;
-    if (!confirmDestructiveAction(`Update ${selectedBank.name} balance to match the sub-account total?`)) return;
+    if (!(await confirmDestructiveAction(`Update ${selectedBank.name} balance to match the sub-account total?`))) return;
     updateBankBalance.mutate({
       id: selectedBank.id,
       startingCents: displayedLinkedBudgetCents,
@@ -1059,9 +1073,9 @@ export function TransactionsPage() {
     });
   };
 
-  const confirmDeleteBudget = () => {
+  const confirmDeleteBudget = async () => {
     if (!editingBudgetId) return;
-    if (!confirmDestructiveAction(`This will delete the sub-account and remove all transaction links. Continue?`)) return;
+    if (!(await confirmDestructiveAction(`This will delete the sub-account and remove all transaction links. Continue?`))) return;
     deleteBudget.mutate(editingBudgetId);
   };
 
@@ -1164,16 +1178,6 @@ export function TransactionsPage() {
             </div>
           </div>
         </div>
-
-      {/* Action Buttons */}
-      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-        <button className="btn btn-ghost" style={{ flex: 1 }} onClick={openTransferModal} disabled={(budgets.data?.length ?? 0) < 2}>
-          Transfer
-        </button>
-        <button className="btn btn-primary" style={{ flex: 1 }} onClick={openCreateModal}>
-          Add Transaction
-        </button>
-      </div>
 
       <section ref={subAccountsRef} className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1364,42 +1368,67 @@ export function TransactionsPage() {
 
       {/* Month/Year Filter Bar */}
       <div className="tx-filter-bar" ref={customMonthBtnRef}>
-        <div className="tx-filter-pills">
-          <button
-            type="button"
-            className={`tx-filter-pill ${activeQuickSelect === "thisMonth" ? "is-active" : ""}`}
-            onClick={() => handleQuickSelect("thisMonth")}
-          >
-            This Month
-          </button>
-          <button
-            type="button"
-            className={`tx-filter-pill ${activeQuickSelect === "lastMonth" ? "is-active" : ""}`}
-            onClick={() => handleQuickSelect("lastMonth")}
-          >
-            Last Month
-          </button>
-          <button
-            type="button"
-            className={`tx-filter-pill ${activeQuickSelect === null && !dateFilter.from ? "is-active" : ""}`}
-            onClick={() => {
-              setActiveQuickSelect(null);
-              setSelectedMonth(null);
-              setDateFilter({});
-            }}
-          >
-            All
-          </button>
-          <button
-            type="button"
-            className={`tx-filter-pill tx-filter-pill-custom ${activeQuickSelect === "custom" ? "is-active" : ""}`}
-            onClick={() => setIsCustomMonthOpen(!isCustomMonthOpen)}
-          >
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style={{ marginRight: "4px" }}>
-              <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-            </svg>
-            Custom
-          </button>
+        <div className="tx-filter-controls">
+          <div className="tx-filter-pills">
+            <button
+              type="button"
+              className={`tx-filter-pill ${activeQuickSelect === "thisMonth" ? "is-active" : ""}`}
+              onClick={() => handleQuickSelect("thisMonth")}
+            >
+              {currentMonthLabel}
+            </button>
+            <button
+              type="button"
+              className={`tx-filter-pill ${activeQuickSelect === "lastMonth" ? "is-active" : ""}`}
+              onClick={() => handleQuickSelect("lastMonth")}
+            >
+              {previousMonthLabel}
+            </button>
+            <button
+              type="button"
+              className={`tx-filter-pill ${activeQuickSelect === null && !dateFilter.from ? "is-active" : ""}`}
+              onClick={() => {
+                setActiveQuickSelect(null);
+                setSelectedMonth(null);
+                setDateFilter({});
+              }}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`tx-filter-pill tx-filter-pill-custom ${activeQuickSelect === "custom" ? "is-active" : ""}`}
+              onClick={() => setIsCustomMonthOpen(!isCustomMonthOpen)}
+            >
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style={{ marginRight: "4px" }}>
+                <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+              </svg>
+              Custom
+            </button>
+          </div>
+          <div className="tx-primary-actions" aria-label="Transaction actions">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm tx-primary-action"
+              onClick={openTransferModal}
+              disabled={(budgets.data?.length ?? 0) < 2}
+              aria-label="Transfer between sub-accounts"
+              title="Transfer between sub-accounts"
+            >
+              <ArrowLeftRight size={16} aria-hidden="true" />
+              <span className="tx-primary-action-label">Transfer</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm tx-primary-action"
+              onClick={openCreateModal}
+              aria-label="Add transaction"
+              title="Add transaction"
+            >
+              <Plus size={16} aria-hidden="true" />
+              <span className="tx-primary-action-label">Add Transaction</span>
+            </button>
+          </div>
         </div>
         <div className="tx-search-box">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" className="tx-search-icon">
@@ -1426,7 +1455,7 @@ export function TransactionsPage() {
         {/* Custom Month Popover */}
         {isCustomMonthOpen && typeof document !== "undefined" && createPortal(
           <>
-            <div className="tx-popover-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsCustomMonthOpen(false))} />
+            <div className="tx-popover-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsCustomMonthOpen(false))} />
             <div className="tx-month-popover">
               <div className="tx-popover-header">
                 <h4>Select Month</h4>
@@ -1511,10 +1540,9 @@ export function TransactionsPage() {
           )}
 
           {!transactions.isLoading && !transactions.isError && transactionsByMonth.map((monthGroup) => {
-            const monthSummary = transactionMonthSummaryByKey.get(monthGroup.monthKey);
+            const monthSummary = searchQuery.trim() ? undefined : transactionMonthSummaryByKey.get(monthGroup.monthKey);
             const totalIncome = monthSummary?.incomeCents ?? monthGroup.totalIncome;
             const totalExpense = monthSummary?.expenseCents ?? monthGroup.totalExpense;
-            const transactionCount = monthSummary?.count ?? monthGroup.transactions.length;
 
             return (
             <div key={monthGroup.monthKey} className="tx-month-group">
@@ -1579,23 +1607,23 @@ export function TransactionsPage() {
               </button>
             </div>
           ) : null}
-          {!transactions.isLoading && !transactions.isError && transactionList.length === 0 && (
+          {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
             <EmptyState
-              icon="📑"
-              title="No transactions"
-              description={selectedMonthFilter !== "ALL" ? "No transactions for this month." : selectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
-              action={
+              icon={searchQuery.trim() ? "🔎" : "📑"}
+              title={searchQuery.trim() ? "No matching transactions" : "No transactions"}
+              description={searchQuery.trim() ? `No transactions match “${searchQuery.trim()}”.` : selectedMonthFilter !== "ALL" ? "No transactions for this month." : selectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
+              action={!searchQuery.trim() ? (
                 <button className="btn btn-primary" onClick={openCreateModal}>
                   + Add Transaction
                 </button>
-              }
+              ) : undefined}
             />
           )}
         </div>
       </section>
 
       {isCreateModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsCreateModalOpen(false))}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsCreateModalOpen(false))}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Add Transaction</h3>
@@ -1711,7 +1739,7 @@ export function TransactionsPage() {
       )}
 
       {editingTxId && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditModal)}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEditModal)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Transaction</h3>
@@ -1815,7 +1843,7 @@ export function TransactionsPage() {
       )}
 
       {editingBankAccount && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEditBankBalance)}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEditBankBalance)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Bank Balance</h3>
@@ -1854,7 +1882,7 @@ export function TransactionsPage() {
       )}
 
       {isTransferModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeTransferModal)}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeTransferModal)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Transfer Between Sub-Accounts</h3>
@@ -1931,7 +1959,7 @@ export function TransactionsPage() {
       )}
 
       {receivableInfoBudgetId && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setReceivableInfoBudgetId(null))}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setReceivableInfoBudgetId(null))}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{receivableInfoBudget?.name || "Receivable Breakdown"}</h3>
@@ -1986,7 +2014,7 @@ export function TransactionsPage() {
       )}
 
       {isBudgetModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeBudgetModal)}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeBudgetModal)}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}</h3>

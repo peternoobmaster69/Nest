@@ -1,15 +1,11 @@
 "use client";
 
-import { createContext, ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ConfirmOptions, registerConfirmHandler } from "@/lib/confirm-destructive";
 
-type ConfirmDialogOptions = {
-  title?: string;
-  message: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-};
+type ConfirmDialogOptions = ConfirmOptions;
 
 type ConfirmDialogContextValue = {
   confirm: (options: ConfirmDialogOptions) => Promise<boolean>;
@@ -30,6 +26,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
     message: "",
     confirmLabel: "Confirm",
     cancelLabel: "Cancel",
+    destructive: false,
   });
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
 
@@ -46,6 +43,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
       message: options.message,
       confirmLabel: options.confirmLabel ?? "Confirm",
       cancelLabel: options.cancelLabel ?? "Cancel",
+      destructive: options.destructive ?? false,
     });
 
     return new Promise<boolean>((resolve) => {
@@ -55,41 +53,30 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ confirm }), [confirm]);
 
+  useEffect(() => {
+    registerConfirmHandler(confirm);
+    return () => registerConfirmHandler(null);
+  }, [confirm]);
+
   return (
     <ConfirmDialogContext.Provider value={value}>
       {children}
-      {dialog.open && typeof document !== "undefined"
-        ? createPortal(
-            <div className="modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => closeDialog(false))}>
-              <div
-                className="modal-container modal-md"
-                onClick={(event) => event.stopPropagation()}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="confirm-dialog-title"
-              >
-                <div className="modal-header">
-                  <h3 className="modal-title" id="confirm-dialog-title">{dialog.title}</h3>
-                  <button className="modal-close" onClick={() => closeDialog(false)} aria-label="Close confirmation dialog">
-                    Close
-                  </button>
-                </div>
-                <div className="modal-body">
-                  <p className="text-base" style={{ margin: 0, lineHeight: 'var(--leading-relaxed)' }}>{dialog.message}</p>
-                </div>
-                <div className="modal-footer">
-                  <button className="btn btn-md btn-ghost" onClick={() => closeDialog(false)}>
-                    {dialog.cancelLabel}
-                  </button>
-                  <button className="btn btn-md btn-primary" onClick={() => closeDialog(true)}>
-                    {dialog.confirmLabel}
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      <Dialog
+        open={dialog.open}
+        onClose={() => closeDialog(false)}
+        title={dialog.title || "Confirm action"}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => closeDialog(false)}>{dialog.cancelLabel}</Button>
+            <Button variant={dialog.destructive ? "destructive" : "primary"} onClick={() => closeDialog(true)} autoFocus>
+              {dialog.confirmLabel}
+            </Button>
+          </>
+        }
+      >
+        <p className="confirm-dialog-message">{dialog.message}</p>
+      </Dialog>
     </ConfirmDialogContext.Provider>
   );
 }

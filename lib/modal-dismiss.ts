@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
 
-export function closeOnBackdropDoubleClick(event: MouseEvent<HTMLElement>, close: () => void) {
+export function closeOnBackdropClick(event: MouseEvent<HTMLElement>, close: () => void) {
   if (event.target === event.currentTarget) close();
 }

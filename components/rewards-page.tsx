@@ -7,7 +7,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui-skeleton";
 import { RewardsCardGridSkeleton, RewardsRowsSkeleton, RewardsSummarySkeleton } from "@/components/skeletons/RewardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ArrowLeftRight, Building2, CreditCard, Plane, Plus } from "lucide-react";
 
 type CreditCardReward = {
@@ -828,23 +828,23 @@ export function RewardsPage({
     }, 450);
   };
 
-  const confirmDeleteCardReward = (id: string) => {
-    if (!confirmDestructiveAction("Delete this credit card rewards record?")) return;
+  const confirmDeleteCardReward = async (id: string) => {
+    if (!(await confirmDestructiveAction("Delete this credit card rewards record?"))) return;
     deleteCardReward.mutate(id);
   };
 
-  const confirmDeleteFrequentFlyer = (id: string) => {
-    if (!confirmDestructiveAction("Delete this frequent flyer account?")) return;
+  const confirmDeleteFrequentFlyer = async (id: string) => {
+    if (!(await confirmDestructiveAction("Delete this frequent flyer account?"))) return;
     deleteFrequentFlyer.mutate(id);
   };
 
-  const confirmDeleteHotelReward = (id: string) => {
-    if (!confirmDestructiveAction("Delete this hotel rewards account?")) return;
+  const confirmDeleteHotelReward = async (id: string) => {
+    if (!(await confirmDestructiveAction("Delete this hotel rewards account?"))) return;
     deleteHotelReward.mutate(id);
   };
 
-  const confirmDeleteConversion = (id: string) => {
-    if (!confirmDestructiveAction("Delete this conversion rate?")) return;
+  const confirmDeleteConversion = async (id: string) => {
+    if (!(await confirmDestructiveAction("Delete this conversion rate?"))) return;
     deleteConversion.mutate(id);
   };
 
@@ -1633,7 +1633,7 @@ export function RewardsPage({
 
       {/* Credit Card Rewards Modal */}
       {isCardRewardModalOpen && data?.cardsWithoutRewards.length ? (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeCardRewardModal)}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeCardRewardModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Credit Card Rewards</h3>
@@ -1735,7 +1735,7 @@ export function RewardsPage({
 
       {/* Conversion Rate Modal */}
       {isConversionModalOpen && data?.creditCards.length && data?.frequentFlyers.length ? (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeConversionModal)}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeConversionModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Conversion Rate</h3>
@@ -1835,7 +1835,7 @@ export function RewardsPage({
 
       {/* Hotel Rewards Modal */}
       {isHotelModalOpen && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeHotelModal)}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeHotelModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingHotelId ? "Edit Hotel Rewards" : "Add Hotel Rewards"}</h3>
@@ -1950,7 +1950,7 @@ export function RewardsPage({
 
       {/* Frequent Flyer Modal */}
       {isFFModalOpen && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeFFModal)}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeFFModal)}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}</h3>
@@ -2097,7 +2097,7 @@ export function RewardsPage({
 
       {/* Add Earn Transaction Modal */}
       {isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsAddEarnModalOpen(false))}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsAddEarnModalOpen(false))}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Earn Transaction</h3>
@@ -2186,7 +2186,7 @@ export function RewardsPage({
 
       {/* Redeem Miles Modal */}
       {isRedeemModalOpen && selectedHistoryFrequentFlyer && (
-        <div className="st-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsRedeemModalOpen(false))}>
+        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsRedeemModalOpen(false))}>
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Redeem Miles</h3>

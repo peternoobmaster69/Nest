@@ -257,8 +257,8 @@ export function CollaboratorsPage() {
     inviteMutation.mutate();
   };
 
-  const confirmRemoveMember = (memberId: string) => {
-    if (!confirmDestructiveAction("Remove this collaborator from the workspace?")) return;
+  const confirmRemoveMember = async (memberId: string) => {
+    if (!(await confirmDestructiveAction("Remove this collaborator from the workspace?"))) return;
     removeMember.mutate(memberId);
   };
 

@@ -2,16 +2,19 @@ import { PageFrame } from "@/components/page-frame";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/require-session";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { PageHeader } from "@/components/ui/page-header";
+import { DataValue, MobileDataCard } from "@/components/ui/data-view";
+import { formatMoney } from "@/lib/currency";
+import { formatLocalDateTime } from "@/lib/presentation";
 
 function formatDateTime(value: Date | null) {
   if (!value) return "—";
-  return value.toLocaleString();
+  return formatLocalDateTime(value);
 }
 
 function formatAmount(cents: number | null, currency: string | null) {
   if (cents === null) return "—";
-  const amount = (cents / 100).toFixed(2);
-  return `${currency || ""} ${amount}`.trim();
+  return formatMoney(cents, currency);
 }
 
 export default async function CreditAlertsRoute() {
@@ -42,7 +45,8 @@ export default async function CreditAlertsRoute() {
   });
 
   return (
-    <PageFrame title="Credit Alert Staging" current="/credit-alerts" userName={userName} userImage={session.user?.image || null}>
+    <PageFrame title="Credit Alert Staging" current="/credit-alerts" userName={userName} userEmail={session.user?.email || undefined} userImage={session.user?.image || null}>
+      <PageHeader title="Credit Alerts" description="Inspect the latest email alerts and diagnose parsing failures." eyebrow="Automation" />
       <div className="card">
         <div style={{ marginBottom: "12px" }}>
           <div style={{ fontSize: "14px", fontWeight: 700 }}>Recent Gmail / Email Alert Staging</div>
@@ -51,7 +55,7 @@ export default async function CreditAlertsRoute() {
           </div>
         </div>
 
-        <div className="cct-table-wrapper">
+        <div className="cct-table-wrapper desktop-data-table">
           <table className="cct-table">
             <thead>
               <tr>
@@ -91,6 +95,23 @@ export default async function CreditAlertsRoute() {
               ) : null}
             </tbody>
           </table>
+        </div>
+        <div className="mobile-data-list">
+          {staged.map((row, index) => (
+            <MobileDataCard key={`${row.createdAt.toISOString()}-mobile-${index}`}>
+              <div className="mobile-data-card-head">
+                <strong>{row.merchant || row.bankName || "Card alert"}</strong>
+                <span className={`badge ${row.parseStatus === "PARSED" || row.parseStatus === "PROCESSED" ? "badge-success" : "badge-warning"}`}>
+                  {row.parseStatus}
+                </span>
+              </div>
+              <DataValue label="Amount" priority="high">{formatAmount(row.amountCents, row.currency)}</DataValue>
+              <DataValue label="Card">{row.cardLast4 ? `••${row.cardLast4}` : "—"}</DataValue>
+              <DataValue label="Created">{formatDateTime(row.createdAt)}</DataValue>
+              {row.failureReason ? <DataValue label="Failure" priority="low">{row.failureReason}</DataValue> : null}
+            </MobileDataCard>
+          ))}
+          {staged.length === 0 ? <div className="empty-state"><p className="empty-state-desc">No staged alerts found.</p></div> : null}
         </div>
       </div>
     </PageFrame>

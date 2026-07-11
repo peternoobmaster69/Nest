@@ -6,9 +6,26 @@ import { signOut } from "next-auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useTheme } from "./theme-provider";
 import { SidebarSkeleton } from "./ui-skeleton";
+import {
+  ChartNoAxesCombined,
+  ChartPie,
+  CreditCard,
+  Gift,
+  Home,
+  Landmark,
+  ListChecks,
+  LogOut,
+  MailWarning,
+  Moon,
+  ReceiptText,
+  Settings,
+  Sun,
+  Undo2,
+  Users,
+} from "lucide-react";
 
 type Workspace = {
   id: string;
@@ -270,11 +287,13 @@ export function AppSidebar({
 
   return (
     <>
-      {isOpen && <div className="sidebar-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setIsOpen(false))} />}
-      <aside ref={sidebarRef} className={`sidebar${isOpen ? " open" : ""}`}>
-        <Link href="/" className="sb-logo" onClick={handleNavClick}>
-          <Image src="/icon.svg" alt="Nest" width={30} height={30} className="brand-logo-sm" />
-          <span>Nest</span>
+      {isOpen && <div className="sidebar-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsOpen(false))} />}
+      <aside ref={sidebarRef} className={`sidebar${isOpen ? " open" : ""}`} aria-label="Primary navigation">
+        <div className="sb-logo-row">
+          <Link href="/" className="sb-logo" onClick={handleNavClick}>
+            <Image src="/icon.svg" alt="" width={30} height={30} className="brand-logo-sm" />
+            <span>Nest</span>
+          </Link>
           <button
             className="sidebar-close"
             onClick={(e) => {
@@ -286,7 +305,7 @@ export function AppSidebar({
           >
             ✕
           </button>
-        </Link>
+        </div>
 
         {isContextLoading ? (
           <SidebarSkeleton />
@@ -294,57 +313,63 @@ export function AppSidebar({
           <>
       <div className="sb-scroll">
         <div className="sb-sec">Overview</div>
-        <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href="/" onClick={handleNavClick}>
-          <span className="sb-ic">⌂</span>Dashboard
+        <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href="/" onClick={handleNavClick} aria-current={currentPath === "/" ? "page" : undefined}>
+          <Home className="sb-ic" size={18} aria-hidden="true" />Dashboard
         </Link>
 
         <div className="sb-sec">Money</div>
         {sidebarMoneyPages.transactions !== false && (
-          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick}>
-            <span className="sb-ic">📑</span>Transactions
+          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick} aria-current={currentPath === "/transactions" ? "page" : undefined}>
+            <ReceiptText className="sb-ic" size={18} aria-hidden="true" />Transactions
           </Link>
         )}
+        <Link className={`sb-item${currentPath === "/accounts" ? " on" : ""}`} href="/accounts" onClick={handleNavClick} aria-current={currentPath === "/accounts" ? "page" : undefined}>
+          <Landmark className="sb-ic" size={18} aria-hidden="true" />Accounts
+        </Link>
         {showCreditCards && (
-          <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick}>
-            <span className="sb-ic">💳</span>Credit Cards
+          <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick} aria-current={currentPath === "/credit-cards" ? "page" : undefined}>
+            <CreditCard className="sb-ic" size={18} aria-hidden="true" />Credit Cards
           </Link>
         )}
         {showCreditTransactions && (
-          <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick}>
-            <span className="sb-ic">🧾</span>Card Transactions
+          <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick} aria-current={currentPath === "/credit-transactions" ? "page" : undefined}>
+            <ListChecks className="sb-ic" size={18} aria-hidden="true" />Card Transactions
           </Link>
         )}
         {sidebarMoneyPages.receivables !== false && (
           <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
-            <span className="sb-ic">↩</span>Receivables
+            <Undo2 className="sb-ic" size={18} aria-hidden="true" />Receivables
             {resolvedReceivablesCount ? <span className="sb-badge">{resolvedReceivablesCount}</span> : null}
           </Link>
         )}
         {sidebarMoneyPages.rewards !== false && (
           <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href="/rewards" onClick={handleNavClick}>
-            <span className="sb-ic">◎</span>Rewards
+            <Gift className="sb-ic" size={18} aria-hidden="true" />Rewards
           </Link>
         )}
         {sidebarMoneyPages.investments !== false && (
           <Link className={`sb-item${currentPath === "/investments" ? " on" : ""}`} href="/investments" onClick={handleNavClick}>
-            <span className="sb-ic">📈</span>Investments
+            <ChartNoAxesCombined className="sb-ic" size={18} aria-hidden="true" />Investments
           </Link>
         )}
         <Link className={`sb-item${currentPath === "/budgets/plan" ? " on" : ""}`} href="/budgets/plan" onClick={handleNavClick}>
-          <span className="sb-ic">📊</span>Budget Plan
+          <ChartPie className="sb-ic" size={18} aria-hidden="true" />Budget Plan
         </Link>
 
         <div className="sb-sec">Workspace</div>
         <Link className={`sb-item${currentPath === "/collaborators" ? " on" : ""}`} href="/collaborators" onClick={handleNavClick}>
-          <span className="sb-ic">👥</span>Workspaces
+          <Users className="sb-ic" size={18} aria-hidden="true" />Workspaces
+        </Link>
+        <Link className={`sb-item${currentPath === "/credit-alerts" ? " on" : ""}`} href="/credit-alerts" onClick={handleNavClick} aria-current={currentPath === "/credit-alerts" ? "page" : undefined}>
+          <MailWarning className="sb-ic" size={18} aria-hidden="true" />Credit Alerts
         </Link>
         <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href="/settings" onClick={handleNavClick}>
-          <span className="sb-ic">⚙</span>Settings
+          <Settings className="sb-ic" size={18} aria-hidden="true" />Settings
         </Link>
 
         {/* Mobile-only logout button */}
         <button className="sb-item sb-logout-mobile" onClick={() => signOut({ callbackUrl: "/signin" })}>
-          <span className="sb-ic">⎋</span>Log Out
+          <LogOut className="sb-ic" size={18} aria-hidden="true" />Log Out
         </button>
       </div>
 
@@ -383,7 +408,7 @@ export function AppSidebar({
                   toggleTheme();
                 }}
               >
-                {theme === "light" ? "🌙 Dark Mode" : "☀️ Light Mode"}
+                {theme === "light" ? <><Moon size={16} aria-hidden="true" /> Dark mode</> : <><Sun size={16} aria-hidden="true" /> Light mode</>}
               </button>
               <div className="sb-user-menu-divider" />
               <div className="sb-user-menu-section">Switch Workspace</div>
@@ -423,7 +448,7 @@ export function AppSidebar({
         )}
 
       {profileModalOpen && (
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, () => setProfileModalOpen(false))}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setProfileModalOpen(false))}>
           <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Profile</h3>

@@ -6,6 +6,7 @@
     "predev": "npm run prisma:generate",
     "dev": "next dev",
     "test": "node --test tests/*.test.mjs",
+    "test:ui": "node --test tests/ui-contract.test.mjs",
     "prebuild": "npm run prisma:generate",
     "build": "next build",
     "start": "next start",

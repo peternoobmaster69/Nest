@@ -1,11 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { ReactNode } from "react";
-import Link from "next/link";
-import { Home } from "lucide-react";
-import { AppSidebar } from "./app-sidebar";
+import { AppShell } from "./app-shell";
 import {
   DATABASE_UNAVAILABLE_CODE,
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -49,6 +46,7 @@ export function PageFrame({
   title,
   current,
   userName,
+  userEmail,
   userImage,
   badgeCounts,
   children,
@@ -56,6 +54,7 @@ export function PageFrame({
   title: string;
   current: string;
   userName: string;
+  userEmail?: string;
   userImage?: string | null;
   badgeCounts?: {
     budgets?: number;
@@ -63,7 +62,6 @@ export function PageFrame({
   };
   children: ReactNode;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const contextQuery = useQuery({
     queryKey: ["app-context"],
     queryFn: () => fetchJson<AppContext>("/api/context"),
@@ -74,67 +72,17 @@ export function PageFrame({
     contextError instanceof ApiError &&
     (contextError.code === DATABASE_UNAVAILABLE_CODE || contextError.status === 503);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.sessionStorage.getItem("nest:ui:sidebarOpen");
-    if (saved === "1") {
-      setSidebarOpen(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.sessionStorage.setItem("nest:ui:sidebarOpen", sidebarOpen ? "1" : "0");
-  }, [sidebarOpen]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const workspaceName = contextQuery.data?.workspaceName?.trim();
-    document.title = workspaceName ? `${workspaceName} [${title}]` : title;
-  }, [contextQuery.data?.workspaceName, title]);
-
   return (
-    <div className="app-shell">
-      <AppSidebar
-        userName={userName}
-        userImage={userImage}
+    <AppShell
+        title={title}
         currentPath={current}
+        userName={userName}
+        userEmail={userEmail}
+        userImage={userImage}
         badgeCounts={badgeCounts}
-        sidebarOpen={sidebarOpen}
-        onSidebarChange={setSidebarOpen}
         contextData={contextQuery.data}
         contextLoading={isContextLoading}
-      />
-
-      <main className="main">
-        <header className="topbar">
-          <div className="tb-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
-              <span></span>
-              <span></span>
-              <span></span>
-            </button>
-            {current === "/" ? (
-              <div className="tb-title">{title}</div>
-            ) : (
-              <nav className="tb-breadcrumb" aria-label="Breadcrumb">
-                <ol className="breadcrumb-list">
-                  <li className="breadcrumb-item">
-                    <Link href="/" className="breadcrumb-link" aria-label="Home">
-                      <Home size={16} strokeWidth={1.5} />
-                    </Link>
-                  </li>
-                  <li className="breadcrumb-separator" aria-hidden="true">/</li>
-                  <li className="breadcrumb-item">
-                    <span className="breadcrumb-current">{title}</span>
-                  </li>
-                </ol>
-              </nav>
-            )}
-          </div>
-        </header>
-
-        <div className="body">
+    >
           {isDatabaseUnavailable ? (
             <section className="service-state" role="alert" aria-live="assertive">
               <div className="service-state-eyebrow">Service interruption</div>
@@ -149,8 +97,6 @@ export function PageFrame({
           ) : (
             children
           )}
-        </div>
-      </main>
-    </div>
+    </AppShell>
   );
 }

@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropDoubleClick } from "@/lib/modal-dismiss";
+import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 import { Droplet } from "lucide-react";
 
@@ -424,13 +424,13 @@ export function InvestmentsPage() {
     setEditingEntryId(null);
   };
 
-  const confirmDeleteAccount = (accountId: string) => {
-    if (!confirmDestructiveAction("Delete this investment account and its history?")) return;
+  const confirmDeleteAccount = async (accountId: string) => {
+    if (!(await confirmDestructiveAction("Delete this investment account and its history?"))) return;
     deleteAccount.mutate(accountId);
   };
 
-  const confirmDeleteEntry = (entryId: string) => {
-    if (!confirmDestructiveAction("Delete this investment entry?")) return;
+  const confirmDeleteEntry = async (entryId: string) => {
+    if (!(await confirmDestructiveAction("Delete this investment entry?"))) return;
     deleteEntry.mutate(entryId);
   };
 
@@ -967,7 +967,7 @@ export function InvestmentsPage() {
       ) : null}
 
       {accountModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeAccountModal)}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeAccountModal)}>
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
@@ -1052,7 +1052,7 @@ export function InvestmentsPage() {
       )}
 
       {entryModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onDoubleClick={(event) => closeOnBackdropDoubleClick(event, closeEntryModal)}>
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEntryModal)}>
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
