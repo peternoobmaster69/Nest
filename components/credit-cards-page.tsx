@@ -495,6 +495,7 @@ export function CreditCardsPage() {
           const revealedCvv = normalizeSecurityCode(revealedCards[card.id]?.securityCode);
           const isRevealingNumber = revealingField?.cardId === card.id && revealingField.field === "number";
           const isRevealingCvv = revealingField?.cardId === card.id && revealingField.field === "cvv";
+          const collapsedCardNumber = card.last4Digit ? `•••• ${card.last4Digit}` : card.maskedNumber;
           const headerCardNumber =
             revealedNumber.length === 16
               ? revealedNumber.replace(/(\d{4})(?=\d)/g, "$1 ").trim()
@@ -529,9 +530,9 @@ export function CreditCardsPage() {
                         <Image
                           src={logo}
                           alt={bank?.name || "Bank"}
-                          width={100}
-                          height={36}
-                          sizes="100px"
+                          width={88}
+                          height={32}
+                          sizes="(max-width: 480px) 72px, 88px"
                           className="cc-bank-img"
                           loading="lazy"
                           onError={() => setFailedLogos((prev) => ({ ...prev, [card.id]: true }))}
@@ -544,7 +545,7 @@ export function CreditCardsPage() {
                   {isCollapsed && <div className="cc-card-name">{card.cardName}</div>}
                 </div>
 
-                <div className="cc-card-number">{card.maskedNumber}</div>
+                <div className="cc-card-number">{isCollapsed ? collapsedCardNumber : card.maskedNumber}</div>
 
                 <div className="cc-card-footer">
                   <div className="cc-card-name">{card.cardName}</div>
@@ -654,14 +655,6 @@ export function CreditCardsPage() {
           >
             <span className="cc-show-all-icon">{isStackExpanded ? "▲" : "▼"}</span>
             <span>{isStackExpanded ? "Show Wallet" : "Show All Cards"}</span>
-          </button>
-        )}
-
-        {/* Add Card Placeholder - only show when loaded and has cards */}
-        {!cards.isLoading && !cards.isError && sortedCards.length > 0 && (
-          <button className="cc-add-card" onClick={openModal}>
-            <div className="cc-add-icon-large">+</div>
-            <span>Add New Card</span>
           </button>
         )}
 

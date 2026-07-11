@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui-skeleton";
 import { RewardsCardGridSkeleton, RewardsRowsSkeleton, RewardsSummarySkeleton } from "@/components/skeletons/RewardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -224,6 +224,9 @@ export function RewardsPage({
   const [ffFormValidityPeriodYears, setFFFormValidityPeriodYears] = useState("3");
   const [ffFormNotes, setFFFormNotes] = useState("");
   const [openHistoryFFId, setOpenHistoryFFId] = useState<string | null>(null);
+  const rewardsTopRef = useRef<HTMLDivElement>(null);
+  const historySectionRef = useRef<HTMLElement>(null);
+  const closeHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [earnDate, setEarnDate] = useState(todayDateInputValue);
   const [earnMiles, setEarnMiles] = useState("");
   const [earnTitle, setEarnTitle] = useState("");
@@ -294,6 +297,21 @@ export function RewardsPage({
     setEarnPage(1);
     setRedemptionPage(1);
   }, [openHistoryFFId]);
+
+  useEffect(() => {
+    if (!openHistoryFFId) return;
+    const frame = requestAnimationFrame(() => {
+      historySectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [openHistoryFFId]);
+
+  useEffect(() => () => {
+    if (closeHistoryTimerRef.current) clearTimeout(closeHistoryTimerRef.current);
+  }, []);
 
   const createCardReward = useMutation({
     mutationFn: (payload: {
@@ -766,12 +784,48 @@ export function RewardsPage({
 
   const openHistoryForFrequentFlyer = (frequentFlyerId: string) => {
     if (openHistoryFFId === frequentFlyerId) {
-      setOpenHistoryFFId(null);
-      setEditingEarnId(null);
+      closeHistoryAndScrollToTop();
       return;
+    }
+    if (closeHistoryTimerRef.current) {
+      clearTimeout(closeHistoryTimerRef.current);
+      closeHistoryTimerRef.current = null;
     }
     setOpenHistoryFFId(frequentFlyerId);
     setEditingEarnId(null);
+  };
+
+  const prefersReducedMotion = () =>
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const closeHistoryAndScrollToTop = () => {
+    setEditingEarnId(null);
+    const rewardsTop = rewardsTopRef.current;
+    const scrollContainer = rewardsTop?.closest(".body");
+    const reduceMotion = prefersReducedMotion();
+
+    if (!rewardsTop) {
+      setOpenHistoryFFId(null);
+      return;
+    }
+
+    if (scrollContainer instanceof HTMLElement) {
+      scrollContainer.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+    } else {
+      rewardsTop.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }
+
+    if (closeHistoryTimerRef.current) clearTimeout(closeHistoryTimerRef.current);
+    if (reduceMotion || (scrollContainer instanceof HTMLElement && scrollContainer.scrollTop <= 2)) {
+      setOpenHistoryFFId(null);
+      closeHistoryTimerRef.current = null;
+      return;
+    }
+
+    closeHistoryTimerRef.current = setTimeout(() => {
+      setOpenHistoryFFId(null);
+      closeHistoryTimerRef.current = null;
+    }, 450);
   };
 
   const confirmDeleteCardReward = (id: string) => {
@@ -874,7 +928,7 @@ export function RewardsPage({
     ) : null;
 
   return (
-    <div>
+    <div ref={rewardsTopRef} className="rewards-page-top">
       {/* Summary Stats */}
       <section className="rewards-overview">
         {isLoading ? (
@@ -1161,7 +1215,7 @@ export function RewardsPage({
           </div>
 
           {openHistoryFFId && selectedHistoryFrequentFlyer && (
-            <section className="card" style={{ marginTop: "20px", display: "grid", gap: "12px" }}>
+            <section ref={historySectionRef} className="card rewards-history-section" style={{ marginTop: "20px", display: "grid", gap: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
                 <div>
                   <div style={{ fontSize: "14px", fontWeight: 700 }}>Reward Points Transaction History</div>
@@ -1187,7 +1241,7 @@ export function RewardsPage({
                   >
                     ✈️
                   </button>
-                  <button className="btn btn-ghost btn-xs" onClick={() => setOpenHistoryFFId(null)}>
+                  <button className="btn btn-ghost btn-xs" onClick={closeHistoryAndScrollToTop}>
                     Close
                   </button>
                 </div>

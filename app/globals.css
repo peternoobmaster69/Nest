@@ -2274,6 +2274,14 @@ body[data-modal-scroll-lock="true"] {
   min-width: 0;
 }
 
+.rewards-page-top {
+  min-width: 0;
+}
+
+.rewards-history-section {
+  scroll-margin-top: 16px;
+}
+
 .rewards-overview {
   display: grid;
   gap: 28px;
@@ -6443,7 +6451,7 @@ body[data-modal-scroll-lock="true"] {
   font-family: var(--font-display);
   font-size: 24px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .cc-add-btn {
@@ -6522,7 +6530,9 @@ body[data-modal-scroll-lock="true"] {
 
 .cc-grid-stacked .cc-card-collapsed .cc-card-header {
   margin-bottom: 0;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -6549,13 +6559,15 @@ body[data-modal-scroll-lock="true"] {
   margin-bottom: 0;
   margin-right: -4px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  flex: 1;
+  flex: 0 0 auto;
   text-align: right;
   white-space: nowrap;
 }
 
 .cc-grid-stacked .cc-card-collapsed .cc-bank-logo {
-  flex-shrink: 0;
+  width: 56px;
+  height: 24px;
+  flex: 0 0 56px;
 }
 
 .cc-grid-stacked .cc-card-collapsed:hover {
@@ -6679,13 +6691,20 @@ body[data-modal-scroll-lock="true"] {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  width: 88px;
+  height: 32px;
+  flex: 0 0 88px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .cc-bank-img {
-  height: 36px;
-  width: auto;
-  max-width: 100px;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
   object-fit: contain;
+  object-position: left center;
   background: transparent;
   padding: 0;
   box-shadow: none;
@@ -6843,51 +6862,6 @@ body[data-modal-scroll-lock="true"] {
 .cc-back-actions .cc-delete:hover {
   color: var(--danger);
   border-color: var(--danger);
-}
-
-/* Add Card Placeholder */
-.cc-add-card {
-  height: 200px;
-  border-radius: 16px;
-  border: 2px dashed var(--border-default);
-  background: var(--bg-surface);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: var(--text-secondary);
-}
-
-.cc-add-card:hover {
-  border-color: var(--brand-500);
-  color: var(--brand-500);
-  background: var(--brand-50);
-}
-
-.cc-add-icon-large {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--bg-subtle);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
-  font-weight: 300;
-  transition: all 0.2s;
-}
-
-.cc-add-card:hover .cc-add-icon-large {
-  background: var(--brand-500);
-  color: white;
-}
-
-.cc-add-card span {
-  font-size: 14px;
-  font-weight: 500;
 }
 
 /* Empty State */
@@ -7134,6 +7108,149 @@ body[data-modal-scroll-lock="true"] {
 }
 
 @media (max-width: 480px) {
+  .cc-container {
+    padding: 0;
+    min-width: 0;
+  }
+
+  .cc-header {
+    gap: 12px;
+    margin: 0 2px 16px;
+  }
+
+  .cc-title {
+    font-size: 20px;
+  }
+
+  .cc-add-btn {
+    min-height: 40px;
+  }
+
+  .cc-grid {
+    gap: 14px;
+  }
+
+  .cc-grid-stacked {
+    min-height: auto;
+    padding: 8px 0 72px;
+  }
+
+  .cc-card-wrapper {
+    height: 180px;
+  }
+
+  .cc-card-front {
+    padding: 16px 18px;
+  }
+
+  .cc-bank-logo {
+    width: 72px;
+    height: 28px;
+    flex-basis: 72px;
+  }
+
+  .cc-card-number {
+    max-width: 100%;
+    margin-bottom: 14px;
+    overflow: hidden;
+    font-size: 17px;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .cc-card-name {
+    max-width: 75%;
+    font-size: 12px;
+  }
+
+  .cc-card-back {
+    padding: 12px 14px;
+  }
+
+  .cc-back-header {
+    margin-bottom: 8px;
+  }
+
+  .cc-back-header-meta {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cc-back-number,
+  .cc-back-expiry,
+  .cc-back-cvv {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .cc-back-number {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .cc-detail-column,
+  .cc-detail-row {
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+
+  .cc-detail-label {
+    margin-bottom: 3px;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+
+  .cc-detail-value-icon {
+    gap: 6px;
+    font-size: 16px;
+  }
+
+  .cc-back-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .cc-back-actions .btn {
+    min-width: 0;
+    padding: 6px;
+    font-size: 10px;
+    line-height: 1.1;
+    white-space: normal;
+  }
+
+  .cc-show-all-btn {
+    width: 100%;
+    margin-top: 14px;
+  }
+
+  .cc-toast {
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    text-align: center;
+  }
+
+  .cc-grid-stacked .cc-card-collapsed .cc-card-header .cc-card-name {
+    max-width: 72px;
+  }
+
+  .cc-grid-stacked .cc-card-collapsed .cc-bank-logo {
+    width: 52px;
+    height: 22px;
+    flex-basis: 52px;
+  }
+
+  .cc-grid-stacked .cc-card-collapsed .cc-card-number {
+    margin-right: 0;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+
   .cc-form-grid {
     grid-template-columns: 1fr;
   }
@@ -7203,6 +7320,27 @@ body[data-modal-scroll-lock="true"] {
 
   .cc-form-grid {
     padding-bottom: 24px;
+  }
+}
+
+@media (max-width: 360px) {
+  .cc-card-front {
+    padding-inline: 16px;
+  }
+
+  .cc-card-number {
+    font-size: 15px;
+    letter-spacing: 0.035em;
+  }
+
+  .cc-grid-stacked .cc-card-collapsed .cc-bank-logo {
+    width: 46px;
+    height: 20px;
+    flex-basis: 46px;
+  }
+
+  .cc-grid-stacked .cc-card-collapsed .cc-card-header .cc-card-name {
+    max-width: 58px;
   }
 }
 

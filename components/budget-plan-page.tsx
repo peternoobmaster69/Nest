@@ -12,7 +12,6 @@ import {
   CalendarRange,
   Check,
   ChevronDown,
-  ChevronUp,
   CircleDollarSign,
   FilePlus2,
   LayoutTemplate,
@@ -618,7 +617,8 @@ export function BudgetPlanPage() {
 
   return (
     <div className="bp-container">
-      <section className="card" style={{ padding: "18px 20px" }}>
+      {!showSetup && (
+        <section className="card" style={{ padding: "18px 20px" }}>
         <div
           className="card-header"
           style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "18px" }}
@@ -631,10 +631,10 @@ export function BudgetPlanPage() {
               Manage this month without changing Budget Setup.
             </p>
           </div>
-          <button className="btn btn-ghost" type="button" onClick={() => setShowSetup((visible) => !visible)}>
+          <button className="btn btn-ghost" type="button" onClick={() => setShowSetup(true)}>
             <LayoutTemplate size={16} />
-            {showSetup ? "Hide Setup" : "Budget Setup"}
-            {showSetup ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            Budget Setup
+            <ChevronDown size={15} />
           </button>
         </div>
 
@@ -934,23 +934,48 @@ export function BudgetPlanPage() {
             </div>
           </>
         )}
-      </section>
+        </section>
+      )}
 
       {showSetup && (
-        <section className="card" style={{ padding: "18px 20px" }}>
+        <section
+          className="card"
+          style={{ padding: "18px 20px", borderTop: "3px solid var(--brand-500)" }}
+        >
           <div
             className="card-header"
             style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "16px" }}
           >
             <div>
-              <h3 style={{ fontSize: "17px", fontWeight: 600, margin: 0 }}>Budget Setup</h3>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  marginBottom: "6px",
+                  color: "var(--brand-600)",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                }}
+              >
+                <LayoutTemplate size={14} />
+                Setup mode
+              </div>
+              <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0 }}>Budget Setup</h3>
               <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
-                Reusable templates for starting future monthly budgets.
+                Edit reusable sources and items for future monthly budgets. Existing monthly budgets are not changed.
               </p>
             </div>
-            <button className="btn btn-ghost btn-icon" type="button" onClick={() => planQuery.refetch()} disabled={planQuery.isFetching} title="Refresh setup" aria-label="Refresh setup">
-              <RefreshCw size={15} className={planQuery.isFetching ? "spin" : undefined} />
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost btn-icon" type="button" onClick={() => planQuery.refetch()} disabled={planQuery.isFetching} title="Refresh setup" aria-label="Refresh setup">
+                <RefreshCw size={15} className={planQuery.isFetching ? "spin" : undefined} />
+              </button>
+              <button className="btn btn-ghost" type="button" onClick={() => setShowSetup(false)}>
+                <CalendarRange size={16} />
+                Monthly Budget
+              </button>
+            </div>
           </div>
 
           {planQuery.isError && (
