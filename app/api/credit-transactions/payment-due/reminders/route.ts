@@ -1,4 +1,4 @@
-import { sendPaymentDueReminders } from "@/lib/payment-due-reminders";
+import { sendCreditCardPaymentReminders } from "@/lib/credit-card-payment-reminders";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -9,6 +9,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await sendPaymentDueReminders();
+  const result = await sendCreditCardPaymentReminders();
   return NextResponse.json(result, { status: result.ok ? 200 : 207 });
 }

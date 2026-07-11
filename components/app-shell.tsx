@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { Home, Menu } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { NotificationBell } from "@/components/notification-bell";
 
 export type AppShellContext = {
   workspaceId?: string | null;
@@ -91,6 +92,9 @@ export function AppShell({
                 </ol>
               </nav>
             ))}
+          </div>
+          <div className="tb-actions">
+            <NotificationBell workspaceId={contextData?.workspaceId} />
           </div>
         </header>
         <div className="body">{children}</div>

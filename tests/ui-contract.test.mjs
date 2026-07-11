@@ -17,6 +17,7 @@ async function walk(directory) {
 test("shared UI primitives remain available", async () => {
   const required = [
     "components/app-shell.tsx",
+    "components/notification-bell.tsx",
     "components/ui/button.tsx",
     "components/ui/dialog.tsx",
     "components/ui/form-field.tsx",

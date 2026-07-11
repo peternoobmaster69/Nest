@@ -1,8 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { EmailClient, KnownEmailSendStatus } from "@azure/communication-email";
+import { createHash } from "node:crypto";
+import {
+  addUtcDays,
+  getDaysUntilDue,
+  getReminderDateKey,
+  REMINDER_LEAD_DAYS,
+  shouldSendPaymentReminder,
+  startOfUtcDay,
+} from "@/lib/credit-card-payment-reminder-schedule";
+import { completeBackgroundJob, createBackgroundJob, failBackgroundJob } from "@/lib/background-jobs";
+import { syncCreditCardDueNotificationsForAllUsers } from "@/lib/in-app-notifications";
 
-const REMINDER_LEAD_DAYS = 3;
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const DELIVERY_JOB_TYPE = "CREDIT_CARD_PAYMENT_REMINDER_EMAIL";
 
 type ReminderRow = {
   workspaceId: string;
@@ -23,6 +34,7 @@ type ReminderRecipient = {
 };
 
 type ReminderEmail = {
+  workspaceId: string;
   to: string;
   subject: string;
   text: string;
@@ -35,16 +47,9 @@ type ReminderResult = {
   dueItemCount: number;
   emailCount: number;
   sentCount: number;
+  skippedCount: number;
   errors: Array<{ to: string; message: string }>;
 };
-
-function startOfUtcDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function addDays(date: Date, days: number) {
-  return new Date(date.getTime() + days * MS_PER_DAY);
-}
 
 function toNumber(value: number | bigint | null | undefined) {
   return Number(value ?? 0);
@@ -64,10 +69,6 @@ function formatDate(date: Date) {
     year: "numeric",
     timeZone: "UTC",
   }).format(date);
-}
-
-function getDaysUntilDue(dueDate: Date, today: Date) {
-  return Math.ceil((startOfUtcDay(dueDate).getTime() - today.getTime()) / MS_PER_DAY);
 }
 
 function getDueLabel(dueDate: Date, today: Date) {
@@ -93,9 +94,9 @@ function escapeHtml(value: string) {
 }
 
 async function findDueCreditCardPayments(today: Date) {
-  const reminderThrough = addDays(today, REMINDER_LEAD_DAYS + 1);
+  const reminderThrough = addUtcDays(today, REMINDER_LEAD_DAYS + 1);
 
-  return prisma.$queryRaw<ReminderRow[]>(Prisma.sql`
+  const rows = await prisma.$queryRaw<ReminderRow[]>(Prisma.sql`
     SELECT
       cct.[workspaceId] AS [workspaceId],
       w.[name] AS [workspaceName],
@@ -113,6 +114,7 @@ async function findDueCreditCardPayments(today: Date) {
       ON w.[id] = cct.[workspaceId]
     WHERE cct.[paymentDueDate] IS NOT NULL
       AND cct.[paymentDueDate] < ${reminderThrough}
+      AND cc.[isActive] = 1
     GROUP BY
       cct.[workspaceId],
       w.[name],
@@ -124,6 +126,8 @@ async function findDueCreditCardPayments(today: Date) {
     HAVING SUM(CAST(cct.[amountCents] AS BIGINT)) > 0
     ORDER BY MIN(cct.[paymentDueDate]) ASC
   `);
+
+  return rows.filter((row) => shouldSendPaymentReminder(getDaysUntilDue(row.paymentDueDate, today)));
 }
 
 async function findRecipients(workspaceIds: string[]) {
@@ -221,39 +225,65 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
     </div>
   `;
 
-  return { to: recipient.email, subject, text, html };
+  return { workspaceId: recipient.workspaceId, to: recipient.email, subject, text, html };
 }
 
 async function sendReminderEmail(email: ReminderEmail) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.CREDIT_CARD_REMINDER_FROM;
+  const connectionString = process.env.AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING;
+  const senderAddress = process.env.AZURE_EMAIL_SENDER;
 
-  if (!apiKey || !from) {
-    throw new Error("RESEND_API_KEY and CREDIT_CARD_REMINDER_FROM must be configured");
+  if (!connectionString || !senderAddress) {
+    throw new Error("AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING and AZURE_EMAIL_SENDER must be configured");
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  const client = new EmailClient(connectionString);
+  const poller = await client.beginSend({
+    senderAddress,
+    recipients: {
+      to: [{ address: email.to }],
     },
-    body: JSON.stringify({
-      from,
-      to: email.to,
+    content: {
       subject: email.subject,
-      text: email.text,
       html: email.html,
-    }),
+      plainText: email.text,
+    },
+  });
+  const response = await poller.pollUntilDone();
+
+  if (response.status !== KnownEmailSendStatus.Succeeded) {
+    const detail = response.error?.message || response.error?.code || response.status;
+    throw new Error(`Azure Communication Email failed: ${detail}`);
+  }
+}
+
+function getDeliveryKey(email: ReminderEmail, today: Date) {
+  const recipientHash = createHash("sha256").update(email.to.trim().toLowerCase()).digest("hex").slice(0, 20);
+  return `${getReminderDateKey(today)}:${email.workspaceId}:${recipientHash}`;
+}
+
+async function wasAlreadySentOrIsSending(key: string) {
+  const now = new Date();
+  const existing = await prisma.backgroundJob.findFirst({
+    where: {
+      type: DELIVERY_JOB_TYPE,
+      key,
+      OR: [
+        { status: "SUCCEEDED" },
+        {
+          status: { in: ["PENDING", "RUNNING"] },
+          OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { gt: now } }],
+        },
+      ],
+    },
+    select: { id: true },
   });
 
-  if (!response.ok) {
-    throw new Error(`Email provider returned ${response.status}`);
-  }
+  return Boolean(existing);
 }
 
 export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): Promise<ReminderResult> {
   const today = startOfUtcDay(new Date());
+  if (!dryRun) await syncCreditCardDueNotificationsForAllUsers();
   const dueRows = await findDueCreditCardPayments(today);
   const workspaceIds = [...new Set(dueRows.map((row) => row.workspaceId))];
   const recipients = await findRecipients(workspaceIds);
@@ -279,6 +309,7 @@ export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): P
       dueItemCount: dueRows.length,
       emailCount: 0,
       sentCount: 0,
+      skippedCount: 0,
       errors: [],
     };
   }
@@ -290,18 +321,40 @@ export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): P
       dueItemCount: dueRows.length,
       emailCount: emails.length,
       sentCount: 0,
+      skippedCount: emails.length,
       errors: [],
     };
   }
 
   const errors: ReminderResult["errors"] = [];
   let sentCount = 0;
+  let skippedCount = 0;
 
   for (const email of emails) {
+    const deliveryKey = getDeliveryKey(email, today);
+    if (await wasAlreadySentOrIsSending(deliveryKey)) {
+      skippedCount += 1;
+      continue;
+    }
+
+    let jobId: string | null = null;
     try {
+      const job = await createBackgroundJob({
+        type: DELIVERY_JOB_TYPE,
+        key: deliveryKey,
+        workspaceId: email.workspaceId,
+        message: "Sending credit card payment reminder.",
+        leaseMs: 5 * 60 * 1000,
+      });
+      jobId = job.id;
       await sendReminderEmail(email);
+      await completeBackgroundJob(jobId, {
+        message: "Credit card payment reminder sent.",
+        result: { provider: "AZURE_COMMUNICATION_EMAIL" },
+      });
       sentCount += 1;
     } catch (error) {
+      await failBackgroundJob(jobId, error).catch(() => null);
       errors.push({
         to: email.to,
         message: error instanceof Error ? error.message : "Unknown email error",
@@ -315,6 +368,7 @@ export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): P
     dueItemCount: dueRows.length,
     emailCount: emails.length,
     sentCount,
+    skippedCount,
     errors,
   };
 }

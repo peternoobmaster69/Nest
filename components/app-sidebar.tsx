@@ -5,6 +5,7 @@ import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useTheme } from "./theme-provider";
@@ -397,12 +398,16 @@ export function AppSidebar({
                 onClick={() => {
                   setProfileMenuOpen(false);
                   setProfileModalOpen(true);
+                  if (window.matchMedia("(max-width: 1280px)").matches) {
+                    setIsOpen(false);
+                    window.sessionStorage.setItem("nest:ui:sidebarOpen", "0");
+                  }
                 }}
               >
                 View Profile
               </button>
               <button
-                className="sb-user-menu-item"
+                className="sb-user-menu-item sb-user-menu-theme"
                 onClick={() => {
                   setProfileMenuOpen(false);
                   toggleTheme();
@@ -447,9 +452,11 @@ export function AppSidebar({
           </>
         )}
 
-      {profileModalOpen && (
-        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setProfileModalOpen(false))}>
-          <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+      </aside>
+
+      {profileModalOpen && typeof document !== "undefined" && createPortal(
+        <div className="profile-modal-overlay account-profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setProfileModalOpen(false))}>
+          <div className="profile-modal account-profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Profile</h3>
               <button className="profile-modal-close" onClick={() => setProfileModalOpen(false)}>
@@ -492,10 +499,9 @@ export function AppSidebar({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-
-      </aside>
 
       {/* Workspace Transition Overlay */}
       {isTransitioning && (
