@@ -4,7 +4,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AccountsGridSkeleton } from "@/components/skeletons/AccountsSkeleton";
-import { PageHeader } from "@/components/ui/page-header";
 import { Plus } from "lucide-react";
 import { formatCurrencyAmount } from "@/lib/presentation";
 
@@ -58,26 +57,24 @@ export default function AccountsPageClient() {
 
   return (
     <div className="page-stack">
-      <PageHeader
-        title="Accounts"
-        description="Manage account balances and activity."
-        actions={
-          <Link href="/accounts/create" className="btn btn-primary btn-md">
-            <Plus size={16} aria-hidden="true" /> Add account
-          </Link>
-        }
-      />
       <section className="card">
-        {accounts.length > 0 ? (
+        {loading || error || accounts.length > 0 ? (
           <div className="account-summary-row">
-            <span className="section-label">Total balance</span>
-            <div className="account-total-list">
-              {Object.entries(totalsByCurrency).map(([currency, total]) => (
-                <strong key={currency} className="account-total">
-                  {formatCurrencyAmount(total, currency)}
-                </strong>
-              ))}
-            </div>
+            {accounts.length > 0 ? (
+              <div className="account-summary-main">
+                <span className="section-label">Total balance</span>
+                <div className="account-total-list">
+                  {Object.entries(totalsByCurrency).map(([currency, total]) => (
+                    <strong key={currency} className="account-total">
+                      {formatCurrencyAmount(total, currency)}
+                    </strong>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <Link href="/accounts/create" className="btn btn-primary btn-md account-add-btn">
+              <Plus size={16} aria-hidden="true" /> Add account
+            </Link>
           </div>
         ) : null}
 

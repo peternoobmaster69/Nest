@@ -2,7 +2,6 @@ import { PageFrame } from "@/components/page-frame";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/require-session";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
-import { PageHeader } from "@/components/ui/page-header";
 import { DataValue, MobileDataCard } from "@/components/ui/data-view";
 import { formatMoney } from "@/lib/currency";
 import { formatLocalDateTime } from "@/lib/presentation";
@@ -46,13 +45,9 @@ export default async function CreditAlertsRoute() {
 
   return (
     <PageFrame title="Credit Alert Staging" current="/credit-alerts" userName={userName} userEmail={session.user?.email || undefined} userImage={session.user?.image || null}>
-      <PageHeader title="Credit Alerts" description="Inspect the latest email alerts and diagnose parsing failures." eyebrow="Automation" />
       <div className="card">
-        <div style={{ marginBottom: "12px" }}>
-          <div style={{ fontSize: "14px", fontWeight: 700 }}>Recent Gmail / Email Alert Staging</div>
-          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-            Latest 100 staged alert rows for the current workspace.
-          </div>
+        <div className="section-label" style={{ marginBottom: "12px" }}>
+          Showing {staged.length} most recent staged {staged.length === 1 ? "alert" : "alerts"}
         </div>
 
         <div className="cct-table-wrapper desktop-data-table">

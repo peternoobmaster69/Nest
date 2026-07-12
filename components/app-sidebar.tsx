@@ -16,10 +16,8 @@ import {
   CreditCard,
   Gift,
   Home,
-  Landmark,
   ListChecks,
   LogOut,
-  MailWarning,
   Moon,
   ReceiptText,
   Settings,
@@ -324,9 +322,6 @@ export function AppSidebar({
             <ReceiptText className="sb-ic" size={18} aria-hidden="true" />Transactions
           </Link>
         )}
-        <Link className={`sb-item${currentPath === "/accounts" ? " on" : ""}`} href="/accounts" onClick={handleNavClick} aria-current={currentPath === "/accounts" ? "page" : undefined}>
-          <Landmark className="sb-ic" size={18} aria-hidden="true" />Accounts
-        </Link>
         {showCreditCards && (
           <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick} aria-current={currentPath === "/credit-cards" ? "page" : undefined}>
             <CreditCard className="sb-ic" size={18} aria-hidden="true" />Credit Cards
@@ -360,9 +355,6 @@ export function AppSidebar({
         <div className="sb-sec">Workspace</div>
         <Link className={`sb-item${currentPath === "/collaborators" ? " on" : ""}`} href="/collaborators" onClick={handleNavClick}>
           <Users className="sb-ic" size={18} aria-hidden="true" />Workspaces
-        </Link>
-        <Link className={`sb-item${currentPath === "/credit-alerts" ? " on" : ""}`} href="/credit-alerts" onClick={handleNavClick} aria-current={currentPath === "/credit-alerts" ? "page" : undefined}>
-          <MailWarning className="sb-ic" size={18} aria-hidden="true" />Credit Alerts
         </Link>
         <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href="/settings" onClick={handleNavClick}>
           <Settings className="sb-ic" size={18} aria-hidden="true" />Settings

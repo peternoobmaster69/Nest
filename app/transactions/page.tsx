@@ -1,5 +1,4 @@
 import { PageFrame } from "@/components/page-frame";
-import { PageHeader } from "@/components/ui/page-header";
 import { TransactionsPage } from "@/components/transactions-page";
 import { requireSession } from "@/lib/require-session";
 
@@ -9,7 +8,6 @@ export default async function TransactionsRoute() {
 
   return (
     <PageFrame title="Transactions" current="/transactions" userName={userName} userEmail={session.user?.email || undefined} userImage={session.user?.image || null}>
-      <PageHeader title="Transactions" description="Review cash flow, search activity, and manage sub-accounts." />
       <TransactionsPage />
     </PageFrame>
   );

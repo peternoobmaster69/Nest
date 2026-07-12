@@ -5,7 +5,6 @@ import { getDb } from "@/lib/db";
 import HideableAccountForm from "../../HideableAccountForm";
 import AccountTransactionsSection from "../../AccountTransactionSection";
 import { PageFrame } from "@/components/page-frame";
-import { PageHeader } from "@/components/ui/page-header";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -97,7 +96,6 @@ export default async function EditAccountPage({ params }: PageProps) {
   return (
     <PageFrame title={acc.Name} current="/accounts" userName={user.Name || user.Email || "User"} userEmail={user.Email}>
       <div className="page-stack">
-        <PageHeader title={acc.Name} description={`${acc.Type} account · ${acc.Currency}`} />
         {/* Top ~10%: compact account update card */}
         <section className="card">
           <HideableAccountForm mode="edit" account={acc} defaultVisible={false} />

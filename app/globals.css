@@ -222,6 +222,8 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -9083,13 +9085,11 @@ body[data-modal-scroll-lock="true"] {
   .cct-table td {
     padding: 8px 10px;
     font-size: 12px;
-    height: 56.5px;
     box-sizing: border-box;
   }
 
   .cct-tx-card,
   .cct-tx-actions {
-    height: 56.5px;
     white-space: nowrap;
   }
 
@@ -11330,6 +11330,18 @@ body[data-modal-scroll-lock="true"] {
   padding-bottom: var(--space-4);
 }
 
+.account-summary-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.account-add-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 .account-total-list {
   display: flex;
   flex-wrap: wrap;
@@ -11500,6 +11512,97 @@ body[data-modal-scroll-lock="true"] {
     display: none;
   }
 
+  /* Credit transactions become compact, native-style records on mobile. */
+  .cct-table.responsive-data-table tbody tr:not(.cct-row-deleting) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .cct-table.responsive-data-table tbody td {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    font-size: var(--text-base);
+  }
+
+  .cct-table.responsive-data-table .cct-tx-subject {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .cct-table.responsive-data-table .cct-tx-subject::before,
+  .cct-table.responsive-data-table .cct-tx-date::before,
+  .cct-table.responsive-data-table .cct-tx-amount::before,
+  .cct-table.responsive-data-table .cct-tx-card::before {
+    display: none;
+  }
+
+  .cct-table.responsive-data-table .cct-subject-wrapper {
+    display: -webkit-box;
+    max-height: 2.8em;
+    overflow: hidden;
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--leading-base);
+  }
+
+  .cct-table.responsive-data-table .cct-tx-date {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+    color: var(--text-secondary);
+  }
+
+  .cct-table.responsive-data-table .cct-tx-amount {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    justify-items: end;
+    text-align: right;
+  }
+
+  .cct-table.responsive-data-table .cct-tx-card {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-self: end;
+    gap: var(--space-2);
+  }
+
+  .cct-table.responsive-data-table .cct-card-checkbox {
+    min-width: 0;
+    min-height: 24px;
+    gap: 6px;
+  }
+
+  .cct-table.responsive-data-table .cct-card-checkbox span {
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cct-table.responsive-data-table .cct-tx-actions {
+    grid-row: 3;
+    min-height: 40px;
+    margin-top: 0;
+    padding-top: 6px;
+    gap: 6px;
+  }
+
+  .cct-table.responsive-data-table .cct-action-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    font-size: var(--text-md);
+  }
+
+  .cct-table.responsive-data-table .cct-action-placeholder {
+    display: none;
+  }
+
   .mobile-data-list {
     display: grid;
   }
@@ -11550,6 +11653,15 @@ body[data-modal-scroll-lock="true"] {
 
   .account-summary-row {
     display: grid;
+  }
+
+  .account-summary-main {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .account-add-btn {
+    justify-self: end;
   }
 
   .section-header,
@@ -13001,12 +13113,19 @@ body[data-modal-scroll-lock="true"] {
 .space-x-3 > * + * { margin-left: var(--space-3); }
 .space-x-4 > * + * { margin-left: var(--space-4); }
 
-@media (max-width: 820px) {
+/*
+ * iOS Safari zooms the viewport when a focused editable control computes below
+ * 16px. Cover touch devices as well as narrow browser windows so phones in
+ * landscape and controls with inline typography cannot bypass this safeguard.
+ */
+@media (max-width: 820px), (hover: none) and (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
   select,
   textarea,
-  .input {
-    font-size: 16px;
+  [contenteditable]:not([contenteditable="false"]),
+  [role="textbox"],
+  .input:is(input, select, textarea) {
+    font-size: 16px !important;
   }
 
   .modal-footer .btn,
@@ -13031,5 +13150,234 @@ body[data-modal-scroll-lock="true"] {
   .auto-rule-modal-footer {
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+}
+
+/* ============================================================
+   MODAL VIEWPORT CONTRACT — one centered experience everywhere
+   ============================================================ */
+
+:where(
+  .modal-overlay,
+  .profile-modal-overlay,
+  .cc-modal-overlay,
+  .cct-modal-overlay,
+  .st-modal-overlay,
+  .auto-rule-modal-overlay
+) {
+  position: fixed !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding-top: max(16px, env(safe-area-inset-top, 0px)) !important;
+  padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)) !important;
+  overflow: auto !important;
+}
+
+:where(
+  .modal-container,
+  .profile-modal,
+  .cc-modal,
+  .cct-modal,
+  .st-modal,
+  .auto-rule-modal,
+  .inv-modal
+) {
+  height: auto !important;
+  max-height: calc(
+    100dvh - max(16px, env(safe-area-inset-top, 0px)) - max(16px, env(safe-area-inset-bottom, 0px))
+  ) !important;
+  margin: auto !important;
+  border-radius: var(--modal-radius) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  animation: modal-container-in var(--duration-base) var(--ease-decelerate) !important;
+}
+
+.modal-container {
+  width: min(100%, 560px) !important;
+  max-width: 560px !important;
+}
+
+.modal-container.modal-sm {
+  width: min(100%, 400px) !important;
+  max-width: 400px !important;
+}
+
+.modal-container.modal-lg {
+  width: min(100%, 720px) !important;
+  max-width: 720px !important;
+}
+
+.modal-container.modal-xl {
+  width: min(100%, 1100px) !important;
+  max-width: 1100px !important;
+}
+
+.profile-modal {
+  width: min(100%, 380px) !important;
+  max-width: 380px !important;
+}
+
+.profile-modal.recv-modal,
+.profile-modal.txn-modal {
+  width: min(100%, 1100px) !important;
+  max-width: 1100px !important;
+}
+
+.profile-modal.inv-modal {
+  width: min(100%, 460px) !important;
+  max-width: 460px !important;
+}
+
+.cc-modal,
+.st-modal {
+  width: min(100%, 440px) !important;
+  max-width: 440px !important;
+}
+
+.cct-modal {
+  width: min(100%, 480px) !important;
+  max-width: 480px !important;
+}
+
+.cct-modal.cct-modal-wide {
+  width: min(100%, 1080px) !important;
+  max-width: 1080px !important;
+}
+
+.auto-rule-modal {
+  width: min(100%, 1120px) !important;
+  max-width: 1120px !important;
+}
+
+:where(
+  .modal-body,
+  .profile-modal-body,
+  .recv-modal-body,
+  .txn-modal-body,
+  .cc-modal-form,
+  .cct-modal-form,
+  .st-modal-form,
+  .auto-rule-modal-body,
+  .inv-modal-body
+) {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+}
+
+:where(
+  .modal-footer,
+  .profile-actions,
+  .txn-modal-actions,
+  .cc-modal-actions,
+  .cct-modal-actions,
+  .st-modal-actions,
+  .inv-modal-actions,
+  .auto-rule-modal-footer
+) {
+  position: sticky !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--color-border) !important;
+  background: var(--color-surface-raised) !important;
+}
+
+@media (max-width: 820px), (hover: none) and (pointer: coarse) {
+  :where(
+    .modal-footer,
+    .profile-actions,
+    .txn-modal-actions,
+    .cc-modal-actions,
+    .cct-modal-actions,
+    .st-modal-actions,
+    .inv-modal-actions,
+    .auto-rule-modal-footer
+  ) .btn {
+    min-height: 48px;
+  }
+
+  :where(
+    .modal-close,
+    .profile-modal-close,
+    .cc-close-btn,
+    .cct-close-btn,
+    .st-close-btn,
+    .auto-rule-icon-btn
+  ) {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+  }
+}
+
+@media (max-width: 820px) {
+  :where(
+    .modal-overlay,
+    .profile-modal-overlay,
+    .cc-modal-overlay,
+    .cct-modal-overlay,
+    .st-modal-overlay,
+    .auto-rule-modal-overlay
+  ) {
+    padding-right: 5px !important;
+    padding-left: 5px !important;
+  }
+
+  body :is(
+    .modal-container,
+    .profile-modal,
+    .cc-modal,
+    .cct-modal,
+    .st-modal,
+    .auto-rule-modal,
+    .inv-modal
+  )[class] {
+    width: calc(100vw - 10px) !important;
+    max-width: calc(100vw - 10px) !important;
+  }
+
+  :where(
+    .modal-body,
+    .profile-modal-body,
+    .recv-modal-body,
+    .txn-modal-body,
+    .cc-modal-form,
+    .cct-modal-form,
+    .st-modal-form,
+    .auto-rule-modal-body,
+    .inv-modal-body
+  ) {
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+    scroll-padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  :where(
+    .modal-footer,
+    .profile-actions,
+    .txn-modal-actions,
+    .cc-modal-actions,
+    .cct-modal-actions,
+    .st-modal-actions,
+    .inv-modal-actions,
+    .auto-rule-modal-footer
+  ) {
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .tx-month-popover {
+    width: calc(100vw - 10px);
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100dvh - 24px);
   }
 }

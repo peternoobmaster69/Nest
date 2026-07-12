@@ -1,5 +1,4 @@
 import { PageFrame } from "@/components/page-frame";
-import { PageHeader } from "@/components/ui/page-header";
 import { CreditTransactionsPage } from "@/components/credit-transactions-page";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/require-session";
@@ -24,7 +23,6 @@ export default async function CreditTransactionsRoute() {
       userEmail={session.user?.email || undefined}
       userImage={session.user?.image || null}
     >
-      <PageHeader title="Card Transactions" description="Review card activity, allocate spending, import statements, and manage payments." />
       <CreditTransactionsPage initialCards={creditCards} />
     </PageFrame>
   );

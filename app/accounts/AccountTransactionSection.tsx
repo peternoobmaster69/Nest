@@ -218,9 +218,6 @@ export default function AccountTransactionsSection({
         <h2 className="section-title">
           Transactions
         </h2>
-        <p className="page-header-description">
-          Add, edit, or delete transactions for this account.
-        </p>
       </div>
 
       <form
