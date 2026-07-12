@@ -403,21 +403,24 @@ export function TransactionsPage() {
     queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
+  const bankAccountOptions = useMemo(() => bankAccounts.data ?? [], [bankAccounts.data]);
+  const hasMultipleBankAccounts = bankAccountOptions.length > 1;
+  const effectiveSelectedBankId = bankAccountOptions.length === 1 ? bankAccountOptions[0].id : selectedBankId;
 
   // Query for accurate month aggregation data (not paginated)
   const transactionMonths = useQuery({
-    queryKey: ["transaction-months", workspaceId, selectedBankId, activeBudgetFilterId],
+    queryKey: ["transaction-months", workspaceId, effectiveSelectedBankId, activeBudgetFilterId],
     queryFn: () =>
       fetchJson<{
         months: TransactionMonthSummary[];
         total: number;
       }>(
-        `/api/transactions/months?workspaceId=${workspaceId}${selectedBankId ? `&accountId=${selectedBankId}` : ""}${activeBudgetFilterId !== "ALL" ? `&budgetId=${activeBudgetFilterId}` : ""}`,
+        `/api/transactions/months?workspaceId=${workspaceId}${effectiveSelectedBankId ? `&accountId=${effectiveSelectedBankId}` : ""}${activeBudgetFilterId !== "ALL" ? `&budgetId=${activeBudgetFilterId}` : ""}`,
       ),
     enabled: Boolean(workspaceId),
   });
 
-  const transactionAccountFilter = selectedBankId || "";
+  const transactionAccountFilter = effectiveSelectedBankId || "";
   const transactionBudgetFilter = activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "";
   const transactionGroupFilter = activeGroupFilterId !== "ALL" ? activeGroupFilterId : "";
 
@@ -594,11 +597,16 @@ export function TransactionsPage() {
   }, [txBankStorageKey]);
 
   useEffect(() => {
-    if (!selectedBankId || !bankAccounts.data?.length) return;
-    if (!bankAccounts.data.some((b) => b.id === selectedBankId)) {
+    if (!bankAccountOptions.length) return;
+    if (bankAccountOptions.length === 1) {
+      const onlyBankId = bankAccountOptions[0].id;
+      if (selectedBankId !== onlyBankId) setSelectedBankId(onlyBankId);
+      return;
+    }
+    if (selectedBankId && !bankAccountOptions.some((b) => b.id === selectedBankId)) {
       setSelectedBankId("");
     }
-  }, [bankAccounts.data, selectedBankId]);
+  }, [bankAccountOptions, selectedBankId]);
 
   useEffect(() => {
     if (!txBankStorageKey || !bankFilterHydrated) return;
@@ -989,7 +997,7 @@ export function TransactionsPage() {
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     const selectedBudget = budgets.data?.find((b) => b.id === budgetId);
-    const accountId = selectedBudget?.accountId || selectedBankId;
+    const accountId = selectedBudget?.accountId || effectiveSelectedBankId;
     if (!workspaceId || !accountId || !subject || !amount || !transactionDate || !budgetId) return;
     createTx.mutate({
       subject,
@@ -1006,9 +1014,9 @@ export function TransactionsPage() {
 
   const visibleBudgets = useMemo(() => {
     if (!budgets.data?.length) return [];
-    if (!selectedBankId) return budgets.data;
-    return budgets.data.filter((b) => b.accountId === selectedBankId);
-  }, [budgets.data, selectedBankId]);
+    if (!effectiveSelectedBankId) return budgets.data;
+    return budgets.data.filter((b) => b.accountId === effectiveSelectedBankId);
+  }, [budgets.data, effectiveSelectedBankId]);
   const editingTransaction = useMemo(
     () => transactionList.find((tx) => tx.id === editingTxId) ?? null,
     [transactionList, editingTxId],
@@ -1076,8 +1084,8 @@ export function TransactionsPage() {
     [visibleBudgets],
   );
   const selectedBank = useMemo(
-    () => (bankAccounts.data ?? []).find((bank) => bank.id === selectedBankId) ?? null,
-    [bankAccounts.data, selectedBankId],
+    () => bankAccountOptions.find((bank) => bank.id === effectiveSelectedBankId) ?? null,
+    [bankAccountOptions, effectiveSelectedBankId],
   );
   const displayedBankBalanceCents = selectedBank ? selectedBank.currentBalanceCents : totalBankBalanceCents;
   const displayedLinkedBudgetCents = selectedBank ? visibleBudgetTotalCents : totalLinkedBudgetCents;
@@ -1271,7 +1279,7 @@ export function TransactionsPage() {
     createBudget.reset();
     setCreateBudgetName("");
     setCreateBudgetTarget("");
-    setCreateBudgetAccountId(selectedBankId || bankAccounts.data?.[0]?.id || "");
+    setCreateBudgetAccountId(effectiveSelectedBankId || bankAccountOptions[0]?.id || "");
     setIsBudgetModalOpen(true);
   };
 
@@ -1470,15 +1478,17 @@ export function TransactionsPage() {
               </div>
             </div>
             <div className="bank-selector-actions" ref={bankPickerRef}>
-              <button
-                type="button"
-                className="bm-edit-btn"
-                onClick={() => setIsBankPickerOpen((open) => !open)}
-                aria-label="Choose bank"
-                title="Choose bank"
-              >
-                ▾
-              </button>
+              {hasMultipleBankAccounts ? (
+                <button
+                  type="button"
+                  className="bm-edit-btn"
+                  onClick={() => setIsBankPickerOpen((open) => !open)}
+                  aria-label="Choose bank"
+                  title="Choose bank"
+                >
+                  ▾
+                </button>
+              ) : null}
               {selectedBank ? (
                 <button
                   type="button"
@@ -1490,7 +1500,7 @@ export function TransactionsPage() {
                   ✎
                 </button>
               ) : null}
-              {isBankPickerOpen ? (
+              {isBankPickerOpen && hasMultipleBankAccounts ? (
                 <div className="bank-selector-menu" role="menu" aria-label="Bank options">
                   <button
                     type="button"
@@ -1502,7 +1512,7 @@ export function TransactionsPage() {
                   >
                     All banks
                   </button>
-                  {(bankAccounts.data ?? []).map((bank) => (
+                  {bankAccountOptions.map((bank) => (
                     <button
                       key={bank.id}
                       type="button"
@@ -2070,7 +2080,7 @@ export function TransactionsPage() {
             <EmptyState
               icon={searchQuery.trim() ? "🔎" : "📑"}
               title={searchQuery.trim() ? "No matching transactions" : "No transactions"}
-              description={searchQuery.trim() ? `No transactions match “${searchQuery.trim()}”.` : selectedMonthFilter !== "ALL" ? "No transactions for this month." : selectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
+              description={searchQuery.trim() ? `No transactions match “${searchQuery.trim()}”.` : selectedMonthFilter !== "ALL" ? "No transactions for this month." : effectiveSelectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
               action={!searchQuery.trim() ? (
                 <button className="btn btn-primary" onClick={openCreateModal}>
                   + Add Transaction

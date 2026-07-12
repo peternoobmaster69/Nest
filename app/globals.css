@@ -5600,8 +5600,11 @@ body[data-modal-scroll-lock="true"] {
 
 .card.tx-group-panel {
   box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   height: 52px;
   padding: 8px 12px;
+  overflow: hidden;
   border-style: dashed;
   background: color-mix(in srgb, var(--bg-subtle) 55%, var(--bg-surface));
 }
@@ -5681,8 +5684,10 @@ body[data-modal-scroll-lock="true"] {
   display: flex;
   flex: 1 1 0;
   min-width: 80px;
+  max-width: 100%;
   gap: 6px;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
 }
@@ -5965,11 +5970,12 @@ body[data-modal-scroll-lock="true"] {
   }
 
   .tx-group-cards {
+    min-width: 0;
     scroll-snap-type: x proximity;
   }
 
   .tx-group-card {
-    flex: 0 0 190px;
+    flex: 0 0 min(178px, calc(100vw - 134px));
     scroll-snap-align: start;
   }
 

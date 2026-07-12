@@ -750,16 +750,26 @@ export function DashboardShell({
     enabled: Boolean(workspaceId),
   });
 
+  const bankAccountsQuery = useQuery({
+    queryKey: ["bank-accounts", workspaceId],
+    queryFn: () => fetchJson<BankAccountSummary[]>(`/api/accounts?workspaceId=${workspaceId}`),
+    enabled: Boolean(workspaceId),
+  });
+  const bankAccountOptions = useMemo(() => bankAccountsQuery.data ?? [], [bankAccountsQuery.data]);
+  const hasMultipleBankAccounts = bankAccountOptions.length > 1;
+  const effectiveSelectedBankFilterId =
+    bankAccountOptions.length === 1 ? bankAccountOptions[0].id : selectedBankFilterId;
+
   const transactionsQuery = useQuery({
-    queryKey: ["transactions", workspaceId, selectedBankFilterId],
+    queryKey: ["transactions", workspaceId, effectiveSelectedBankFilterId],
     queryFn: () => {
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
         paginated: "1",
         limit: String(RECENT_TRANSACTION_LIMIT),
       });
-      if (selectedBankFilterId !== "ALL") {
-        params.set("accountId", selectedBankFilterId);
+      if (effectiveSelectedBankFilterId !== "ALL") {
+        params.set("accountId", effectiveSelectedBankFilterId);
       }
       return fetchJson<TransactionsSummaryResponse>(`/api/transactions?${params.toString()}`);
     },
@@ -772,17 +782,12 @@ export function DashboardShell({
     enabled: Boolean(workspaceId),
   });
 
-  const bankAccountsQuery = useQuery({
-    queryKey: ["bank-accounts", workspaceId],
-    queryFn: () => fetchJson<BankAccountSummary[]>(`/api/accounts?workspaceId=${workspaceId}`),
-    enabled: Boolean(workspaceId),
-  });
   const investmentsQuery = useQuery({
     queryKey: ["investments", workspaceId],
     queryFn: () => fetchJson<InvestmentAccountSummary[]>(`/api/investments?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
-  const firstBankAccountId = bankAccountsQuery.data?.[0]?.id;
+  const firstBankAccountId = bankAccountOptions[0]?.id;
 
   const updateBankBalance = useMutation({
     mutationFn: ({ id, startingCents }: { id: string; startingCents: number }) =>
@@ -1185,8 +1190,8 @@ export function DashboardShell({
   };
   const filteredBudgets = useMemo(
     () =>
-      (budgetsQuery.data ?? []).filter((b) => selectedBankFilterId === "ALL" || b.accountId === selectedBankFilterId),
-    [budgetsQuery.data, selectedBankFilterId],
+      (budgetsQuery.data ?? []).filter((b) => effectiveSelectedBankFilterId === "ALL" || b.accountId === effectiveSelectedBankFilterId),
+    [budgetsQuery.data, effectiveSelectedBankFilterId],
   );
   const filteredTransactions = useMemo(
     () => transactionsQuery.data?.transactions ?? [],
@@ -1217,13 +1222,13 @@ export function DashboardShell({
   );
   const filteredBankDiscrepancies = useMemo(
     () =>
-      summary.bankDiscrepancies.filter((d) => selectedBankFilterId === "ALL" || d.id === selectedBankFilterId),
-    [summary.bankDiscrepancies, selectedBankFilterId],
+      summary.bankDiscrepancies.filter((d) => effectiveSelectedBankFilterId === "ALL" || d.id === effectiveSelectedBankFilterId),
+    [summary.bankDiscrepancies, effectiveSelectedBankFilterId],
   );
   const filteredBankBalance =
-    selectedBankFilterId === "ALL"
+    effectiveSelectedBankFilterId === "ALL"
       ? summary.totalBalanceCents
-      : bankAccountsQuery.data?.find((b) => b.id === selectedBankFilterId)?.currentBalanceCents ?? 0;
+      : bankAccountOptions.find((b) => b.id === effectiveSelectedBankFilterId)?.currentBalanceCents ?? 0;
 
   const totalBudgeted = useMemo(
     () => filteredBudgets.reduce((sum, b) => sum + b.availableCents, 0),
@@ -1239,7 +1244,7 @@ export function DashboardShell({
         const budget = tx.budgetId ? budgetById.get(tx.budgetId) : undefined;
         return {
           tx,
-          showBudgetIcon: selectedBankFilterId === "ALL" && Boolean(budget),
+          showBudgetIcon: effectiveSelectedBankFilterId === "ALL" && Boolean(budget),
           budgetIcon: budget ? getBudgetIcon(budget.name, budget.icon) : null,
           budgetName: (tx.budgetId && budgetNameById.get(tx.budgetId)) || "Unassigned",
           amountClassName: getAmountToneClass(tx.direction === "DEBIT" ? -tx.amountCents : tx.amountCents),
@@ -1248,7 +1253,7 @@ export function DashboardShell({
           formattedDate: new Date(tx.date).toLocaleDateString(),
         };
       }),
-    [budgetById, budgetNameById, filteredTransactions, formatCents, selectedBankFilterId],
+    [budgetById, budgetNameById, effectiveSelectedBankFilterId, filteredTransactions, formatCents],
   );
   const cashFlowAccountOptions = useMemo(
     () => [
@@ -1268,16 +1273,16 @@ export function DashboardShell({
   const selectedCashFlowAccountName =
     cashFlowAccountOptions.find((account) => account.id === selectedCashFlowAccountId)?.name ?? "All sub-accounts";
   const cashFlowScopeName =
-    selectedBankFilterId === ALL_BANKS_FILTER
+    effectiveSelectedBankFilterId === ALL_BANKS_FILTER
       ? "all accounts"
-      : bankAccountsQuery.data?.find((account) => account.id === selectedBankFilterId)?.name ?? "selected account";
+      : bankAccountOptions.find((account) => account.id === effectiveSelectedBankFilterId)?.name ?? "selected account";
   const cashFlowPoints = useMemo<CashFlowPoint[]>(
     () =>
       (summary.cashFlow ?? []).map((month) => {
         if (selectedCashFlowAccountId === CASH_FLOW_ALL_ACCOUNTS) {
-          const accountMonth = selectedBankFilterId === ALL_BANKS_FILTER
+          const accountMonth = effectiveSelectedBankFilterId === ALL_BANKS_FILTER
             ? month
-            : month.accounts?.[selectedBankFilterId] ?? {
+            : month.accounts?.[effectiveSelectedBankFilterId] ?? {
                 inflowCents: 0,
                 outflowCents: 0,
                 netCents: 0,
@@ -1303,7 +1308,7 @@ export function DashboardShell({
           netCents: budgetMonth.netCents,
         };
       }),
-    [selectedBankFilterId, selectedCashFlowAccountId, summary.cashFlow],
+    [effectiveSelectedBankFilterId, selectedCashFlowAccountId, summary.cashFlow],
   );
   const hasCashFlowData = cashFlowPoints.some((point) => point.inflowCents > 0 || point.outflowCents > 0);
 
@@ -1329,9 +1334,9 @@ export function DashboardShell({
     .reduce((sum, budget) => sum + budget.availableCents, 0);
   const totalInvestmentsAndSavings = investmentTotals.current + totalSavings;
   const selectedBank =
-    selectedBankFilterId === "ALL"
+    effectiveSelectedBankFilterId === "ALL"
       ? null
-      : bankAccountsQuery.data?.find((bank) => bank.id === selectedBankFilterId) ?? null;
+      : bankAccountOptions.find((bank) => bank.id === effectiveSelectedBankFilterId) ?? null;
 
   useEffect(() => {
     if (!dashboardBankStorageKey) return;
@@ -1350,12 +1355,16 @@ export function DashboardShell({
   }, [dashboardBankStorageKey, selectedBankFilterId, bankFilterHydrated]);
 
   useEffect(() => {
-    if (selectedBankFilterId === "ALL") return;
-    if (!bankAccountsQuery.data?.length) return;
-    if (!bankAccountsQuery.data?.some((b) => b.id === selectedBankFilterId)) {
+    if (!bankAccountOptions.length) return;
+    if (bankAccountOptions.length === 1) {
+      const onlyBankId = bankAccountOptions[0].id;
+      if (selectedBankFilterId !== onlyBankId) setSelectedBankFilterId(onlyBankId);
+      return;
+    }
+    if (selectedBankFilterId !== "ALL" && !bankAccountOptions.some((b) => b.id === selectedBankFilterId)) {
       setSelectedBankFilterId("ALL");
     }
-  }, [bankAccountsQuery.data, selectedBankFilterId]);
+  }, [bankAccountOptions, selectedBankFilterId]);
 
   useEffect(() => {
     if (!isBankPickerOpen) return;
@@ -1422,15 +1431,17 @@ export function DashboardShell({
                     </div>
                   </div>
                   <div className="bank-selector-actions" ref={bankPickerRef}>
-                    <button
-                      type="button"
-                      className="bm-edit-btn"
-                      onClick={() => setIsBankPickerOpen((open) => !open)}
-                      aria-label="Choose bank"
-                      title="Choose bank"
-                    >
-                      ▾
-                    </button>
+                    {hasMultipleBankAccounts ? (
+                      <button
+                        type="button"
+                        className="bm-edit-btn"
+                        onClick={() => setIsBankPickerOpen((open) => !open)}
+                        aria-label="Choose bank"
+                        title="Choose bank"
+                      >
+                        ▾
+                      </button>
+                    ) : null}
                     {selectedBank ? (
                       <button
                         type="button"
@@ -1442,7 +1453,7 @@ export function DashboardShell({
                         ✎
                       </button>
                     ) : null}
-                    {isBankPickerOpen ? (
+                    {isBankPickerOpen && hasMultipleBankAccounts ? (
                       <div className="bank-selector-menu" role="menu" aria-label="Bank options">
                         <button
                           type="button"
@@ -1454,7 +1465,7 @@ export function DashboardShell({
                         >
                           All banks
                         </button>
-                        {bankAccountsQuery.data?.map((bank) => (
+                        {bankAccountOptions.map((bank) => (
                           <button
                             key={bank.id}
                             type="button"
