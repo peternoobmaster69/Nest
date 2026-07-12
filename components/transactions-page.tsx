@@ -17,6 +17,11 @@ import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ArrowLeftRight, Check, Layers3, Pencil, Plus, X } from "lucide-react";
 
 const ALL_BANKS_FILTER = "ALL";
+const GROUP_ICON_OPTIONS = [
+  "📌", "🧳", "🛠️", "🎁", "🏥", "🚗", "🎓", "💼", "🎯", "✈️",
+  "🏠", "🍽️", "🛒", "🎉", "💍", "👶", "🐾", "🎮", "📱", "💻",
+  "🧾s", "🏖️", "⛺", "🎵", "📚", "🏋️", "🚌", "🚆", "💡", "🩺",
+] as const;
 
 type AppContext = {
   workspaceId: string | null;
@@ -299,6 +304,7 @@ export function TransactionsPage() {
   const [groupIcon, setGroupIcon] = useState("📌");
   const [editingGroup, setEditingGroup] = useState<TransactionGroup | null>(null);
   const [editingGroupName, setEditingGroupName] = useState("");
+  const [editingGroupIcon, setEditingGroupIcon] = useState("📌");
   const [editingGroupSearch, setEditingGroupSearch] = useState("");
   const [debouncedEditingGroupSearch, setDebouncedEditingGroupSearch] = useState("");
   const [editingGroupMembershipChanges, setEditingGroupMembershipChanges] = useState<Record<string, boolean>>({});
@@ -510,6 +516,11 @@ export function TransactionsPage() {
     setActiveQuickSelect(null);
     setSelectedMonth(null);
     setDateFilter({});
+  };
+
+  const toggleTransactionGroupFilter = (groupId: string) => {
+    setActiveGroupFilterId((currentGroupId) => currentGroupId === groupId ? "ALL" : groupId);
+    clearDateFilter();
   };
 
   const transactions = useInfiniteQuery({
@@ -782,22 +793,25 @@ export function TransactionsPage() {
     mutationFn: ({
       id,
       name,
+      icon,
       addTransactionIds,
       removeTransactionIds,
     }: {
       id: string;
       name: string;
+      icon: string;
       addTransactionIds: string[];
       removeTransactionIds: string[];
     }) =>
       fetchJson(`/api/transaction-groups/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, addTransactionIds, removeTransactionIds }),
+        body: JSON.stringify({ name, icon, addTransactionIds, removeTransactionIds }),
       }),
     onSuccess: () => {
       setEditingGroup(null);
       setEditingGroupName("");
+      setEditingGroupIcon("📌");
       setEditingGroupSearch("");
       setDebouncedEditingGroupSearch("");
       setEditingGroupMembershipChanges({});
@@ -811,6 +825,7 @@ export function TransactionsPage() {
     onSuccess: () => {
       setEditingGroup(null);
       setEditingGroupName("");
+      setEditingGroupIcon("📌");
       setEditingGroupSearch("");
       setDebouncedEditingGroupSearch("");
       setEditingGroupMembershipChanges({});
@@ -1312,6 +1327,8 @@ export function TransactionsPage() {
   };
 
   const activeBudget = budgets.data?.find((budget) => budget.id === activeBudgetFilterId);
+  const visibleTransactionGroups = transactionGroups.data ?? [];
+  const hasTransactionGroups = visibleTransactionGroups.length > 0;
   const editingGroupOriginalMemberIds = new Set(editingGroupDetail.data?.memberIds ?? []);
   const editingGroupSelectedCount = (() => {
     let count = editingGroupOriginalMemberIds.size;
@@ -1328,6 +1345,7 @@ export function TransactionsPage() {
     deleteTransactionGroup.reset();
     setEditingGroup(group);
     setEditingGroupName(group.name);
+    setEditingGroupIcon(group.icon || "📌");
     setEditingGroupSearch("");
     setDebouncedEditingGroupSearch("");
     setEditingGroupMembershipChanges({});
@@ -1336,6 +1354,7 @@ export function TransactionsPage() {
   const closeEditingGroupModal = () => {
     setEditingGroup(null);
     setEditingGroupName("");
+    setEditingGroupIcon("📌");
     setEditingGroupSearch("");
     setDebouncedEditingGroupSearch("");
     setEditingGroupMembershipChanges({});
@@ -1359,6 +1378,7 @@ export function TransactionsPage() {
     updateTransactionGroup.mutate({
       id: editingGroup.id,
       name: editingGroupName.trim(),
+      icon: editingGroupIcon,
       addTransactionIds,
       removeTransactionIds,
     });
@@ -1689,15 +1709,70 @@ export function TransactionsPage() {
       </section>
 
       {activeBudgetFilterId !== "ALL" ? (
-        <section className="card tx-group-panel" aria-label={`Groups in ${activeBudget?.name ?? "sub-account"}`}>
+        <section
+          className={`card tx-group-panel${transactionGroups.isLoading ? " is-loading" : hasTransactionGroups ? " has-groups" : " is-empty"}`}
+          aria-label={`Groups in ${activeBudget?.name ?? "sub-account"}`}
+        >
           <div className="tx-group-panel-head">
-            <div>
-              <div className="tx-group-panel-title">
-                <Layers3 size={16} aria-hidden="true" />
-                <span>{activeBudget?.name} groups</span>
-              </div>
-              <p>Bring related transactions together—by project, event, purchase, goal, trip, or anything else.</p>
+            <div className="tx-group-panel-heading">
+              <span className="tx-group-panel-symbol" aria-hidden="true">
+                <Layers3 size={15} />
+              </span>
+              {hasTransactionGroups ? (
+                <span className="tx-group-count" aria-label={`${visibleTransactionGroups.length} groups`}>
+                  {visibleTransactionGroups.length}
+                </span>
+              ) : !transactionGroups.isLoading ? (
+                <p>No groups yet. Create one to organise related transactions.</p>
+              ) : (
+                <p><LoadingDots /> Loading groups</p>
+              )}
             </div>
+            {hasTransactionGroups ? (
+              <div className="tx-group-cards">
+                {visibleTransactionGroups.map((group) => {
+                  const isActive = activeGroupFilterId === group.id;
+                  return (
+                    <div
+                      key={group.id}
+                      className={`tx-group-card${isActive ? " is-active" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isActive}
+                      aria-label={isActive ? `Clear ${group.name} filter and show all transactions` : `Show ${group.name} transactions`}
+                      title={isActive ? "Select again to show all transactions" : `Show ${group.name} transactions`}
+                      onClick={() => toggleTransactionGroupFilter(group.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleTransactionGroupFilter(group.id);
+                        }
+                      }}
+                    >
+                      <span className="tx-group-card-icon" aria-hidden="true">{group.icon || "📌"}</span>
+                      <span className="tx-group-card-copy">
+                        <strong>{group.name}</strong>
+                        <small>{group.transactionCount}</small>
+                      </span>
+                      <span className="tx-group-card-total">
+                        <strong>{formatCents(group.expenseCents - group.incomeCents)}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        className="tx-group-card-edit"
+                        aria-label={`Edit ${group.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openEditingGroupModal(group);
+                        }}
+                      >
+                        <Pencil size={12} aria-hidden="true" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -1708,66 +1783,9 @@ export function TransactionsPage() {
               }}
               disabled={!filteredTransactions.length}
             >
-              <Plus size={15} aria-hidden="true" />
-              Group transactions
+              Group
             </button>
           </div>
-          <div className="tx-group-cards">
-            <button
-              type="button"
-              className={`tx-group-card tx-group-card-all${activeGroupFilterId === "ALL" ? " is-active" : ""}`}
-              onClick={() => setActiveGroupFilterId("ALL")}
-            >
-              <span className="tx-group-card-icon" aria-hidden="true">📚</span>
-              <span className="tx-group-card-copy">
-                <strong>All transactions</strong>
-                <small>Grouped and ungrouped</small>
-              </span>
-            </button>
-            {(transactionGroups.data ?? []).map((group) => (
-              <div
-                key={group.id}
-                className={`tx-group-card${activeGroupFilterId === group.id ? " is-active" : ""}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  setActiveGroupFilterId(group.id);
-                  clearDateFilter();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setActiveGroupFilterId(group.id);
-                    clearDateFilter();
-                  }
-                }}
-              >
-                <span className="tx-group-card-icon" aria-hidden="true">{group.icon || "📌"}</span>
-                <span className="tx-group-card-copy">
-                  <strong>{group.name}</strong>
-                  <small>{group.transactionCount} {group.transactionCount === 1 ? "transaction" : "transactions"}</small>
-                </span>
-                <span className="tx-group-card-total">
-                  <small>Net spent</small>
-                  <strong>{formatCents(group.expenseCents - group.incomeCents)}</strong>
-                </span>
-                <button
-                  type="button"
-                  className="tx-group-card-edit"
-                  aria-label={`Edit ${group.name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openEditingGroupModal(group);
-                  }}
-                >
-                  <Pencil size={13} aria-hidden="true" />
-                </button>
-              </div>
-            ))}
-          </div>
-          {!transactionGroups.isLoading && !(transactionGroups.data ?? []).length ? (
-            <div className="tx-group-empty">No groups yet. Select a few transactions to create the first one.</div>
-          ) : null}
         </section>
       ) : null}
 
@@ -2091,7 +2109,7 @@ export function TransactionsPage() {
                     <label className="tx-group-field tx-group-icon-field">
                       Icon
                       <select className="input" value={groupIcon} onChange={(event) => setGroupIcon(event.target.value)}>
-                        {[groupIcon, "📌", "🧳", "🛠️", "🎁", "🏥", "🚗", "🎓", "💼", "🎯"].filter((icon, index, icons) => icons.indexOf(icon) === index).map((icon) => (
+                        {[groupIcon, ...GROUP_ICON_OPTIONS].filter((icon, index, icons) => icons.indexOf(icon) === index).map((icon) => (
                           <option key={icon} value={icon}>{icon}</option>
                         ))}
                       </select>
@@ -2135,10 +2153,20 @@ export function TransactionsPage() {
             </div>
             <form onSubmit={submitEditingGroup} className="tx-group-edit-form">
               <div className="profile-modal-body">
-                <label className="tx-group-field">
-                  Name
-                  <input className="input" value={editingGroupName} onChange={(event) => setEditingGroupName(event.target.value)} maxLength={80} autoFocus required />
-                </label>
+                <div className="tx-group-name-row">
+                  <label className="tx-group-field tx-group-icon-field">
+                    Icon
+                    <select className="input" value={editingGroupIcon} onChange={(event) => setEditingGroupIcon(event.target.value)} aria-label="Group icon">
+                      {[editingGroupIcon, ...GROUP_ICON_OPTIONS].filter((icon, index, icons) => icons.indexOf(icon) === index).map((icon) => (
+                        <option key={icon} value={icon}>{icon}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="tx-group-field">
+                    Name
+                    <input className="input" value={editingGroupName} onChange={(event) => setEditingGroupName(event.target.value)} maxLength={80} autoFocus required />
+                  </label>
+                </div>
                 <div className="tx-group-members-head">
                   <div>
                     <strong>Transactions</strong>

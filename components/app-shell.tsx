@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Home, Menu } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { NotificationBell } from "@/components/notification-bell";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export type AppShellContext = {
   workspaceId?: string | null;

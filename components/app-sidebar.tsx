@@ -227,7 +227,7 @@ export function AppSidebar({
 
   const handleNavClick = () => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia("(max-width: 1024px)").matches) {
+    if (window.matchMedia("(max-width: 1280px)").matches) {
       setIsOpen(false);
       window.sessionStorage.setItem("nest:ui:sidebarOpen", "0");
     }

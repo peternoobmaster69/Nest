@@ -36,7 +36,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         amountCents: true,
         status: true,
         title: true,
-        remarkTogether: true,
         notes: true,
       },
     });
@@ -54,7 +53,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { id: receivable.workspaceId },
       select: {
         id: true,
-        name: true,
         receivableDefaultAccountId: true,
         receivableDefaultBudgetId: true,
       },
@@ -73,7 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         kind: "BANK",
         isActive: true,
       },
-      select: { id: true, name: true, workspaceId: true },
+      select: { id: true, workspaceId: true },
     });
     if (!targetAccount) {
       return NextResponse.json(
@@ -99,24 +97,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     const targetWorkspaceId = targetBudget.workspaceId;
 
-    // Destination workspace for receivable close-in posting
-    const destinationWorkspace = await prisma.workspace.findUnique({
-      where: { id: targetWorkspaceId },
-      select: { id: true, name: true },
-    });
-    if (!destinationWorkspace) {
-      return NextResponse.json({ error: "Destination workspace not found" }, { status: 404 });
-    }
-
     const effectiveSourceAccountId = receivable.sourceAccountId ?? receivable.accountId;
     const effectiveSourceBudgetId = receivable.sourceBudgetId ?? receivable.budgetId;
 
-    let sourceAccount: { id: string; name: string; workspaceId: string } | null = null;
+    let sourceAccount: { id: string; workspaceId: string } | null = null;
     let sourceBudget: { id: string } | null = null;
     if (effectiveSourceAccountId) {
       const account = await prisma.financialAccount.findFirst({
         where: { id: effectiveSourceAccountId, kind: "BANK", isActive: true },
-        select: { id: true, name: true, workspaceId: true },
+        select: { id: true, workspaceId: true },
       });
       if (!account) {
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
@@ -150,8 +139,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const closeDate = parsed.data.closeDate ? new Date(parsed.data.closeDate) : new Date();
     const externalRef = `receivable-close:${receivable.id}:${Date.now()}`;
-    const transactionTitle = receivable.title.trim() || "Receivable";
-    const transactionNotes = receivable.notes?.trim() || null;
+    const transactionTitle = receivable.title;
+    const transactionNotes = receivable.notes ?? null;
 
     const result = await prisma.$transaction(async (db) => {
       const incomeTx = await db.transaction.create({
@@ -164,7 +153,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           date: closeDate,
           amountCents: receivable.amountCents,
           subject: transactionTitle,
-          details: sourceAccount ? `Receivable closed • funded from ${sourceAccount.name}` : "Receivable closed",
+          // Receivable postings use notes as their only descriptive field. Keeping
+          // details empty prevents legacy details-as-notes clients from showing
+          // internal transfer metadata instead of the receivable notes.
+          details: null,
           notes: transactionNotes,
           externalRef,
           isSynced: false,
@@ -191,7 +183,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             date: closeDate,
             amountCents: receivable.amountCents,
             subject: transactionTitle,
-            details: `Receivable transfer out • to workspace "${destinationWorkspace.name}" receivable account`,
+            details: null,
             notes: transactionNotes,
             externalRef,
             isSynced: false,
