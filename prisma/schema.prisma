@@ -117,6 +117,7 @@ model Workspace {
   monthlyBudgets      MonthlyBudget[]
   monthlyBudgetPlans  MonthlyBudgetPlan[]
   inAppNotifications InAppNotification[]
+  transactionGroups  TransactionGroup[]
 
   @@index([publicNetWorthToken])
 }
@@ -270,6 +271,7 @@ model BudgetEnvelope {
   incomingMonthlyBudgetPlanItems MonthlyBudgetPlanItem[]
   expenseTypes   ExpenseType[]
   transactions   Transaction[]
+  transactionGroups TransactionGroup[]
   receivables    Receivable[]
 
   @@index([workspaceId, accountId])
@@ -433,6 +435,7 @@ model Transaction {
   workspaceId     String
   accountId       String
   budgetId        String?
+  groupId         String?
   kind            String
   direction       String
   date            DateTime
@@ -448,6 +451,7 @@ model Transaction {
   workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account         FinancialAccount     @relation(fields: [accountId], references: [id], onDelete: NoAction)
   budget          BudgetEnvelope?      @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  group           TransactionGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
   expense         Expense?
   creditCardLinks CreditCardTxnLink[]
   migrationMap    LegacyRecordLink?
@@ -455,10 +459,26 @@ model Transaction {
   @@index([workspaceId, date])
   @@index([accountId, date])
   @@index([workspaceId, budgetId, date])
+  @@index([workspaceId, groupId, date])
   @@index([workspaceId, date, createdAt, id])
   @@index([workspaceId, direction, date])
   @@index([workspaceId, budgetId, direction, date])
   @@index([workspaceId, accountId, date])
+}
+
+model TransactionGroup {
+  id           String          @id @default(cuid())
+  workspaceId  String
+  budgetId     String
+  name         String
+  icon         String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  budget       BudgetEnvelope  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([workspaceId, budgetId, updatedAt])
 }
 
 model Expense {

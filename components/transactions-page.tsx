@@ -14,7 +14,7 @@ import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
-import { ArrowLeftRight, Plus } from "lucide-react";
+import { ArrowLeftRight, Check, Layers3, Pencil, Plus, X } from "lucide-react";
 
 const ALL_BANKS_FILTER = "ALL";
 
@@ -38,6 +38,8 @@ type Transaction = {
   id: string;
   accountId: string;
   budgetId?: string | null;
+  groupId?: string | null;
+  group?: { id: string; name: string; icon?: string | null } | null;
   subject: string;
   details?: string | null;
   notes?: string | null;
@@ -45,6 +47,28 @@ type Transaction = {
   direction: "DEBIT" | "CREDIT";
   kind: string;
   date: string;
+};
+
+type TransactionGroup = {
+  id: string;
+  budgetId: string;
+  name: string;
+  icon?: string | null;
+  transactionCount: number;
+  incomeCents: number;
+  expenseCents: number;
+  netCents: number;
+  firstTransactionDate?: string | null;
+  lastTransactionDate?: string | null;
+};
+
+type GroupTransactionOption = Pick<Transaction, "id" | "subject" | "date" | "amountCents" | "direction" | "groupId" | "group">;
+
+type TransactionGroupDetail = {
+  group: Pick<TransactionGroup, "id" | "budgetId" | "name" | "icon">;
+  memberIds: string[];
+  transactions: GroupTransactionOption[];
+  candidateLimit: number;
 };
 
 type TransactionsPageResponse = {
@@ -179,6 +203,31 @@ function getBudgetIcon(name: string, icon?: string | null) {
   return "💰";
 }
 
+function getContextualGroupDefaults(budget: Budget | undefined, transactions: Transaction[]) {
+  const name = budget?.name ?? "Transactions";
+  const key = name.toLocaleLowerCase();
+  const contexts = [
+    { match: /holiday|travel|vacation|trip/, icon: "🧳", example: "Japan trip" },
+    { match: /home|house|renovation|repair/, icon: "🛠️", example: "Kitchen renovation" },
+    { match: /health|medical|hospital|insurance/, icon: "🏥", example: "Insurance claim" },
+    { match: /car|vehicle|transport/, icon: "🚗", example: "Major service" },
+    { match: /gift|family|birthday/, icon: "🎁", example: "Mum's birthday" },
+    { match: /school|education|course/, icon: "🎓", example: "Design course" },
+    { match: /work|business|project/, icon: "💼", example: "Client project" },
+    { match: /wedding/, icon: "💍", example: "Wedding expenses" },
+  ];
+  const context = contexts.find((item) => item.match.test(key));
+  const dates = transactions.map((transaction) => new Date(transaction.date)).filter((date) => !Number.isNaN(date.getTime()));
+  const latestDate = dates.length ? new Date(Math.max(...dates.map((date) => date.getTime()))) : new Date();
+  const period = latestDate.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+
+  return {
+    icon: context?.icon ?? budget?.icon ?? "📌",
+    suggestedName: `${name} · ${period}`,
+    placeholder: `e.g. ${context?.example ?? "Annual renewal"}`,
+  };
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const data = (await res.json().catch(() => null)) as
@@ -210,11 +259,13 @@ export function TransactionsPage() {
   const [notes, setNotes] = useState("");
   const [amount, setAmount] = useState("");
   const [budgetId, setBudgetId] = useState("");
+  const [transactionGroupId, setTransactionGroupId] = useState("");
   const [operation, setOperation] = useState<"DEDUCT" | "ADD">("ADD");
   const [selectedBankId, setSelectedBankId] = useState("");
   const [transactionDate, setTransactionDate] = useState("");
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [activeBudgetFilterId, setActiveBudgetFilterId] = useState<string>("ALL");
+  const [activeGroupFilterId, setActiveGroupFilterId] = useState<string>("ALL");
   const [urlFilterHydrated, setUrlFilterHydrated] = useState(false);
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
@@ -225,6 +276,7 @@ export function TransactionsPage() {
   const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("ADD");
   const [editTransactionDate, setEditTransactionDate] = useState("");
   const [editBudgetId, setEditBudgetId] = useState("");
+  const [editGroupId, setEditGroupId] = useState("");
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
   const [editBankBalance, setEditBankBalance] = useState("");
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -239,6 +291,17 @@ export function TransactionsPage() {
   const loadMoreTransactionsRef = useRef<HTMLDivElement | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>("ALL"); // Format: "YYYY-MM" or "ALL"
+  const [isGroupingMode, setIsGroupingMode] = useState(false);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [groupDestinationId, setGroupDestinationId] = useState<"NEW" | string>("NEW");
+  const [groupName, setGroupName] = useState("");
+  const [groupIcon, setGroupIcon] = useState("📌");
+  const [editingGroup, setEditingGroup] = useState<TransactionGroup | null>(null);
+  const [editingGroupName, setEditingGroupName] = useState("");
+  const [editingGroupSearch, setEditingGroupSearch] = useState("");
+  const [debouncedEditingGroupSearch, setDebouncedEditingGroupSearch] = useState("");
+  const [editingGroupMembershipChanges, setEditingGroupMembershipChanges] = useState<Record<string, boolean>>({});
 
   // Budget (sub-account) management modals
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
@@ -285,6 +348,43 @@ export function TransactionsPage() {
     gcTime: 0,
   });
 
+  const transactionGroups = useQuery({
+    queryKey: ["transaction-groups", workspaceId, activeBudgetFilterId],
+    queryFn: () =>
+      fetchJson<TransactionGroup[]>(
+        `/api/transaction-groups?workspaceId=${workspaceId}&budgetId=${activeBudgetFilterId}`,
+      ),
+    enabled: Boolean(workspaceId && activeBudgetFilterId !== "ALL"),
+    staleTime: 0,
+  });
+
+  const createFormGroups = useQuery({
+    queryKey: ["transaction-groups", workspaceId, budgetId],
+    queryFn: () =>
+      fetchJson<TransactionGroup[]>(`/api/transaction-groups?workspaceId=${workspaceId}&budgetId=${budgetId}`),
+    enabled: Boolean(workspaceId && isCreateModalOpen && budgetId),
+    staleTime: 0,
+  });
+
+  const editFormGroups = useQuery({
+    queryKey: ["transaction-groups", workspaceId, editBudgetId],
+    queryFn: () =>
+      fetchJson<TransactionGroup[]>(`/api/transaction-groups?workspaceId=${workspaceId}&budgetId=${editBudgetId}`),
+    enabled: Boolean(workspaceId && editingTxId && editBudgetId),
+    staleTime: 0,
+  });
+
+  const editingGroupDetail = useQuery({
+    queryKey: ["transaction-group-detail", editingGroup?.id, debouncedEditingGroupSearch],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (debouncedEditingGroupSearch) params.set("search", debouncedEditingGroupSearch);
+      return fetchJson<TransactionGroupDetail>(`/api/transaction-groups/${editingGroup?.id}?${params.toString()}`);
+    },
+    enabled: Boolean(editingGroup?.id),
+    staleTime: 0,
+  });
+
   // Debug: log budget icons
   useEffect(() => {
     if (budgets.data) {
@@ -313,6 +413,7 @@ export function TransactionsPage() {
 
   const transactionAccountFilter = selectedBankId || "";
   const transactionBudgetFilter = activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : "";
+  const transactionGroupFilter = activeGroupFilterId !== "ALL" ? activeGroupFilterId : "";
 
   // Month/Year filter state
   const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>({});
@@ -380,6 +481,14 @@ export function TransactionsPage() {
     return () => window.clearTimeout(timeoutId);
   }, [searchQuery]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedEditingGroupSearch(editingGroupSearch.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [editingGroupSearch]);
+
   const handleQuickSelect = (type: string) => {
     setActiveQuickSelect(type);
     setSelectedMonth(null);
@@ -404,7 +513,7 @@ export function TransactionsPage() {
   };
 
   const transactions = useInfiniteQuery({
-    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionMonthFilter, debouncedSearchQuery],
+    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionGroupFilter, transactionMonthFilter, debouncedSearchQuery],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
@@ -414,6 +523,7 @@ export function TransactionsPage() {
       if (pageParam) params.set("cursor", pageParam);
       if (transactionAccountFilter) params.set("accountId", transactionAccountFilter);
       if (transactionBudgetFilter) params.set("budgetId", transactionBudgetFilter);
+      if (transactionGroupFilter) params.set("groupId", transactionGroupFilter);
       if (dateFilter.from) params.set("from", dateFilter.from);
       if (dateFilter.to) params.set("to", dateFilter.to);
       if (transactionMonthFilter) params.set("month", transactionMonthFilter);
@@ -497,6 +607,19 @@ export function TransactionsPage() {
   }, [activeBudgetFilterId, selectedBankId, budgets.data]);
 
   useEffect(() => {
+    setActiveGroupFilterId("ALL");
+    setIsGroupingMode(false);
+    setSelectedTransactionIds([]);
+  }, [activeBudgetFilterId]);
+
+  useEffect(() => {
+    if (activeGroupFilterId === "ALL" || transactionGroups.isLoading) return;
+    if (!(transactionGroups.data ?? []).some((group) => group.id === activeGroupFilterId)) {
+      setActiveGroupFilterId("ALL");
+    }
+  }, [activeGroupFilterId, transactionGroups.data, transactionGroups.isLoading]);
+
+  useEffect(() => {
     if (urlFilterHydrated) return;
     if (!bankAccounts.data || !budgets.data) return;
 
@@ -547,6 +670,7 @@ export function TransactionsPage() {
       operation: "DEDUCT" | "ADD";
       date: string;
       budgetId: string;
+      groupId?: string;
       budgetOperation: "DEDUCT" | "ADD";
     }) =>
       fetchJson("/api/transactions", {
@@ -562,6 +686,7 @@ export function TransactionsPage() {
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
           date: new Date(payload.date).toISOString(),
           budgetId: payload.budgetId,
+          groupId: payload.groupId || undefined,
           budgetOperation: payload.budgetOperation,
         }),
       }),
@@ -570,10 +695,12 @@ export function TransactionsPage() {
       setNotes("");
       setAmount("");
       setBudgetId("");
+      setTransactionGroupId("");
       setOperation("ADD");
       setTransactionDate("");
       setIsCreateModalOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transaction-groups", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
@@ -606,10 +733,90 @@ export function TransactionsPage() {
       setTransferSourceBudgetId("");
       setTransferDestinationBudgetId("");
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transaction-groups", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+    },
+  });
+
+  const saveTransactionGroup = useMutation({
+    mutationFn: async (payload: {
+      destinationId: string;
+      name: string;
+      icon: string;
+      transactionIds: string[];
+    }) => {
+      if (payload.destinationId === "NEW") {
+        return fetchJson("/api/transaction-groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId,
+            budgetId: activeBudgetFilterId,
+            name: payload.name,
+            icon: payload.icon,
+            transactionIds: payload.transactionIds,
+          }),
+        });
+      }
+      return fetchJson(`/api/transaction-groups/${payload.destinationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addTransactionIds: payload.transactionIds }),
+      });
+    },
+    onSuccess: () => {
+      setIsGroupModalOpen(false);
+      setIsGroupingMode(false);
+      setSelectedTransactionIds([]);
+      setGroupDestinationId("NEW");
+      setGroupName("");
+      void queryClient.invalidateQueries({ queryKey: ["transaction-groups", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+    },
+  });
+
+  const updateTransactionGroup = useMutation({
+    mutationFn: ({
+      id,
+      name,
+      addTransactionIds,
+      removeTransactionIds,
+    }: {
+      id: string;
+      name: string;
+      addTransactionIds: string[];
+      removeTransactionIds: string[];
+    }) =>
+      fetchJson(`/api/transaction-groups/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, addTransactionIds, removeTransactionIds }),
+      }),
+    onSuccess: () => {
+      setEditingGroup(null);
+      setEditingGroupName("");
+      setEditingGroupSearch("");
+      setDebouncedEditingGroupSearch("");
+      setEditingGroupMembershipChanges({});
+      void queryClient.invalidateQueries({ queryKey: ["transaction-groups", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+    },
+  });
+
+  const deleteTransactionGroup = useMutation({
+    mutationFn: (id: string) => fetchJson(`/api/transaction-groups/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setEditingGroup(null);
+      setEditingGroupName("");
+      setEditingGroupSearch("");
+      setDebouncedEditingGroupSearch("");
+      setEditingGroupMembershipChanges({});
+      setActiveGroupFilterId("ALL");
+      void queryClient.invalidateQueries({ queryKey: ["transaction-groups", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
     },
   });
 
@@ -676,7 +883,7 @@ export function TransactionsPage() {
   });
 
   const updateTx = useMutation({
-    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId: string }) =>
+    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId: string; groupId?: string | null }) =>
       fetchJson(`/api/transactions/${payload.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -688,6 +895,7 @@ export function TransactionsPage() {
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
           date: new Date(payload.date).toISOString(),
           budgetId: payload.budgetId,
+          groupId: payload.groupId || null,
         }),
       }),
     onSuccess: async () => {
@@ -698,7 +906,9 @@ export function TransactionsPage() {
       setEditOperation("DEDUCT");
       setEditTransactionDate("");
       setEditBudgetId("");
+      setEditGroupId("");
       void queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: ["transaction-groups", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
@@ -719,6 +929,7 @@ export function TransactionsPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["transactions", workspaceId], refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["transaction-groups", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["transaction-months", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId], refetchType: "active" });
       await queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId], refetchType: "active" });
@@ -773,6 +984,7 @@ export function TransactionsPage() {
       operation,
       date: transactionDate,
       budgetId,
+      groupId: transactionGroupId || undefined,
       budgetOperation: operation,
     });
   };
@@ -886,6 +1098,7 @@ export function TransactionsPage() {
     setEditOperation(tx.direction === "CREDIT" ? "ADD" : "DEDUCT");
     setEditTransactionDate(new Date(tx.date).toISOString().split("T")[0]);
     setEditBudgetId(tx.budgetId || "");
+    setEditGroupId(tx.groupId || "");
   };
 
   const closeEditModal = () => {
@@ -898,6 +1111,7 @@ export function TransactionsPage() {
     setEditOperation("DEDUCT");
     setEditTransactionDate("");
     setEditBudgetId("");
+    setEditGroupId("");
   };
 
   useEffect(() => {
@@ -909,12 +1123,28 @@ export function TransactionsPage() {
   }, [isCreateModalOpen, visibleBudgets, budgetId]);
 
   useEffect(() => {
+    if (!isCreateModalOpen) return;
+    if (!createFormGroups.data) return;
+    if (transactionGroupId && !(createFormGroups.data ?? []).some((group) => group.id === transactionGroupId)) {
+      setTransactionGroupId("");
+    }
+  }, [isCreateModalOpen, createFormGroups.data, transactionGroupId]);
+
+  useEffect(() => {
     if (!editingTxId) return;
+    if (!editFormGroups.data) return;
     if (!editableBudgets.length) return;
     if (!editBudgetId || !editableBudgets.some((budget) => budget.id === editBudgetId)) {
       setEditBudgetId(editableBudgets[0].id);
     }
   }, [editingTxId, editableBudgets, editBudgetId]);
+
+  useEffect(() => {
+    if (!editingTxId) return;
+    if (editGroupId && !(editFormGroups.data ?? []).some((group) => group.id === editGroupId)) {
+      setEditGroupId("");
+    }
+  }, [editingTxId, editFormGroups.data, editGroupId]);
 
   const onSubmitEdit = (event: FormEvent) => {
     event.preventDefault();
@@ -927,6 +1157,7 @@ export function TransactionsPage() {
       operation: editOperation,
       date: editTransactionDate,
       budgetId: editBudgetId,
+      groupId: editGroupId || null,
     });
   };
 
@@ -937,6 +1168,7 @@ export function TransactionsPage() {
     setAmount("");
     setOperation("ADD");
     setBudgetId(activeBudgetFilterId !== "ALL" ? activeBudgetFilterId : visibleBudgets[0]?.id ?? "");
+    setTransactionGroupId(activeGroupFilterId !== "ALL" ? activeGroupFilterId : "");
     setTransactionDate(new Date().toISOString().split("T")[0]);
     setIsCreateModalOpen(true);
   };
@@ -1077,6 +1309,96 @@ export function TransactionsPage() {
     if (!editingBudgetId) return;
     if (!(await confirmDestructiveAction(`This will delete the sub-account and remove all transaction links. Continue?`))) return;
     deleteBudget.mutate(editingBudgetId);
+  };
+
+  const activeBudget = budgets.data?.find((budget) => budget.id === activeBudgetFilterId);
+  const editingGroupOriginalMemberIds = new Set(editingGroupDetail.data?.memberIds ?? []);
+  const editingGroupSelectedCount = (() => {
+    let count = editingGroupOriginalMemberIds.size;
+    for (const [transactionId, selected] of Object.entries(editingGroupMembershipChanges)) {
+      const wasSelected = editingGroupOriginalMemberIds.has(transactionId);
+      if (selected && !wasSelected) count += 1;
+      if (!selected && wasSelected) count -= 1;
+    }
+    return count;
+  })();
+
+  const openEditingGroupModal = (group: TransactionGroup) => {
+    updateTransactionGroup.reset();
+    deleteTransactionGroup.reset();
+    setEditingGroup(group);
+    setEditingGroupName(group.name);
+    setEditingGroupSearch("");
+    setDebouncedEditingGroupSearch("");
+    setEditingGroupMembershipChanges({});
+  };
+
+  const closeEditingGroupModal = () => {
+    setEditingGroup(null);
+    setEditingGroupName("");
+    setEditingGroupSearch("");
+    setDebouncedEditingGroupSearch("");
+    setEditingGroupMembershipChanges({});
+  };
+
+  const toggleEditingGroupTransaction = (transactionId: string) => {
+    const isSelected = editingGroupMembershipChanges[transactionId] ?? editingGroupOriginalMemberIds.has(transactionId);
+    setEditingGroupMembershipChanges((current) => ({ ...current, [transactionId]: !isSelected }));
+  };
+
+  const submitEditingGroup = (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingGroup || !editingGroupName.trim()) return;
+    const addTransactionIds: string[] = [];
+    const removeTransactionIds: string[] = [];
+    for (const [transactionId, selected] of Object.entries(editingGroupMembershipChanges)) {
+      const wasSelected = editingGroupOriginalMemberIds.has(transactionId);
+      if (selected && !wasSelected) addTransactionIds.push(transactionId);
+      if (!selected && wasSelected) removeTransactionIds.push(transactionId);
+    }
+    updateTransactionGroup.mutate({
+      id: editingGroup.id,
+      name: editingGroupName.trim(),
+      addTransactionIds,
+      removeTransactionIds,
+    });
+  };
+
+  const toggleTransactionSelection = (transactionId: string) => {
+    setSelectedTransactionIds((current) =>
+      current.includes(transactionId)
+        ? current.filter((id) => id !== transactionId)
+        : [...current, transactionId],
+    );
+  };
+
+  const openGroupingModal = () => {
+    if (!selectedTransactionIds.length) return;
+    saveTransactionGroup.reset();
+    const selectedTransactions = transactionList.filter((transaction) => selectedTransactionIds.includes(transaction.id));
+    const defaults = getContextualGroupDefaults(activeBudget, selectedTransactions);
+    setGroupDestinationId("NEW");
+    setGroupName(defaults.suggestedName);
+    setGroupIcon(defaults.icon);
+    setIsGroupModalOpen(true);
+  };
+
+  const submitGrouping = (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedTransactionIds.length) return;
+    if (groupDestinationId === "NEW" && !groupName.trim()) return;
+    saveTransactionGroup.mutate({
+      destinationId: groupDestinationId,
+      name: groupName.trim(),
+      icon: groupIcon,
+      transactionIds: selectedTransactionIds,
+    });
+  };
+
+  const confirmDeleteGroup = async () => {
+    if (!editingGroup) return;
+    if (!(await confirmDestructiveAction(`Delete “${editingGroup.name}”? Its transactions will remain in the sub-account.`))) return;
+    deleteTransactionGroup.mutate(editingGroup.id);
   };
 
   return (
@@ -1366,6 +1688,89 @@ export function TransactionsPage() {
         </div>
       </section>
 
+      {activeBudgetFilterId !== "ALL" ? (
+        <section className="card tx-group-panel" aria-label={`Groups in ${activeBudget?.name ?? "sub-account"}`}>
+          <div className="tx-group-panel-head">
+            <div>
+              <div className="tx-group-panel-title">
+                <Layers3 size={16} aria-hidden="true" />
+                <span>{activeBudget?.name} groups</span>
+              </div>
+              <p>Bring related transactions together—by project, event, purchase, goal, trip, or anything else.</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setIsGroupingMode(true);
+                setSelectedTransactionIds([]);
+                recentTransactionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              disabled={!filteredTransactions.length}
+            >
+              <Plus size={15} aria-hidden="true" />
+              Group transactions
+            </button>
+          </div>
+          <div className="tx-group-cards">
+            <button
+              type="button"
+              className={`tx-group-card tx-group-card-all${activeGroupFilterId === "ALL" ? " is-active" : ""}`}
+              onClick={() => setActiveGroupFilterId("ALL")}
+            >
+              <span className="tx-group-card-icon" aria-hidden="true">📚</span>
+              <span className="tx-group-card-copy">
+                <strong>All transactions</strong>
+                <small>Grouped and ungrouped</small>
+              </span>
+            </button>
+            {(transactionGroups.data ?? []).map((group) => (
+              <div
+                key={group.id}
+                className={`tx-group-card${activeGroupFilterId === group.id ? " is-active" : ""}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setActiveGroupFilterId(group.id);
+                  clearDateFilter();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setActiveGroupFilterId(group.id);
+                    clearDateFilter();
+                  }
+                }}
+              >
+                <span className="tx-group-card-icon" aria-hidden="true">{group.icon || "📌"}</span>
+                <span className="tx-group-card-copy">
+                  <strong>{group.name}</strong>
+                  <small>{group.transactionCount} {group.transactionCount === 1 ? "transaction" : "transactions"}</small>
+                </span>
+                <span className="tx-group-card-total">
+                  <small>Net spent</small>
+                  <strong>{formatCents(group.expenseCents - group.incomeCents)}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="tx-group-card-edit"
+                  aria-label={`Edit ${group.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEditingGroupModal(group);
+                  }}
+                >
+                  <Pencil size={13} aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+          {!transactionGroups.isLoading && !(transactionGroups.data ?? []).length ? (
+            <div className="tx-group-empty">No groups yet. Select a few transactions to create the first one.</div>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* Month/Year Filter Bar */}
       <div className="tx-filter-bar" ref={customMonthBtnRef}>
         <div className="tx-filter-controls">
@@ -1501,6 +1906,29 @@ export function TransactionsPage() {
       </div>
       {/* Recent Transactions List */}
       <section ref={recentTransactionsRef} className="card">
+        {isGroupingMode ? (
+          <div className="tx-selection-bar">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setIsGroupingMode(false);
+                setSelectedTransactionIds([]);
+              }}
+            >
+              <X size={16} aria-hidden="true" /> Cancel
+            </button>
+            <span><strong>{selectedTransactionIds.length}</strong> selected</span>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={openGroupingModal}
+              disabled={!selectedTransactionIds.length}
+            >
+              <Layers3 size={16} aria-hidden="true" /> Continue
+            </button>
+          </div>
+        ) : (
         <div style={{ display: "flex", justifyContent: "center", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
           {transactions.isLoading ? (
             <TransactionsStatsSkeleton />
@@ -1526,6 +1954,7 @@ export function TransactionsPage() {
             </div>
           ) : null}
         </div>
+        )}
         <div className="simple-list tx-month-groups">
           {transactions.isLoading && <TransactionsListSkeleton />}
 
@@ -1540,7 +1969,9 @@ export function TransactionsPage() {
           )}
 
           {!transactions.isLoading && !transactions.isError && transactionsByMonth.map((monthGroup) => {
-            const monthSummary = searchQuery.trim() ? undefined : transactionMonthSummaryByKey.get(monthGroup.monthKey);
+            const monthSummary = searchQuery.trim() || activeGroupFilterId !== "ALL"
+              ? undefined
+              : transactionMonthSummaryByKey.get(monthGroup.monthKey);
             const totalIncome = monthSummary?.incomeCents ?? monthGroup.totalIncome;
             const totalExpense = monthSummary?.expenseCents ?? monthGroup.totalExpense;
 
@@ -1561,32 +1992,42 @@ export function TransactionsPage() {
                 {monthGroup.transactions.map((tx) => {
                   const isDeleting = deletingTransactionIds.includes(tx.id);
                   const isIncome = tx.direction === "CREDIT";
+                  const isSelected = selectedTransactionIds.includes(tx.id);
                   const signedAmount = isIncome ? tx.amountCents : -tx.amountCents;
                   return (
                     <div
                       key={tx.id}
-                      className={`crud-row tx-recent-row${isDeleting ? " crud-row-deleting" : ""}`}
-                      onClick={() => !isDeleting && beginEdit(tx)}
+                      className={`crud-row tx-recent-row${isDeleting ? " crud-row-deleting" : ""}${isSelected ? " is-selected" : ""}`}
+                      onClick={() => {
+                        if (isDeleting) return;
+                        if (isGroupingMode) toggleTransactionSelection(tx.id);
+                        else beginEdit(tx);
+                      }}
                       onKeyDown={(event) => {
                         if (isDeleting) return;
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          beginEdit(tx);
+                          if (isGroupingMode) toggleTransactionSelection(tx.id);
+                          else beginEdit(tx);
                         }
                       }}
                       role="button"
                       tabIndex={isDeleting ? -1 : 0}
-                      aria-label={`Edit transaction ${tx.subject}`}
+                      aria-label={isGroupingMode ? `${isSelected ? "Deselect" : "Select"} transaction ${tx.subject}` : `Edit transaction ${tx.subject}`}
+                      aria-pressed={isGroupingMode ? isSelected : undefined}
                     >
-                      <div className={`tx-recent-arrow ${isIncome ? "income" : "expense"}`}>
-                        {isIncome ? "→" : "←"}
+                      <div className={`tx-recent-arrow ${isGroupingMode ? "select" : isIncome ? "income" : "expense"}${isSelected ? " is-selected" : ""}`}>
+                        {isGroupingMode ? (isSelected ? <Check size={17} aria-hidden="true" /> : null) : isIncome ? "→" : "←"}
                       </div>
                       <div className="tx-recent-main">
                         <span className="tx-recent-subject">{tx.subject}</span>
                         <span className={`tx-recent-amount ${getAmountToneClass(signedAmount)}`}>
                           {isIncome ? "+" : "−"}{formatCents(tx.amountCents)}
                         </span>
-                        <span className="tx-recent-date">{formatTransactionDate(tx.date)}</span>
+                        <span className="tx-recent-date">
+                          {formatTransactionDate(tx.date)}
+                          {tx.group ? <span className="tx-row-group-pill">{tx.group.icon || "📌"} {tx.group.name}</span> : null}
+                        </span>
                       </div>
                     </div>
                   );
@@ -1622,6 +2063,150 @@ export function TransactionsPage() {
         </div>
       </section>
 
+      {isGroupModalOpen && typeof document !== "undefined" && createPortal(
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsGroupModalOpen(false))}>
+          <div className="profile-modal tx-group-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>Group {selectedTransactionIds.length} transactions</h3>
+              <button type="button" className="profile-modal-close" onClick={() => setIsGroupModalOpen(false)}>Close</button>
+            </div>
+            <form onSubmit={submitGrouping}>
+              <div className="profile-modal-body">
+                <p className="tx-group-modal-intro">
+                  What do these {activeBudget?.name ?? "sub-account"} transactions belong to?
+                </p>
+                {(transactionGroups.data ?? []).length ? (
+                  <label className="tx-group-field">
+                    Group
+                    <select className="input" value={groupDestinationId} onChange={(event) => setGroupDestinationId(event.target.value)}>
+                      <option value="NEW">Create a new group</option>
+                      {(transactionGroups.data ?? []).map((group) => (
+                        <option key={group.id} value={group.id}>{group.icon || "📌"} {group.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {groupDestinationId === "NEW" ? (
+                  <div className="tx-group-name-row">
+                    <label className="tx-group-field tx-group-icon-field">
+                      Icon
+                      <select className="input" value={groupIcon} onChange={(event) => setGroupIcon(event.target.value)}>
+                        {[groupIcon, "📌", "🧳", "🛠️", "🎁", "🏥", "🚗", "🎓", "💼", "🎯"].filter((icon, index, icons) => icons.indexOf(icon) === index).map((icon) => (
+                          <option key={icon} value={icon}>{icon}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="tx-group-field">
+                      Name
+                      <input
+                        className="input"
+                        value={groupName}
+                        onChange={(event) => setGroupName(event.target.value)}
+                        placeholder={getContextualGroupDefaults(activeBudget, transactionList.filter((transaction) => selectedTransactionIds.includes(transaction.id))).placeholder}
+                        maxLength={80}
+                        autoFocus
+                        required
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <p className="tx-group-modal-hint">Selected transactions will be moved here if they already belong to another group.</p>
+                )}
+                {saveTransactionGroup.isError ? <div className="form-error">{saveTransactionGroup.error.message}</div> : null}
+              </div>
+              <div className="txn-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setIsGroupModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saveTransactionGroup.isPending || (groupDestinationId === "NEW" && !groupName.trim())}>
+                  {saveTransactionGroup.isPending ? "Saving…" : groupDestinationId === "NEW" ? "Create group" : "Add to group"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {editingGroup && typeof document !== "undefined" && createPortal(
+        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEditingGroupModal)}>
+          <div className="profile-modal tx-group-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal-head">
+              <h3>Edit group</h3>
+              <button type="button" className="profile-modal-close" onClick={closeEditingGroupModal}>Close</button>
+            </div>
+            <form onSubmit={submitEditingGroup} className="tx-group-edit-form">
+              <div className="profile-modal-body">
+                <label className="tx-group-field">
+                  Name
+                  <input className="input" value={editingGroupName} onChange={(event) => setEditingGroupName(event.target.value)} maxLength={80} autoFocus required />
+                </label>
+                <div className="tx-group-members-head">
+                  <div>
+                    <strong>Transactions</strong>
+                    <span>{editingGroupSelectedCount} selected</span>
+                  </div>
+                  <input
+                    className="input tx-group-members-search"
+                    type="search"
+                    value={editingGroupSearch}
+                    onChange={(event) => setEditingGroupSearch(event.target.value)}
+                    placeholder="Search this sub-account…"
+                    aria-label="Search transactions in this sub-account"
+                  />
+                </div>
+                <p className="tx-group-modal-hint">Select or clear transactions to change what belongs in this group. Selecting one from another group will move it here.</p>
+                <div className="tx-group-members-list" aria-label="Transactions available for this group">
+                  {editingGroupDetail.isLoading ? (
+                    <div className="tx-group-members-state"><LoadingDots /> Loading transactions</div>
+                  ) : editingGroupDetail.isError ? (
+                    <div className="tx-group-members-state form-error">{editingGroupDetail.error.message}</div>
+                  ) : (editingGroupDetail.data?.transactions ?? []).length ? (
+                    (editingGroupDetail.data?.transactions ?? []).map((transaction) => {
+                      const isSelected = editingGroupMembershipChanges[transaction.id] ?? editingGroupOriginalMemberIds.has(transaction.id);
+                      const signedAmount = transaction.direction === "CREDIT" ? transaction.amountCents : -transaction.amountCents;
+                      return (
+                        <label key={transaction.id} className={`tx-group-member-row${isSelected ? " is-selected" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleEditingGroupTransaction(transaction.id)}
+                          />
+                          <span className="tx-group-member-copy">
+                            <strong>{transaction.subject}</strong>
+                            <small>
+                              {formatTransactionDate(transaction.date)}
+                              {transaction.group && transaction.group.id !== editingGroup.id ? (
+                                <span className="tx-group-member-current">{transaction.group.icon || "📌"} {transaction.group.name}</span>
+                              ) : null}
+                            </small>
+                          </span>
+                          <span className={`tx-group-member-amount ${getAmountToneClass(signedAmount)}`}>
+                            {transaction.direction === "CREDIT" ? "+" : "−"}{formatCents(transaction.amountCents)}
+                          </span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <div className="tx-group-members-state">No matching transactions.</div>
+                  )}
+                </div>
+                {updateTransactionGroup.isError ? <div className="form-error">{updateTransactionGroup.error.message}</div> : null}
+                {deleteTransactionGroup.isError ? <div className="form-error">{deleteTransactionGroup.error.message}</div> : null}
+              </div>
+              <div className="txn-modal-actions tx-group-edit-actions">
+                <button type="button" className="btn btn-danger" onClick={confirmDeleteGroup} disabled={deleteTransactionGroup.isPending}>Delete group</button>
+                <div>
+                  <button type="button" className="btn btn-ghost" onClick={closeEditingGroupModal}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={updateTransactionGroup.isPending || !editingGroupName.trim()}>
+                    {updateTransactionGroup.isPending ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
       {isCreateModalOpen && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsCreateModalOpen(false))}>
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
@@ -1655,7 +2240,10 @@ export function TransactionsPage() {
                   </label>
                   <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                     Sub Account
-                    <select className="input" value={budgetId} onChange={(e) => setBudgetId(e.target.value)} required>
+                    <select className="input" value={budgetId} onChange={(e) => {
+                      setBudgetId(e.target.value);
+                      setTransactionGroupId("");
+                    }} required>
                       <option value="" disabled>
                         Select sub account
                       </option>
@@ -1666,6 +2254,17 @@ export function TransactionsPage() {
                       ))}
                     </select>
                   </label>
+                  {(createFormGroups.data ?? []).length ? (
+                    <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                      Group <span style={{ color: "var(--text-tertiary)" }}>(optional)</span>
+                      <select className="input" value={transactionGroupId} onChange={(e) => setTransactionGroupId(e.target.value)}>
+                        <option value="">No group</option>
+                        {(createFormGroups.data ?? []).map((group) => (
+                          <option key={group.id} value={group.id}>{group.icon || "📌"} {group.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                     Date
                     <input
@@ -1789,7 +2388,10 @@ export function TransactionsPage() {
               </label>
               <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                 Sub Account
-                <select className="input" value={editBudgetId} onChange={(e) => setEditBudgetId(e.target.value)} required>
+                <select className="input" value={editBudgetId} onChange={(e) => {
+                  setEditBudgetId(e.target.value);
+                  setEditGroupId("");
+                }} required>
                   <option value="" disabled>
                     Select sub account
                   </option>
@@ -1797,6 +2399,15 @@ export function TransactionsPage() {
                     <option key={b.id} value={b.id}>
                       {b.name}
                     </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                Group <span style={{ color: "var(--text-tertiary)" }}>(optional)</span>
+                <select className="input" value={editGroupId} onChange={(e) => setEditGroupId(e.target.value)}>
+                  <option value="">No group</option>
+                  {(editFormGroups.data ?? []).map((group) => (
+                    <option key={group.id} value={group.id}>{group.icon || "📌"} {group.name}</option>
                   ))}
                 </select>
               </label>

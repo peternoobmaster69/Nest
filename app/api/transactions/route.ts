@@ -23,6 +23,7 @@ const CreateTransactionSchema = z.object({
   details: z.string().max(500).optional(),
   notes: z.string().optional(),
   budgetId: z.string().min(1),
+  groupId: z.string().min(1).optional(),
   budgetOperation: z.enum(["DEDUCT", "ADD"]),
 });
 
@@ -49,6 +50,7 @@ export async function GET(request: Request) {
     const cursor = searchParams.get("cursor");
     const accountId = searchParams.get("accountId");
     const budgetId = searchParams.get("budgetId");
+    const groupId = searchParams.get("groupId");
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
     const monthKey = searchParams.get("month");
@@ -60,6 +62,7 @@ export async function GET(request: Request) {
       cursor !== null ||
       accountId !== null ||
       budgetId !== null ||
+      groupId !== null ||
       monthKey !== null ||
       fromDate !== null ||
       toDate !== null ||
@@ -85,6 +88,7 @@ export async function GET(request: Request) {
       workspaceId,
       ...(accountId ? { accountId } : {}),
       ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
+      ...(groupId ? { groupId } : {}),
       ...(monthRange ? { date: { gte: monthRange.start, lt: monthRange.end } } : {}),
       ...(search
         ? {
@@ -113,6 +117,7 @@ export async function GET(request: Request) {
       workspaceId: true,
       accountId: true,
       budgetId: true,
+      groupId: true,
       kind: true,
       direction: true,
       date: true,
@@ -125,6 +130,7 @@ export async function GET(request: Request) {
       externalRef: true,
       createdAt: true,
       updatedAt: true,
+      group: { select: { id: true, name: true, icon: true } },
     } as const;
 
     if (wantsPaginatedResponse) {
@@ -204,7 +210,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { budgetId, budgetOperation, ...txPayload } = parsed.data;
+    const { budgetId, groupId, budgetOperation, ...txPayload } = parsed.data;
     await requireWorkspaceAccess(txPayload.workspaceId);
 
     const account = await prisma.financialAccount.findFirst({
@@ -247,13 +253,23 @@ export async function POST(request: Request) {
         throw new Error("Selected budget is linked to a different bank account.");
       }
 
+      if (groupId) {
+        const group = await db.transactionGroup.findFirst({
+          where: { id: groupId, workspaceId: txPayload.workspaceId, budgetId },
+          select: { id: true },
+        });
+        if (!group) throw new Error("Selected group does not belong to this sub-account.");
+      }
+
+      const linkedTx = groupId ? await db.transaction.update({ where: { id: tx.id }, data: { groupId } }) : tx;
+
       const [updatedBudget] = await applyTransactionBudgetDelta(db, {
         nextBudgetId: budget.id,
-        nextDirection: tx.direction,
-        nextAmountCents: tx.amountCents,
+        nextDirection: linkedTx.direction,
+        nextAmountCents: linkedTx.amountCents,
       });
 
-      return { tx, updatedBudget };
+      return { tx: linkedTx, updatedBudget };
     });
 
     return NextResponse.json(created, { status: 201 });
@@ -262,6 +278,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (
+      message === "Selected budget does not belong to workspace." ||
+      message === "Selected budget is linked to a different bank account." ||
+      message === "Selected group does not belong to this sub-account."
+    ) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to create transaction", message }, { status: 500 });
   }
 }

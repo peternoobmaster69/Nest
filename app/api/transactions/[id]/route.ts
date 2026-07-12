@@ -15,6 +15,7 @@ const UpdateTransactionSchema = z.object({
   notes: z.string().nullable().optional(),
   date: z.string().datetime().optional(),
   budgetId: z.string().min(1),
+  groupId: z.string().min(1).nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -57,6 +58,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         throw new Error("Selected budget does not belong to this transaction account.");
       }
 
+      if (parsed.data.groupId) {
+        const group = await db.transactionGroup.findFirst({
+          where: {
+            id: parsed.data.groupId,
+            workspaceId: existing.workspaceId,
+            budgetId: parsed.data.budgetId,
+          },
+          select: { id: true },
+        });
+        if (!group) throw new Error("Selected group does not belong to this sub-account.");
+      }
+
       const updated = await db.transaction.update({
         where: { id },
         data: parsed.data,
@@ -86,6 +99,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: message }, { status: 404 });
     }
     if (message === "Selected budget does not belong to this transaction account.") {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    if (message === "Selected group does not belong to this sub-account.") {
       return NextResponse.json({ error: message }, { status: 400 });
     }
     return NextResponse.json({ error: "Failed to update transaction", message }, { status: 500 });
