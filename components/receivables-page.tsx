@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui-skeleton";
 import { ReceivablesListSkeleton, ReceivablesSummarySkeleton } from "@/components/skeletons/ReceivablesSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 type AppContext = {
   workspaceId: string | null;
@@ -663,12 +664,11 @@ export function ReceivablesPage() {
           <div className="profile-modal recv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>
-              <button className="profile-modal-close" onClick={closeModal} disabled={isSavingReceivable}>
-                Close
-              </button>
+              <ModalCloseButton onClick={closeModal} disabled={isSavingReceivable} label={`Close ${modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}`} />
             </div>
-            <div className="profile-modal-body recv-modal-body">
-              <form className="recv-modal-form" onSubmit={onSubmit}>
+            <form className="modal-form-shell" onSubmit={onSubmit}>
+              <div className="profile-modal-body recv-modal-body">
+                <div className="recv-modal-form">
                 <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                   Title
                   <input className="input" placeholder="Title" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} />
@@ -780,25 +780,6 @@ export function ReceivablesPage() {
                     </select>
                   </label>
                 )}
-                <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "6px" }}>
-                  <button className="btn btn-ghost" type="button" onClick={closeModal} disabled={isSavingReceivable}>
-                    Cancel
-                  </button>
-                  <button
-                    className={`btn btn-primary ${isSavingReceivable ? "recv-save-btn is-saving" : ""}`}
-                    type="submit"
-                    disabled={isSavingReceivable}
-                  >
-                    {isSavingReceivable ? (
-                      <>
-                        <span className="recv-save-spinner" aria-hidden="true" />
-                        {modalMode === "edit" ? "Saving..." : "Adding..."}
-                      </>
-                    ) : (
-                      modalMode === "edit" ? "Save" : "Add"
-                    )}
-                  </button>
-                </div>
                 {isSavingReceivable && (
                   <div className="modal-grid-span-2 recv-save-status" aria-live="polite">
                     <div className="workspace-save-progress" aria-hidden="true">
@@ -814,8 +795,28 @@ export function ReceivablesPage() {
                     {((createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error) as Error)?.message || "Action failed"}
                   </div>
                 )}
-              </form>
-            </div>
+                </div>
+              </div>
+              <div className="txn-modal-actions">
+                <button className="btn btn-ghost" type="button" onClick={closeModal} disabled={isSavingReceivable}>
+                  Cancel
+                </button>
+                <button
+                  className={`btn btn-primary ${isSavingReceivable ? "recv-save-btn is-saving" : ""}`}
+                  type="submit"
+                  disabled={isSavingReceivable}
+                >
+                  {isSavingReceivable ? (
+                    <>
+                      <span className="recv-save-spinner" aria-hidden="true" />
+                      {modalMode === "edit" ? "Saving..." : "Adding..."}
+                    </>
+                  ) : (
+                    modalMode === "edit" ? "Save" : "Add"
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>,
         document.body

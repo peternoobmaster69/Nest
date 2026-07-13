@@ -23,10 +23,10 @@ import {
   Trash2,
   Users,
   WalletCards,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 type WorkspaceMember = {
   user: { id: string; name: string | null; email: string | null };
@@ -174,9 +174,7 @@ function ModalShell({
       <div className="st-modal" onClick={(event) => event.stopPropagation()}>
         <div className="st-modal-header">
           <h3>{title}</h3>
-          <button className="st-close-btn" type="button" onClick={onClose} disabled={closeDisabled} aria-label="Close">
-            <X size={16} />
-          </button>
+          <ModalCloseButton onClick={onClose} disabled={closeDisabled} label={`Close ${title}`} />
         </div>
         {children}
       </div>

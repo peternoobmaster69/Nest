@@ -2,8 +2,7 @@
 
 import { ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
-import { Button } from "./button";
+import { ModalCloseButton } from "./modal-close-button";
 
 const FOCUSABLE = [
   "button:not([disabled])",
@@ -98,9 +97,7 @@ export function Dialog({
             <h2 className="modal-title" id={titleId}>{title}</h2>
             {description ? <p className="modal-description" id={descriptionId}>{description}</p> : null}
           </div>
-          <Button variant="ghost" size="sm" iconOnly onClick={onClose} disabled={closeDisabled} aria-label={`Close ${title}`}>
-            <X size={18} aria-hidden="true" />
-          </Button>
+          <ModalCloseButton onClick={onClose} disabled={closeDisabled} label={`Close ${title}`} />
         </div>
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}

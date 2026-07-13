@@ -8,6 +8,8 @@ New controls use the primitives in `components/ui`: `Button`, form fields, `Dial
 
 All confirmations use the promise-based confirmation service. Do not use `window.confirm`, double-click backdrop dismissal, or unlabelled modal containers. Dialogs must trap focus, close with Escape when safe, and restore focus.
 
+All popups use a fixed header, an independently scrolling content region, and a fixed action footer. Form fields and long Notes content must never push the action footer outside the popup viewport. Dismissal controls use `ModalCloseButton`, which renders the standard accessible X icon; do not add text-labelled or Unicode close controls.
+
 Mutations expose a pending state and surface failures through the global toast provider. Empty and query-error states should provide a useful next action where one exists.
 
 Money and dates use `lib/currency.ts` and `lib/presentation.ts`. Amount meaning must be conveyed by sign or label in addition to color.

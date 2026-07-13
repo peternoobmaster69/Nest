@@ -11,6 +11,7 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 import { Droplet } from "lucide-react";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 type AppContext = {
   workspaceId: string | null;
@@ -971,9 +972,9 @@ export function InvestmentsPage() {
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
-              <button className="profile-modal-close" onClick={closeAccountModal}>✕</button>
+              <ModalCloseButton onClick={closeAccountModal} label={`Close ${accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}`} />
             </div>
-            <form className="profile-modal-body inv-modal-body" onSubmit={(event: FormEvent) => {
+            <form className="modal-form-shell" onSubmit={(event: FormEvent) => {
               event.preventDefault();
               if (!workspaceId) {
                 setAccountError("Workspace is not ready. Please wait and try again.");
@@ -985,6 +986,7 @@ export function InvestmentsPage() {
               }
               createAccount.mutate();
             }}>
+              <div className="profile-modal-body inv-modal-body">
               <div className="profile-field">
                 <span>Display Name of the Account</span>
                 <input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
@@ -1026,6 +1028,8 @@ export function InvestmentsPage() {
                   </button>
                 </div>
               </div>
+              {accountError ? <div className="profile-error">{accountError}</div> : null}
+              </div>
               <div className="profile-actions inv-modal-actions">
                 {accountModalMode === "edit" && editingAccountId ? (
                   <button
@@ -1044,7 +1048,6 @@ export function InvestmentsPage() {
                   </button>
                 </div>
               </div>
-              {accountError ? <div className="profile-error">{accountError}</div> : null}
             </form>
           </div>
         </div>,
@@ -1056,9 +1059,9 @@ export function InvestmentsPage() {
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
-              <button className="profile-modal-close" onClick={closeEntryModal}>✕</button>
+              <ModalCloseButton onClick={closeEntryModal} label={`Close ${entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}`} />
             </div>
-            <form className="profile-modal-body inv-modal-body" onSubmit={(event: FormEvent) => {
+            <form className="modal-form-shell" onSubmit={(event: FormEvent) => {
               event.preventDefault();
               if (entryModalMode === "edit" && editingEntryId) {
                 updateEntry.mutate(editingEntryId);
@@ -1070,6 +1073,7 @@ export function InvestmentsPage() {
                 setEntryError("Please select an investment account first.");
               }
             }}>
+              <div className="profile-modal-body inv-modal-body">
               <div className="profile-field">
                 <span>Date</span>
                 <input className="input" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
@@ -1087,6 +1091,8 @@ export function InvestmentsPage() {
               <div className="profile-field">
                 <span>Current Value</span>
                 <NumericCalculatorInput step="0.01" value={entryCurrentValue} onValueChange={setEntryCurrentValue} required />
+              </div>
+              {entryError ? <div className="profile-error">{entryError}</div> : null}
               </div>
               <div className="profile-actions inv-modal-actions">
                 {entryModalMode === "edit" && editingEntryId ? (
@@ -1106,7 +1112,6 @@ export function InvestmentsPage() {
                   </button>
                 </div>
               </div>
-              {entryError ? <div className="profile-error">{entryError}</div> : null}
             </form>
           </div>
         </div>,

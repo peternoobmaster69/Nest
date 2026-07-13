@@ -120,9 +120,7 @@ export function ModalViewportManager() {
       if (!modal) return;
 
       if (event.key === "Escape") {
-        const closeButton = modal.querySelector<HTMLButtonElement>(
-          ".profile-modal-close,.cc-close-btn,.cct-close-btn,.st-close-btn,.modal-close,[aria-label^='Close']",
-        );
+        const closeButton = modal.querySelector<HTMLButtonElement>(".modal-close");
         if (closeButton && !closeButton.disabled) {
           event.preventDefault();
           closeButton.click();

@@ -10,6 +10,7 @@ import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton"
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useToast } from "@/components/toast-provider";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 type AppContext = {
   workspaceId: string | null;
@@ -657,13 +658,12 @@ export function CreditCardsPage() {
           <div className="cc-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cc-modal-header">
               <h3>{editingCardId ? "Edit Credit Card" : "Add Credit Card"}</h3>
-              <button className="cc-close-btn" onClick={closeModal}>
-                ✕
-              </button>
+              <ModalCloseButton onClick={closeModal} label={`Close ${editingCardId ? "Edit Credit Card" : "Add Credit Card"}`} />
             </div>
 
             <form className="cc-modal-form" onSubmit={onSubmit}>
-              {/* Card Preview */}
+              <div className="cc-modal-scroll">
+                {/* Card Preview */}
                 <div
                 className="cc-preview"
                 style={{ background: getCardGradient(bankName, themeKey) }}
@@ -846,6 +846,7 @@ export function CreditCardsPage() {
                 </div>
               </div>
 
+              </div>
               <div className="cc-modal-actions">
                 {formError ? (
                   <div style={{ color: "var(--danger)", fontSize: "12px", marginRight: "auto" }}>{formError}</div>

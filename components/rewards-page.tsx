@@ -9,6 +9,7 @@ import { RewardsCardGridSkeleton, RewardsRowsSkeleton, RewardsSummarySkeleton } 
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ArrowLeftRight, Building2, CreditCard, Plane, Plus } from "lucide-react";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 type CreditCardReward = {
   id: string;
@@ -1637,9 +1638,7 @@ export function RewardsPage({
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Credit Card Rewards</h3>
-              <button className="st-close-btn" onClick={closeCardRewardModal} aria-label="Close">
-                x
-              </button>
+              <ModalCloseButton onClick={closeCardRewardModal} label="Close Add Credit Card Rewards" />
             </div>
             <form className="st-modal-form" onSubmit={onCreateCardReward}>
               <div className="st-form-grid">
@@ -1739,9 +1738,7 @@ export function RewardsPage({
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Conversion Rate</h3>
-              <button className="st-close-btn" onClick={closeConversionModal} aria-label="Close">
-                x
-              </button>
+              <ModalCloseButton onClick={closeConversionModal} label="Close Add Conversion Rate" />
             </div>
             <form className="st-modal-form" onSubmit={onCreateConversion}>
               <div className="st-form-grid">
@@ -1839,9 +1836,7 @@ export function RewardsPage({
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingHotelId ? "Edit Hotel Rewards" : "Add Hotel Rewards"}</h3>
-              <button className="st-close-btn" onClick={closeHotelModal} aria-label="Close">
-                x
-              </button>
+              <ModalCloseButton onClick={closeHotelModal} label={`Close ${editingHotelId ? "Edit Hotel Program" : "Add Hotel Program"}`} />
             </div>
             <form className="st-modal-form" onSubmit={onSubmitHotel}>
               <div className="st-form-grid">
@@ -1954,9 +1949,7 @@ export function RewardsPage({
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}</h3>
-              <button className="st-close-btn" onClick={closeFFModal}>
-                ✕
-              </button>
+              <ModalCloseButton onClick={closeFFModal} label={`Close ${editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}`} />
             </div>
             <form className="st-modal-form" onSubmit={onSubmitFF}>
               <div className="st-form-grid">
@@ -2101,9 +2094,7 @@ export function RewardsPage({
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Earn Transaction</h3>
-              <button className="st-close-btn" onClick={() => setIsAddEarnModalOpen(false)}>
-                ✕
-              </button>
+              <ModalCloseButton onClick={() => setIsAddEarnModalOpen(false)} label="Close Add Earn Transaction" />
             </div>
             <form
               className="st-modal-form"
@@ -2190,9 +2181,7 @@ export function RewardsPage({
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Redeem Miles</h3>
-              <button className="st-close-btn" onClick={() => setIsRedeemModalOpen(false)}>
-                ✕
-              </button>
+              <ModalCloseButton onClick={() => setIsRedeemModalOpen(false)} label="Close Redeem Miles" />
             </div>
             <form
               className="st-modal-form"

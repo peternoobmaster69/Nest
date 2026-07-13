@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useTheme } from "./theme-provider";
 import { SidebarSkeleton } from "./ui-skeleton";
+import { ModalCloseButton } from "./ui/modal-close-button";
 import {
   ChartNoAxesCombined,
   ChartPie,
@@ -451,11 +452,10 @@ export function AppSidebar({
           <div className="profile-modal account-profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Profile</h3>
-              <button className="profile-modal-close" onClick={() => setProfileModalOpen(false)}>
-                ✕
-              </button>
+              <ModalCloseButton onClick={() => setProfileModalOpen(false)} label="Close Profile" />
             </div>
-            <div className="profile-modal-body">
+            <div className="modal-form-shell">
+              <div className="profile-modal-body">
               {userImage ? (
                 <Image src={userImage} alt={avatarAlt} width={44} height={44} className="avatar avatar-lg avatar-image" />
               ) : (
@@ -481,6 +481,7 @@ export function AppSidebar({
               {profileError && (
                 <div className="profile-error">{profileError}</div>
               )}
+              </div>
               <div className="profile-actions">
                 <button className="btn btn-ghost btn-xs" onClick={() => setProfileModalOpen(false)} disabled={savingProfile}>
                   Cancel

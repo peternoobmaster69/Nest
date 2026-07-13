@@ -15,6 +15,7 @@ import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsRece
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ArrowLeftRight, Check, Layers3, Pencil, Plus, X } from "lucide-react";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 const ALL_BANKS_FILTER = "ALL";
 const GROUP_ICON_OPTIONS = [
@@ -1892,7 +1893,7 @@ export function TransactionsPage() {
             <div className="tx-month-popover">
               <div className="tx-popover-header">
                 <h4>Select Month</h4>
-                <button type="button" className="tx-popover-close" onClick={() => setIsCustomMonthOpen(false)}>×</button>
+                <ModalCloseButton onClick={() => setIsCustomMonthOpen(false)} label="Close Select Month" />
               </div>
               <div className="tx-popover-body">
                 {/* Generate years from current year down to earliest transaction year (or 2020 as default) */}
@@ -2096,9 +2097,9 @@ export function TransactionsPage() {
           <div className="profile-modal tx-group-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Group {selectedTransactionIds.length} transactions</h3>
-              <button type="button" className="profile-modal-close" onClick={() => setIsGroupModalOpen(false)}>Close</button>
+              <ModalCloseButton onClick={() => setIsGroupModalOpen(false)} label="Close Group Transactions" />
             </div>
-            <form onSubmit={submitGrouping}>
+            <form className="modal-form-shell" onSubmit={submitGrouping}>
               <div className="profile-modal-body">
                 <p className="tx-group-modal-intro">
                   What do these {activeBudget?.name ?? "sub-account"} transactions belong to?
@@ -2159,9 +2160,9 @@ export function TransactionsPage() {
           <div className="profile-modal tx-group-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit group</h3>
-              <button type="button" className="profile-modal-close" onClick={closeEditingGroupModal}>Close</button>
+              <ModalCloseButton onClick={closeEditingGroupModal} label="Close Edit Group" />
             </div>
-            <form onSubmit={submitEditingGroup} className="tx-group-edit-form">
+            <form onSubmit={submitEditingGroup} className="modal-form-shell tx-group-edit-form">
               <div className="profile-modal-body">
                 <div className="tx-group-name-row">
                   <label className="tx-group-field tx-group-icon-field">
@@ -2250,9 +2251,7 @@ export function TransactionsPage() {
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Add Transaction</h3>
-              <button className="profile-modal-close" onClick={() => setIsCreateModalOpen(false)}>
-                Close
-              </button>
+              <ModalCloseButton onClick={() => setIsCreateModalOpen(false)} label="Close Add Transaction" />
             </div>
             <form onSubmit={onSubmit} className="txn-modal-form-wrapper">
               <div className="profile-modal-body txn-modal-body">
@@ -2380,11 +2379,10 @@ export function TransactionsPage() {
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Transaction</h3>
-              <button className="profile-modal-close" onClick={closeEditModal}>
-                Close
-              </button>
+              <ModalCloseButton onClick={closeEditModal} label="Close Edit Transaction" />
             </div>
-            <form className="profile-modal-body txn-modal-body txn-modal-form" onSubmit={onSubmitEdit}>
+            <form className="modal-form-shell" onSubmit={onSubmitEdit}>
+              <div className="profile-modal-body txn-modal-body txn-modal-form">
               <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                 Amount
                 <NumericCalculatorInput
@@ -2466,7 +2464,8 @@ export function TransactionsPage() {
                   {(updateTx.error as Error).message || "Failed to save transaction"}
                 </div>
               ) : null}
-              <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+              </div>
+              <div className="txn-modal-actions" style={{ justifyContent: "space-between" }}>
                 <button
                   className="btn btn-ghost"
                   type="button"
@@ -2496,9 +2495,10 @@ export function TransactionsPage() {
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Bank Balance</h3>
-              <button className="profile-modal-close" onClick={closeEditBankBalance}>✕</button>
+              <ModalCloseButton onClick={closeEditBankBalance} label="Close Edit Bank Balance" />
             </div>
-            <form className="profile-modal-body txn-modal-body txn-modal-form txn-bank-balance-form" onSubmit={onSubmitBankBalance}>
+            <form className="modal-form-shell" onSubmit={onSubmitBankBalance}>
+              <div className="profile-modal-body txn-modal-body txn-modal-form txn-bank-balance-form">
               <div className="form-group">
                 <label className="label">Bank Account</label>
                 <input className="input" value={editingBankAccount.name} disabled />
@@ -2518,7 +2518,8 @@ export function TransactionsPage() {
                   {(updateBankBalance.error as Error).message || "Failed to save bank balance"}
                 </div>
               ) : null}
-              <div className="profile-actions">
+              </div>
+              <div className="txn-modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={closeEditBankBalance}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={updateBankBalance.isPending}>
                   {updateBankBalance.isPending ? "Saving..." : "Save Balance"}
@@ -2535,11 +2536,10 @@ export function TransactionsPage() {
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Transfer Between Sub-Accounts</h3>
-              <button className="profile-modal-close" onClick={closeTransferModal}>
-                Close
-              </button>
+              <ModalCloseButton onClick={closeTransferModal} label="Close Transfer Between Sub-Accounts" />
             </div>
-            <form className="profile-modal-body txn-modal-body txn-modal-form" onSubmit={onSubmitTransfer}>
+            <form className="modal-form-shell" onSubmit={onSubmitTransfer}>
+              <div className="profile-modal-body txn-modal-body txn-modal-form">
               <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                 Title
                 <input className="input" placeholder="Transfer title" value={transferTitle} onChange={(e) => setTransferTitle(e.target.value)} required />
@@ -2582,7 +2582,8 @@ export function TransactionsPage() {
                   {(transferBetweenBudgets.error as Error)?.message || "Transfer failed"}
                 </div>
               ) : null}
-              <div className="modal-grid-span-2" style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              </div>
+              <div className="txn-modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={closeTransferModal}>
                   Cancel
                 </button>
@@ -2612,9 +2613,7 @@ export function TransactionsPage() {
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{receivableInfoBudget?.name || "Receivable Breakdown"}</h3>
-              <button className="profile-modal-close" onClick={() => setReceivableInfoBudgetId(null)}>
-                Close
-              </button>
+              <ModalCloseButton onClick={() => setReceivableInfoBudgetId(null)} label="Close Receivable Breakdown" />
             </div>
             <div className="profile-modal-body" style={{ display: "grid", gap: "12px" }}>
               <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
@@ -2667,9 +2666,7 @@ export function TransactionsPage() {
           <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}</h3>
-              <button className="profile-modal-close" onClick={closeBudgetModal}>
-                Close
-              </button>
+              <ModalCloseButton onClick={closeBudgetModal} label={`Close ${editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}`} />
             </div>
             <div className="profile-modal-body txn-modal-body" style={{ display: "grid", gap: "12px" }}>
               <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
@@ -2745,7 +2742,7 @@ export function TransactionsPage() {
                 </>
               ) : null}
             </div>
-            <div className="profile-modal-body" style={{ display: "flex", justifyContent: "space-between", gap: "8px", borderTop: "1px solid var(--border-subtle)", paddingTop: "12px" }}>
+            <div className="txn-modal-actions" style={{ justifyContent: "space-between" }}>
               {editingBudgetId ? (
                 <button
                   type="button"

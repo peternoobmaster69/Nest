@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
@@ -13,6 +13,8 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { ArrowLeft, ArrowRight, Check, ChevronDown } from "lucide-react";
 
 type CreditCard = {
   id: string;
@@ -209,9 +211,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
   const cardBarRef = useRef<HTMLDivElement | null>(null);
   const monthTabsRef = useRef<HTMLDivElement | null>(null);
-  const [isCardBarScrolled, setIsCardBarScrolled] = useState(false);
+  const mobileCardPickerRef = useRef<HTMLDivElement | null>(null);
   const [isMonthTabsScrolled, setIsMonthTabsScrolled] = useState(false);
-  const [isSelectedCardOutOfView, setIsSelectedCardOutOfView] = useState(false);
+  const [canScrollCardsLeft, setCanScrollCardsLeft] = useState(false);
+  const [canScrollCardsRight, setCanScrollCardsRight] = useState(false);
+  const [isMobileCardPickerOpen, setIsMobileCardPickerOpen] = useState(false);
+  const [mobileCardQuery, setMobileCardQuery] = useState("");
 
   // Form state
   const [formCardId, setFormCardId] = useState("");
@@ -263,55 +268,62 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     writeCookie(CREDIT_TX_MONTH_COOKIE, String(selectedMonth));
   }, [filtersReady, selectedMonth]);
 
-  const updateSelectedCardVisibility = useCallback(() => {
-    const container = cardBarRef.current;
-    if (!container || selectedCardId === "all") {
-      setIsSelectedCardOutOfView(false);
-      return;
-    }
-
-    const selectedChip = container.querySelector<HTMLButtonElement>(`[data-card-id="${CSS.escape(selectedCardId)}"]`);
-    if (!selectedChip) {
-      setIsSelectedCardOutOfView(false);
-      return;
-    }
-
-    const containerRect = container.getBoundingClientRect();
-    const selectedRect = selectedChip.getBoundingClientRect();
-    const isVisible = selectedRect.right > containerRect.left && selectedRect.left < containerRect.right;
-    setIsSelectedCardOutOfView(!isVisible);
-  }, [selectedCardId]);
-
   useEffect(() => {
-    const watchHorizontalScroll = (
-      element: HTMLDivElement | null,
-      setScrolled: (value: boolean) => void,
-    ) => {
-      if (!element) return undefined;
-
-      const update = () => {
-        setScrolled(element.scrollLeft > 8);
-        if (element === cardBarRef.current) {
-          updateSelectedCardVisibility();
-        }
-      };
-      update();
-      element.addEventListener("scroll", update, { passive: true });
-      return () => element.removeEventListener("scroll", update);
+    if (!isMobileCardPickerOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !mobileCardPickerRef.current?.contains(event.target)) {
+        setIsMobileCardPickerOpen(false);
+        setMobileCardQuery("");
+      }
     };
-
-    const unwatchCardBar = watchHorizontalScroll(cardBarRef.current, setIsCardBarScrolled);
-    const unwatchMonthTabs = watchHorizontalScroll(monthTabsRef.current, setIsMonthTabsScrolled);
-
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMobileCardPickerOpen(false);
+        setMobileCardQuery("");
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      unwatchCardBar?.();
-      unwatchMonthTabs?.();
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
     };
-  }, [updateSelectedCardVisibility]);
+  }, [isMobileCardPickerOpen]);
 
   useEffect(() => {
-    requestAnimationFrame(updateSelectedCardVisibility);
-  }, [selectedCardId, sortedCards, updateSelectedCardVisibility]);
+    const element = cardBarRef.current;
+    if (!element) return;
+    const update = () => {
+      const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+      setCanScrollCardsLeft(element.scrollLeft > 2);
+      setCanScrollCardsRight(element.scrollLeft < maxScrollLeft - 2);
+    };
+    const resizeObserver = new ResizeObserver(update);
+    update();
+    element.addEventListener("scroll", update, { passive: true });
+    resizeObserver.observe(element);
+    Array.from(element.children).forEach((child) => resizeObserver.observe(child));
+    return () => {
+      element.removeEventListener("scroll", update);
+      resizeObserver.disconnect();
+    };
+  }, [sortedCards]);
+
+  useEffect(() => {
+    const element = monthTabsRef.current;
+    if (!element) return;
+    const update = () => setIsMonthTabsScrolled(element.scrollLeft > 8);
+    update();
+    element.addEventListener("scroll", update, { passive: true });
+    return () => element.removeEventListener("scroll", update);
+  }, []);
+
+  useEffect(() => {
+    if (selectedCardId === "all") return;
+    const container = cardBarRef.current;
+    const selectedChip = container?.querySelector<HTMLButtonElement>(`[data-card-id="${CSS.escape(selectedCardId)}"]`);
+    scrollSelectedFilterIntoView(container ?? null, selectedChip ?? null);
+  }, [selectedCardId, sortedCards]);
 
   useEffect(() => {
     if (!filtersReady) return;
@@ -499,6 +511,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     [selectedCardId, sortedCards],
   );
   const selectedCardBank = getSingaporeBankByName(selectedCard?.bankName);
+  const selectedCardLogo = getBankLogoUrl(selectedCardBank);
+  const mobileCardOptions = useMemo(() => {
+    const query = mobileCardQuery.trim().toLowerCase();
+    if (!query) return sortedCards;
+    return sortedCards.filter((card) =>
+      [card.cardName, card.bankName, card.last4Digit]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query)),
+    );
+  }, [mobileCardQuery, sortedCards]);
   const canImportMaybankCsv = selectedCardBank?.code === "MAYBANK";
 
   const filteredTransactions = useMemo(() => {
@@ -997,6 +1019,25 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     return cardCounts.find((c) => c.creditCardId === cardId)?._count.id || 0;
   };
 
+  const closeMobileCardPicker = () => {
+    setIsMobileCardPickerOpen(false);
+    setMobileCardQuery("");
+  };
+
+  const selectMobileCard = (cardId: string) => {
+    setSelectedCardId(cardId);
+    closeMobileCardPicker();
+  };
+
+  const scrollCardRail = (direction: -1 | 1) => {
+    const container = cardBarRef.current;
+    if (!container) return;
+    container.scrollBy({
+      left: direction * Math.max(240, container.clientWidth * 0.72),
+      behavior: "smooth",
+    });
+  };
+
   const confirmDeleteTransaction = async (transactionId: string) => {
     if (!(await confirmDestructiveAction("Delete this credit card transaction permanently? This cannot be undone."))) return;
     if (deletingTransactionIds.includes(transactionId)) return;
@@ -1048,9 +1089,136 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   return (
     <div className="cct-container">
-      {/* Card Selector Bar */}
-      <div className={`cct-card-selector${isCardBarScrolled ? " is-scrolled" : ""}`}>
+      <div className="cct-mobile-card-picker" ref={mobileCardPickerRef}>
         <button
+          type="button"
+          className="cct-mobile-card-trigger"
+          aria-haspopup="listbox"
+          aria-expanded={isMobileCardPickerOpen}
+          aria-controls="mobile-credit-card-options"
+          onClick={() => {
+            if (isMobileCardPickerOpen) {
+              closeMobileCardPicker();
+            } else {
+              setIsMobileCardPickerOpen(true);
+            }
+          }}
+        >
+          <span className="cct-mobile-card-leading" aria-hidden="true">
+            {selectedCard && selectedCardLogo && !failedLogos[selectedCard.id] ? (
+              <Image
+                src={selectedCardLogo}
+                alt=""
+                width={32}
+                height={22}
+                sizes="32px"
+                className="cct-mobile-card-logo"
+                onError={() => setFailedLogos((current) => ({ ...current, [selectedCard.id]: true }))}
+              />
+            ) : (
+              <span className="cct-mobile-card-fallback">{selectedCard ? "💳" : "📋"}</span>
+            )}
+          </span>
+          <span className="cct-mobile-card-copy">
+            <strong>{selectedCard?.cardName ?? "All cards"}</strong>
+            <small>
+              {selectedCard
+                ? `${selectedCard.bankName || "Card"} ••${selectedCard.last4Digit}`
+                : `${sortedCards.length} ${sortedCards.length === 1 ? "card" : "cards"}`}
+            </small>
+          </span>
+          {(selectedCard ? getCardCount(selectedCard.id) : unaccountedCardCountTotal) > 0 ? (
+            <span className="cct-mobile-card-count">
+              {selectedCard ? getCardCount(selectedCard.id) : unaccountedCardCountTotal}
+            </span>
+          ) : null}
+          <ChevronDown size={19} aria-hidden="true" />
+        </button>
+        {isMobileCardPickerOpen ? (
+          <div className="cct-mobile-card-dropdown">
+            {sortedCards.length > 6 ? (
+              <div className="cct-mobile-card-search">
+                <input
+                  className="input"
+                  type="search"
+                  aria-label="Search cards"
+                  value={mobileCardQuery}
+                  onChange={(event) => setMobileCardQuery(event.target.value)}
+                  placeholder="Search cards"
+                />
+              </div>
+            ) : null}
+            <div id="mobile-credit-card-options" className="cct-mobile-card-options" role="listbox" aria-label="Credit cards">
+              {!mobileCardQuery.trim() ? (
+                <button
+                  type="button"
+                  className={`cct-mobile-card-option${selectedCardId === "all" ? " is-selected" : ""}`}
+                  role="option"
+                  aria-selected={selectedCardId === "all"}
+                  onClick={() => selectMobileCard("all")}
+                >
+                  <span className="cct-mobile-card-leading" aria-hidden="true">
+                    <span className="cct-mobile-card-fallback">📋</span>
+                  </span>
+                  <span className="cct-mobile-card-copy">
+                    <strong>All cards</strong>
+                    <small>{sortedCards.length} {sortedCards.length === 1 ? "card" : "cards"}</small>
+                  </span>
+                  {unaccountedCardCountTotal > 0 ? <span className="cct-mobile-card-count">{unaccountedCardCountTotal}</span> : null}
+                  {selectedCardId === "all" ? <Check size={18} aria-hidden="true" /> : <span className="cct-mobile-card-check-space" />}
+                </button>
+              ) : null}
+              {mobileCardOptions.map((card) => {
+                const bank = getSingaporeBankByName(card.bankName);
+                const logo = getBankLogoUrl(bank);
+                const count = getCardCount(card.id);
+                const isSelected = selectedCardId === card.id;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    className={`cct-mobile-card-option${isSelected ? " is-selected" : ""}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => selectMobileCard(card.id)}
+                  >
+                    <span className="cct-mobile-card-leading" aria-hidden="true">
+                      {logo && !failedLogos[card.id] ? (
+                        <Image
+                          src={logo}
+                          alt=""
+                          width={28}
+                          height={18}
+                          sizes="28px"
+                          className="cct-mobile-card-logo"
+                          loading="lazy"
+                          onError={() => setFailedLogos((current) => ({ ...current, [card.id]: true }))}
+                        />
+                      ) : (
+                        <span className="cct-mobile-card-fallback">💳</span>
+                      )}
+                    </span>
+                    <span className="cct-mobile-card-copy">
+                      <strong>{card.cardName}</strong>
+                      <small>{card.bankName || "Card"} ••{card.last4Digit}</small>
+                    </span>
+                    {count > 0 ? <span className="cct-mobile-card-count">{count}</span> : null}
+                    {isSelected ? <Check size={18} aria-hidden="true" /> : <span className="cct-mobile-card-check-space" />}
+                  </button>
+                );
+              })}
+              {mobileCardOptions.length === 0 ? (
+                <div className="cct-mobile-card-empty">No matching cards.</div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Card Selector Bar */}
+      <div className="cct-card-selector">
+        <button
+          type="button"
           className={`cct-card-chip cct-card-chip-all ${selectedCardId === "all" ? "active" : ""}`}
           onClick={() => setSelectedCardId("all")}
         >
@@ -1058,34 +1226,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <span className="cct-card-chip-name">All Cards</span>
           {unaccountedCardCountTotal > 0 && <span className="cct-card-chip-badge">{unaccountedCardCountTotal}</span>}
         </button>
-        {selectedCard && isSelectedCardOutOfView ? (() => {
-          const bank = getSingaporeBankByName(selectedCard.bankName);
-          const logo = getBankLogoUrl(bank);
-          const count = getCardCount(selectedCard.id);
-          return (
-            <button
-              className="cct-card-chip cct-card-chip-current active"
-              onClick={() => setSelectedCardId(selectedCard.id)}
-            >
-              {logo && !failedLogos[selectedCard.id] ? (
-                <Image
-                  src={logo}
-                  alt={selectedCard.bankName || ""}
-                  width={24}
-                  height={16}
-                  sizes="24px"
-                  className="cct-card-chip-logo"
-                  loading="lazy"
-                  onError={() => setFailedLogos((prev) => ({ ...prev, [selectedCard.id]: true }))}
-                />
-              ) : (
-                <span className="cct-card-chip-icon">💳</span>
-              )}
-              <span className="cct-card-chip-name">{selectedCard.cardName}</span>
-              {count > 0 && <span className="cct-card-chip-badge">{count}</span>}
-            </button>
-          );
-        })() : null}
+        <button
+          type="button"
+          className="cct-card-rail-button"
+          onClick={() => scrollCardRail(-1)}
+          disabled={!canScrollCardsLeft}
+          aria-label="Show previous cards"
+        >
+          <ArrowLeft size={18} aria-hidden="true" />
+        </button>
         <div ref={cardBarRef} className="cct-card-bar">
           {sortedCards.map((card) => {
             const bank = getSingaporeBankByName(card.bankName);
@@ -1094,6 +1243,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             return (
               <button
                 key={card.id}
+                type="button"
                 data-card-id={card.id}
                 className={`cct-card-chip ${selectedCardId === card.id ? "active" : ""}`}
                 onClick={() => setSelectedCardId(card.id)}
@@ -1118,6 +1268,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             );
           })}
         </div>
+        <button
+          type="button"
+          className="cct-card-rail-button"
+          onClick={() => scrollCardRail(1)}
+          disabled={!canScrollCardsRight}
+          aria-label="Show more cards"
+        >
+          <ArrowRight size={18} aria-hidden="true" />
+        </button>
       </div>
 
       {/* Period Filter */}
@@ -1414,9 +1573,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <div className="cct-modal cct-modal-wide" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>{editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}</h3>
-              <button className="cct-close-btn" onClick={closeModal}>
-                ✕
-              </button>
+              <ModalCloseButton onClick={closeModal} label={`Close ${editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}`} />
             </div>
             <form className="cct-modal-form" onSubmit={onSubmit}>
               <div className="cct-form-grid">
@@ -1521,7 +1678,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Deduct Credit Transaction</h3>
-              <button className="cct-close-btn" onClick={closeAccountingModal}>✕</button>
+              <ModalCloseButton onClick={closeAccountingModal} label="Close Deduct Credit Transaction" />
             </div>
             <form className="cct-modal-form" onSubmit={onSubmitDeduct}>
               <div className="cct-form-grid">
@@ -1587,7 +1744,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Create Receivable</h3>
-              <button className="cct-close-btn" onClick={closeReceivableModal}>✕</button>
+              <ModalCloseButton onClick={closeReceivableModal} label="Close Create Receivable" />
             </div>
             <form className="cct-modal-form cct-receivable-form" onSubmit={onSubmitReceivable}>
               <div className="cct-form-grid">

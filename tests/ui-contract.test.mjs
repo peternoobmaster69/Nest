@@ -20,6 +20,7 @@ test("shared UI primitives remain available", async () => {
     "components/notification-bell.tsx",
     "components/ui/button.tsx",
     "components/ui/dialog.tsx",
+    "components/ui/modal-close-button.tsx",
     "components/ui/form-field.tsx",
     "components/ui/page-header.tsx",
     "components/ui/query-state.tsx",
@@ -135,4 +136,82 @@ test("small-screen modals fill the available screen width", async () => {
   assert.match(contract, /@media\s*\(max-width:\s*820px\)[\s\S]*?padding-right:\s*5px\s*!important[\s\S]*?padding-left:\s*5px\s*!important/);
   assert.match(contract, /padding-bottom:\s*max\(16px, env\(safe-area-inset-bottom, 0px\)\)\s*!important/);
   assert.match(contract, /\.tx-month-popover\s*\{[^}]*width:\s*calc\(100vw - 10px\)/s);
+});
+
+test("modal close controls use the shared icon button", async () => {
+  const files = (await walk(path.join(root, "components"))).filter((file) => file.endsWith(".tsx"));
+  const sources = await Promise.all(files.map(async (file) => [file, await readFile(file, "utf8")]));
+  const legacyCloseClass = /className=["'](?:profile-modal-close|cc-close-btn|cct-close-btn|st-close-btn|tx-popover-close)["']/;
+
+  for (const [file, source] of sources) {
+    assert.doesNotMatch(source, legacyCloseClass, `${path.relative(root, file)} uses a legacy popup close control`);
+  }
+
+  const closeButton = await readFile(path.join(root, "components/ui/modal-close-button.tsx"), "utf8");
+  assert.match(closeButton, /className={`modal-close/);
+  assert.match(closeButton, /<X\s+size=\{18\}\s+aria-hidden="true"\s*\/>/);
+  assert.match(closeButton, /aria-label={label}/);
+});
+
+test("modal action bars remain outside independently scrolling content", async () => {
+  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const contract = source.slice(source.indexOf("MODAL VIEWPORT CONTRACT"));
+
+  assert.match(contract, /\.modal-form-shell,[\s\S]*?\.cc-modal-form,[\s\S]*?\.cct-modal-form,[\s\S]*?\.st-modal-form\s*\{[\s\S]*?flex-direction:\s*column\s*!important[\s\S]*?overflow:\s*hidden\s*!important/);
+  assert.match(contract, /\.cc-modal-scroll,[\s\S]*?\.cct-form-grid,[\s\S]*?\.st-modal-form\s*>\s*\.st-form-grid[\s\S]*?overflow-y:\s*auto/);
+  assert.match(contract, /\.modal-footer,[\s\S]*?\.txn-modal-actions,[\s\S]*?\.st-modal-actions,[\s\S]*?\.auto-rule-modal-footer[\s\S]*?position:\s*static\s*!important[\s\S]*?flex:\s*0\s+0\s+auto\s*!important/);
+
+  const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+  const receivables = await readFile(path.join(root, "components/receivables-page.tsx"), "utf8");
+  assert.match(transactions, /<form className="modal-form-shell" onSubmit={onSubmitEdit}>[\s\S]*?<div className="profile-modal-body txn-modal-body txn-modal-form">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
+  assert.match(receivables, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body recv-modal-body">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
+});
+
+test("credit transaction card selection uses a compact mobile-only dropdown", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /className="cct-mobile-card-trigger"[\s\S]*?aria-haspopup="listbox"/);
+  assert.match(component, /className="cct-mobile-card-dropdown"/);
+  assert.match(component, /card\.bankName \|\| "Card"} ••{card\.last4Digit}/);
+  assert.doesNotMatch(component, /cct-mobile-card-label|title="Select card"|mobileSheet/);
+  assert.match(styles, /\.cct-mobile-card-picker\s*\{[^}]*display:\s*none/s);
+  assert.match(styles, /\.cct-mobile-card-trigger\s*\{[^}]*min-height:\s*48px/s);
+  assert.match(styles, /\.cct-mobile-card-dropdown\s*\{[^}]*position:\s*absolute[^}]*max-height:\s*min\(55dvh, 360px\)/s);
+  assert.match(styles, /\.cct-mobile-card-option\s*\{[^}]*min-height:\s*48px/s);
+  assert.match(styles, /\.cct-card-selector\s*\{[^}]*display:\s*flex/s);
+  assert.match(styles, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.cct-mobile-card-picker\s*\{[^}]*display:\s*block[\s\S]*?\.cct-card-selector\s*\{[^}]*display:\s*none/s);
+  assert.doesNotMatch(styles, /modal-overlay-mobile-sheet|modal-mobile-sheet/);
+});
+
+test("tablet and desktop card rails use stable explicit navigation", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /aria-label="Show previous cards"/);
+  assert.match(component, /aria-label="Show more cards"/);
+  assert.match(component, /container\.scrollBy\([\s\S]*?behavior:\s*"smooth"/);
+  assert.doesNotMatch(component, /isSelectedCardOutOfView|isCardBarScrolled|updateSelectedCardVisibility/);
+  assert.doesNotMatch(styles, /\.cct-card-selector\.is-scrolled/);
+  assert.match(styles, /\.cct-card-rail-button\s*\{[^}]*min-width:\s*36px/s);
+  assert.match(styles, /\.cct-card-rail-button:disabled\s*\{[^}]*visibility:\s*hidden/s);
+});
+
+test("phone layouts use the native-style mobile application shell", async () => {
+  const shell = await readFile(path.join(root, "components/app-shell.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const plan = await readFile(path.join(root, "plan.md"), "utf8");
+
+  assert.match(shell, /className="mobile-topbar-title"/);
+  assert.match(shell, /className="mobile-bottom-nav" aria-label="Primary mobile navigation"/);
+  assert.match(shell, />Home<|<span>Home<\/span>/);
+  assert.match(shell, />Transactions<|<span>Transactions<\/span>/);
+  assert.match(shell, />Cards<|<span>Cards<\/span>/);
+  assert.match(shell, />Budget<|<span>Budget<\/span>/);
+  assert.match(shell, /aria-haspopup="dialog"[\s\S]*?<span>More<\/span>/);
+  assert.match(shell, /document\.documentElement\.dataset\.mobileMoreOpen/);
+  assert.match(styles, /\.mobile-bottom-nav,[\s\S]*?\.mobile-more-menu\s*\{[\s\S]*?display:\s*none/);
+  assert.match(styles, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.topbar \.hamburger\s*\{[^}]*display:\s*none\s*!important[\s\S]*?\.mobile-bottom-nav\s*\{[^}]*position:\s*fixed[^}]*display:\s*flex/s);
+  assert.match(styles, /\.body\s*\{[^}]*padding:\s*14px 12px calc\(16px \+ 62px \+ env\(safe-area-inset-bottom, 0px\)\)/s);
+  assert.match(plan, /## Phase 1 — Mobile application shell[\s\S]*?\[x\] Add a phone-only bottom navigation/);
 });

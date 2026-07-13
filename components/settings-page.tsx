@@ -13,6 +13,7 @@ import { DataImportSection } from "@/components/data-import-section";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 type Context = {
   workspaceId: string | null;
@@ -1181,9 +1182,7 @@ export function SettingsPage() {
                   <p>{editingAutoRule.name || `Rule ${editingAutoRuleDisplayIndex}`}</p>
                 </div>
               </div>
-              <button className="auto-rule-icon-btn" type="button" onClick={closeRuleEditor} aria-label="Close editor">
-                <X size={18} aria-hidden="true" />
-              </button>
+              <ModalCloseButton onClick={closeRuleEditor} label="Close Edit Auto Accounting Rule" />
             </div>
 
             <div className="auto-rule-modal-body">
@@ -1610,7 +1609,7 @@ export function SettingsPage() {
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Bank Account</h3>
-              <button className="st-close-btn" onClick={closeAddModal}>✕</button>
+              <ModalCloseButton onClick={closeAddModal} label="Close Add Bank Account" />
             </div>
             <form className="st-modal-form" onSubmit={onSubmitAdd}>
               <div className="st-form-grid">
@@ -1682,7 +1681,7 @@ export function SettingsPage() {
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Edit Bank Account</h3>
-              <button className="st-close-btn" onClick={closeEditModal}>✕</button>
+              <ModalCloseButton onClick={closeEditModal} label="Close Edit Bank Account" />
             </div>
             <form className="st-modal-form" onSubmit={onSubmitEdit}>
               <div className="st-form-grid">

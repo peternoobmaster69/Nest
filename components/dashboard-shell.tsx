@@ -22,6 +22,7 @@ import {
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 import { useToast } from "@/components/toast-provider";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 const ALL_BANKS_FILTER = "ALL";
 const RECENT_TRANSACTION_LIMIT = 5;
@@ -1814,12 +1815,10 @@ export function DashboardShell({
             <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>New Sub-Account</h3>
-                <button className="profile-modal-close" onClick={() => setCreateBudgetOpen(false)}>
-                  ✕
-                </button>
+                <ModalCloseButton onClick={() => setCreateBudgetOpen(false)} label="Close New Sub-Account" />
               </div>
-              <div className="profile-modal-body">
-                <form onSubmit={onCreateBudget} className="profile-field" style={{ display: "grid", gap: "10px" }}>
+              <form onSubmit={onCreateBudget} className="modal-form-shell">
+                <div className="profile-modal-body profile-field">
                   <span>Name</span>
                   <input
                     className="input"
@@ -1846,16 +1845,16 @@ export function DashboardShell({
                     value={budgetTarget}
                     onValueChange={setBudgetTarget}
                   />
-                  <div className="profile-actions">
-                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => setCreateBudgetOpen(false)}>
-                      Cancel
-                    </button>
-                    <button className="btn btn-primary btn-xs" type="submit" disabled={createBudget.isPending}>
-                      {createBudget.isPending ? "Creating..." : "Create"}
-                    </button>
-                  </div>
-                </form>
-              </div>
+                </div>
+                <div className="profile-actions">
+                  <button className="btn btn-ghost btn-xs" type="button" onClick={() => setCreateBudgetOpen(false)}>
+                    Cancel
+                  </button>
+                  <button className="btn btn-primary btn-xs" type="submit" disabled={createBudget.isPending}>
+                    {createBudget.isPending ? "Creating..." : "Create"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
@@ -1865,11 +1864,10 @@ export function DashboardShell({
             <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>Edit Account</h3>
-                <button className="profile-modal-close" onClick={() => setEditingBudgetId(null)}>
-                  ✕
-                </button>
+                <ModalCloseButton onClick={() => setEditingBudgetId(null)} label="Close Edit Account" />
               </div>
-              <div className="profile-modal-body">
+              <div className="modal-form-shell">
+                <div className="profile-modal-body">
                 <div className="profile-field">
                   <span>Name</span>
                   <input className="input" value={editingBudgetName} onChange={(e) => setEditingBudgetName(e.target.value)} />
@@ -1916,6 +1914,7 @@ export function DashboardShell({
                     ))}
                   </div>
                 </div>
+                </div>
                 <div className="profile-actions">
                   <button
                     className="btn btn-ghost btn-xs"
@@ -1949,9 +1948,10 @@ export function DashboardShell({
             <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
               <div className="profile-modal-head">
                 <h3>Edit Bank Balance</h3>
-                <button className="profile-modal-close" onClick={closeEditBankBalance}>✕</button>
+                <ModalCloseButton onClick={closeEditBankBalance} label="Close Edit Bank Balance" />
               </div>
-              <form className="profile-modal-body txn-bank-balance-form" onSubmit={onSubmitBankBalance}>
+              <form className="modal-form-shell" onSubmit={onSubmitBankBalance}>
+                <div className="profile-modal-body txn-bank-balance-form">
                 <div className="profile-field">
                   <span>Bank Account</span>
                   <strong>{editingBankAccount.name}</strong>
@@ -1965,6 +1965,7 @@ export function DashboardShell({
                     onValueChange={setEditBankBalance}
                     required
                   />
+                </div>
                 </div>
                 <div className="profile-actions">
                   <button type="button" className="btn btn-ghost" onClick={closeEditBankBalance}>Cancel</button>
