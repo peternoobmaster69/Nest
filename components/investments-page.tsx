@@ -578,23 +578,6 @@ export function InvestmentsPage() {
 
   return (
     <div className="inv-page">
-      {/* Add Button - Outside card */}
-      {!accountsLoading && (
-        <div style={{ marginBottom: "8px", display: "flex", justifyContent: "flex-end" }}>
-          <button
-            className="btn btn-primary btn-sm mobile-primary-create"
-            type="button"
-            onClick={openCreateAccountModal}
-            disabled={!workspaceId}
-            aria-label="Add Investment Account"
-            title="Add Investment Account"
-          >
-            <Plus size={18} aria-hidden="true" />
-            <span className="mobile-primary-create-label">Add Account</span>
-          </button>
-        </div>
-      )}
-
       {/* Modern Fintech-Style Dashboard Header */}
       {accountsLoading ? (
         <InvestmentsPortfolioHeaderSkeleton />
@@ -662,7 +645,7 @@ export function InvestmentsPage() {
       {/* View Toggle */}
       <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
         <div style={{ fontSize: "13px", fontWeight: 600 }}>
-          {showAllAccounts ? "Viewing: All Accounts" : selectedAccount ? `Viewing: ${selectedAccount.displayName || selectedAccount.productName}` : "Select an account to view details"}
+          {showAllAccounts ? "All Accounts" : selectedAccount ? `${selectedAccount.displayName || selectedAccount.productName}` : "Select an account to view details"}
         </div>
         <div className="segmented">
           <button
@@ -682,6 +665,22 @@ export function InvestmentsPage() {
           </button>
         </div>
       </section>
+
+      {!accountsLoading && !accountsError && (accounts.data?.length ?? 0) > 0 ? (
+        <div className="inv-account-create-row">
+          <button
+            className="btn btn-ghost btn-sm inv-add-account-btn"
+            type="button"
+            onClick={openCreateAccountModal}
+            disabled={!workspaceId}
+            aria-label="Add investment account"
+            title="Add investment account"
+          >
+            <Plus size={15} aria-hidden="true" />
+            <span>Add account</span>
+          </button>
+        </div>
+      ) : null}
 
       {accountsLoading ? (
         <InvestmentsAccountGridSkeleton />

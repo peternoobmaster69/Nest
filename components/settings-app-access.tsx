@@ -2,7 +2,7 @@
 
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   clearInstallPrompt,
@@ -47,11 +47,50 @@ function isStandalone() {
     Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
 }
 
+function suggestedPasskeyName() {
+  const userAgent = navigator.userAgent;
+  const isIPad = /iPad/.test(userAgent) || (/Macintosh/.test(userAgent) && navigator.maxTouchPoints > 1);
+  const device = /iPhone/.test(userAgent)
+    ? "iPhone"
+    : isIPad
+      ? "iPad"
+      : /Android/.test(userAgent)
+        ? "Android device"
+        : /Windows/.test(userAgent)
+          ? "Windows PC"
+          : /Macintosh/.test(userAgent)
+            ? "Mac"
+            : /Linux/.test(userAgent)
+              ? "Linux device"
+              : "This device";
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /Firefox\//.test(userAgent)
+      ? "Firefox"
+      : /Chrome\//.test(userAgent) || /CriOS\//.test(userAgent)
+        ? "Chrome"
+        : /Safari\//.test(userAgent)
+          ? "Safari"
+          : "Browser";
+  return `${device} · ${browser}`;
+}
+
+function passkeyMetadata(passkey: Passkey) {
+  const kind = passkey.backedUp || passkey.deviceType === "multiDevice" ? "Synced passkey" : "Device-bound passkey";
+  const added = new Date(passkey.createdAt).toLocaleDateString("en-SG");
+  const lastUsed = passkey.lastUsedAt ? new Date(passkey.lastUsedAt).toLocaleDateString("en-SG") : null;
+  return `${kind} · Added ${added}${lastUsed ? ` · Last used ${lastUsed}` : " · Not used yet"}`;
+}
+
 export function SettingsAppAccess() {
   const queryClient = useQueryClient();
   const installAvailable = useSyncExternalStore(subscribeInstallPrompt, hasInstallPrompt, () => false);
   const [capabilities, setCapabilities] = useState({ passkeys: false, push: false, standalone: false, ios: false });
   const [message, setMessage] = useState<string | null>(null);
+  const [isNamingPasskey, setIsNamingPasskey] = useState(false);
+  const [newPasskeyName, setNewPasskeyName] = useState("");
+  const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
+  const [editingPasskeyName, setEditingPasskeyName] = useState("");
 
   useEffect(() => {
     setCapabilities({
@@ -88,7 +127,7 @@ export function SettingsAppAccess() {
   });
 
   const addPasskey = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (name: string) => {
       const start = await jsonRequest<{ challengeId: string; options: RegistrationOptions }>("/api/passkeys/register/options", {
         method: "POST",
       });
@@ -96,13 +135,31 @@ export function SettingsAppAccess() {
       await jsonRequest("/api/passkeys/register/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challengeId: start.challengeId, name: "Nest passkey", response }),
+        body: JSON.stringify({ challengeId: start.challengeId, name: name.trim(), response }),
       });
     },
     onSuccess: async () => {
       setMessage("Passkey added. You can now use it to sign in.");
+      setIsNamingPasskey(false);
+      setNewPasskeyName("");
       await queryClient.invalidateQueries({ queryKey: ["settings-passkeys"] });
     },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey could not be added."),
+  });
+
+  const renamePasskey = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => jsonRequest("/api/passkeys", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, name: name.trim() }),
+    }),
+    onSuccess: async () => {
+      setMessage("Passkey name updated.");
+      setEditingPasskeyId(null);
+      setEditingPasskeyName("");
+      await queryClient.invalidateQueries({ queryKey: ["settings-passkeys"] });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey name could not be updated."),
   });
 
   const removePasskey = useMutation({
@@ -113,9 +170,17 @@ export function SettingsAppAccess() {
     }),
     onSuccess: async () => {
       setMessage("Passkey removed.");
+      setEditingPasskeyId(null);
       await queryClient.invalidateQueries({ queryKey: ["settings-passkeys"] });
     },
   });
+
+  const openPasskeyNameForm = () => {
+    setMessage(null);
+    setEditingPasskeyId(null);
+    setNewPasskeyName(suggestedPasskeyName());
+    setIsNamingPasskey(true);
+  };
 
   const enableNotifications = useMutation({
     mutationFn: async () => {
@@ -217,10 +282,49 @@ export function SettingsAppAccess() {
             <div className="settings-section-title">Passkeys</div>
             <div className="settings-section-copy">Sign in securely with Face ID, Touch ID, Windows Hello, or a security key.</div>
           </div>
-          <button className="btn btn-primary btn-xs" type="button" onClick={() => addPasskey.mutate()} disabled={!capabilities.passkeys || addPasskey.isPending}>
-            {addPasskey.isPending ? "Adding..." : "Add Passkey"}
+          <button className="btn btn-primary btn-xs" type="button" onClick={openPasskeyNameForm} disabled={!capabilities.passkeys || addPasskey.isPending || isNamingPasskey}>
+            Add Passkey
           </button>
         </div>
+
+        {isNamingPasskey ? (
+          <form
+            className="settings-passkey-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (newPasskeyName.trim()) addPasskey.mutate(newPasskeyName);
+            }}
+          >
+            <label htmlFor="new-passkey-name">Passkey name</label>
+            <input
+              id="new-passkey-name"
+              className="input"
+              value={newPasskeyName}
+              onChange={(event) => setNewPasskeyName(event.target.value)}
+              maxLength={80}
+              placeholder="e.g. Peter's iPhone or YubiKey"
+              autoFocus
+              required
+            />
+            <p>Choose a name that identifies the device, browser, or security key. You can rename it later.</p>
+            <div className="settings-passkey-form-actions">
+              <button
+                className="btn btn-ghost btn-xs"
+                type="button"
+                onClick={() => {
+                  setIsNamingPasskey(false);
+                  setNewPasskeyName("");
+                }}
+                disabled={addPasskey.isPending}
+              >
+                Cancel
+              </button>
+              <button className="btn btn-primary btn-xs" type="submit" disabled={!newPasskeyName.trim() || addPasskey.isPending}>
+                {addPasskey.isPending ? "Adding..." : "Continue"}
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         {passkeys.isLoading ? <div className="settings-muted-message settings-message-spaced">Loading passkeys...</div> : null}
         {passkeys.isError ? <div className="settings-message settings-message-spaced">Passkeys could not be loaded.</div> : null}
@@ -228,25 +332,77 @@ export function SettingsAppAccess() {
           <div className="settings-passkey-list">
             {passkeys.data.passkeys.map((passkey) => (
               <div className="settings-passkey-item" key={passkey.id}>
-                <div>
-                  <strong>{passkey.name || "Passkey"}</strong>
-                  <span>
-                    Added {new Date(passkey.createdAt).toLocaleDateString("en-SG")}
-                    {passkey.backedUp ? " · Synced" : ""}
-                  </span>
-                </div>
-                <button
-                  className="btn-icon"
-                  type="button"
-                  onClick={() => removePasskey.mutate(passkey.id)}
-                  disabled={removePasskey.isPending}
-                  aria-label={`Remove ${passkey.name || "passkey"}`}
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                </button>
+                {editingPasskeyId === passkey.id ? (
+                  <form
+                    className="settings-passkey-edit-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (editingPasskeyName.trim()) renamePasskey.mutate({ id: passkey.id, name: editingPasskeyName });
+                    }}
+                  >
+                    <input
+                      className="input"
+                      value={editingPasskeyName}
+                      onChange={(event) => setEditingPasskeyName(event.target.value)}
+                      maxLength={80}
+                      aria-label={`Name for ${passkey.name || "passkey"}`}
+                      autoFocus
+                      required
+                    />
+                    <div className="settings-passkey-edit-actions">
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        type="button"
+                        onClick={() => {
+                          setEditingPasskeyId(null);
+                          setEditingPasskeyName("");
+                        }}
+                        disabled={renamePasskey.isPending}
+                      >
+                        Cancel
+                      </button>
+                      <button className="btn btn-primary btn-xs" type="submit" disabled={!editingPasskeyName.trim() || renamePasskey.isPending}>
+                        {renamePasskey.isPending ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className="settings-passkey-copy">
+                      <strong>{passkey.name || "Unnamed passkey"}</strong>
+                      <span>{passkeyMetadata(passkey)}</span>
+                    </div>
+                    <div className="settings-passkey-actions">
+                      <button
+                        className="btn-icon settings-passkey-icon-button"
+                        type="button"
+                        onClick={() => {
+                          setIsNamingPasskey(false);
+                          setEditingPasskeyId(passkey.id);
+                          setEditingPasskeyName(passkey.name || suggestedPasskeyName());
+                        }}
+                        disabled={renamePasskey.isPending || removePasskey.isPending}
+                        aria-label={`Rename ${passkey.name || "passkey"}`}
+                      >
+                        <Pencil size={16} aria-hidden="true" />
+                      </button>
+                      <button
+                        className="btn-icon settings-passkey-icon-button"
+                        type="button"
+                        onClick={() => removePasskey.mutate(passkey.id)}
+                        disabled={removePasskey.isPending || renamePasskey.isPending}
+                        aria-label={`Remove ${passkey.name || "passkey"}`}
+                      >
+                        <Trash2 size={16} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
+        ) : !passkeys.isLoading && !passkeys.isError ? (
+          <div className="settings-muted-message settings-message-spaced">No passkeys added yet.</div>
         ) : null}
       </div>
 

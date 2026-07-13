@@ -77,6 +77,7 @@ export function AppShell({
   const showInvestments = sidebarMoneyPages.investments !== false;
   const primaryCardsPath = showCreditTransactions ? "/credit-transactions" : "/credit-cards";
   const cardsRouteActive = currentPath === "/credit-cards" || currentPath === "/credit-transactions";
+  const mobileWorkspaceName = contextData?.workspaceName?.trim();
   const moreRouteActive = [
     "/receivables",
     "/rewards",
@@ -161,6 +162,7 @@ export function AppShell({
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <AppSidebar
         userName={userName}
         userEmail={userEmail}
@@ -173,7 +175,7 @@ export function AppShell({
         contextData={contextData}
         contextLoading={contextLoading}
       />
-      <main className="main" id="main-content">
+      <main className="main" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div className="tb-left">
             <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
@@ -208,7 +210,7 @@ export function AppShell({
       {mobileMoreOpen ? (
         <>
           <div className="mobile-more-backdrop" aria-hidden="true" />
-          <section ref={mobileMoreRef} className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
+          <section id="mobile-more-menu" ref={mobileMoreRef} className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
             <div className="mobile-more-header">
               <div className="mobile-more-header-main">
                 {mobileMoreView === "account" ? (
@@ -312,10 +314,22 @@ export function AppShell({
           }}
           aria-expanded={mobileMoreOpen}
           aria-haspopup="dialog"
+          aria-controls="mobile-more-menu"
+          aria-label={mobileMoreOpen ? "Close More menu" : "Open More menu"}
         >
           <Ellipsis size={22} aria-hidden="true" />
           <span>More</span>
         </button>
+        {mobileWorkspaceName ? (
+          <div
+            className="mobile-bottom-nav-workspace"
+            aria-label={`Current workspace: ${mobileWorkspaceName}`}
+            title={mobileWorkspaceName}
+          >
+            <span className="mobile-bottom-nav-workspace-dot" aria-hidden="true" />
+            <span className="mobile-bottom-nav-workspace-name">{mobileWorkspaceName}</span>
+          </div>
+        ) : null}
       </nav>
     </div>
   );

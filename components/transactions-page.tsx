@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useSessionState } from "@/lib/use-session-state";
+import { getMotionSafeScrollBehavior } from "@/lib/motion";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
@@ -1597,12 +1598,22 @@ export function TransactionsPage() {
           */}
           <div
             className="budget-mini budget-mini-compact tx-account-card"
+            role="button"
+            tabIndex={0}
+            aria-pressed={activeBudgetFilterId === "ALL"}
+            aria-label="Show transactions from all sub-accounts"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.currentTarget.click();
+              }
+            }}
             onClick={() => {
               setActiveBudgetFilterId("ALL");
               if (subAccountsRef.current) {
                 const rect = subAccountsRef.current.getBoundingClientRect();
                 if (rect.top > 0) {
-                  subAccountsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                  subAccountsRef.current.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
                 }
               }
             }}
@@ -1628,12 +1639,22 @@ export function TransactionsPage() {
             <div
               key={b.id}
               className="budget-mini budget-mini-compact tx-account-card"
+              role="button"
+              tabIndex={0}
+              aria-pressed={activeBudgetFilterId === b.id}
+              aria-label={`Show transactions from ${b.name}`}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  event.currentTarget.click();
+                }
+              }}
               onClick={() => {
                 setActiveBudgetFilterId(b.id);
                 if (subAccountsRef.current) {
                   const rect = subAccountsRef.current.getBoundingClientRect();
                   if (rect.top > 0) {
-                    subAccountsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                    subAccountsRef.current.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
                   }
                 }
               }}
@@ -1727,18 +1748,19 @@ export function TransactionsPage() {
         >
           <div className="tx-group-panel-head">
             <div className="tx-group-panel-heading">
-              <span className="tx-group-panel-symbol" aria-hidden="true">
-                <Layers3 size={15} />
+              <span className="tx-group-panel-symbol">
+                <Layers3 size={15} aria-hidden="true" />
+                {hasTransactionGroups ? (
+                  <span className="tx-group-count" aria-label={`${visibleTransactionGroups.length} groups`}>
+                    ×{visibleTransactionGroups.length}
+                  </span>
+                ) : null}
               </span>
-              {hasTransactionGroups ? (
-                <span className="tx-group-count" aria-label={`${visibleTransactionGroups.length} groups`}>
-                  {visibleTransactionGroups.length}
-                </span>
-              ) : !transactionGroups.isLoading ? (
+              {!hasTransactionGroups && !transactionGroups.isLoading ? (
                 <p>No groups yet. Create one to organise related transactions.</p>
-              ) : (
+              ) : !hasTransactionGroups ? (
                 <p><LoadingDots /> Loading groups</p>
-              )}
+              ) : null}
             </div>
             {hasTransactionGroups ? (
               <div className="tx-group-cards">
@@ -1790,7 +1812,7 @@ export function TransactionsPage() {
               onClick={() => {
                 setIsGroupingMode(true);
                 setSelectedTransactionIds([]);
-                recentTransactionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                recentTransactionsRef.current?.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
               }}
               disabled={!filteredTransactions.length}
             >

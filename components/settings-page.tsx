@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS } from "@/lib/credit-txn-auto-rules";
+import { CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS } from "@/lib/credit-txn-auto-rules-config";
 import { GMAIL_SYNC_INTERVAL_MS } from "@/lib/gmail-alert-query";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";

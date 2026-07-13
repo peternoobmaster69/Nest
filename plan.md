@@ -44,12 +44,12 @@ Status: Complete
 
 ## Phase 4 — Mobile quality audit
 
-Status: Planned
+Status: In Progress
 
-- [ ] Validate at 390px, 430px, and common phone landscape dimensions.
-- [ ] Audit 44–48px touch targets, focus order, screen-reader names, keyboard behavior, and reduced motion.
-- [ ] Remove remaining layout shifts and accidental nested scrolling.
-- [ ] Measure mobile route transitions, interaction latency, and bundle impact.
+- [ ] Complete the live visual pass at 390px, 430px, 844×390, and 932×430. Automated responsive contracts are complete; an interactive browser session is still required.
+- [x] Audit 44–48px touch targets, focus order, screen-reader names, keyboard behavior, and reduced motion.
+- [x] Remove remaining layout shifts and accidental nested scrolling.
+- [x] Measure mobile route transitions, interaction latency, and bundle impact.
 
 ## Execution log
 
@@ -63,3 +63,8 @@ Status: Planned
 - 2026-07-13: Added explicit offline mutation rejection with no background financial queue, discoverable passkeys with one-time WebAuthn challenges and replay counters, and NextAuth passkey sign-in.
 - 2026-07-13: Added opt-in VAPID web push subscriptions for payment reminders, receivable dates, invitations, and background-task completion, plus deployment setup documentation.
 - 2026-07-13: Completed Phase 3 verification: Prisma schema validation passed, TypeScript passed, ESLint passed, all 28 tests passed, the 80-route Next.js production build completed, and `git diff --check` reported no whitespace errors.
+- 2026-07-13: Started Phase 4 with a source and interaction-contract audit. Added 44px coarse-pointer targets, a keyboard skip link, keyboard-operable transaction account filters, reliable legacy-dialog labels, motion-safe scrolling, and a global reduced-motion contract.
+- 2026-07-13: Extended the native mobile shell and full-screen workflow rules to coarse-pointer phone landscape up to 960×500, including landscape safe-area padding and a two-column More layout. Stabilized the main scroll container and removed the route loader's artificial post-navigation delay.
+- 2026-07-13: Added real client-route performance measures, Vercel Speed Insights, and a bundle regression boundary that keeps the Settings client away from the server validation module. After the passkey-management refinement, Settings measured 246.3 KiB raw / 70.5 KiB gzip, down from 509.4 KiB raw / 131.5 KiB gzip; Transactions measured 67.8 KiB gzip and Card Transactions 62.0 KiB gzip.
+- 2026-07-13: Made passkey names required and recognizable, with device/browser suggestions, rename controls for existing credentials, synced/device-bound status, and added/last-used references. Server-side rename and registration validation remain scoped to the signed-in user.
+- 2026-07-13: Phase 4 automated verification passed: TypeScript, ESLint, all 31 tests, and the 80-route Next.js production build. The live 390px/430px/phone-landscape visual pass remains open because no interactive browser session was available; the normal npm build wrapper also encountered a Windows lock on the already-generated Prisma DLL, while the direct Next.js build passed.

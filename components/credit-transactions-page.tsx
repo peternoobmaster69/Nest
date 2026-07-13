@@ -14,6 +14,7 @@ import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
 import { useSessionState } from "@/lib/use-session-state";
+import { getMotionSafeScrollBehavior } from "@/lib/motion";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Plus } from "lucide-react";
 
@@ -163,7 +164,7 @@ function scrollSelectedFilterIntoView(container: HTMLDivElement | null, selected
     selectedElement.offsetLeft - (container.clientWidth - selectedElement.offsetWidth) / 2;
   container.scrollTo({
     left: Math.max(0, targetLeft),
-    behavior: "smooth",
+    behavior: getMotionSafeScrollBehavior(),
   });
 }
 
@@ -337,7 +338,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   useEffect(() => {
     if (selectedMonth === -1) {
-      monthTabsRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+      monthTabsRef.current?.scrollTo({ left: 0, behavior: getMotionSafeScrollBehavior() });
       return;
     }
     const activeMonthTab = Array.from(monthTabsRef.current?.querySelectorAll<HTMLButtonElement>("[data-month]") ?? [])
@@ -1035,7 +1036,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     if (!container) return;
     container.scrollBy({
       left: direction * Math.max(240, container.clientWidth * 0.72),
-      behavior: "smooth",
+      behavior: getMotionSafeScrollBehavior(),
     });
   };
 

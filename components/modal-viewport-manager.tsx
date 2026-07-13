@@ -35,6 +35,7 @@ export function ModalViewportManager() {
     let previousBodyOverflow = "";
     let previousHtmlOverflow = "";
     let previouslyFocused: HTMLElement | null = null;
+    let generatedTitleId = 0;
 
     const lockViewport = () => {
       if (isLocked) return;
@@ -90,6 +91,19 @@ export function ModalViewportManager() {
           legacyModal.setAttribute("role", "dialog");
           legacyModal.setAttribute("aria-modal", "true");
           legacyModal.tabIndex = -1;
+          if (!legacyModal.hasAttribute("aria-label") && !legacyModal.hasAttribute("aria-labelledby")) {
+            const heading = legacyModal.querySelector<HTMLElement>("h1,h2,h3,[data-modal-title]");
+            if (heading) {
+              if (!heading.id) {
+                generatedTitleId += 1;
+                heading.id = `nest-modal-title-${generatedTitleId}`;
+              }
+              legacyModal.setAttribute("aria-labelledby", heading.id);
+            } else {
+              const closeLabel = legacyModal.querySelector<HTMLElement>(".modal-close")?.getAttribute("aria-label");
+              legacyModal.setAttribute("aria-label", closeLabel?.replace(/^Close\s+/i, "") || "Dialog");
+            }
+          }
           if (!legacyModal.contains(document.activeElement)) {
             (legacyModal.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) || legacyModal).focus();
           }

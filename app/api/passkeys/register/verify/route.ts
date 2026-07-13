@@ -11,6 +11,10 @@ export async function POST(request: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json() as { challengeId?: string; name?: string; response?: RegistrationResponseJSON };
   if (!body.challengeId || !body.response) return NextResponse.json({ error: "Invalid passkey response" }, { status: 400 });
+  const passkeyName = body.name?.trim().replace(/\s+/g, " ");
+  if (!passkeyName || passkeyName.length > 80) {
+    return NextResponse.json({ error: "Passkey name must be between 1 and 80 characters" }, { status: 400 });
+  }
   const challenge = await readWebAuthnChallenge(body.challengeId, "REGISTRATION", session.user.id);
   if (!challenge) return NextResponse.json({ error: "Passkey challenge expired" }, { status: 400 });
   const { origin, rpID } = getWebAuthnConfig(request);
@@ -33,7 +37,7 @@ export async function POST(request: Request) {
         transports: info.credential.transports ? JSON.stringify(info.credential.transports) : null,
         deviceType: info.credentialDeviceType,
         backedUp: info.credentialBackedUp,
-        name: body.name?.trim().slice(0, 80) || "Passkey",
+        name: passkeyName,
       },
     });
     return NextResponse.json({ verified: true });

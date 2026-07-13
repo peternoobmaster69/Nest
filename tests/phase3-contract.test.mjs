@@ -38,13 +38,22 @@ test("passkeys use one-time challenges, replay counters, and NextAuth handoff ti
   const passkeys = await source("lib/passkeys.ts");
   const register = await source("app/api/passkeys/register/verify/route.ts");
   const authenticate = await source("app/api/passkeys/authenticate/verify/route.ts");
+  const management = await source("app/api/passkeys/route.ts");
+  const settings = await source("components/settings-app-access.tsx");
   assert.match(schema, /model PasskeyCredential[\s\S]*?credentialId\s+String\s+@unique[\s\S]*?counter\s+BigInt/);
   assert.match(schema, /model WebAuthnChallenge/);
   assert.match(auth, /CredentialsProvider\([\s\S]*?consumePasskeyLoginTicket/);
   assert.match(passkeys, /LOGIN_TICKET_TTL_MS\s*=\s*60 \* 1000/);
   assert.match(register, /requireUserVerification:\s*true/);
+  assert.match(register, /Passkey name must be between 1 and 80 characters/);
   assert.match(authenticate, /newCounter/);
   assert.match(authenticate, /consumeWebAuthnChallenge/);
+  assert.match(management, /export async function PATCH/);
+  assert.match(management, /data:\s*\{ name \}/);
+  assert.match(settings, /suggestedPasskeyName/);
+  assert.match(settings, /Peter's iPhone or YubiKey/);
+  assert.match(settings, /Rename \$\{passkey\.name/);
+  assert.match(settings, /Last used/);
 });
 
 test("push subscriptions are opt-in and cover planned notification events", async () => {
