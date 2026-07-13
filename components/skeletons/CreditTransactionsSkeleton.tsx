@@ -3,9 +3,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 /*
 Structural inventory: Credit transactions page shell
 Route: /credit-transactions
-Layout regions: PageFrame chrome static; .cct-container stacks filter bars, action controls, and data table at 16px gap.
+Layout regions: PageFrame chrome static; .cct-container stacks filter bars, action controls, and data table at 14px gap.
 Content blocks:
-- Card chip bar: .cct-card-bar flex row, 8px gap, horizontally scrollable chips with 24x16 logo and 13px label.
+- Card chip bar: .cct-card-bar flex row, 6px gap, horizontally scrollable chips with 24x16 logo and 12px label.
 - Period bar/actions: static controls in the loaded component are represented by button/input-sized skeletons because card/month counts are server or query data.
 - Table wrapper: .cct-table-wrapper with .cct-table header rendered statically and six body rows from CreditTransactionsTableRowsSkeleton.
 Do not skeletonize: PageFrame chrome; table headers; static import button position.
@@ -28,7 +28,7 @@ export function CreditTransactionsPageSkeleton() {
         <Skeleton width={36} height={36} borderRadius="var(--r-md)" />
       </div>
       <div className="cct-table-wrapper">
-        <table className="cct-table">
+        <table className="cct-table responsive-data-table">
           <thead>
             <tr>
               <th>Date</th>
@@ -53,15 +53,15 @@ Route: /credit-transactions
 Layout regions: PageFrame chrome, card chip bar, period bar, summary/actions are static or derived from local state; table body is data-driven.
 Content blocks:
 - Table wrapper: .cct-table-wrapper, overflow-x auto, border radius var(--r-lg).
-- Table: .cct-table, 13px font, headers fixed; tbody rows contain five cells.
-- Row dimensions: td padding 12px 16px; date day line, subject with max 2-line clamp, right-aligned mono amount, card checkbox row, action buttons 28px high.
+- Table: .cct-table, 13px font, headers fixed; tbody rows contain five cells and collapse to two visual rows on mobile.
+- Row dimensions: td padding 10px 12px; date day line, subject, right-aligned mono amount, card checkbox row, action buttons 28px high.
 Do not skeletonize: table header, filters, import/sync action controls.
 */
 export function CreditTransactionsTableRowsSkeleton() {
   return (
     <>
       {Array.from({ length: 6 }).map((_, index) => (
-        <tr key={index}>
+        <tr className="cct-transaction-row" key={index}>
           <td className="cct-tx-date">
             <Skeleton width={82} height={18} borderRadius="4px" />
           </td>
@@ -79,11 +79,9 @@ export function CreditTransactionsTableRowsSkeleton() {
               <Skeleton width={92} height={18} borderRadius="4px" />
             </label>
           </td>
-          <td>
-            <div className="cct-tx-actions">
-              <Skeleton width={28} height={28} borderRadius="var(--r-sm)" />
-              <Skeleton width={28} height={28} borderRadius="var(--r-sm)" />
-            </div>
+          <td className="cct-tx-actions">
+            <Skeleton width={28} height={28} borderRadius="var(--r-sm)" />
+            <Skeleton width={28} height={28} borderRadius="var(--r-sm)" />
           </td>
         </tr>
       ))}

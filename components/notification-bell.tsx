@@ -181,7 +181,7 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
               <div className="notification-state notification-empty">
                 <span className="notification-empty-icon"><Bell size={22} aria-hidden="true" /></span>
                 <strong>All caught up</strong>
-                <span>Important account reminders will appear here.</span>
+                <span>Credit card due reminders and workspace invitations will appear here.</span>
               </div>
             )}
           </div>

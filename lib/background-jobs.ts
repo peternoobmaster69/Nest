@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { sendPushToUser } from "@/lib/web-push";
 
 export type BackgroundJobPhase = "idle" | "reading" | "writing" | "complete" | "error";
 
@@ -105,7 +104,7 @@ export async function completeBackgroundJob(
   },
 ) {
   if (!jobId) return null;
-  const job = await prisma.backgroundJob.update({
+  return prisma.backgroundJob.update({
     where: { id: jobId },
     data: {
       status: params.skipped ? "SKIPPED" : "SUCCEEDED",
@@ -117,15 +116,6 @@ export async function completeBackgroundJob(
       finishedAt: new Date(),
     },
   });
-  if (job.userId) {
-    await sendPushToUser(job.userId, {
-      title: "Background task complete",
-      message: params.message,
-      href: "/settings",
-      tag: `background-job:${job.id}`,
-    });
-  }
-  return job;
 }
 
 export async function failBackgroundJob(jobId: string | null | undefined, error: unknown) {

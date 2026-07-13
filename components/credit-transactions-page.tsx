@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
@@ -105,6 +105,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CREDIT_TX_MONTH_COOKIE = "nest_credit_tx_month";
 const CREDIT_TX_CARD_COOKIE = "nest_credit_tx_card";
 const EMPTY_CREDIT_TRANSACTION_SUMMARY: CreditTransactionSummary = {
@@ -122,6 +123,22 @@ function getAmountToneClass(valueCents: number) {
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+}
+
+function getDateGroupDetails(dateStr: string) {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) {
+    return { key: dateStr, label: dateStr, dateTime: "" };
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return {
+    key: `${year}-${month}-${day}`,
+    label: `${WEEKDAYS[date.getDay()]}, ${formatDate(dateStr)}`,
+    dateTime: `${year}-${month}-${day}`,
+  };
 }
 
 function toDateInputValue(dateStr: string) {
@@ -386,11 +403,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     enabled: Boolean(context.data?.workspaceId),
   });
 
-  const defaultSubaccountBalance = useMemo(() => {
-    if (!defaultReceivableBudgetId || !budgets.data) return 0;
-    const budget = budgets.data.find((b) => b.id === defaultReceivableBudgetId);
-    return budget?.availableCents ?? 0;
+  const defaultReceivableSubaccount = useMemo(() => {
+    if (!defaultReceivableBudgetId || !budgets.data) return null;
+    return budgets.data.find((budget) => budget.id === defaultReceivableBudgetId) ?? null;
   }, [budgets.data, defaultReceivableBudgetId]);
+  const defaultSubaccountBalance = defaultReceivableSubaccount?.availableCents ?? 0;
   const creditTransactionsKeyPrefix = ["credit-transactions", context.data?.workspaceId] as const;
   const currentCreditTransactionsKey = [
     "credit-transactions",
@@ -512,6 +529,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     () => sortedCards.find((card) => card.id === selectedCardId) ?? null,
     [selectedCardId, sortedCards],
   );
+  const unaccountedTransactionCount = selectedCardId === "all"
+    ? unaccountedCardCountTotal
+    : cardCounts.find((entry) => entry.creditCardId === selectedCardId)?._count.id ?? 0;
   const selectedCardBank = getSingaporeBankByName(selectedCard?.bankName);
   const selectedCardLogo = getBankLogoUrl(selectedCardBank);
   const mobileCardOptions = useMemo(() => {
@@ -525,10 +545,40 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   }, [mobileCardQuery, sortedCards]);
   const canImportMaybankCsv = selectedCardBank?.code === "MAYBANK";
 
+  useEffect(() => {
+    if (!data || unaccountedTransactionCount > 0 || !showUnaccountedOnly) return;
+    setShowUnaccountedOnly(false);
+  }, [data, setShowUnaccountedOnly, showUnaccountedOnly, unaccountedTransactionCount]);
+
   const filteredTransactions = useMemo(() => {
     if (!showUnaccountedOnly) return transactions;
     return transactions.filter((t) => !t.isAllocated);
   }, [transactions, showUnaccountedOnly]);
+
+  const transactionDateGroups = useMemo(() => {
+    const groups: Array<{
+      key: string;
+      label: string;
+      dateTime: string;
+      transactions: CreditCardTransaction[];
+    }> = [];
+    const groupsByDate = new Map<string, (typeof groups)[number]>();
+
+    filteredTransactions.forEach((transaction) => {
+      const date = getDateGroupDetails(transaction.transactionDate);
+      const existingGroup = groupsByDate.get(date.key);
+      if (existingGroup) {
+        existingGroup.transactions.push(transaction);
+        return;
+      }
+
+      const group = { ...date, transactions: [transaction] };
+      groupsByDate.set(date.key, group);
+      groups.push(group);
+    });
+
+    return groups;
+  }, [filteredTransactions]);
 
   const statementTotalAmountCents = transactionSummary.totalAmountCents;
   const unaccountedAmountCents = transactionSummary.unaccountedAmountCents;
@@ -552,8 +602,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   );
   const isBalanced = useMemo(() => {
     const expectedTotal = totalReceivableCents + defaultSubaccountBalance;
-    return totals.total === expectedTotal && totals.total !== 0 && totals.unaccounted === 0;
-  }, [totals.total, totalReceivableCents, defaultSubaccountBalance, totals.unaccounted]);
+    return totals.total === expectedTotal && totals.total !== 0 && unaccountedTransactionCount === 0;
+  }, [totals.total, totalReceivableCents, defaultSubaccountBalance, unaccountedTransactionCount]);
   const balanceDelta = useMemo(
     () => totalReceivableCents + defaultSubaccountBalance - totals.total,
     [totalReceivableCents, defaultSubaccountBalance, totals.total],
@@ -572,7 +622,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         className: "cct-balance-status cct-balance-status-surplus",
       };
     }
-    const deficitAmount = balanceDelta < 0 ? Math.abs(balanceDelta) : totals.unaccounted;
+    if (balanceDelta === 0 && unaccountedTransactionCount > 0) {
+      const transactionLabel = unaccountedTransactionCount === 1 ? "transaction" : "transactions";
+      return {
+        label: `Totals match — ${unaccountedTransactionCount} ${transactionLabel} still unaccounted`,
+        className: "cct-balance-status cct-balance-status-pending",
+      };
+    }
+    const deficitAmount = Math.abs(balanceDelta);
     return {
       label: `Deficit ${formatCurrency(deficitAmount)}`,
       className: "cct-balance-status cct-balance-status-deficit",
@@ -583,7 +640,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     defaultSubaccountBalance,
     isBalanced,
     balanceDelta,
-    totals.unaccounted,
+    unaccountedTransactionCount,
     formatCurrency,
   ]);
 
@@ -643,6 +700,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     onSuccess: (_result, _id, context) => {
       syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: null });
       invalidateCreditTransactionDependencies();
+      setDeletingTransactionIds((current) => current.filter((item) => item !== _id));
+      if (editingTransactionId === _id) {
+        setIsModalOpen(false);
+        setEditingTransactionId(null);
+      }
     },
     onError: (_error, id) => {
       setDeletingTransactionIds((current) => current.filter((item) => item !== id));
@@ -1284,9 +1346,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       {/* Period Filter */}
       <div className="cct-mobile-period-selectors" aria-label="Statement period filters">
         <label>
-          <span>Month</span>
           <select
             className="input"
+            aria-label="Statement month"
             value={selectedMonth}
             onChange={(event) => setSelectedMonth(Number(event.target.value))}
           >
@@ -1295,9 +1357,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           </select>
         </label>
         <label>
-          <span>Year</span>
           <select
             className="input"
+            aria-label="Statement year"
             value={selectedYear}
             onChange={(event) => setSelectedYear(Number(event.target.value))}
           >
@@ -1355,7 +1417,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               <span className="cct-summary-value">{formatCurrency(receivablesSummary.data?.totalCents ?? 0)}</span>
             </div>
             <div className="cct-summary-item">
-              <span className="cct-summary-label">Default Subaccount</span>
+              <span className="cct-summary-label">{defaultReceivableSubaccount?.name ?? "Default Subaccount"}</span>
               <span className={`cct-summary-value ${getAmountToneClass(defaultSubaccountBalance)}`}>{formatCurrency(defaultSubaccountBalance)}</span>
             </div>
           </div>
@@ -1425,14 +1487,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Actions */}
       <div className="cct-actions">
-        <label className="cct-toggle">
-          <input
-            type="checkbox"
-            checked={showUnaccountedOnly}
-            onChange={(e) => setShowUnaccountedOnly(e.target.checked)}
-          />
-          <span>Unaccounted only</span>
-        </label>
+        {unaccountedTransactionCount > 0 ? (
+          <label className="cct-toggle">
+            <input
+              type="checkbox"
+              checked={showUnaccountedOnly}
+              onChange={(e) => setShowUnaccountedOnly(e.target.checked)}
+            />
+            <span>Unaccounted only</span>
+          </label>
+        ) : null}
         <button className="btn btn-primary mobile-primary-create" onClick={openModal} aria-label="Add card transaction" title="Add card transaction">
           <Plus size={18} aria-hidden="true" />
           <span className="mobile-primary-create-label">Add Transaction</span>
@@ -1501,80 +1565,90 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               </tr>
             )}
 
-            {!isLoading && !isError && filteredTransactions.map((tx) => {
-              const isDeleting = deletingTransactionIds.includes(tx.id);
-              return (
-                <tr
-                  key={tx.id}
-                  className={`${tx.isAllocated ? "allocated" : "unallocated"}${isDeleting ? " cct-row-deleting" : ""}`}
-                >
-                  <td className="cct-tx-date" data-label="Date">
-                    <span className="cct-tx-day">{formatDate(tx.transactionDate)}</span>
-                  </td>
-                  <td className="cct-tx-subject" data-label="Subject">
-                    <div className="cct-subject-wrapper">
-                      <span>{tx.subject}</span>
-                    </div>
-                  </td>
-                  <td className={`cct-tx-amount ${getAmountToneClass(tx.amountCents)}`} data-label="Amount">{formatCurrency(tx.amountCents)}</td>
-                  <td className="cct-tx-card" data-label="Card">
-                    <label className="cct-card-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={tx.isAllocated}
-                        onChange={() => toggleAllocated.mutate({ id: tx.id, isAllocated: !tx.isAllocated })}
-                        disabled={tx.isAllocated}
-                      />
-                      <span>{tx.creditCard.cardName}</span>
-                    </label>
-                  </td>
-                  <td className="cct-tx-actions" data-label="Actions">
-                    {!tx.isAllocated ? (
-                      <>
-                        <button
-                          className="btn btn-ghost btn-icon cct-action-btn"
-                          onClick={() => openDeductModal(tx)}
-                          disabled={accountCreditTxn.isPending || isDeleting}
-                          title="Deduct transaction"
-                          aria-label="Deduct transaction"
-                        >
-                          ➖
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-icon cct-action-btn"
-                          onClick={() => openReceivableModal(tx)}
-                          disabled={accountCreditTxn.isPending || isDeleting}
-                          title="Create receivable"
-                          aria-label="Create receivable"
-                        >
-                          🧾
-                        </button>
-                      </>
-                    ) : (
-                      <span className="cct-action-placeholder" aria-hidden="true" />
-                    )}
-                    <button
-                      className="btn btn-ghost btn-icon cct-action-btn"
-                      onClick={() => openEditModal(tx)}
-                      disabled={updateTransaction.isPending || isDeleting}
-                      title="Edit transaction"
-                      aria-label="Edit transaction"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-icon cct-action-btn cct-action-delete"
-                      onClick={() => confirmDeleteTransaction(tx.id)}
-                      disabled={deleteTransaction.isPending || isDeleting}
-                      title="Delete transaction"
-                      aria-label="Delete transaction"
-                    >
-                      🗑
-                    </button>
+            {!isLoading && !isError && transactionDateGroups.map((group) => (
+              <Fragment key={group.key}>
+                <tr className="cct-date-group-row">
+                  <td colSpan={5}>
+                    <time dateTime={group.dateTime || undefined}>{group.label}</time>
                   </td>
                 </tr>
-              );
-            })}
+                {group.transactions.map((tx) => {
+                  const isDeleting = deletingTransactionIds.includes(tx.id);
+                  return (
+                    <tr
+                      key={tx.id}
+                      className={`cct-transaction-row ${tx.isAllocated ? "allocated" : "unallocated"}${isDeleting ? " cct-row-deleting" : ""}`}
+                    >
+                      <td className="cct-tx-date" data-label="Date">
+                        <span className="cct-tx-day">{formatDate(tx.transactionDate)}</span>
+                      </td>
+                      <td className="cct-tx-subject" data-label="Subject">
+                        <div className="cct-subject-wrapper">
+                          <span>{tx.subject}</span>
+                        </div>
+                      </td>
+                      <td className={`cct-tx-amount ${getAmountToneClass(tx.amountCents)}`} data-label="Amount">{formatCurrency(tx.amountCents)}</td>
+                      <td className="cct-tx-card" data-label="Card">
+                        <label className="cct-card-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={tx.isAllocated}
+                            onChange={() => toggleAllocated.mutate({ id: tx.id, isAllocated: !tx.isAllocated })}
+                            disabled={tx.isAllocated}
+                            aria-label={`${tx.subject} accounted`}
+                          />
+                          <span>{tx.creditCard.cardName}</span>
+                        </label>
+                      </td>
+                      <td className="cct-tx-actions" data-label="Actions">
+                        {!tx.isAllocated ? (
+                          <>
+                            <button
+                              className="btn btn-ghost btn-icon cct-action-btn cct-action-accounting"
+                              onClick={() => openDeductModal(tx)}
+                              disabled={accountCreditTxn.isPending || isDeleting}
+                              title="Deduct transaction"
+                              aria-label="Deduct transaction"
+                            >
+                              ➖
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-icon cct-action-btn cct-action-accounting"
+                              onClick={() => openReceivableModal(tx)}
+                              disabled={accountCreditTxn.isPending || isDeleting}
+                              title="Create receivable"
+                              aria-label="Create receivable"
+                            >
+                              🧾
+                            </button>
+                          </>
+                        ) : (
+                          <span className="cct-action-placeholder" aria-hidden="true" />
+                        )}
+                        <button
+                          className="btn btn-ghost btn-icon cct-action-btn cct-action-edit"
+                          onClick={() => openEditModal(tx)}
+                          disabled={updateTransaction.isPending || isDeleting}
+                          title="Edit transaction"
+                          aria-label={`Edit transaction: ${tx.subject}`}
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-icon cct-action-btn cct-action-delete"
+                          onClick={() => confirmDeleteTransaction(tx.id)}
+                          disabled={deleteTransaction.isPending || isDeleting}
+                          title="Delete transaction"
+                          aria-label={`Delete transaction: ${tx.subject}`}
+                        >
+                          🗑
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
             {!isLoading && !isError && filteredTransactions.length === 0 && (
               <tr>
                 <td colSpan={5}>
@@ -1679,6 +1753,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
               </div>
               <div className="cct-modal-actions">
+                {editingTransactionId ? (
+                  <button
+                    type="button"
+                    className="btn btn-danger cct-modal-delete"
+                    onClick={() => confirmDeleteTransaction(editingTransactionId)}
+                    disabled={deleteTransaction.isPending || updateTransaction.isPending}
+                  >
+                    {deletingTransactionIds.includes(editingTransactionId) ? "Deleting..." : "Delete"}
+                  </button>
+                ) : null}
                 <button type="button" className="btn btn-ghost" onClick={closeModal}>
                   Cancel
                 </button>

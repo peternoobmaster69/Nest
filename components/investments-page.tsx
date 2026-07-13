@@ -10,7 +10,7 @@ import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } fr
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
-import { Droplet, Plus } from "lucide-react";
+import { Droplet, Lock, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 
@@ -80,9 +80,19 @@ function isWithinLastDay(value: string) {
 
 function formatInceptionBadge(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  if (Number.isNaN(date.getTime())) return null;
   const year = String(date.getFullYear());
-  return `Since ${year}`;
+  return {
+    full: `Since ${year}`,
+    compact: `Since ’${year.slice(-2)}`,
+  };
+}
+
+function getLatestInvestmentEntry(entries: InvestmentEntry[]) {
+  return entries.reduce<InvestmentEntry | null>((latest, entry) => {
+    if (!latest) return entry;
+    return new Date(entry.date).getTime() > new Date(latest.date).getTime() ? entry : latest;
+  }, null);
 }
 
 function buildLinePath(points: Array<{ x: number; y: number }>) {
@@ -715,11 +725,14 @@ export function InvestmentsPage() {
           </div>
         )}
 
-        {!accountsError && [...(accounts.data ?? [])]
-          .sort((a, b) => (a.displayName || a.productName).localeCompare(b.displayName || b.productName))
-          .map((account) => {
-          const entries = [...account.entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          const latest = entries[entries.length - 1] ?? null;
+        {!accountsError && (accounts.data ?? [])
+          .map((account) => ({ account, latest: getLatestInvestmentEntry(account.entries) }))
+          .sort((a, b) => {
+            const currentValueDifference = (b.latest?.currentValueCents ?? 0) - (a.latest?.currentValueCents ?? 0);
+            return currentValueDifference ||
+              (a.account.displayName || a.account.productName).localeCompare(b.account.displayName || b.account.productName);
+          })
+          .map(({ account, latest }) => {
           const recentlyUpdated = account.entries.some((entry) => isWithinLastDay(entry.createdAt));
           const selected = !showAllAccounts && account.id === selectedAccountId;
           const investedCents = latest?.investedCents ?? 0;
@@ -739,8 +752,20 @@ export function InvestmentsPage() {
               </button>
               <button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
                 <div className="inv-account-head">
-                  <strong>{account.displayName || account.productName}</strong>
-                  <span>{account.productName} · {account.institutionName}</span>
+                  <div className="inv-account-title-row">
+                    <strong>{account.displayName || account.productName}</strong>
+                    <span
+                      className={`inv-account-liquidity-status ${account.isLiquid ? "is-liquid" : "is-locked"}`}
+                      role="img"
+                      aria-label={account.isLiquid ? "Liquid account" : "Non-liquid account"}
+                      title={account.isLiquid ? "Liquid account" : "Non-liquid account"}
+                    >
+                      {account.isLiquid
+                        ? <Droplet size={13} aria-hidden="true" />
+                        : <Lock size={12} aria-hidden="true" />}
+                    </span>
+                  </div>
+                  <span className="inv-account-subtitle">{account.productName} · {account.institutionName}</span>
                 </div>
                 <div className="inv-account-amounts">
                   <div>
@@ -754,10 +779,13 @@ export function InvestmentsPage() {
                 </div>
               </button>
               <div className="inv-account-actions">
-                {inceptionBadge ? <span className="inv-inception-chip">{inceptionBadge}</span> : null}
-                {account.isLiquid ? (
-                  <span className="inv-liquid-chip" title="Liquid portfolio" aria-label="Liquid portfolio">
-                    <Droplet size={13} aria-hidden="true" />
+                {inceptionBadge ? (
+                  <span
+                    className="inv-inception-chip"
+                    title={inceptionBadge.full}
+                    data-compact-label={inceptionBadge.compact}
+                  >
+                    {inceptionBadge.full}
                   </span>
                 ) : null}
                 <button

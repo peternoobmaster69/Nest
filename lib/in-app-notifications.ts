@@ -1,10 +1,17 @@
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { addUtcDays, getDaysUntilDue, startOfUtcDay } from "@/lib/credit-card-payment-reminder-schedule";
+import {
+  addUtcDays,
+  getDaysUntilDue,
+  REMINDER_LEAD_DAYS,
+  shouldSendPaymentReminder,
+  startOfUtcDay,
+} from "@/lib/credit-card-payment-reminder-schedule";
 import { sendPushToUser } from "@/lib/web-push";
 
 const CREDIT_CARD_DUE_TYPE = "CREDIT_CARD_DUE";
+const WORKSPACE_INVITATION_TYPE = "WORKSPACE_INVITATION";
 
 type DueCardRow = {
   workspaceId: string;
@@ -55,7 +62,7 @@ function dueCopy(daysUntilDue: number) {
 
 async function findDueCards(workspaceId?: string) {
   const today = startOfUtcDay(new Date());
-  const reminderThrough = addUtcDays(today, 4);
+  const reminderThrough = addUtcDays(today, REMINDER_LEAD_DAYS + 1);
   const workspaceFilter = workspaceId ? Prisma.sql`AND cct.[workspaceId] = ${workspaceId}` : Prisma.empty;
   const rows = await prisma.$queryRaw<DueCardRow[]>(Prisma.sql`
     SELECT
@@ -83,7 +90,10 @@ async function findDueCards(workspaceId?: string) {
     HAVING SUM(CAST(cct.[amountCents] AS BIGINT)) > 0
   `);
 
-  return { today, rows };
+  return {
+    today,
+    rows: rows.filter((row) => shouldSendPaymentReminder(getDaysUntilDue(row.paymentDueDate, today))),
+  };
 }
 
 function getDedupeKey(row: DueCardRow) {
@@ -188,6 +198,7 @@ export async function listInAppNotifications(userId: string, workspaceId: string
     SELECT TOP (50) [id], [type], [title], [message], [href], [readAt], [createdAt], [updatedAt]
     FROM [dbo].[InAppNotification]
     WHERE [userId] = ${userId} AND [workspaceId] = ${workspaceId}
+      AND [type] IN (${CREDIT_CARD_DUE_TYPE}, ${WORKSPACE_INVITATION_TYPE})
     ORDER BY CASE WHEN [readAt] IS NULL THEN 0 ELSE 1 END, [updatedAt] DESC
   `);
 }
@@ -197,6 +208,7 @@ export async function markInAppNotificationRead(userId: string, notificationId: 
     UPDATE [dbo].[InAppNotification]
     SET [readAt] = COALESCE([readAt], CURRENT_TIMESTAMP), [updatedAt] = CURRENT_TIMESTAMP
     WHERE [id] = ${notificationId} AND [userId] = ${userId}
+      AND [type] IN (${CREDIT_CARD_DUE_TYPE}, ${WORKSPACE_INVITATION_TYPE})
   `);
 }
 
@@ -205,5 +217,6 @@ export async function markAllInAppNotificationsRead(userId: string, workspaceId:
     UPDATE [dbo].[InAppNotification]
     SET [readAt] = COALESCE([readAt], CURRENT_TIMESTAMP), [updatedAt] = CURRENT_TIMESTAMP
     WHERE [userId] = ${userId} AND [workspaceId] = ${workspaceId} AND [readAt] IS NULL
+      AND [type] IN (${CREDIT_CARD_DUE_TYPE}, ${WORKSPACE_INVITATION_TYPE})
   `);
 }

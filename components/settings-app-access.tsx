@@ -256,7 +256,7 @@ export function SettingsAppAccess() {
             <div className="settings-section-copy">
               {!pushStatus.data?.configured
                 ? "Notification delivery has not been configured for this deployment."
-                : "Receive payment, receivable, invitation, and background-task alerts."}
+                : "Receive scheduled reminders for credit card payments that are due, plus workspace invitations."}
             </div>
           </div>
           {pushStatus.data?.subscribed ? (

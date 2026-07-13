@@ -97,13 +97,35 @@ test("mobile editable controls do not trigger viewport focus zoom", async () => 
 });
 
 test("credit transaction records use a compact mobile card layout", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
   const source = await readFile(path.join(root, "app/globals.css"), "utf8");
 
   assert.doesNotMatch(source, /\.cct-table td\s*\{[^}]*height:\s*56\.5px/s);
+  assert.match(component, /transactionDateGroups\.map\(\(group\)[\s\S]*?className="cct-date-group-row"/);
+  assert.match(component, /className="btn btn-danger cct-modal-delete"/);
+  assert.match(component, /defaultReceivableSubaccount\?\.name \?\? "Default Subaccount"/);
+  assert.match(component, /balanceDelta === 0 && unaccountedTransactionCount > 0/);
+  assert.match(component, /unaccountedTransactionCount === 1 \? "transaction" : "transactions"/);
+  assert.match(component, /className: "cct-balance-status cct-balance-status-pending"/);
+  assert.match(component, /unaccountedTransactionCount > 0 \? \([\s\S]*?className="cct-toggle"/);
+  assert.match(component, /if \(!data \|\| unaccountedTransactionCount > 0 \|\| !showUnaccountedOnly\) return;/);
+  assert.doesNotMatch(component, /const deficitAmount = [^;]*totals\.unaccounted/);
+  assert.match(component, /aria-label="Statement month"/);
+  assert.match(component, /aria-label="Statement year"/);
+  assert.doesNotMatch(component, /<span>Month<\/span>|<span>Year<\/span>/);
   assert.match(source, /\.cct-table\.responsive-data-table \.cct-tx-subject\s*\{[^}]*grid-row:\s*1/s);
   assert.match(source, /\.cct-table\.responsive-data-table \.cct-tx-amount\s*\{[^}]*grid-row:\s*1/s);
-  assert.match(source, /\.cct-table\.responsive-data-table \.cct-tx-card\s*\{[^}]*grid-row:\s*2/s);
-  assert.match(source, /\.cct-table\.responsive-data-table \.cct-action-btn\s*\{[^}]*height:\s*40px/s);
+  assert.match(source, /\.cct-table\.responsive-data-table \.cct-tx-date\s*\{[^}]*display:\s*none/s);
+  assert.match(source, /\.cct-table\.responsive-data-table \.cct-tx-card\s*\{[^}]*grid-column:\s*1[^}]*grid-row:\s*2/s);
+  assert.match(source, /\.cct-table\.responsive-data-table \.cct-tx-actions\s*\{[^}]*grid-column:\s*2[^}]*grid-row:\s*2/s);
+  assert.match(source, /\.cct-table\.responsive-data-table \.cct-action-btn\s*\{[^}]*height:\s*30px[^}]*min-block-size:\s*30px/s);
+  assert.match(source, /\.cct-table\.responsive-data-table \.cct-action-edit\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0/s);
+  assert.match(source, /\.cct-table\.responsive-data-table \.cct-action-delete\s*\{[^}]*display:\s*none/s);
+  assert.match(source, /\.cct-table\.responsive-data-table tbody \.cct-date-group-row\s*\{[^}]*padding:\s*2px 4px 0/s);
+  assert.match(source, /\.cct-table\.responsive-data-table \.cct-date-group-row td\s*\{[^}]*font-size:\s*var\(--text-md\)/s);
+  assert.match(source, /\.cct-balance-status-pending\s*\{[^}]*background:\s*var\(--warning-bg[^}]*color:\s*var\(--warning/s);
+  assert.match(source, /\.cct-table\.responsive-data-table tbody \.cct-transaction-row:not\(\.cct-row-deleting\)\s*\{[^}]*gap:\s*3px 10px[^}]*padding:\s*10px 12px/s);
+  assert.match(source, /\.cct-summary-left\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s);
 });
 
 test("all modal families use the centered viewport contract", async () => {
@@ -249,6 +271,8 @@ test("settings uses the shared typography and layout contract", async () => {
   assert.match(settings, /<SettingsAppAccess\s*\/>/);
   assert.match(appAccess, />Install Nest</);
   assert.match(appAccess, />Notifications</);
+  assert.match(appAccess, /scheduled reminders for credit card payments that are due, plus workspace invitations/);
+  assert.doesNotMatch(appAccess, /payment, receivable, invitation, and background-task alerts/);
   assert.match(appAccess, />Passkeys</);
   assert.match(settings, /className="st-header settings-accounts-header"/);
   assert.match(styles, /--font-display:\s*"DM Sans", sans-serif/);
@@ -261,16 +285,31 @@ test("settings uses the shared typography and layout contract", async () => {
   assert.match(settingsContract, /\.settings-public-url-row\s*\{[^}]*grid-template-columns:\s*1fr/s);
 });
 
-test("transaction group cards size to their names and omit per-group transaction counts", async () => {
+test("transaction groups use compact two-row cards and a searchable picker", async () => {
   const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
 
   assert.match(transactions, /className="tx-group-card-copy"[\s\S]*?<strong>\{group\.name\}<\/strong>/);
   assert.doesNotMatch(transactions, /\{group\.transactionCount\}/);
   assert.match(transactions, /className="tx-group-count"[\s\S]*?×\{visibleTransactionGroups\.length\}/);
+  assert.match(transactions, /className="tx-group-picker-popover"[\s\S]*?placeholder="Search groups…"/);
+  assert.match(transactions, /className="tx-group-cards" ref=\{transactionGroupCardsRef\}/);
+  assert.match(transactions, /data-group-id=\{group\.id\}/);
+  assert.match(transactions, /onClick=\{\(\) => selectTransactionGroupFromPicker\(group\.id\)\}/);
+  assert.match(transactions, /formatTransactionGroupDateRange\([\s\S]*?group\.firstTransactionDate,[\s\S]*?group\.lastTransactionDate/);
+  assert.match(transactions, /const searchableValue = normalizeTransactionGroupSearchValue\(`\$\{group\.name\} \$\{dateRange\}`\)/);
+  assert.match(transactions, /className="tx-group-picker-option-range" title=\{transactionDateRange\}/);
   assert.match(styles, /\.tx-group-count\s*\{[^}]*position:\s*absolute[^}]*right:\s*-7px[^}]*bottom:\s*-3px/s);
-  assert.match(styles, /\.tx-group-card\s*\{[^}]*grid-template-columns:\s*auto max-content auto[^}]*width:\s*max-content[^}]*flex:\s*0 0 auto/s);
+  assert.match(styles, /\.tx-group-picker-trigger\s*\{[^}]*min-inline-size:\s*28px[^}]*min-block-size:\s*28px[^}]*padding:\s*0/s);
+  assert.match(styles, /\.tx-group-picker-trigger::before\s*\{[^}]*inset:\s*-8px/s);
+  assert.match(styles, /\.tx-group-picker-popover\s*\{[^}]*max-height:\s*min\(55dvh, 420px\)[^}]*overflow:\s*hidden/s);
+  assert.match(styles, /\.tx-group-picker-options\s*\{[^}]*max-height:\s*min\(45dvh, 340px\)[^}]*overflow-y:\s*auto/s);
+  assert.match(styles, /\.tx-group-card\s*\{[^}]*grid-template-columns:\s*auto max-content 22px[^}]*grid-template-rows:\s*auto auto[^}]*width:\s*max-content[^}]*flex:\s*0 0 auto/s);
+  assert.match(styles, /\.tx-group-card-icon\s*\{[^}]*grid-row:\s*1 \/ 3/s);
+  assert.match(styles, /\.tx-group-card-copy\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(styles, /\.tx-group-card-total\s*\{[^}]*grid-row:\s*2/s);
   assert.match(styles, /\.tx-group-card-copy strong\s*\{[^}]*overflow:\s*visible[^}]*text-overflow:\s*clip/s);
+  assert.match(styles, /\.tx-group-card-edit\s*\{[^}]*position:\s*static[^}]*grid-row:\s*1 \/ 3[^}]*min-block-size:\s*22px[^}]*transform:\s*none/s);
 });
 
 test("mobile quality uses the Phase 4 accessibility and performance contract", async () => {
@@ -303,6 +342,22 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.doesNotMatch(investments, /mobile-primary-create/);
   assert.doesNotMatch(investments, /Investment accounts|tracked accounts?/);
   assert.match(investments, /className="inv-account-create-row"[\s\S]*?className="btn btn-ghost btn-sm inv-add-account-btn"/);
+  assert.match(investments, /const currentValueDifference = \(b\.latest\?\.currentValueCents \?\? 0\) - \(a\.latest\?\.currentValueCents \?\? 0\)/);
+  assert.match(investments, /compact:\s*`[^`]*\$\{year\.slice\(-2\)\}`/);
+  assert.match(investments, /data-compact-label=\{inceptionBadge\.compact\}/);
+  assert.doesNotMatch(investments, /inv-inception-label-(?:full|short)/);
+  assert.match(investments, /className=\{`inv-account-liquidity-status \$\{account\.isLiquid \? "is-liquid" : "is-locked"\}`\}/);
+  assert.match(investments, /account\.isLiquid[\s\S]*?\? <Droplet[\s\S]*?: <Lock/);
+  assert.doesNotMatch(investments, /inv-liquid-chip/);
+  assert.match(styles, /@media\s*\(max-width:\s*720px\)[\s\S]*?\.inv-account-actions\s*\{[^}]*gap:\s*4px/s);
+  assert.match(styles, /\.inv-inception-chip::after\s*\{[^}]*content:\s*attr\(data-compact-label\)[^}]*font-size:\s*11px/s);
+  assert.match(styles, /\.inv-edit-icon\s*\{[^}]*min-inline-size:\s*22px[^}]*min-block-size:\s*22px/s);
+  assert.match(styles, /\.inv-edit-icon::before\s*\{[^}]*inset:\s*-11px/s);
+  assert.match(styles, /\.inv-account-title-row\s*\{[^}]*padding-right:\s*28px/s);
+  assert.match(styles, /\.inv-account-subtitle\s*\{[^}]*display:\s*block[^}]*width:\s*100%/s);
+  assert.match(styles, /\.inv-liquidity-toggle\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[^}]*height:\s*44px/s);
+  assert.match(styles, /\.inv-liquidity-toggle \.inv-liquidity-toggle-btn\s*\{[^}]*height:\s*36px[^}]*min-block-size:\s*36px/s);
+  assert.doesNotMatch(styles, /\.inv-liquid-chip\s*\{/);
   assert.match(motion, /prefers-reduced-motion:\s*reduce/);
   assert.doesNotMatch(`${transactions}\n${creditTransactions}`, /behavior:\s*"smooth"/);
   assert.match(layout, /<SpeedInsights\s*\/>/);

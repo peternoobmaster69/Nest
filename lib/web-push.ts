@@ -47,32 +47,3 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
 
   return { sent, configured: true };
 }
-
-export async function sendReceivableDatePushReminders(now = new Date()) {
-  const through = new Date(now);
-  through.setUTCDate(through.getUTCDate() + 1);
-  through.setUTCHours(23, 59, 59, 999);
-  const receivables = await prisma.receivable.findMany({
-    where: { status: { in: ["OPEN", "PARTIAL"] }, date: { lte: through } },
-    select: {
-      id: true,
-      title: true,
-      date: true,
-      workspace: { select: { members: { select: { userId: true } } } },
-    },
-  });
-  let sent = 0;
-  for (const receivable of receivables) {
-    const due = receivable.date.toLocaleDateString("en-SG", { day: "numeric", month: "short", timeZone: "UTC" });
-    for (const member of receivable.workspace.members) {
-      const result = await sendPushToUser(member.userId, {
-        title: "Receivable date reminder",
-        message: `${receivable.title} is dated ${due}.`,
-        href: "/receivables",
-        tag: `receivable-date:${receivable.id}`,
-      });
-      sent += result.sent;
-    }
-  }
-  return sent;
-}

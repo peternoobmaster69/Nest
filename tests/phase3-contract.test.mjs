@@ -56,17 +56,26 @@ test("passkeys use one-time challenges, replay counters, and NextAuth handoff ti
   assert.match(settings, /Last used/);
 });
 
-test("push subscriptions are opt-in and cover planned notification events", async () => {
+test("push notifications are limited to scheduled card-due reminders and invitations", async () => {
   const schema = await source("prisma/schema.prisma");
   const route = await source("app/api/push-subscriptions/route.ts");
   const delivery = await source("lib/web-push.ts");
   const invitations = await source("app/api/collaborators/invite/route.ts");
   const jobs = await source("lib/background-jobs.ts");
   const cardReminders = await source("lib/in-app-notifications.ts");
+  const reminderRunner = await source("lib/credit-card-payment-reminders.ts");
+  const settings = await source("components/settings-app-access.tsx");
+  const notificationBell = await source("components/notification-bell.tsx");
   assert.match(schema, /model PushSubscription/);
   assert.match(route, /Notification|push subscription|publicKey/i);
-  assert.match(delivery, /Receivable date reminder/);
+  assert.doesNotMatch(delivery, /Receivable date reminder|receivable-date:/i);
   assert.match(invitations, /Workspace invitation/);
-  assert.match(jobs, /Background task complete/);
+  assert.doesNotMatch(jobs, /Background task complete|sendPushToUser/);
   assert.match(cardReminders, /sendPushToUser/);
+  assert.match(cardReminders, /shouldSendPaymentReminder\(getDaysUntilDue\(row\.paymentDueDate, today\)\)/);
+  assert.match(cardReminders, /\[type\] IN \(\$\{CREDIT_CARD_DUE_TYPE\}, \$\{WORKSPACE_INVITATION_TYPE\}\)/);
+  assert.doesNotMatch(reminderRunner, /sendReceivableDatePushReminders/);
+  assert.match(settings, /scheduled reminders for credit card payments that are due, plus workspace invitations/);
+  assert.doesNotMatch(settings, /payment, receivable, invitation, and background-task alerts/);
+  assert.match(notificationBell, /Credit card due reminders and workspace invitations will appear here/);
 });

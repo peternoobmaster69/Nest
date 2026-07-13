@@ -326,8 +326,7 @@ export function AppShell({
             aria-label={`Current workspace: ${mobileWorkspaceName}`}
             title={mobileWorkspaceName}
           >
-            <span className="mobile-bottom-nav-workspace-dot" aria-hidden="true" />
-            <span className="mobile-bottom-nav-workspace-name">{mobileWorkspaceName}</span>
+            <span className="mobile-bottom-nav-workspace-name">{mobileWorkspaceName.toUpperCase()}</span>
           </div>
         ) : null}
       </nav>
