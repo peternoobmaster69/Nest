@@ -12,6 +12,7 @@ import {
 } from "@/lib/credit-card-payment-reminder-schedule";
 import { completeBackgroundJob, createBackgroundJob, failBackgroundJob } from "@/lib/background-jobs";
 import { syncCreditCardDueNotificationsForAllUsers } from "@/lib/in-app-notifications";
+import { sendReceivableDatePushReminders } from "@/lib/web-push";
 
 const DELIVERY_JOB_TYPE = "CREDIT_CARD_PAYMENT_REMINDER_EMAIL";
 
@@ -283,7 +284,12 @@ async function wasAlreadySentOrIsSending(key: string) {
 
 export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): Promise<ReminderResult> {
   const today = startOfUtcDay(new Date());
-  if (!dryRun) await syncCreditCardDueNotificationsForAllUsers();
+  if (!dryRun) {
+    await Promise.all([
+      syncCreditCardDueNotificationsForAllUsers(),
+      sendReceivableDatePushReminders(),
+    ]);
+  }
   const dueRows = await findDueCreditCardPayments(today);
   const workspaceIds = [...new Set(dueRows.map((row) => row.workspaceId))];
   const recipients = await findRecipients(workspaceIds);

@@ -11,6 +11,8 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useToast } from "@/components/toast-provider";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { useSessionState } from "@/lib/use-session-state";
+import { Plus } from "lucide-react";
 
 type AppContext = {
   workspaceId: string | null;
@@ -170,7 +172,7 @@ export function CreditCardsPage() {
   const [notes, setNotes] = useState("");
   const [isStackExpanded, setIsStackExpanded] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useSessionState<string | null>("nest:view:credit-cards:selected", null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -444,9 +446,9 @@ export function CreditCardsPage() {
       {/* Header with Add Button */}
       <div className="cc-header">
         <h2 className="cc-title">Your Cards</h2>
-        <button className="btn btn-primary cc-add-btn" onClick={openModal}>
-          <span className="cc-add-icon">+</span>
-          Add Card
+        <button className="btn btn-primary cc-add-btn mobile-primary-create" onClick={openModal} aria-label="Add card" title="Add card">
+          <Plus size={18} aria-hidden="true" />
+          <span className="mobile-primary-create-label">Add Card</span>
         </button>
       </div>
 

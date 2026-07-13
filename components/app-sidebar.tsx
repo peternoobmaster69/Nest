@@ -168,13 +168,19 @@ export function AppSidebar({
 
   useEffect(() => {
     if (!profileMenuOpen) return;
+    const focusFrame = window.requestAnimationFrame(() => {
+      profileMenuRef.current?.querySelector<HTMLButtonElement>(".sb-user-menu button:not([disabled])")?.focus();
+    });
     const onClick = (event: MouseEvent) => {
       if (!profileMenuRef.current?.contains(event.target as Node)) {
         setProfileMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("mousedown", onClick);
+    };
   }, [profileMenuOpen]);
 
   useEffect(() => {

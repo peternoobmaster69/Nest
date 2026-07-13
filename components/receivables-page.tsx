@@ -11,6 +11,8 @@ import { ReceivablesListSkeleton, ReceivablesSummarySkeleton } from "@/component
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { useSessionState } from "@/lib/use-session-state";
+import { Plus } from "lucide-react";
 
 type AppContext = {
   workspaceId: string | null;
@@ -133,10 +135,10 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function ReceivablesPage() {
   const queryClient = useQueryClient();
-  const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth() + 1);
-  const [sortBy, setSortBy] = useState<"amount" | "title" | "receivableDate" | "transactionDate">("receivableDate");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [hideClosed, setHideClosed] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useSessionState<number>("nest:view:receivables:month", () => new Date().getMonth() + 1);
+  const [sortBy, setSortBy] = useSessionState<"amount" | "title" | "receivableDate" | "transactionDate">("nest:view:receivables:sort", "receivableDate");
+  const [sortDir, setSortDir] = useSessionState<"asc" | "desc">("nest:view:receivables:direction", "desc");
+  const [hideClosed, setHideClosed] = useSessionState("nest:view:receivables:hide-closed", true);
   const [closeError, setCloseError] = useState<string | null>(null);
   const [closingReceivableId, setClosingReceivableId] = useState<string | null>(null);
   const [deletingReceivableIds, setDeletingReceivableIds] = useState<string[]>([]);
@@ -546,8 +548,9 @@ export function ReceivablesPage() {
             />
             Hide closed
           </label>
-          <button className="btn btn-primary recv-add-btn" type="button" onClick={openCreateModal} title="Add receivable" aria-label="Add receivable">
-            Add Receivable
+          <button className="btn btn-primary recv-add-btn mobile-primary-create" type="button" onClick={openCreateModal} title="Add receivable" aria-label="Add receivable">
+            <Plus size={18} aria-hidden="true" />
+            <span className="mobile-primary-create-label">Add Receivable</span>
           </button>
         </div>
         {isLoading ? (

@@ -199,19 +199,90 @@ test("tablet and desktop card rails use stable explicit navigation", async () =>
 
 test("phone layouts use the native-style mobile application shell", async () => {
   const shell = await readFile(path.join(root, "components/app-shell.tsx"), "utf8");
+  const mobileAccount = await readFile(path.join(root, "components/mobile-account-panel.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
   const plan = await readFile(path.join(root, "plan.md"), "utf8");
+  const moreNavigationStart = shell.indexOf('<nav className="mobile-more-links"');
+  const moreNavigationEnd = shell.indexOf("</nav>", moreNavigationStart);
+  const moreNavigation = shell.slice(moreNavigationStart, moreNavigationEnd);
+  const bottomNavigation = shell.slice(shell.indexOf('<nav className="mobile-bottom-nav"'));
 
   assert.match(shell, /className="mobile-topbar-title"/);
   assert.match(shell, /className="mobile-bottom-nav" aria-label="Primary mobile navigation"/);
   assert.match(shell, />Home<|<span>Home<\/span>/);
   assert.match(shell, />Transactions<|<span>Transactions<\/span>/);
   assert.match(shell, />Cards<|<span>Cards<\/span>/);
-  assert.match(shell, />Budget<|<span>Budget<\/span>/);
+  assert.match(bottomNavigation, /href="\/investments"[\s\S]*?<span>Investments<\/span>/);
+  assert.doesNotMatch(bottomNavigation, /href="\/budgets\/plan"/);
+  assert.match(moreNavigation, /href="\/budgets\/plan"[\s\S]*?<strong>Budget<\/strong>/);
+  assert.doesNotMatch(moreNavigation, /href="\/investments"/);
   assert.match(shell, /aria-haspopup="dialog"[\s\S]*?<span>More<\/span>/);
+  assert.match(shell, /className="mobile-more-account"[\s\S]*?Profile, appearance, and workspace/);
+  assert.match(shell, /setMobileMoreView\("account"\)/);
+  assert.match(shell, /<MobileAccountPanel[\s\S]*?onClose=\{closeMobileNavigation\}/);
+  assert.doesNotMatch(shell, /profileMenuRequest|mobileAccountRequest/);
+  assert.match(mobileAccount, /className="mobile-account-profile-form"/);
+  assert.doesNotMatch(mobileAccount, /profile-modal-overlay|account-profile-modal/);
   assert.match(shell, /document\.documentElement\.dataset\.mobileMoreOpen/);
   assert.match(styles, /\.mobile-bottom-nav,[\s\S]*?\.mobile-more-menu\s*\{[\s\S]*?display:\s*none/);
   assert.match(styles, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.topbar \.hamburger\s*\{[^}]*display:\s*none\s*!important[\s\S]*?\.mobile-bottom-nav\s*\{[^}]*position:\s*fixed[^}]*display:\s*flex/s);
-  assert.match(styles, /\.body\s*\{[^}]*padding:\s*14px 12px calc\(16px \+ 62px \+ env\(safe-area-inset-bottom, 0px\)\)/s);
+  assert.match(layout, /viewportFit:\s*"cover"/);
+  assert.match(styles, /--mobile-nav-safe-bottom:\s*max\(24px, env\(safe-area-inset-bottom, 0px\)\)/);
+  assert.match(styles, /\.mobile-bottom-nav\s*\{[^}]*min-height:\s*var\(--mobile-nav-height\)[^}]*padding:[^;]*var\(--mobile-nav-safe-bottom\)/s);
+  assert.match(styles, /\.body\s*\{[^}]*padding:\s*14px 12px calc\(16px \+ var\(--mobile-nav-height\)\)/s);
   assert.match(plan, /## Phase 1 — Mobile application shell[\s\S]*?\[x\] Add a phone-only bottom navigation/);
+});
+
+test("settings uses the shared typography and layout contract", async () => {
+  const settings = await readFile(path.join(root, "components/settings-page.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
+  const appAccess = await readFile(path.join(root, "components/settings-app-access.tsx"), "utf8");
+  const settingsStart = styles.indexOf(".settings-card-block");
+  const settingsEnd = styles.indexOf(".gmail-sync-progress {", settingsStart);
+  const settingsContract = styles.slice(settingsStart, settingsEnd);
+
+  assert.doesNotMatch(settings, /DeviceSettingsPanel|This Device/);
+  assert.match(settings, /<SettingsAppAccess\s*\/>/);
+  assert.match(appAccess, />Install Nest</);
+  assert.match(appAccess, />Notifications</);
+  assert.match(appAccess, />Passkeys</);
+  assert.match(settings, /className="st-header settings-accounts-header"/);
+  assert.match(styles, /--font-display:\s*"DM Sans", sans-serif/);
+  assert.match(styles, /--font-body:\s*"DM Sans", sans-serif/);
+  assert.match(styles, /button,\s*\ninput,\s*\nselect,\s*\ntextarea\s*\{\s*\n\s*font:\s*inherit/);
+  assert.doesNotMatch(layout, /Fraunces/);
+  assert.match(styles, /\.st-container\s*\{[^}]*width:\s*min\(100%, 1080px\)[^}]*gap:\s*16px/s);
+  assert.match(settingsContract, /\.settings-section-title\s*\{[^}]*font-size:\s*var\(--text-xl\)/s);
+  assert.match(settingsContract, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.settings-card-block \.btn\s*\{[^}]*width:\s*100%[^}]*min-height:\s*44px/s);
+  assert.match(settingsContract, /\.settings-public-url-row\s*\{[^}]*grid-template-columns:\s*1fr/s);
+});
+
+test("transaction group cards omit per-group transaction counts", async () => {
+  const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+
+  assert.match(transactions, /className="tx-group-card-copy"[\s\S]*?<strong>\{group\.name\}<\/strong>/);
+  assert.doesNotMatch(transactions, /\{group\.transactionCount\}/);
+});
+
+test("core mobile workflows use the Phase 2 interaction contract", async () => {
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const providers = await readFile(path.join(root, "app/providers.tsx"), "utf8");
+  const workflowManager = await readFile(path.join(root, "components/mobile-workflow-manager.tsx"), "utf8");
+  const sessionState = await readFile(path.join(root, "lib/use-session-state.ts"), "utf8");
+  const creditTransactions = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const plan = await readFile(path.join(root, "plan.md"), "utf8");
+
+  assert.match(styles, /\.mobile-primary-create\s*\{[\s\S]*?position:\s*fixed\s*!important[\s\S]*?bottom:\s*calc\(76px \+ var\(--mobile-nav-safe-bottom\)\)[\s\S]*?width:\s*56px\s*!important/);
+  assert.match(styles, /body\s+:is\([\s\S]*?\.modal-container[\s\S]*?\.inv-modal[\s\S]*?\)\[class\]\s*\{[\s\S]*?width:\s*100vw\s*!important[\s\S]*?height:\s*100dvh\s*!important/);
+  assert.match(styles, /\.btn:active:not\(:disabled\)[\s\S]*?transform:\s*scale\(0\.97\)/);
+  assert.match(styles, /\.mutation-feedback\.is-success/);
+  assert.match(providers, /<MobileWorkflowManager\s*\/>/);
+  assert.match(workflowManager, /window\.history\.scrollRestoration\s*=\s*"manual"/);
+  assert.match(sessionState, /window\.sessionStorage\.setItem/);
+  assert.match(creditTransactions, /className="cct-mobile-period-selectors"/);
+  assert.match(creditTransactions, /className="btn btn-primary mobile-primary-create"/);
+  assert.match(creditTransactions, /<Plus size=\{18\} aria-hidden="true"\s*\/>[\s\S]*?mobile-primary-create-label/);
+  assert.match(plan, /## Phase 2 — Core mobile workflows[\s\S]*?Status: Complete[\s\S]*?\[x\] Preserve page scroll/);
 });

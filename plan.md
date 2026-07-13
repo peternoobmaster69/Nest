@@ -22,25 +22,25 @@ Status: Complete
 
 ## Phase 2 — Core mobile workflows
 
-Status: Planned
+Status: Complete
 
-- [ ] Standardize one mobile placement for primary create actions.
-- [ ] Convert long create/edit workflows into full-screen mobile flows with fixed action bars.
-- [ ] Preserve page scroll, selected month, account, card, and filters when navigating back.
-- [ ] Add consistent pressed, loading, success, and optimistic mutation feedback.
-- [ ] Review every dense toolbar and replace unnecessary horizontal scrolling with compact selectors or filter panels.
-- [ ] Restrict swipe gestures to safe and reversible actions.
+- [x] Standardize one mobile placement for primary create actions.
+- [x] Convert long create/edit workflows into full-screen mobile flows with fixed action bars.
+- [x] Preserve page scroll, selected month, account, card, and filters when navigating back.
+- [x] Add consistent pressed, loading, success, and optimistic mutation feedback.
+- [x] Review every dense toolbar and replace unnecessary horizontal scrolling with compact selectors or filter panels.
+- [x] Restrict swipe gestures to safe and reversible actions.
 
 ## Phase 3 — Installability and device integration
 
-Status: Planned
+Status: Complete
 
-- [ ] Add production Android and iOS icon sets, including maskable and Apple touch icons.
-- [ ] Add install guidance and standalone-display refinements.
-- [ ] Add a service worker and cache the application shell plus safe read-only recent data.
-- [ ] Never silently queue financial mutations while offline.
-- [ ] Add passkey/WebAuthn authentication where supported.
-- [ ] Add optional web push for payment reminders, receivable dates, invitations, and background-task completion.
+- [x] Add production Android and iOS icon sets, including maskable and Apple touch icons.
+- [x] Add install guidance and standalone-display refinements.
+- [x] Add a service worker and cache the application shell plus safe read-only recent data.
+- [x] Never silently queue financial mutations while offline.
+- [x] Add passkey/WebAuthn authentication where supported.
+- [x] Add optional web push for payment reminders, receivable dates, invitations, and background-task completion.
 
 ## Phase 4 — Mobile quality audit
 
@@ -56,3 +56,10 @@ Status: Planned
 - 2026-07-13: Created the roadmap and started Phase 1 mobile-shell implementation.
 - 2026-07-13: Implemented the phone-only bottom navigation, compact mobile app bar, workspace-aware More panel, focus containment, and safe-area collision offsets. Verification remains in progress.
 - 2026-07-13: Completed Phase 1 verification: TypeScript passed, ESLint passed, all 15 UI-contract tests passed, production build completed, and `git diff --check` reported no whitespace errors.
+- 2026-07-13: Implemented Phase 2 shared workflow state, browser-back scroll restoration, global mutation progress feedback, standardized phone create actions, and full-screen phone form flows with safe fixed action bars.
+- 2026-07-13: Replaced the dense mobile card-transaction period rail with compact month/year selectors and constrained horizontal touch interactions to reversible selection rails.
+- 2026-07-13: Completed Phase 2 verification: TypeScript passed, ESLint passed, all 24 tests passed, the Next.js production build completed, and `git diff --check` reported no whitespace errors. The Prisma prebuild download was separately blocked by the local self-signed certificate chain.
+- 2026-07-13: Implemented Phase 3 install assets, maskable and Apple icons, install guidance, standalone refinements, an offline application shell, and recent read-only cache fallbacks.
+- 2026-07-13: Added explicit offline mutation rejection with no background financial queue, discoverable passkeys with one-time WebAuthn challenges and replay counters, and NextAuth passkey sign-in.
+- 2026-07-13: Added opt-in VAPID web push subscriptions for payment reminders, receivable dates, invitations, and background-task completion, plus deployment setup documentation.
+- 2026-07-13: Completed Phase 3 verification: Prisma schema validation passed, TypeScript passed, ESLint passed, all 28 tests passed, the 80-route Next.js production build completed, and `git diff --check` reported no whitespace errors.

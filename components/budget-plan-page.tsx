@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { useSessionState } from "@/lib/use-session-state";
 
 type WorkspaceMember = {
   user: { id: string; name: string | null; email: string | null };
@@ -207,9 +208,9 @@ function ErrorMessage({ error }: { error: Error | null | undefined }) {
 export function BudgetPlanPage() {
   const queryClient = useQueryClient();
   const now = new Date();
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
-  const [showSetup, setShowSetup] = useState(false);
+  const [selectedYear, setSelectedYear] = useSessionState("nest:view:budget-plan:year", now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useSessionState("nest:view:budget-plan:month", now.getMonth() + 1);
+  const [showSetup, setShowSetup] = useSessionState("nest:view:budget-plan:setup", false);
   const [itemModal, setItemModal] = useState<EditModalState | null>(null);
   const [sourceModal, setSourceModal] = useState<EditModalState | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);

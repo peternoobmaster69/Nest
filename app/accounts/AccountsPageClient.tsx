@@ -72,8 +72,9 @@ export default function AccountsPageClient() {
                 </div>
               </div>
             ) : null}
-            <Link href="/accounts/create" className="btn btn-primary btn-md account-add-btn">
-              <Plus size={16} aria-hidden="true" /> Add account
+            <Link href="/accounts/create" className="btn btn-primary btn-md account-add-btn mobile-primary-create" aria-label="Add account" title="Add account">
+              <Plus size={16} aria-hidden="true" />
+              <span className="mobile-primary-create-label">Add account</span>
             </Link>
           </div>
         ) : null}

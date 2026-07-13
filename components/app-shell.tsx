@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   ChartNoAxesCombined,
   ChartPie,
   CreditCard,
@@ -15,10 +16,12 @@ import {
   Settings,
   Undo2,
   Users,
+  UserRound,
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { NotificationBell } from "@/components/notification-bell";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { MobileAccountPanel } from "@/components/mobile-account-panel";
 
 export type AppShellContext = {
   workspaceId?: string | null;
@@ -57,6 +60,7 @@ export function AppShell({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [mobileMoreView, setMobileMoreView] = useState<"navigation" | "account">("navigation");
   const mobileMoreRef = useRef<HTMLElement | null>(null);
   const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarMoneyPages = contextData?.sidebarMoneyPages ?? {
@@ -70,12 +74,13 @@ export function AppShell({
   const showTransactions = sidebarMoneyPages.transactions !== false;
   const showCreditCards = sidebarMoneyPages.creditCards !== false;
   const showCreditTransactions = showCreditCards && sidebarMoneyPages.creditTransactions !== false;
+  const showInvestments = sidebarMoneyPages.investments !== false;
   const primaryCardsPath = showCreditTransactions ? "/credit-transactions" : "/credit-cards";
   const cardsRouteActive = currentPath === "/credit-cards" || currentPath === "/credit-transactions";
   const moreRouteActive = [
     "/receivables",
     "/rewards",
-    "/investments",
+    "/budgets",
     "/collaborators",
     "/settings",
     "/accounts",
@@ -97,13 +102,14 @@ export function AppShell({
 
   useEffect(() => {
     setMobileMoreOpen(false);
+    setMobileMoreView("navigation");
   }, [currentPath]);
 
   useEffect(() => {
     if (!mobileMoreOpen) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusFrame = window.requestAnimationFrame(() => {
-      mobileMoreRef.current?.querySelector<HTMLElement>("button:not([disabled]),a[href]")?.focus();
+      mobileMoreRef.current?.querySelector<HTMLElement>("button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])")?.focus();
     });
     const onPointerDown = (event: PointerEvent) => {
       if (
@@ -122,7 +128,7 @@ export function AppShell({
       }
       if (event.key !== "Tab" || !mobileMoreRef.current) return;
       const focusable = Array.from(
-        mobileMoreRef.current.querySelectorAll<HTMLElement>("button:not([disabled]),a[href]"),
+        mobileMoreRef.current.querySelectorAll<HTMLElement>("button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])"),
       );
       if (!focusable.length) return;
       const first = focusable[0];
@@ -149,6 +155,7 @@ export function AppShell({
 
   const closeMobileNavigation = () => {
     setMobileMoreOpen(false);
+    setMobileMoreView("navigation");
     setSidebarOpen(false);
   };
 
@@ -203,13 +210,22 @@ export function AppShell({
           <div className="mobile-more-backdrop" aria-hidden="true" />
           <section ref={mobileMoreRef} className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
             <div className="mobile-more-header">
-              <div>
-                <h2 id="mobile-more-title">More</h2>
-                <p>{contextData?.workspaceName || "Workspace"}</p>
+              <div className="mobile-more-header-main">
+                {mobileMoreView === "account" ? (
+                  <button className="mobile-more-back" type="button" onClick={() => setMobileMoreView("navigation")} aria-label="Back to More navigation" autoFocus>
+                    <ArrowLeft size={19} aria-hidden="true" />
+                  </button>
+                ) : null}
+                <div>
+                  <h2 id="mobile-more-title">{mobileMoreView === "account" ? "Account" : "More"}</h2>
+                  <p>{contextData?.workspaceName || "Workspace"}</p>
+                </div>
               </div>
               <ModalCloseButton onClick={() => setMobileMoreOpen(false)} label="Close More navigation" />
             </div>
-            <nav className="mobile-more-links" aria-label="More navigation">
+            {mobileMoreView === "navigation" ? (
+              <>
+                <nav className="mobile-more-links" aria-label="More navigation">
               {showCreditTransactions ? (
                 <Link className={`mobile-more-link${currentPath === "/credit-cards" ? " is-active" : ""}`} href="/credit-cards" onClick={closeMobileNavigation}>
                   <CreditCard size={20} aria-hidden="true" />
@@ -229,12 +245,11 @@ export function AppShell({
                   <span><strong>Rewards</strong><small>Cards, miles, and hotel points</small></span>
                 </Link>
               ) : null}
-              {sidebarMoneyPages.investments !== false ? (
-                <Link className={`mobile-more-link${currentPath === "/investments" ? " is-active" : ""}`} href="/investments" onClick={closeMobileNavigation}>
-                  <ChartNoAxesCombined size={20} aria-hidden="true" />
-                  <span><strong>Investments</strong><small>Portfolio performance</small></span>
-                </Link>
-              ) : null}
+              <Link className={`mobile-more-link${currentPath.startsWith("/budgets") ? " is-active" : ""}`} href="/budgets/plan" onClick={closeMobileNavigation}>
+                <ChartPie size={20} aria-hidden="true" />
+                <span><strong>Budget</strong><small>Plan monthly sources and spending</small></span>
+                {badgeCounts?.budgets ? <span className="mobile-more-badge">{badgeCounts.budgets}</span> : null}
+              </Link>
               <Link className={`mobile-more-link${currentPath === "/collaborators" ? " is-active" : ""}`} href="/collaborators" onClick={closeMobileNavigation}>
                 <Users size={20} aria-hidden="true" />
                 <span><strong>Workspaces</strong><small>Members and workspace access</small></span>
@@ -243,7 +258,23 @@ export function AppShell({
                 <Settings size={20} aria-hidden="true" />
                 <span><strong>Settings</strong><small>Accounts and preferences</small></span>
               </Link>
-            </nav>
+                </nav>
+                <button className="mobile-more-account" type="button" onClick={() => setMobileMoreView("account")}>
+                  <span className="mobile-more-account-icon"><UserRound size={19} aria-hidden="true" /></span>
+                  <span><strong>{userName || "Account"}</strong><small>Profile, appearance, and workspace</small></span>
+                </button>
+              </>
+            ) : (
+              <MobileAccountPanel
+                userName={userName}
+                userEmail={userEmail}
+                userImage={userImage}
+                workspaceId={contextData?.workspaceId}
+                workspaceName={contextData?.workspaceName}
+                onDisplayNameUpdated={onDisplayNameUpdated}
+                onClose={closeMobileNavigation}
+              />
+            )}
           </section>
         </>
       ) : null}
@@ -265,15 +296,20 @@ export function AppShell({
             <span>Cards</span>
           </Link>
         ) : null}
-        <Link className={`mobile-bottom-nav-item${currentPath === "/budgets/plan" ? " is-active" : ""}`} href="/budgets/plan" onClick={closeMobileNavigation} aria-current={currentPath === "/budgets/plan" ? "page" : undefined}>
-          <ChartPie size={21} aria-hidden="true" />
-          <span>Budget</span>
-        </Link>
+        {showInvestments ? (
+          <Link className={`mobile-bottom-nav-item${currentPath === "/investments" ? " is-active" : ""}`} href="/investments" onClick={closeMobileNavigation} aria-current={currentPath === "/investments" ? "page" : undefined}>
+            <ChartNoAxesCombined size={21} aria-hidden="true" />
+            <span>Investments</span>
+          </Link>
+        ) : null}
         <button
           ref={mobileMoreButtonRef}
           type="button"
           className={`mobile-bottom-nav-item${mobileMoreOpen || moreRouteActive ? " is-active" : ""}`}
-          onClick={() => setMobileMoreOpen((open) => !open)}
+          onClick={() => {
+            setMobileMoreView("navigation");
+            setMobileMoreOpen((open) => !open);
+          }}
           aria-expanded={mobileMoreOpen}
           aria-haspopup="dialog"
         >

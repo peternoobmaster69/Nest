@@ -33,6 +33,9 @@ model User {
   budgetSources   BudgetSource[]
   monthlyBudgetSources MonthlyBudgetSource[]
   monthlyBudgetPlanSources MonthlyBudgetPlanSource[]
+  passkeys        PasskeyCredential[]
+  webAuthnChallenges WebAuthnChallenge[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Account {
@@ -898,4 +901,48 @@ model InAppNotification {
   @@unique([userId, dedupeKey])
   @@index([userId, workspaceId, readAt, updatedAt])
   @@index([workspaceId, type])
+}
+
+model PasskeyCredential {
+  id             String   @id @default(cuid())
+  userId         String
+  credentialId   String   @unique
+  publicKey       Bytes
+  counter         BigInt   @default(0)
+  transports     String?
+  deviceType     String
+  backedUp        Boolean  @default(false)
+  name            String?
+  createdAt       DateTime @default(now())
+  lastUsedAt      DateTime?
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model WebAuthnChallenge {
+  id          String   @id @default(cuid())
+  userId      String?
+  purpose     String
+  challenge   String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, expiresAt])
+  @@index([purpose, expiresAt])
+}
+
+model PushSubscription {
+  id             String   @id @default(cuid())
+  userId         String
+  endpoint       String   @unique @db.NVarChar(1000)
+  p256dh         String   @db.NVarChar(1000)
+  auth           String   @db.NVarChar(1000)
+  expirationTime BigInt?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
 }

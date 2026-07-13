@@ -10,8 +10,9 @@ import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } fr
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
-import { Droplet } from "lucide-react";
+import { Droplet, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { useSessionState } from "@/lib/use-session-state";
 
 type AppContext = {
   workspaceId: string | null;
@@ -104,9 +105,9 @@ export function InvestmentsPage() {
   const queryClient = useQueryClient();
   const chartWrapRef = useRef<HTMLDivElement>(null);
   const tooltip = useChartCursorTooltip<InvestmentChartPoint>(chartWrapRef);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRange>("ALL");
-  const [showAllAccounts, setShowAllAccounts] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useSessionState<string | null>("nest:view:investments:account", null);
+  const [timeRange, setTimeRange] = useSessionState<TimeRange>("nest:view:investments:range", "ALL");
+  const [showAllAccounts, setShowAllAccounts] = useSessionState("nest:view:investments:all", false);
   const [accountError, setAccountError] = useState("");
   const [entryError, setEntryError] = useState("");
 
@@ -581,14 +582,15 @@ export function InvestmentsPage() {
       {!accountsLoading && (
         <div style={{ marginBottom: "8px", display: "flex", justifyContent: "flex-end" }}>
           <button
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm mobile-primary-create"
             type="button"
             onClick={openCreateAccountModal}
             disabled={!workspaceId}
             aria-label="Add Investment Account"
             title="Add Investment Account"
           >
-            + Add Account
+            <Plus size={18} aria-hidden="true" />
+            <span className="mobile-primary-create-label">Add Account</span>
           </button>
         </div>
       )}

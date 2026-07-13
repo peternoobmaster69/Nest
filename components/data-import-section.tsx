@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback } from "react";
-import { Upload, AlertCircle, CheckCircle, XCircle, FileJson, Calculator } from "lucide-react";
+import { Upload, AlertCircle, CheckCircle, XCircle, Calculator } from "lucide-react";
 
 interface DataImportSectionProps {
   workspaceId: string | null;
@@ -360,30 +360,24 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
   };
 
   return (
-    <div className="card" style={{ marginBottom: "12px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
+    <div className="card settings-card-block settings-import-card">
+      <div className="settings-card-header">
         <div>
-          <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
-            <FileJson size={16} />
-            Bulk Transaction Import
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+          <div className="settings-section-title">Bulk Transaction Import</div>
+          <div className="settings-section-copy">
             Import multiple transactions from JSON. Duplicates are detected by Date + Subject + Amount.
           </div>
         </div>
       </div>
 
       {/* Target Selection */}
-      <div style={{ display: "grid", gap: "12px", marginBottom: "16px" }}>
+      <div className="settings-import-fields">
         {/* Workspace */}
         {workspaces.length > 1 && (
-          <div>
-            <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-              Workspace
-            </label>
+          <div className="settings-field">
+            <label>Workspace</label>
             <select
               className="input"
-              style={{ maxWidth: "100%" }}
               value={selectedWorkspaceId || workspaceId || ""}
               onChange={(e) => {
                 setSelectedWorkspaceId(e.target.value);
@@ -401,7 +395,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
               ))}
             </select>
             {!workspaceId && !selectedWorkspaceId && (
-              <div style={{ marginTop: "4px", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--warning-600)" }}>
+              <div className="settings-field-hint is-warning">
                 <AlertCircle size={12} />
                 Select a workspace first
               </div>
@@ -410,10 +404,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         )}
 
         {/* Bank Account */}
-        <div>
-          <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-            Bank Account
-          </label>
+        <div className="settings-field">
+          <label>Bank Account</label>
           <select
             className="input"
             value={selectedAccountId}
@@ -434,10 +426,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         </div>
 
         {/* Sub Account (Budget) */}
-        <div>
-          <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-            Sub Account (Budget)
-          </label>
+        <div className="settings-field">
+          <label>Sub Account (Budget)</label>
           <select
             className="input"
             value={selectedBudgetId}
@@ -455,7 +445,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
             ))}
           </select>
           {selectedAccountId && activeBudgets.length === 0 && !budgets.isLoading && (
-            <div style={{ marginTop: "4px", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--warning-600)" }}>
+            <div className="settings-field-hint is-warning">
               <AlertCircle size={12} />
               No active sub accounts for this bank account
             </div>
@@ -463,10 +453,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         </div>
 
         {/* Kind */}
-        <div>
-          <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-            Transaction Kind
-          </label>
+        <div className="settings-field">
+          <label>Transaction Kind</label>
           <select className="input" value={kind} onChange={(e) => setKind(e.target.value)} disabled={isImporting}>
             <option value="Migration">Migration</option>
             <option value="Adjustment">Adjustment</option>
@@ -478,12 +466,10 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       </div>
 
       {/* JSON Input */}
-      <div style={{ marginBottom: "12px" }}>
-        <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-          JSON Data
-        </label>
+      <div className="settings-field settings-json-field">
+        <label>JSON Data</label>
         <textarea
-          className="input"
+          className="input settings-json-input"
           rows={8}
           placeholder={`Paste JSON here, e.g.:
 {
@@ -500,30 +486,10 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
           value={jsonInput}
           onChange={(e) => handleJsonChange(e.target.value)}
           disabled={isImporting}
-          style={{ fontFamily: "monospace", fontSize: "12px" }}
         />
         {preview && (
-          <div
-            style={{
-              marginTop: "8px",
-              padding: "8px 12px",
-              borderRadius: "6px",
-              fontSize: "12px",
-              backgroundColor:
-                preview.valid > 0 && preview.invalid === 0
-                  ? "var(--success-50)"
-                  : preview.invalid > 0
-                  ? "var(--warning-50)"
-                  : "var(--bg-secondary)",
-              color:
-                preview.valid > 0 && preview.invalid === 0
-                  ? "var(--success-700)"
-                  : preview.invalid > 0
-                  ? "var(--warning-700)"
-                  : "var(--text-secondary)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+          <div className={`settings-import-preview ${preview.valid > 0 && preview.invalid === 0 ? "is-success" : preview.invalid > 0 ? "is-warning" : ""}`}>
+            <div className="settings-import-preview-title">
               {preview.valid > 0 && preview.invalid === 0 ? (
                 <>
                   <CheckCircle size={14} />
@@ -542,12 +508,12 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
               )}
             </div>
             {preview.errors.slice(0, 3).map((err, i) => (
-              <div key={i} style={{ marginTop: "4px", marginLeft: "20px", fontSize: "11px" }}>
+              <div key={i} className="settings-import-preview-error">
                 • {err}
               </div>
             ))}
             {preview.errors.length > 3 && (
-              <div style={{ marginTop: "4px", marginLeft: "20px", fontSize: "11px" }}>
+              <div className="settings-import-preview-error">
                 ...and {preview.errors.length - 3} more
               </div>
             )}
@@ -556,9 +522,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       </div>
 
       {/* Import and Recalculate Buttons */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center" }}>
+      <div className="settings-card-actions settings-import-actions">
         <button className="btn btn-primary" onClick={handleImport} disabled={!canImport}>
-          <Upload size={14} style={{ marginRight: "6px" }} />
+          <Upload size={16} aria-hidden="true" />
           {isImporting ? "Importing..." : "Import Transactions"}
         </button>
         <button
@@ -567,7 +533,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
           disabled={!canRecalculate}
           title="Recalculate budget total based on existing transactions"
         >
-          <Calculator size={14} style={{ marginRight: "6px" }} />
+          <Calculator size={16} aria-hidden="true" />
           {isRecalculating ? "Calculating..." : "Recalculate"}
         </button>
         {jsonInput && !isImporting && (
@@ -579,118 +545,69 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
 
       {/* Progress Bar */}
       {isImporting && progress.total > 0 && (
-        <div style={{ marginTop: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-            <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+        <div className="settings-import-progress">
+          <div className="settings-import-progress-head">
+            <span>
               Importing... {progress.current} of {progress.total} records
             </span>
-            <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--brand-600)" }}>
+            <strong>
               {progressPercent}%
-            </span>
+            </strong>
           </div>
-          <div
-            style={{
-              width: "100%",
-              height: "4px",
-              backgroundColor: "var(--bg-subtle)",
-              borderRadius: "2px",
-              overflow: "hidden",
-            }}
-          >
+          <div className="settings-import-progress-track">
             <div
-              style={{
-                width: `${progressPercent}%`,
-                height: "100%",
-                backgroundColor: "var(--brand-500)",
-                borderRadius: "2px",
-                transition: "width 0.3s ease",
-              }}
+              className="settings-import-progress-value"
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <div style={{ marginTop: "8px", display: "flex", gap: "16px", fontSize: "11px", color: "var(--text-tertiary)" }}>
+          <div className="settings-import-progress-stats">
             <span>Imported: {progress.imported}</span>
             <span>Duplicates: {progress.duplicates}</span>
-            {progress.failed > 0 && <span style={{ color: "var(--danger-600)" }}>Failed: {progress.failed}</span>}
+            {progress.failed > 0 && <span className="is-danger">Failed: {progress.failed}</span>}
           </div>
         </div>
       )}
 
       {/* Result Message */}
       {!isImporting && message && (
-        <div
-          style={{
-            marginTop: "12px",
-            padding: "8px 12px",
-            borderRadius: "6px",
-            fontSize: "12px",
-            backgroundColor: message.includes("complete")
-              ? message.includes("failed")
-                ? "var(--danger-50)"
-                : "var(--success-50)"
-              : message.includes("failed")
-              ? "var(--danger-50)"
-              : "var(--bg-secondary)",
-            color: message.includes("complete")
-              ? message.includes("failed")
-                ? "var(--danger-700)"
-                : "var(--success-700)"
-              : message.includes("failed")
-              ? "var(--danger-700)"
-              : "var(--text-secondary)",
-          }}
-        >
+        <div className={`settings-import-notice ${message.includes("failed") ? "is-danger" : message.includes("complete") ? "is-success" : ""}`}>
           {message}
         </div>
       )}
 
       {/* Error details from import */}
       {!isImporting && progress.errors.length > 0 && (
-        <div style={{ marginTop: "8px", padding: "8px 12px", borderRadius: "6px", fontSize: "11px", backgroundColor: "var(--danger-50)", color: "var(--danger-700)" }}>
+        <div className="settings-import-notice is-danger">
           <strong>Errors:</strong>
           {progress.errors.map((err, i) => (
-            <div key={i} style={{ marginTop: "2px" }}>• {err}</div>
+            <div key={i}>• {err}</div>
           ))}
           {progress.errors.length < progress.failed && (
-            <div style={{ marginTop: "2px" }}>...and {progress.failed - progress.errors.length} more</div>
+            <div>...and {progress.failed - progress.errors.length} more</div>
           )}
         </div>
       )}
 
       {/* Recalculate Results */}
       {!isRecalculating && recalcResult && (
-        <div style={{ marginTop: "12px", padding: "12px", backgroundColor: "var(--bg-subtle)", borderRadius: "6px" }}>
-          <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "8px" }}>
+        <div className="settings-recalculation-results">
+          <div className="settings-recalculation-title">
             Recalculation Results
           </div>
           {recalcResult.budgets.map((budget) => (
-            <div
-              key={budget.id}
-              style={{
-                padding: "8px",
-                backgroundColor: "var(--bg-secondary)",
-                borderRadius: "4px",
-                marginBottom: "4px",
-                fontSize: "12px",
-              }}
-            >
-              <div style={{ fontWeight: 500, color: "var(--text-primary)" }}>{budget.name}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", color: "var(--text-tertiary)" }}>
+            <div key={budget.id} className="settings-recalculation-item">
+              <strong>{budget.name}</strong>
+              <div className="settings-recalculation-values">
                 <span>Previous: {formatMoney(budget.previousCents)}</span>
                 <span>
                   New:{" "}
-                  <span style={{ color: budget.newCents >= 0 ? "var(--success-600)" : "var(--danger-600)", fontWeight: 500 }}>
+                  <span className={budget.newCents >= 0 ? "is-positive" : "is-negative"}>
                     {formatMoney(budget.newCents)}
                   </span>
                 </span>
               </div>
               {budget.difference !== 0 && (
-                <div
-                  style={{
-                    marginTop: "2px",
-                    fontSize: "11px",
-                    color: budget.difference >= 0 ? "var(--success-600)" : "var(--danger-600)",
-                  }}
-                >
+                <div className={`settings-recalculation-difference ${budget.difference >= 0 ? "is-positive" : "is-negative"}`}>
                   Difference: {budget.difference >= 0 ? "+" : ""}
                   {formatMoney(budget.difference)}
                 </div>
@@ -701,9 +618,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       )}
 
       {/* Help Text */}
-      <div style={{ marginTop: "16px", padding: "12px", backgroundColor: "var(--bg-subtle)", borderRadius: "6px", fontSize: "11px", color: "var(--text-tertiary)" }}>
-        <strong>Expected JSON format:</strong>
-        <ul style={{ margin: "8px 0 0 0", paddingLeft: "16px" }}>
+      <details className="settings-import-help">
+        <summary>Expected JSON format</summary>
+        <ul>
           <li>
             <code>Direction</code>: &quot;DEBIT&quot; (outgoing) or &quot;CREDIT&quot; (incoming)
           </li>
@@ -718,10 +635,10 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
           </li>
           <li>Optional: <code>Details</code>, <code>Notes</code>, <code>AccountName</code> (for reference)</li>
         </ul>
-        <div style={{ marginTop: "8px" }}>
+        <div className="settings-import-help-note">
           Duplicate detection: Transactions with the same Date + Subject + AmountCents will be skipped.
         </div>
-      </div>
+      </details>
     </div>
   );
 }

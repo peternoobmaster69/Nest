@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { addUtcDays, getDaysUntilDue, startOfUtcDay } from "@/lib/credit-card-payment-reminder-schedule";
+import { sendPushToUser } from "@/lib/web-push";
 
 const CREDIT_CARD_DUE_TYPE = "CREDIT_CARD_DUE";
 
@@ -89,7 +90,7 @@ function getDedupeKey(row: DueCardRow) {
   return `credit-card-due:${row.workspaceId}:${row.cardId}:${row.statementYear}:${row.statementMonth}`;
 }
 
-async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCardRow[], today: Date) {
+async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCardRow[], today: Date, deliverPush = false) {
   const activeKeys: string[] = [];
 
   for (const row of rows) {
@@ -130,6 +131,15 @@ async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCar
         INSERT ([id], [userId], [workspaceId], [type], [dedupeKey], [title], [message], [href], [metadataJson], [createdAt], [updatedAt])
         VALUES (${randomUUID()}, ${userId}, ${workspaceId}, ${CREDIT_CARD_DUE_TYPE}, ${dedupeKey}, ${copy.title}, ${message}, '/credit-transactions', ${metadataJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
     `);
+
+    if (deliverPush && copy.shouldRealert) {
+      await sendPushToUser(userId, {
+        title: copy.title,
+        message,
+        href: "/credit-transactions",
+        tag: dedupeKey,
+      });
+    }
   }
 
   const existing = await prisma.$queryRaw<Array<{ dedupeKey: string }>>(Prisma.sql`
@@ -169,7 +179,7 @@ export async function syncCreditCardDueNotificationsForAllUsers() {
   }
 
   for (const member of members) {
-    await syncRowsForUser(member.userId, member.workspaceId, rowsByWorkspace.get(member.workspaceId) ?? [], today);
+    await syncRowsForUser(member.userId, member.workspaceId, rowsByWorkspace.get(member.workspaceId) ?? [], today, true);
   }
 }
 

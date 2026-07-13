@@ -131,6 +131,32 @@ NextAuth providers are conditionally enabled when env values exist:
 
 `allowDangerousEmailAccountLinking` is enabled for provider-based account merge by verified email.
 
+### Passkeys and Web Push
+
+Passkeys use the application origin by default. Production deployments should set explicit relying-party values:
+
+```env
+WEBAUTHN_RP_NAME="Nest"
+WEBAUTHN_RP_ID="nest.example.com"
+WEBAUTHN_ORIGIN="https://nest.example.com"
+```
+
+Generate VAPID keys for optional device notifications:
+
+```bash
+npm run vapid:generate
+```
+
+Store the generated values in the deployment environment:
+
+```env
+NEXT_PUBLIC_VAPID_PUBLIC_KEY="..."
+VAPID_PRIVATE_KEY="..."
+VAPID_SUBJECT="mailto:admin@example.com"
+```
+
+Apply the `phase_3_device_integration` migration before enabling passkeys or push subscriptions. Users can install Nest, manage passkeys, and opt into supported notifications from Settings. Financial mutations are never queued by the service worker while offline.
+
 ## Learn More
 
 - [Next.js Documentation](https://nextjs.org/docs)

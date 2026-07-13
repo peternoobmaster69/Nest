@@ -153,7 +153,7 @@ export default function AccountForm({ mode, account }: AccountFormProps) {
 
           <Button
             type="button"
-            onClick={() => router.push("/accounts")}
+            onClick={() => router.back()}
             variant="ghost"
           >
             Cancel

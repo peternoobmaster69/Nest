@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { SettingsAppAccess } from "@/components/settings-app-access";
 
 type Context = {
   workspaceId: string | null;
@@ -898,6 +899,11 @@ export function SettingsPage() {
 
   return (
     <div className="st-container">
+      <header className="settings-page-section-header">
+        <h2>Access &amp; connections</h2>
+        <p>Install Nest and manage secure sign-in, notifications, and connected services.</p>
+      </header>
+      <SettingsAppAccess />
       <div className="card settings-card-block gmail-alerts-card">
         <div className="gmail-alerts-header">
           <div className="gmail-alerts-copy">
@@ -953,6 +959,10 @@ export function SettingsPage() {
         {gmailMessage ? <div className="settings-message settings-message-spaced">{gmailMessage}</div> : null}
       </div>
 
+      <header className="settings-page-section-header">
+        <h2>Workspace preferences</h2>
+        <p>Choose shared defaults and control access to workspace data.</p>
+      </header>
       <div className="card settings-card-block">
         <div className="settings-row">
           <div>
@@ -978,7 +988,7 @@ export function SettingsPage() {
       </div>
 
       <div className="card settings-card-block">
-        <div className="settings-row">
+        <div className="settings-row settings-row-toggle">
           <div>
             <div className="settings-section-title">Public Net Worth API</div>
             <div className="settings-section-copy">
@@ -1078,6 +1088,10 @@ export function SettingsPage() {
         {receivableAccountMessage ? <div className="settings-message">{receivableAccountMessage}</div> : null}
       </div>
 
+      <header className="settings-page-section-header">
+        <h2>Automation</h2>
+        <p>Configure how card transactions are detected and accounted for.</p>
+      </header>
       <div className="card settings-card-block">
         <div className="settings-auto-header">
           <div className="settings-auto-copy">
@@ -1478,13 +1492,20 @@ export function SettingsPage() {
       )}
 
       {/* Data Import Section */}
+      <header className="settings-page-section-header">
+        <h2>Data tools</h2>
+        <p>Import historical transactions and recalculate account totals.</p>
+      </header>
       <DataImportSection workspaceId={workspaceId} baseCurrency={baseCurrency} />
 
-      {/* Header with Add Button */}
-      <div className="st-header">
-        <h2 className="st-title">Bank Accounts</h2>
+      <div className="st-header settings-accounts-header">
+        <div className="settings-accounts-heading">
+          <h2>Bank accounts</h2>
+          <p>Manage balances, account visibility, and reconciliation.</p>
+        </div>
         <button className="btn btn-primary" onClick={openAddModal}>
-          + Add Account
+          <Plus size={16} aria-hidden="true" />
+          Add Account
         </button>
       </div>
 
@@ -1595,7 +1616,8 @@ export function SettingsPage() {
               description="Connect your first bank account to start tracking your finances and managing budgets."
               action={
                 <button className="btn btn-primary" onClick={openAddModal}>
-                  + Add Your First Account
+                  <Plus size={16} aria-hidden="true" />
+                  Add your first account
                 </button>
               }
             />

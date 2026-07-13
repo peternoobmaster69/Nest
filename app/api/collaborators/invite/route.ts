@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { sendPushToUser } from "@/lib/web-push";
 
 const InviteSchema = z.object({
   workspaceId: z.string().min(1),
@@ -108,6 +109,13 @@ export async function POST(request: Request) {
           action: "INVITE_AUTO_ACCEPTED",
           details: `${email} added as collaborator.`,
         },
+      });
+
+      await sendPushToUser(targetUser.id, {
+        title: "Workspace invitation",
+        message: "You were added to a shared Nest workspace.",
+        href: "/collaborators",
+        tag: `workspace-invite:${invite.id}`,
       });
     }
 

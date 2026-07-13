@@ -13,8 +13,9 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
+import { useSessionState } from "@/lib/use-session-state";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
-import { ArrowLeft, ArrowRight, Check, ChevronDown } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Plus } from "lucide-react";
 
 type CreditCard = {
   id: string;
@@ -183,8 +184,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   }, [initialCards]);
   const [selectedCardId, setSelectedCardId] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [showUnaccountedOnly, setShowUnaccountedOnly] = useState(false);
+  const [selectedYear, setSelectedYear] = useSessionState<number>("nest:view:credit-transactions:year", new Date().getFullYear());
+  const [showUnaccountedOnly, setShowUnaccountedOnly] = useSessionState("nest:view:credit-transactions:unaccounted", false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [isAccountingModalOpen, setIsAccountingModalOpen] = useState(false);
@@ -1280,6 +1281,31 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       </div>
 
       {/* Period Filter */}
+      <div className="cct-mobile-period-selectors" aria-label="Statement period filters">
+        <label>
+          <span>Month</span>
+          <select
+            className="input"
+            value={selectedMonth}
+            onChange={(event) => setSelectedMonth(Number(event.target.value))}
+          >
+            <option value={-1}>All months</option>
+            {MONTHS.map((month, index) => <option key={month} value={index}>{month}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Year</span>
+          <select
+            className="input"
+            value={selectedYear}
+            onChange={(event) => setSelectedYear(Number(event.target.value))}
+          >
+            {Array.from({ length: Math.max(1, new Date().getFullYear() - 2018) }, (_, index) => new Date().getFullYear() + 1 - index).map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="cct-period-bar">
         <div className={`cct-month-tabs-shell${isMonthTabsScrolled ? " is-scrolled" : ""}`}>
           <button
@@ -1406,8 +1432,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           />
           <span>Unaccounted only</span>
         </label>
-        <button className="btn btn-primary" onClick={openModal}>
-          + Add Transaction
+        <button className="btn btn-primary mobile-primary-create" onClick={openModal} aria-label="Add card transaction" title="Add card transaction">
+          <Plus size={18} aria-hidden="true" />
+          <span className="mobile-primary-create-label">Add Transaction</span>
         </button>
         {canImportMaybankCsv && (
           <button

@@ -1,9 +1,11 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import { startAuthentication } from "@simplewebauthn/browser";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { KeyRound } from "lucide-react";
 import {
   DATABASE_UNAVAILABLE_CODE,
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -29,9 +31,12 @@ export function SignInPanel({ serviceMessage }: { serviceMessage?: string | null
   const [providers, setProviders] = useState<ProviderMap>({});
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(serviceMessage ?? null);
+  const [passkeySupported, setPasskeySupported] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const isBlockingError = errorMessage === DATABASE_UNAVAILABLE_MESSAGE;
 
   useEffect(() => {
+    setPasskeySupported(Boolean(window.PublicKeyCredential && navigator.credentials));
     let mounted = true;
     fetch("/api/auth/providers")
       .then(async (res) => {
@@ -63,7 +68,31 @@ export function SignInPanel({ serviceMessage }: { serviceMessage?: string | null
     };
   }, []);
 
-  const providerList = Object.values(providers);
+  const providerList = Object.values(providers).filter((provider) => provider.id !== "passkey");
+
+  const signInWithPasskey = async () => {
+    setPasskeyLoading(true);
+    setErrorMessage(null);
+    try {
+      const optionsResponse = await fetch("/api/passkeys/authenticate/options", { method: "POST" });
+      const start = await optionsResponse.json();
+      if (!optionsResponse.ok) throw new Error(start.error || "Unable to start passkey sign-in.");
+      const response = await startAuthentication({ optionsJSON: start.options });
+      const verifyResponse = await fetch("/api/passkeys/authenticate/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId: start.challengeId, response }),
+      });
+      const verified = await verifyResponse.json();
+      if (!verifyResponse.ok || !verified.loginToken) throw new Error(verified.error || "Passkey sign-in failed.");
+      const result = await signIn("passkey", { loginToken: verified.loginToken, redirect: false, callbackUrl: "/" });
+      if (result?.error) throw new Error("Passkey sign-in failed.");
+      window.location.assign(result?.url || "/");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Passkey sign-in failed.");
+      setPasskeyLoading(false);
+    }
+  };
 
   return (
     <main className="signin-shell">
@@ -97,11 +126,18 @@ export function SignInPanel({ serviceMessage }: { serviceMessage?: string | null
             </p>
           )}
 
-          {!loading && !errorMessage && !providerList.length && (
+          {!loading && !errorMessage && !providerList.length && !passkeySupported && (
             <p className="signin-error">
               No auth providers configured.
             </p>
           )}
+
+          {!loading && !isBlockingError && passkeySupported ? (
+            <button className="signin-provider-btn" type="button" onClick={signInWithPasskey} disabled={passkeyLoading}>
+              <span className="signin-provider-icon"><KeyRound size={20} aria-hidden="true" /></span>
+              <span className="signin-provider-text">{passkeyLoading ? "Checking passkey…" : "Continue with a passkey"}</span>
+            </button>
+          ) : null}
 
           {!isBlockingError && providerList.map((provider) => (
             <button

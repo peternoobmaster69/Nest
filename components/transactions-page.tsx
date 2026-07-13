@@ -9,6 +9,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
+import { useSessionState } from "@/lib/use-session-state";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
@@ -270,8 +271,8 @@ export function TransactionsPage() {
   const [selectedBankId, setSelectedBankId] = useState("");
   const [transactionDate, setTransactionDate] = useState("");
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
-  const [activeBudgetFilterId, setActiveBudgetFilterId] = useState<string>("ALL");
-  const [activeGroupFilterId, setActiveGroupFilterId] = useState<string>("ALL");
+  const [activeBudgetFilterId, setActiveBudgetFilterId] = useSessionState<string>("nest:view:transactions:budget", "ALL");
+  const [activeGroupFilterId, setActiveGroupFilterId] = useSessionState<string>("nest:view:transactions:group", "ALL");
   const [urlFilterHydrated, setUrlFilterHydrated] = useState(false);
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
@@ -296,7 +297,7 @@ export function TransactionsPage() {
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTransactionsRef = useRef<HTMLDivElement | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
-  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>("ALL"); // Format: "YYYY-MM" or "ALL"
+  const [selectedMonthFilter, setSelectedMonthFilter] = useSessionState<string>("nest:view:transactions:month", "ALL"); // Format: "YYYY-MM" or "ALL"
   const [isGroupingMode, setIsGroupingMode] = useState(false);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -426,13 +427,13 @@ export function TransactionsPage() {
   const transactionGroupFilter = activeGroupFilterId !== "ALL" ? activeGroupFilterId : "";
 
   // Month/Year filter state
-  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>({});
-  const [activeQuickSelect, setActiveQuickSelect] = useState<string | null>("thisMonth");
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [dateFilter, setDateFilter] = useSessionState<{ from?: string; to?: string }>("nest:view:transactions:dates", {});
+  const [activeQuickSelect, setActiveQuickSelect] = useSessionState<string | null>("nest:view:transactions:quick-period", "thisMonth");
+  const [selectedMonth, setSelectedMonth] = useSessionState<number | null>("nest:view:transactions:custom-month", null);
+  const [selectedYear, setSelectedYear] = useSessionState<number>("nest:view:transactions:custom-year", new Date().getFullYear());
   const [isCustomMonthOpen, setIsCustomMonthOpen] = useState(false);
   const customMonthBtnRef = useRef<HTMLDivElement | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useSessionState("nest:view:transactions:search", "");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -1763,7 +1764,6 @@ export function TransactionsPage() {
                       <span className="tx-group-card-icon" aria-hidden="true">{group.icon || "📌"}</span>
                       <span className="tx-group-card-copy">
                         <strong>{group.name}</strong>
-                        <small>{group.transactionCount}</small>
                       </span>
                       <span className="tx-group-card-total">
                         <strong>{formatCents(group.expenseCents - group.incomeCents)}</strong>
@@ -1854,13 +1854,13 @@ export function TransactionsPage() {
             </button>
             <button
               type="button"
-              className="btn btn-primary btn-sm tx-primary-action"
+              className="btn btn-primary btn-sm tx-primary-action mobile-primary-create"
               onClick={openCreateModal}
               aria-label="Add transaction"
               title="Add transaction"
             >
               <Plus size={16} aria-hidden="true" />
-              <span className="tx-primary-action-label">Add Transaction</span>
+              <span className="tx-primary-action-label mobile-primary-create-label">Add Transaction</span>
             </button>
           </div>
         </div>

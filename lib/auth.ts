@@ -5,10 +5,26 @@ import type { JWT } from "next-auth/jwt";
 import AppleProvider from "next-auth/providers/apple";
 import FacebookProvider from "next-auth/providers/facebook";
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { consumePasskeyLoginTicket } from "@/lib/passkeys";
 
-const providers = [];
+const providers: NextAuthOptions["providers"] = [
+  CredentialsProvider({
+    id: "passkey",
+    name: "Passkey",
+    credentials: {
+      loginToken: { label: "Passkey login token", type: "text" },
+    },
+    async authorize(credentials) {
+      if (!credentials?.loginToken) return null;
+      const user = await consumePasskeyLoginTicket(credentials.loginToken);
+      if (!user) return null;
+      return { id: user.id, email: user.email, name: user.name, image: user.image };
+    },
+  }),
+];
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   providers.push(

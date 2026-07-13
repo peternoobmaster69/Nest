@@ -10,6 +10,8 @@ import { NavigationLoader } from "@/components/navigation-loader";
 import { ConfirmDialogProvider } from "@/components/confirm-dialog";
 import { ModalViewportManager } from "@/components/modal-viewport-manager";
 import { notifyToast, ToastProvider } from "@/components/toast-provider";
+import { MobileWorkflowManager } from "@/components/mobile-workflow-manager";
+import { DeviceIntegration } from "@/components/device-integration";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -50,6 +52,8 @@ export function Providers({ children }: { children: ReactNode }) {
           <ConfirmDialogProvider>
             <ToastProvider>
               <ModalViewportManager />
+              <MobileWorkflowManager />
+              <DeviceIntegration />
               {children}
               <NavigationLoader />
               <CollaborationBanner />
