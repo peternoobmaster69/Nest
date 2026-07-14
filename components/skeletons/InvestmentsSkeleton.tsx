@@ -3,17 +3,17 @@ import { Skeleton } from "@/components/ui/Skeleton";
 /*
 Structural inventory: Investments page loading regions
 Route: /investments
-Layout regions: PageFrame chrome static; .inv-page is a grid with 12px gap.
+Layout regions: PageFrame chrome static; .inv-page is a grid with a compact responsive gap.
 Content blocks:
-- Portfolio header card: .card padding 24px; .inv-portfolio-header flex row, 24px gap, large primary value with withdrawable subline and three smaller metric blocks.
+- Portfolio header card: .card.inv-portfolio-card uses responsive page-specific padding; .inv-portfolio-header flex row, 24px gap, large primary value with withdrawable subline and three smaller metric blocks.
 - View toggle card: static selected-view text/segmented controls are synchronous and not skeletonized.
-- Account grid: .inv-account-grid, repeat(6, 1fr), gap 10px; .card.inv-account-card padding 10px 10px 8px.
+- Account grid: .inv-account-grid, repeat(6, 1fr), gap 8px; .card.inv-account-card padding 10px 10px 8px.
 - Account card internals: edit circle 20px, title 16px, meta 11px, two amount columns with 9px labels and 12px values, inception pill.
 Do not skeletonize: Add Account button, view toggle controls, modal chrome.
 */
 export function InvestmentsPortfolioHeaderSkeleton() {
   return (
-    <section className="card" style={{ padding: "24px" }}>
+    <section className="card inv-portfolio-card">
       <div className="inv-portfolio-header">
         <div style={{ flex: "1 1 200px" }}>
           <Skeleton width={148} height={15} borderRadius="4px" />

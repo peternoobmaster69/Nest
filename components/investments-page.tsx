@@ -592,7 +592,7 @@ export function InvestmentsPage() {
       {accountsLoading ? (
         <InvestmentsPortfolioHeaderSkeleton />
       ) : (
-        <section className="card" style={{ padding: "24px" }}>
+        <section className="card inv-portfolio-card">
           <div className="inv-portfolio-header">
               {/* Total Portfolio Value - Primary */}
               <div style={{ flex: "1 1 200px" }}>
@@ -653,7 +653,7 @@ export function InvestmentsPage() {
       )}
 
       {/* View Toggle */}
-      <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
+      <section className="card inv-view-toggle">
         <div style={{ fontSize: "13px", fontWeight: 600 }}>
           {showAllAccounts ? "All Accounts" : selectedAccount ? `${selectedAccount.displayName || selectedAccount.productName}` : "Select an account to view details"}
         </div>

@@ -98,6 +98,13 @@ type CreditCardPaymentResponse = {
   paymentTransaction: CreditCardTransaction;
 };
 
+type PaymentDueMonthsResponse = {
+  months: Array<{
+    statementMonth: number;
+    paymentDueDate: string;
+  }>;
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -157,8 +164,13 @@ function toMonthEndDateInputValue(dateStr: string) {
 function getDaysUntil(dateStr: string): number {
   const date = new Date(dateStr);
   const today = new Date();
-  const diff = date.getTime() - today.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  const dueDay = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  const currentDay = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((dueDay - currentDay) / (1000 * 60 * 60 * 24));
+}
+
+function getPaymentDueTone(paymentDueDate: string) {
+  return getDaysUntil(paymentDueDate) <= 5 ? "is-due-soon" : "is-due-later";
 }
 
 function readCookie(name: string) {
@@ -215,6 +227,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [paymentDueMessage, setPaymentDueMessage] = useState("");
   const [importProgress, setImportProgress] = useState(0);
   const maybankFileInputRef = useRef<HTMLInputElement | null>(null);
+  const paymentDueInputRef = useRef<HTMLInputElement | null>(null);
   const [deductAccountId, setDeductAccountId] = useState("");
   const [deductBudgetId, setDeductBudgetId] = useState("");
   const [receivableDate, setReceivableDate] = useState("");
@@ -231,10 +244,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const cardBarRef = useRef<HTMLDivElement | null>(null);
   const monthTabsRef = useRef<HTMLDivElement | null>(null);
   const mobileCardPickerRef = useRef<HTMLDivElement | null>(null);
+  const mobileMonthPickerRef = useRef<HTMLDivElement | null>(null);
+  const mobileYearPickerRef = useRef<HTMLDivElement | null>(null);
   const [isMonthTabsScrolled, setIsMonthTabsScrolled] = useState(false);
   const [canScrollCardsLeft, setCanScrollCardsLeft] = useState(false);
   const [canScrollCardsRight, setCanScrollCardsRight] = useState(false);
   const [isMobileCardPickerOpen, setIsMobileCardPickerOpen] = useState(false);
+  const [isMobileMonthPickerOpen, setIsMobileMonthPickerOpen] = useState(false);
+  const [isMobileYearPickerOpen, setIsMobileYearPickerOpen] = useState(false);
   const [mobileCardQuery, setMobileCardQuery] = useState("");
 
   // Form state
@@ -288,16 +305,24 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   }, [filtersReady, selectedMonth]);
 
   useEffect(() => {
-    if (!isMobileCardPickerOpen) return;
+    if (!isMobileCardPickerOpen && !isMobileMonthPickerOpen && !isMobileYearPickerOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && !mobileCardPickerRef.current?.contains(event.target)) {
         setIsMobileCardPickerOpen(false);
         setMobileCardQuery("");
       }
+      if (event.target instanceof Node && !mobileMonthPickerRef.current?.contains(event.target)) {
+        setIsMobileMonthPickerOpen(false);
+      }
+      if (event.target instanceof Node && !mobileYearPickerRef.current?.contains(event.target)) {
+        setIsMobileYearPickerOpen(false);
+      }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsMobileCardPickerOpen(false);
+        setIsMobileMonthPickerOpen(false);
+        setIsMobileYearPickerOpen(false);
         setMobileCardQuery("");
       }
     };
@@ -307,7 +332,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [isMobileCardPickerOpen]);
+  }, [isMobileCardPickerOpen, isMobileMonthPickerOpen, isMobileYearPickerOpen]);
 
   useEffect(() => {
     const element = cardBarRef.current;
@@ -409,6 +434,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   }, [budgets.data, defaultReceivableBudgetId]);
   const defaultSubaccountBalance = defaultReceivableSubaccount?.availableCents ?? 0;
   const creditTransactionsKeyPrefix = ["credit-transactions", context.data?.workspaceId] as const;
+  const paymentDueMonthsKeyPrefix = ["credit-transaction-payment-due-months", context.data?.workspaceId] as const;
   const currentCreditTransactionsKey = [
     "credit-transactions",
     context.data?.workspaceId,
@@ -419,6 +445,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
   const invalidateCreditTransactionDependencies = () => {
     void queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: paymentDueMonthsKeyPrefix, refetchType: "active" });
     void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
   };
 
@@ -430,6 +457,34 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     void queryClient.invalidateQueries({ queryKey: ["bank-accounts"], refetchType: "active" });
     void queryClient.invalidateQueries({ queryKey: ["receivables-summary"], refetchType: "active" });
   };
+
+  const paymentDueMonths = useQuery({
+    queryKey: [...paymentDueMonthsKeyPrefix, selectedCardId, selectedYear],
+    queryFn: () =>
+      fetchJson<PaymentDueMonthsResponse>(`/api/credit-transactions/payment-due?${new URLSearchParams({
+        cardId: selectedCardId,
+        year: String(selectedYear),
+      }).toString()}`),
+    enabled: Boolean(context.data?.workspaceId) && sortedCards.length > 0,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+  const paymentDueDateByMonth = useMemo(
+    () => new Map(
+      (paymentDueMonths.data?.months ?? []).map((entry) => [entry.statementMonth, entry.paymentDueDate]),
+    ),
+    [paymentDueMonths.data?.months],
+  );
+  const statementYearOptions = useMemo(() => {
+    const latestYear = Math.max(new Date().getFullYear() + 1, selectedYear);
+    return Array.from({ length: latestYear - 2019 }, (_, index) => latestYear - index);
+  }, [selectedYear]);
+  const selectedMonthPaymentDueDate = selectedMonth >= 0
+    ? paymentDueDateByMonth.get(selectedMonth + 1)
+    : undefined;
+  const selectedMonthPaymentDueTone = selectedMonthPaymentDueDate
+    ? getPaymentDueTone(selectedMonthPaymentDueDate)
+    : "";
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: currentCreditTransactionsKey,
@@ -850,6 +905,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       invalidateCreditTransactionDependencies();
     },
     onError: (error) => {
+      setSharedPaymentDueDate(earliestPaymentDueDate ? toDateInputValue(earliestPaymentDueDate) : "");
       setPaymentDueMessage(error instanceof Error ? error.message : "Failed to update payment due date.");
     },
   });
@@ -1093,6 +1149,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     closeMobileCardPicker();
   };
 
+  const selectMobileMonth = (month: number) => {
+    setSelectedMonth(month);
+    setIsMobileMonthPickerOpen(false);
+  };
+
+  const selectMobileYear = (year: number) => {
+    setSelectedYear(year);
+    setIsMobileYearPickerOpen(false);
+  };
+
   const scrollCardRail = (direction: -1 | 1) => {
     const container = cardBarRef.current;
     if (!container) return;
@@ -1111,9 +1177,21 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     }, 180);
   };
 
-  const earliestDueDays = earliestPaymentDueDate ? getDaysUntil(earliestPaymentDueDate) : null;
+  const displayedPaymentDueDate = sharedPaymentDueDate
+    ? `${sharedPaymentDueDate}T00:00:00.000Z`
+    : null;
+  const earliestDueDays = displayedPaymentDueDate ? getDaysUntil(displayedPaymentDueDate) : null;
   const earliestDueIsOverdue = earliestDueDays !== null && earliestDueDays < 0;
   const earliestDueIsUrgent = earliestDueDays !== null && earliestDueDays >= 0 && earliestDueDays <= 3;
+  function getPaymentDueLabel(days: number | null) {
+    if (days === null) return "No payment due date set";
+    if (days < 0) return `Overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"}`;
+    if (days === 0) return "Payment due today";
+    if (days === 1) return "Payment due tomorrow";
+    return `Payment due in ${days} days`;
+  }
+  const paymentDueLabel = getPaymentDueLabel(earliestDueDays);
+
   const canEditSharedPaymentDue = selectedMonth >= 0;
   const hasMonthlyPaymentBalance =
     selectedCardId !== "all" &&
@@ -1123,14 +1201,30 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     hasMonthlyPaymentBalance &&
     Boolean(defaultReceivableAccountId) &&
     Boolean(defaultReceivableBudgetId);
-  const saveSharedPaymentDue = () => {
+  const saveSharedPaymentDue = (paymentDueDate: string) => {
     if (!canEditSharedPaymentDue) return;
+    setSharedPaymentDueDate(paymentDueDate);
+    setPaymentDueMessage("");
     updateSharedPaymentDue.mutate({
       ...(selectedCardId !== "all" ? { cardId: selectedCardId } : {}),
       statementMonth: selectedMonth + 1,
       statementYear: selectedYear,
-      paymentDueDate: sharedPaymentDueDate ? new Date(`${sharedPaymentDueDate}T00:00:00.000Z`).toISOString() : null,
+      paymentDueDate: paymentDueDate ? new Date(`${paymentDueDate}T00:00:00.000Z`).toISOString() : null,
     });
+  };
+  const openSharedPaymentDuePicker = () => {
+    const picker = paymentDueInputRef.current;
+    if (!picker || !canEditSharedPaymentDue || updateSharedPaymentDue.isPending) return;
+    picker.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (typeof picker.showPicker === "function") {
+      try {
+        picker.showPicker();
+        return;
+      } catch {
+        // Fall through for browsers that expose showPicker but cannot open it.
+      }
+    }
+    picker.click();
   };
   const submitPayment = async () => {
     if (!selectedCard || selectedMonth < 0 || payableAmountCents <= 0) return;
@@ -1164,6 +1258,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             if (isMobileCardPickerOpen) {
               closeMobileCardPicker();
             } else {
+              setIsMobileMonthPickerOpen(false);
+              setIsMobileYearPickerOpen(false);
               setIsMobileCardPickerOpen(true);
             }
           }}
@@ -1345,29 +1441,119 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Period Filter */}
       <div className="cct-mobile-period-selectors" aria-label="Statement period filters">
-        <label>
-          <select
-            className="input"
+        <div className="cct-mobile-period-picker cct-mobile-month-picker" ref={mobileMonthPickerRef}>
+          <button
+            type="button"
+            className={`cct-mobile-period-trigger${selectedMonthPaymentDueTone ? ` ${selectedMonthPaymentDueTone}` : ""}`}
             aria-label="Statement month"
-            value={selectedMonth}
-            onChange={(event) => setSelectedMonth(Number(event.target.value))}
+            aria-haspopup="listbox"
+            aria-expanded={isMobileMonthPickerOpen}
+            aria-controls="mobile-statement-month-options"
+            onClick={() => {
+              closeMobileCardPicker();
+              setIsMobileYearPickerOpen(false);
+              setIsMobileMonthPickerOpen((current) => !current);
+            }}
           >
-            <option value={-1}>All months</option>
-            {MONTHS.map((month, index) => <option key={month} value={index}>{month}</option>)}
-          </select>
-        </label>
-        <label>
-          <select
-            className="input"
+            <span className="cct-mobile-period-trigger-label">
+              {selectedMonth >= 0 ? MONTHS[selectedMonth] : "All months"}
+            </span>
+            {selectedMonthPaymentDueTone ? (
+              <span className={`cct-mobile-period-due-dot ${selectedMonthPaymentDueTone}`} aria-hidden="true" />
+            ) : (
+              <span className="cct-mobile-period-dot-space" aria-hidden="true" />
+            )}
+            <ChevronDown size={17} aria-hidden="true" />
+          </button>
+          {isMobileMonthPickerOpen ? (
+            <div
+              id="mobile-statement-month-options"
+              className="cct-mobile-period-dropdown cct-mobile-month-dropdown"
+              role="listbox"
+              aria-label="Statement months"
+            >
+              {[-1, ...MONTHS.map((_, index) => index)].map((monthIndex) => {
+                const isAllMonths = monthIndex === -1;
+                const month = isAllMonths ? "All months" : MONTHS[monthIndex];
+                const paymentDueDate = isAllMonths ? undefined : paymentDueDateByMonth.get(monthIndex + 1);
+                const paymentDueTone = paymentDueDate ? getPaymentDueTone(paymentDueDate) : "";
+                const isSelected = selectedMonth === monthIndex;
+                return (
+                  <button
+                    key={month}
+                    type="button"
+                    className={`cct-mobile-period-option${paymentDueTone ? ` ${paymentDueTone}` : ""}${isSelected ? " is-selected" : ""}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    aria-label={paymentDueDate ? `${month}, payment due` : month}
+                    onClick={() => selectMobileMonth(monthIndex)}
+                  >
+                    <span>{month}</span>
+                    {paymentDueTone ? (
+                      <span className={`cct-mobile-period-due-dot ${paymentDueTone}`} aria-hidden="true" />
+                    ) : (
+                      <span className="cct-mobile-period-dot-space" aria-hidden="true" />
+                    )}
+                    {isSelected ? (
+                      <Check size={16} aria-hidden="true" />
+                    ) : (
+                      <span className="cct-mobile-period-check-space" aria-hidden="true" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+        <div className="cct-mobile-period-picker cct-mobile-year-picker" ref={mobileYearPickerRef}>
+          <button
+            type="button"
+            className="cct-mobile-period-trigger"
             aria-label="Statement year"
-            value={selectedYear}
-            onChange={(event) => setSelectedYear(Number(event.target.value))}
+            aria-haspopup="listbox"
+            aria-expanded={isMobileYearPickerOpen}
+            aria-controls="mobile-statement-year-options"
+            onClick={() => {
+              closeMobileCardPicker();
+              setIsMobileMonthPickerOpen(false);
+              setIsMobileYearPickerOpen((current) => !current);
+            }}
           >
-            {Array.from({ length: Math.max(1, new Date().getFullYear() - 2018) }, (_, index) => new Date().getFullYear() + 1 - index).map((year) => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
-        </label>
+            <span className="cct-mobile-period-trigger-label">{selectedYear}</span>
+            <span className="cct-mobile-period-dot-space" aria-hidden="true" />
+            <ChevronDown size={17} aria-hidden="true" />
+          </button>
+          {isMobileYearPickerOpen ? (
+            <div
+              id="mobile-statement-year-options"
+              className="cct-mobile-period-dropdown cct-mobile-year-dropdown"
+              role="listbox"
+              aria-label="Statement years"
+            >
+              {statementYearOptions.map((year) => {
+                const isSelected = selectedYear === year;
+                return (
+                  <button
+                    key={year}
+                    type="button"
+                    className={`cct-mobile-period-option${isSelected ? " is-selected" : ""}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => selectMobileYear(year)}
+                  >
+                    <span>{year}</span>
+                    <span className="cct-mobile-period-dot-space" aria-hidden="true" />
+                    {isSelected ? (
+                      <Check size={16} aria-hidden="true" />
+                    ) : (
+                      <span className="cct-mobile-period-check-space" aria-hidden="true" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="cct-period-bar">
         <div className={`cct-month-tabs-shell${isMonthTabsScrolled ? " is-scrolled" : ""}`}>
@@ -1437,45 +1623,48 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       {hasMonthlyPaymentBalance && (
         <div className="cct-due-panel">
           <div className="cct-due-panel-meta">
-            <span className="cct-summary-label">Payment Due</span>
-            {earliestPaymentDueDate ? (
-              <span className={`cct-due-badge ${earliestDueIsOverdue ? "overdue" : earliestDueIsUrgent ? "urgent" : ""}`}>
-                {earliestDueIsOverdue ? "⚠️ " : earliestDueIsUrgent ? "⏰ " : ""}
-                {formatDate(earliestPaymentDueDate)}
-              </span>
-            ) : (
-              <span className="cct-summary-meta">—</span>
-            )}
+            <span className="cct-summary-label">{paymentDueLabel}</span>
           </div>
           <div className="cct-due-panel-controls">
-            <input
-              type="date"
-              className="input cct-due-input"
-              value={sharedPaymentDueDate}
-              onChange={(e) => setSharedPaymentDueDate(e.target.value)}
-              disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
-            />
-            <button
-              type="button"
-              className="btn btn-primary btn-xs cct-due-save-btn"
-              onClick={saveSharedPaymentDue}
-              disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
-            >
-              {updateSharedPaymentDue.isPending ? "Saving..." : "Save Due Date"}
-            </button>
+            <span className="cct-due-date-control">
+              <button
+                type="button"
+                className={`cct-due-badge cct-due-date-trigger ${earliestDueIsOverdue ? "overdue" : earliestDueIsUrgent ? "urgent" : ""} ${updateSharedPaymentDue.isPending ? "is-saving" : ""}`}
+                onClick={openSharedPaymentDuePicker}
+                disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
+                aria-label="Change payment due date"
+                title="Change payment due date"
+              >
+                {earliestDueIsOverdue ? "⚠️ " : earliestDueIsUrgent ? "⏰ " : ""}
+                <span>{displayedPaymentDueDate ? formatDate(displayedPaymentDueDate) : "Set date"}</span>
+                {updateSharedPaymentDue.isPending ? <span className="cct-due-saving" aria-hidden="true">…</span> : null}
+              </button>
+              <input
+                ref={paymentDueInputRef}
+                type="date"
+                className="cct-due-picker"
+                value={sharedPaymentDueDate}
+                onChange={(e) => saveSharedPaymentDue(e.target.value)}
+                disabled={!canEditSharedPaymentDue || updateSharedPaymentDue.isPending}
+                tabIndex={-1}
+                aria-label="Payment due date picker"
+              />
+            </span>
             {hasMonthlyPaymentBalance ? (
               <button
                 type="button"
-                className="btn btn-primary btn-xs cct-due-save-btn"
+                className="btn btn-primary cct-payment-btn"
                 onClick={submitPayment}
                 disabled={!canMakePayment || makePayment.isPending}
+                aria-label={makePayment.isPending ? "Processing payment" : "Make payment"}
+                aria-busy={makePayment.isPending}
                 title={
                   canMakePayment
                     ? `Make payment of ${formatCurrency(payableAmountCents)}`
                     : "Configure default receivable account and subaccount in Settings"
                 }
               >
-                {makePayment.isPending ? "Processing..." : "Make Payment"}
+                {makePayment.isPending ? "Paying…" : "Pay"}
               </button>
             ) : null}
           </div>

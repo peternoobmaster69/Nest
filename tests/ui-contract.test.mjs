@@ -128,6 +128,46 @@ test("credit transaction records use a compact mobile card layout", async () => 
   assert.match(source, /\.cct-summary-left\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s);
 });
 
+test("payment due card saves from its compact date tag", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /className="cct-due-picker"[\s\S]*?onChange=\{\(e\) => saveSharedPaymentDue\(e\.target\.value\)\}/);
+  assert.match(component, /picker\.parentElement\?\.scrollIntoView\(\{ block: "nearest", inline: "nearest" \}\)/);
+  assert.match(component, /className="btn btn-primary cct-payment-btn"[\s\S]*?\{makePayment\.isPending \? "Paying…" : "Pay"\}/);
+  assert.doesNotMatch(component, /Save Due Date|cct-due-input|cct-due-save-btn/);
+  assert.match(source, /\.cct-due-date-trigger\s*\{[^}]*position:\s*relative[^}]*min-height:\s*28px/s);
+  assert.match(source, /\.cct-due-date-control\s*\{[^}]*position:\s*relative[^}]*safe-area-inset-top[^}]*safe-area-inset-bottom/s);
+  assert.match(source, /\.cct-due-picker\s*\{[^}]*position:\s*absolute[^}]*bottom:\s*0[^}]*left:\s*50%[^}]*opacity:\s*0[^}]*clip-path:\s*inset\(50%\)/s);
+  assert.match(source, /\.cct-payment-btn\s*\{[^}]*height:\s*26px[^}]*padding:\s*0 9px/s);
+});
+
+test("month dropdown identifies outstanding payment due dates", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const route = await readFile(path.join(root, "app/api/credit-transactions/payment-due/route.ts"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /fetchJson<PaymentDueMonthsResponse>\(`\/api\/credit-transactions\/payment-due\?\$\{/);
+  assert.match(component, /return getDaysUntil\(paymentDueDate\) <= 5 \? "is-due-soon" : "is-due-later";/);
+  assert.match(component, /className="cct-mobile-period-picker cct-mobile-month-picker" ref=\{mobileMonthPickerRef\}/);
+  assert.match(component, /className=\{`cct-mobile-period-trigger\$\{selectedMonthPaymentDueTone[\s\S]*?aria-expanded=\{isMobileMonthPickerOpen\}/);
+  assert.match(component, /aria-label=\{paymentDueDate \? `\$\{month\}, payment due` : month\}/);
+  assert.match(component, /className=\{`cct-mobile-period-option\$\{paymentDueTone[\s\S]*?\$\{isSelected \? " is-selected" : ""\}`\}/);
+  assert.match(component, /className=\{`cct-mobile-period-due-dot \$\{paymentDueTone\}`\}/);
+  assert.match(component, /className="cct-mobile-period-picker cct-mobile-year-picker" ref=\{mobileYearPickerRef\}/);
+  assert.match(component, /aria-expanded=\{isMobileYearPickerOpen\}[\s\S]*?statementYearOptions\.map\(\(year\)/);
+  assert.doesNotMatch(component, /cct-month-select|cct-month-option-due/);
+  assert.match(route, /by: \["creditCardId", "statementMonth"\][\s\S]*?_sum: \{ amountCents: true \}/);
+  assert.match(route, /amountCents: \{ gt: 0 \}[\s\S]*?_min: \{ paymentDueDate: true \}/);
+  assert.match(route, /if \(balance <= 0 \|\| !dueDate\) continue;/);
+  assert.match(styles, /\.cct-mobile-period-trigger\.is-due-soon\s*\{[^}]*var\(--warning\)[^}]*var\(--warning-bg\)/s);
+  assert.match(styles, /\.cct-mobile-period-trigger\.is-due-later\s*\{[^}]*var\(--success\)[^}]*var\(--success-bg\)/s);
+  assert.match(styles, /\.cct-mobile-period-due-dot\.is-due-soon\s*\{[^}]*background:\s*var\(--warning\)/s);
+  assert.match(styles, /\.cct-mobile-period-due-dot\.is-due-later\s*\{[^}]*background:\s*var\(--success\)/s);
+  assert.match(styles, /\.cct-mobile-period-dropdown\s*\{[^}]*max-height:\s*min\(55dvh, 440px\)[^}]*overflow-y:\s*auto/s);
+  assert.match(styles, /\.cct-mobile-year-dropdown\s*\{[^}]*right:\s*0[^}]*width:\s*min\(180px/s);
+});
+
 test("all modal families use the centered viewport contract", async () => {
   const source = await readFile(path.join(root, "app/globals.css"), "utf8");
   const contract = source.slice(source.indexOf("MODAL VIEWPORT CONTRACT"));
@@ -341,6 +381,12 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.doesNotMatch(navigationLoader, /Math\.random|setTimeout\([^)]*600/);
   assert.doesNotMatch(investments, /mobile-primary-create/);
   assert.doesNotMatch(investments, /Investment accounts|tracked accounts?/);
+  assert.match(investments, /className="card inv-portfolio-card"/);
+  assert.match(investments, /className="card inv-view-toggle"/);
+  assert.doesNotMatch(investments, /style=\{\{ padding: "24px" \}\}/);
+  assert.match(styles, /\.card\.inv-portfolio-card\s*\{[^}]*padding:\s*18px 20px/s);
+  assert.match(styles, /@media\s*\(max-width:\s*720px\)[\s\S]*?\.inv-page\s*\{[^}]*gap:\s*8px[\s\S]*?\.card\.inv-portfolio-card,[\s\S]*?padding:\s*12px/s);
+  assert.match(styles, /\.card\.inv-account-card\s*\{[^}]*padding:\s*10px 10px 8px/s);
   assert.match(investments, /className="inv-account-create-row"[\s\S]*?className="btn btn-ghost btn-sm inv-add-account-btn"/);
   assert.match(investments, /const currentValueDifference = \(b\.latest\?\.currentValueCents \?\? 0\) - \(a\.latest\?\.currentValueCents \?\? 0\)/);
   assert.match(investments, /compact:\s*`[^`]*\$\{year\.slice\(-2\)\}`/);

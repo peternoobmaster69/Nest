@@ -23,6 +23,21 @@ import { NotificationBell } from "@/components/notification-bell";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { MobileAccountPanel } from "@/components/mobile-account-panel";
 
+const MOBILE_DATE_FORMATTER = new Intl.DateTimeFormat("en-SG", {
+  day: "2-digit",
+  month: "short",
+});
+
+function getMobileDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return {
+    dateTime: `${year}-${month}-${day}`,
+    label: MOBILE_DATE_FORMATTER.format(date),
+  };
+}
+
 export type AppShellContext = {
   workspaceId?: string | null;
   isShared?: boolean;
@@ -61,6 +76,7 @@ export function AppShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [mobileMoreView, setMobileMoreView] = useState<"navigation" | "account">("navigation");
+  const [mobileCurrentDate, setMobileCurrentDate] = useState<{ dateTime: string; label: string } | null>(null);
   const mobileMoreRef = useRef<HTMLElement | null>(null);
   const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarMoneyPages = contextData?.sidebarMoneyPages ?? {
@@ -91,6 +107,21 @@ export function AppShell({
     const workspaceName = contextData?.workspaceName?.trim();
     document.title = workspaceName ? `${workspaceName} · ${title}` : `${title} · Nest`;
   }, [contextData?.workspaceName, title]);
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+    const updateCurrentDate = () => {
+      const now = new Date();
+      setMobileCurrentDate(getMobileDate(now));
+      const nextDay = new Date(now);
+      nextDay.setHours(24, 0, 1, 0);
+      timeoutId = window.setTimeout(updateCurrentDate, Math.max(1000, nextDay.getTime() - now.getTime()));
+    };
+    updateCurrentDate();
+    return () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -320,13 +351,29 @@ export function AppShell({
           <Ellipsis size={22} aria-hidden="true" />
           <span>More</span>
         </button>
-        {mobileWorkspaceName ? (
-          <div
-            className="mobile-bottom-nav-workspace"
-            aria-label={`Current workspace: ${mobileWorkspaceName}`}
-            title={mobileWorkspaceName}
-          >
-            <span className="mobile-bottom-nav-workspace-name">{mobileWorkspaceName.toUpperCase()}</span>
+        {mobileWorkspaceName || mobileCurrentDate ? (
+          <div className="mobile-bottom-nav-workspace">
+            {mobileWorkspaceName ? (
+              <span
+                className="mobile-bottom-nav-workspace-name"
+                aria-label={`Current workspace: ${mobileWorkspaceName}`}
+                title={mobileWorkspaceName}
+              >
+                {mobileWorkspaceName.toUpperCase()}
+              </span>
+            ) : null}
+            {mobileWorkspaceName && mobileCurrentDate ? (
+              <span className="mobile-bottom-nav-workspace-separator" aria-hidden="true" />
+            ) : null}
+            {mobileCurrentDate ? (
+              <time
+                className="mobile-bottom-nav-workspace-name"
+                dateTime={mobileCurrentDate.dateTime}
+                aria-label={`Today: ${mobileCurrentDate.label}`}
+              >
+                {mobileCurrentDate.label}
+              </time>
+            ) : null}
           </div>
         ) : null}
       </nav>
