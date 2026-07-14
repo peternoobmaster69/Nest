@@ -11,6 +11,7 @@ import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useTheme } from "./theme-provider";
 import { SidebarSkeleton } from "./ui-skeleton";
 import { ModalCloseButton } from "./ui/modal-close-button";
+import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
 import {
   ChartNoAxesCombined,
   ChartPie,
@@ -368,7 +369,7 @@ export function AppSidebar({
         </Link>
 
         {/* Mobile-only logout button */}
-        <button className="sb-item sb-logout-mobile" onClick={() => signOut({ callbackUrl: "/signin" })}>
+        <button className="sb-item sb-logout-mobile" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/signin" }))}>
           <LogOut className="sb-ic" size={18} aria-hidden="true" />Log Out
         </button>
       </div>
@@ -441,7 +442,7 @@ export function AppSidebar({
                 })
               )}
               <div className="sb-user-menu-divider" />
-              <button className="sb-user-menu-item" onClick={() => signOut({ callbackUrl: "/signin" })}>
+              <button className="sb-user-menu-item" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/signin" }))}>
                 Log Out
               </button>
             </div>

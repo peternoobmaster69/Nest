@@ -619,6 +619,8 @@ export function SettingsPage() {
     mutationFn: () =>
       fetchJson<{ ok: boolean; scanned: number; matched: number; accounted: number; skipped: number }>("/api/credit-transactions/auto-rules/run", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId }),
       }),
     onSuccess: (data) => {
       setAutoRuleMessage(

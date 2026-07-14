@@ -10,13 +10,12 @@ const CreateCreditCardSchema = z.object({
   bankName: z.string().max(120).optional(),
   themeKey: z.string().max(60).optional(),
   cardNumber: z.string().regex(/^\d{16}$/).optional(),
-  securityCode: z.string().regex(/^\d{3,4}$/).optional(),
   expiryMonth: z.number().int().min(1).max(12).optional(),
   expiryYear: z.number().int().min(2000).max(2100).optional(),
   statementDay: z.number().int().min(1).max(31),
   paymentDueDay: z.number().int().min(1).max(31),
   notes: z.string().max(500).optional(),
-});
+}).strict();
 
 function normalizeCardNumber(value: string) {
   return value.replace(/\D/g, "");
@@ -56,7 +55,6 @@ export async function GET(request: Request) {
           bonusLimitCents: true,
           bonusStatementCents: true,
           encryptedCardNumber: true,
-          encryptedSecurityCode: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -80,7 +78,6 @@ export async function GET(request: Request) {
           bonusLimitCents: true,
           bonusStatementCents: true,
           encryptedCardNumber: true,
-          encryptedSecurityCode: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -90,12 +87,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       cards.map((card) => {
-        const { encryptedCardNumber, encryptedSecurityCode, ...safeCard } = card;
+        const { encryptedCardNumber, ...safeCard } = card;
         return {
           ...safeCard,
           maskedNumber: maskedFromLast4(card.last4Digit),
           hasCardNumber: Boolean(encryptedCardNumber),
-          hasSecurityCode: Boolean(encryptedSecurityCode),
         };
       }),
     );
@@ -103,8 +99,8 @@ export async function GET(request: Request) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to fetch credit cards", message }, { status: 500 });
+    console.error("Failed to fetch credit cards", error);
+    return NextResponse.json({ error: "Failed to fetch credit cards" }, { status: 500 });
   }
 }
 
@@ -123,9 +119,6 @@ export async function POST(request: Request) {
     let encryptedCardNumber: Buffer | null = null;
     let encryptionIv: Buffer | null = null;
     let encryptionTag: Buffer | null = null;
-    let encryptedSecurityCodeBytes: Buffer | null = null;
-    let securityCodeIv: Buffer | null = null;
-    let securityCodeTag: Buffer | null = null;
 
     if (normalizedCardNumber) {
       try {
@@ -136,18 +129,6 @@ export async function POST(request: Request) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         throw new Error(`Card number encryption failed: ${message}`);
-      }
-    }
-
-    if (parsed.data.securityCode) {
-      try {
-        const encrypted = encryptText(parsed.data.securityCode);
-        encryptedSecurityCodeBytes = encrypted.encrypted;
-        securityCodeIv = encrypted.iv;
-        securityCodeTag = encrypted.tag;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        throw new Error(`CVV encryption failed: ${message}`);
       }
     }
 
@@ -166,9 +147,6 @@ export async function POST(request: Request) {
           paymentDueDay: parsed.data.paymentDueDay,
           notes: parsed.data.notes?.trim() || null,
           encryptedCardNumber,
-          encryptedSecurityCode: encryptedSecurityCodeBytes,
-          securityCodeIv,
-          securityCodeTag,
           encryptionIv,
           encryptionTag,
           isActive: true,
@@ -187,7 +165,6 @@ export async function POST(request: Request) {
           bonusLimitCents: true,
           bonusStatementCents: true,
           encryptedCardNumber: true,
-          encryptedSecurityCode: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -207,9 +184,6 @@ export async function POST(request: Request) {
           paymentDueDay: parsed.data.paymentDueDay,
           notes: parsed.data.notes?.trim() || null,
           encryptedCardNumber,
-          encryptedSecurityCode: encryptedSecurityCodeBytes,
-          securityCodeIv,
-          securityCodeTag,
           encryptionIv,
           encryptionTag,
           isActive: true,
@@ -227,7 +201,6 @@ export async function POST(request: Request) {
           bonusLimitCents: true,
           bonusStatementCents: true,
           encryptedCardNumber: true,
-          encryptedSecurityCode: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -237,7 +210,6 @@ export async function POST(request: Request) {
 
     const {
       encryptedCardNumber: encryptedCardNumberBlob,
-      encryptedSecurityCode: encryptedSecurityCodeBlob,
       ...safeCreated
     } = created;
     return NextResponse.json(
@@ -245,7 +217,6 @@ export async function POST(request: Request) {
         ...safeCreated,
         maskedNumber: maskedFromLast4(created.last4Digit),
         hasCardNumber: Boolean(encryptedCardNumberBlob),
-        hasSecurityCode: Boolean(encryptedSecurityCodeBlob),
       },
       { status: 201 },
     );
@@ -253,7 +224,7 @@ export async function POST(request: Request) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to create credit card", message }, { status: 500 });
+    console.error("Failed to create credit card", error);
+    return NextResponse.json({ error: "Failed to create credit card" }, { status: 500 });
   }
 }

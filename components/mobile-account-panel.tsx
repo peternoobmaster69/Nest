@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTheme } from "@/components/theme-provider";
+import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
 
 type Workspace = {
   id: string;
@@ -240,7 +241,7 @@ export function MobileAccountPanel({
           })}
         </div>
 
-        <button className="mobile-account-action mobile-account-logout" type="button" onClick={() => signOut({ callbackUrl: "/signin" })}>
+        <button className="mobile-account-action mobile-account-logout" type="button" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/signin" }))}>
           <LogOut size={19} aria-hidden="true" />
           <span><strong>Log out</strong><small>Sign out of Nest on this device</small></span>
         </button>

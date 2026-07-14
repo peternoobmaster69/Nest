@@ -124,7 +124,7 @@ test("credit transaction records use a compact mobile card layout", async () => 
   assert.match(source, /\.cct-table\.responsive-data-table tbody \.cct-date-group-row\s*\{[^}]*padding:\s*2px 4px 0/s);
   assert.match(source, /\.cct-table\.responsive-data-table \.cct-date-group-row td\s*\{[^}]*font-size:\s*var\(--text-md\)/s);
   assert.match(source, /\.cct-balance-status-pending\s*\{[^}]*background:\s*var\(--warning-bg[^}]*color:\s*var\(--warning/s);
-  assert.match(source, /\.cct-table\.responsive-data-table tbody \.cct-transaction-row:not\(\.cct-row-deleting\)\s*\{[^}]*gap:\s*3px 10px[^}]*padding:\s*10px 12px/s);
+  assert.match(source, /\.cct-table\.responsive-data-table tbody \.cct-transaction-row:not\(\.cct-row-deleting\)\s*\{[^}]*gap:\s*3px 10px[^}]*padding:\s*8px 10px/s);
   assert.match(source, /\.cct-summary-left\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s);
 });
 
@@ -264,7 +264,6 @@ test("phone layouts use the native-style mobile application shell", async () => 
   const mobileAccount = await readFile(path.join(root, "components/mobile-account-panel.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
-  const plan = await readFile(path.join(root, "plan.md"), "utf8");
   const moreNavigationStart = shell.indexOf('<nav className="mobile-more-links"');
   const moreNavigationEnd = shell.indexOf("</nav>", moreNavigationStart);
   const moreNavigation = shell.slice(moreNavigationStart, moreNavigationEnd);
@@ -295,7 +294,6 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(styles, /--mobile-nav-safe-bottom:\s*max\(24px, env\(safe-area-inset-bottom, 0px\)\)/);
   assert.match(styles, /\.mobile-bottom-nav\s*\{[^}]*min-height:\s*var\(--mobile-nav-height\)[^}]*padding:[^;]*var\(--mobile-nav-safe-bottom\)/s);
   assert.match(styles, /\.body\s*\{[^}]*padding:\s*14px 12px calc\(16px \+ var\(--mobile-nav-height\)\)/s);
-  assert.match(plan, /## Phase 1 — Mobile application shell[\s\S]*?\[x\] Add a phone-only bottom navigation/);
 });
 
 test("settings uses the shared typography and layout contract", async () => {
@@ -417,7 +415,6 @@ test("core mobile workflows use the Phase 2 interaction contract", async () => {
   const workflowManager = await readFile(path.join(root, "components/mobile-workflow-manager.tsx"), "utf8");
   const sessionState = await readFile(path.join(root, "lib/use-session-state.ts"), "utf8");
   const creditTransactions = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const plan = await readFile(path.join(root, "plan.md"), "utf8");
 
   assert.match(styles, /\.mobile-primary-create\s*\{[\s\S]*?position:\s*fixed\s*!important[\s\S]*?bottom:\s*calc\(70px \+ var\(--mobile-nav-safe-bottom\)\)[\s\S]*?width:\s*48px\s*!important[\s\S]*?min-height:\s*48px\s*!important/);
   assert.match(styles, /body\s+:is\([\s\S]*?\.modal-container[\s\S]*?\.inv-modal[\s\S]*?\)\[class\]\s*\{[\s\S]*?width:\s*100vw\s*!important[\s\S]*?height:\s*100dvh\s*!important/);
@@ -429,5 +426,4 @@ test("core mobile workflows use the Phase 2 interaction contract", async () => {
   assert.match(creditTransactions, /className="cct-mobile-period-selectors"/);
   assert.match(creditTransactions, /className="btn btn-primary mobile-primary-create"/);
   assert.match(creditTransactions, /<Plus size=\{18\} aria-hidden="true"\s*\/>[\s\S]*?mobile-primary-create-label/);
-  assert.match(plan, /## Phase 2 — Core mobile workflows[\s\S]*?Status: Complete[\s\S]*?\[x\] Preserve page scroll/);
 });

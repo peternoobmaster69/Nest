@@ -1,22 +1,18 @@
 import { sendCreditCardPaymentReminders } from "@/lib/credit-card-payment-reminders";
+import { authorizeCronRequest } from "@/lib/cron-auth";
 import { NextResponse } from "next/server";
 
-function isAuthorized(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authorization = authorizeCronRequest(request);
+  if (!authorization.authorized) {
+    return NextResponse.json({ error: authorization.error }, { status: authorization.status });
   }
 
   try {
     const result = await sendCreditCardPaymentReminders();
     return NextResponse.json(result, { status: result.ok ? 200 : 207 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to send credit card payment reminders", message }, { status: 500 });
+    console.error("Credit card payment reminder cron failed", error);
+    return NextResponse.json({ error: "Failed to send credit card payment reminders" }, { status: 500 });
   }
 }

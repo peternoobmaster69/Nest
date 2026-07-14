@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Landmark } from "lucide-react";
+import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
 
 type HeaderProps = {
   user:
@@ -23,6 +24,7 @@ export default function Header({ user }: HeaderProps) {
   async function handleLogout() {
     try {
       setLoggingOut(true);
+      await purgePrivateServiceWorkerCaches();
       await fetch("/api/auth/logout", { method: "POST" });
       window.location.assign("/login");
     } catch (e) {

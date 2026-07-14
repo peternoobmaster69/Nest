@@ -1,6 +1,6 @@
 # Nest codebase audit and improvement plan
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## Purpose
 
@@ -11,10 +11,10 @@ The order is deliberate: contain security and double-posting risks before expand
 ## Audit confidence and constraints
 
 - Source review, lint, unit/contract tests, a production Next.js build, dependency audit, and Prisma migration-status attempt were performed.
-- `npm run lint` passes.
-- `npx next build` passes and produces 80 routes. The normal `npm run build` wrapper is blocked locally by a Windows lock on the already-generated Prisma engine DLL; no user-owned process was stopped.
-- The pre-plan test baseline is 29/31 passing. Both failures only reflect that `plan.md` had been emptied while two UI contract tests intentionally read the completed mobile plan. The completed contract is retained below.
-- `npm audit` reports 4 production vulnerability entries: 1 high and 3 moderate. The direct Next.js 16.1.6 finding has a non-major fix at 16.2.10 according to the audit result. The NextAuth 4.24.14 chain also needs an explicit supported upgrade/migration decision; do not accept npm's suggested major downgrade blindly.
+- `npm run lint` and the TypeScript check pass.
+- `npx next build` passes on Next.js 16.2.10 and produces 80 routes. The normal `npm run build` wrapper is blocked locally by a Windows lock on the already-generated Prisma engine DLL; no user-owned process was stopped.
+- The current test baseline is 38/38 passing, including the focused Phase 0 containment suite and UI contracts.
+- `npm audit --omit=dev` reports 0 high/critical and 4 moderate production findings. The residual Next.js/PostCSS and NextAuth/UUID chains are documented in `docs/phase-0-security-containment.md`; npm currently proposes unsupported or regressive major downgrades rather than compatible fixes.
 - Live database verification is blocked because the configured Azure SQL database is paused after exhausting its July 2026 free allowance. The attempted connection also reported certificate validation being bypassed, which must be corrected for production.
 - No interactive browser was available, so responsive layout, contrast, screen-reader behavior, and complete keyboard navigation have not been visually validated. These are explicit release gates below.
 
@@ -75,15 +75,17 @@ It is not ready for a security-sensitive production launch without remediation. 
 
 ### Phase 0 — Immediate containment and production gate
 
-Target: 1–3 days. Owner: backend/security. Status: Not started.
+Target: 1–3 days. Owner: backend/security. Status: Complete.
 
-- [ ] Make every cron endpoint return 503 when its required secret is not configured and 401 on mismatch.
-- [ ] Scope manual auto-accounting to the caller's authorized workspace and require OWNER/EDITOR permission.
-- [ ] Temporarily disable card-detail reveal and remove CVV fields from create/update/reveal responses.
-- [ ] Remove authenticated API paths from the service-worker cache and purge existing `*-read` caches.
-- [ ] Upgrade Next.js and related locked dependencies, then require an audit result with no high/critical production finding.
-- [ ] Stop returning raw exception/provider/database messages from public responses on the affected P0 paths.
-- [ ] Add focused regression tests for unauthenticated cron calls, cross-workspace manual jobs, cache cleanup, and card-detail responses.
+- [x] Make every cron endpoint return 503 when its required secret is not configured and 401 on mismatch.
+- [x] Scope manual auto-accounting to the caller's authorized workspace and require OWNER/EDITOR permission.
+- [x] Temporarily disable card-detail reveal and remove CVV fields from create/update/reveal responses.
+- [x] Remove authenticated API paths from the service-worker cache and purge existing `*-read` caches.
+- [x] Upgrade Next.js and related locked dependencies, then require an audit result with no high/critical production finding.
+- [x] Stop returning raw exception/provider/database messages from public responses on the affected P0 paths.
+- [x] Add focused regression tests for unauthenticated cron calls, cross-workspace manual jobs, cache cleanup, and card-detail responses.
+
+Implementation verification (2026-07-14): focused Phase 0 tests, the full test suite, lint, TypeScript, and `npx next build` pass. `npm audit --omit=dev` reports 0 high/critical and 4 moderate findings, documented in `docs/phase-0-security-containment.md`. The CVV purge migration is checked in for the next database deployment; it has not been applied to the currently paused live database. The `npm run build` wrapper remains locally blocked by the known Windows Prisma engine DLL lock, so the established non-destructive `npx next build` verification path was used.
 
 Exit criteria:
 
@@ -311,61 +313,3 @@ Use this as the first pull-request series; keep each change deployable and indep
 6. `ledger/idempotent-close-allocation`: atomic claims, idempotency model, concurrency tests.
 7. `ledger/link-and-reversal`: explicit source links, fix deletion defect, reversal workflow.
 8. `auth/single-stack-rfc`: legacy user inventory and migration/removal implementation decision.
-
-## Completed UI baseline — preserve during remediation
-
-The following shipped mobile work is intentionally retained because current UI contract tests use this plan as a human-readable record of expected behavior.
-
-## Phase 1 — Mobile application shell
-
-Status: Complete
-
-- [x] Add a phone-only bottom navigation with Home, Transactions, Cards, Budget, and More.
-- [x] Respect workspace navigation visibility settings when showing primary and secondary destinations.
-- [x] Replace mobile breadcrumbs and hamburger-first navigation with a compact title-focused app bar.
-- [x] Add a compact More panel for Receivables, Rewards, Investments, Workspaces, Settings, and card-management destinations.
-- [x] Highlight the active destination, including secondary routes represented by More.
-- [x] Add safe-area padding so content, navigation, toasts, and fixed actions do not overlap the bottom bar.
-- [x] Close the More panel on outside tap, Escape, or navigation.
-- [x] Keep the existing sidebar and topbar behavior unchanged above the phone breakpoint.
-- [x] Add UI-contract regression tests and verify lint, TypeScript, and production build.
-
-## Phase 2 — Core mobile workflows
-
-Status: Complete
-
-- [x] Standardize one mobile placement for primary create actions.
-- [x] Convert long create/edit workflows into full-screen mobile flows with fixed action bars.
-- [x] Preserve page scroll, selected month, account, card, and filters when navigating back.
-- [x] Add consistent pressed, loading, success, and optimistic mutation feedback.
-- [x] Review every dense toolbar and replace unnecessary horizontal scrolling with compact selectors or filter panels.
-- [x] Restrict swipe gestures to safe and reversible actions.
-
-## Phase 3 — Installability and device integration
-
-Status: Complete with security remediation required
-
-- [x] Add production Android and iOS icon sets, including maskable and Apple touch icons.
-- [x] Add install guidance and standalone-display refinements.
-- [x] Add a service worker and offline application shell. Authenticated API caching must now be removed under PRIV-01.
-- [x] Never silently queue financial mutations while offline.
-- [x] Add passkey/WebAuthn authentication where supported.
-- [x] Add optional web push for reminders, invitations, and background-task completion.
-
-## Phase 4 — Mobile quality audit
-
-Status: In progress
-
-- [ ] Complete the live visual pass at 390px, 430px, 844×390, and 932×430; no interactive browser was available during this audit.
-- [x] Add 44px coarse-pointer targets, a skip link, focus management, motion-safe scrolling, and reduced-motion rules.
-- [ ] Re-validate these behaviors with axe, keyboard, VoiceOver/NVDA/TalkBack, contrast, zoom/reflow, and visual regression after the UI refactor.
-
-## Definition of done for this plan
-
-This plan is complete only when:
-
-- All P0 and P1 risk-register items are closed with tests and migration/runbook evidence.
-- The release gates in Phase 9 are automated and enforced.
-- Live UI/accessibility testing is completed on real supported viewports/devices.
-- Security/privacy documentation matches actual data collection, storage, retention, sharing, and deletion behavior.
-- Production monitoring demonstrates stable latency/error rates, zero unexplained ledger drift, no duplicate jobs/postings, and successful backup restoration.

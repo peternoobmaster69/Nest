@@ -9,7 +9,6 @@ import { EmptyState } from "@/components/ui-skeleton";
 import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
-import { useToast } from "@/components/toast-provider";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import { Plus } from "lucide-react";
@@ -25,25 +24,11 @@ type CreditCard = {
   themeKey?: string | null;
   last4Digit: string;
   maskedNumber: string;
-  hasCardNumber: boolean;
   expiryMonth: number | null;
   expiryYear: number | null;
-  hasSecurityCode: boolean;
   statementDay: number;
   paymentDueDay: number;
   notes: string | null;
-};
-
-type RevealedCard = {
-  id: string;
-  maskedNumber: string;
-  fullCardNumber: string | null;
-  securityCode: string | null;
-};
-
-type RevealedCardCache = {
-  fullCardNumber: string | null;
-  securityCode: string | null;
 };
 
 type CardTheme = {
@@ -56,38 +41,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json();
-}
-
-async function copyTextToClipboard(text: string) {
-  // Primary path: modern Clipboard API (requires secure context + browser permission).
-  if (typeof navigator !== "undefined" && navigator.clipboard && window.isSecureContext) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return;
-    } catch {
-      // Fallback below for browsers/webviews that deny async clipboard permissions.
-    }
-  }
-
-  // Fallback path: legacy execCommand copy.
-  if (typeof document === "undefined") {
-    throw new Error("Clipboard is unavailable in this environment.");
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.top = "-9999px";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  const copied = document.execCommand("copy");
-  document.body.removeChild(textarea);
-
-  if (!copied) {
-    throw new Error("Copy was blocked by this browser. Please copy manually.");
-  }
 }
 
 // Bank color schemes for card backgrounds
@@ -138,31 +91,17 @@ function getBankInitials(bankName: string | null): string {
     .toUpperCase();
 }
 
-function normalizeCardNumber(value: string | null | undefined) {
-  return (value || "").replace(/\D/g, "");
-}
-
-function normalizeSecurityCode(value: string | null | undefined) {
-  return (value || "").replace(/\D/g, "");
-}
-
 export function CreditCardsPage() {
   const queryClient = useQueryClient();
-  const toast = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [flippedCardId, setFlippedCardId] = useState<string | null>(null);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
-  const [formError, setFormError] = useState("");
-  const [requireCardNumberInput, setRequireCardNumberInput] = useState(false);
-  const [revealedCards, setRevealedCards] = useState<Record<string, RevealedCardCache>>({});
-  const [revealingField, setRevealingField] = useState<{ cardId: string; field: "number" | "cvv" } | null>(null);
 
   // Form state
   const [cardName, setCardName] = useState("");
   const [bankName, setBankName] = useState(SINGAPORE_BANKS[0].name);
   const [cardNumber, setCardNumber] = useState("");
-  const [securityCode, setSecurityCode] = useState("");
   const [themeKey, setThemeKey] = useState<string>("bank-default");
   const [plainColor, setPlainColor] = useState("#1f4ba5");
   const [expiryMonth, setExpiryMonth] = useState("");
@@ -228,7 +167,6 @@ export function CreditCardsPage() {
           cardName,
           bankName,
           cardNumber: cardNumber || undefined,
-          securityCode: securityCode || undefined,
           themeKey,
           expiryMonth: expiryMonth ? Number(expiryMonth) : undefined,
           expiryYear: expiryYear ? Number(expiryYear) : undefined,
@@ -252,7 +190,6 @@ export function CreditCardsPage() {
           cardName,
           bankName,
           cardNumber: cardNumber || undefined,
-          securityCode: securityCode || undefined,
           themeKey: themeKey || null,
           expiryMonth: expiryMonth ? Number(expiryMonth) : null,
           expiryYear: expiryYear ? Number(expiryYear) : null,
@@ -272,45 +209,10 @@ export function CreditCardsPage() {
     onSuccess: invalidateCreditCardDependencies,
   });
 
-  const copyFullCard = useMutation({
-    mutationFn: async (digits: string) => {
-      if (digits.length !== 16) {
-        throw new Error("Card number is unavailable or not 16 digits.");
-      }
-      await copyTextToClipboard(digits);
-      return digits;
-    },
-    onSuccess: () => {
-      toast.success("Copied 16-digit card number");
-    },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Unable to copy 16-digit card number";
-      toast.error(message);
-    },
-  });
-
-  const copyCvv = useMutation({
-    mutationFn: async (cvv: string) => {
-      if (cvv.length < 3 || cvv.length > 4) {
-        throw new Error("CVV unavailable.");
-      }
-      await copyTextToClipboard(cvv);
-      return cvv;
-    },
-    onSuccess: () => {
-      toast.success("Copied CVV");
-    },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Unable to copy CVV";
-      toast.error(message);
-    },
-  });
-
   const resetForm = () => {
     setCardName("");
     setBankName(SINGAPORE_BANKS[0].name);
     setCardNumber("");
-    setSecurityCode("");
     setThemeKey("bank-default");
     setPlainColor("#1f4ba5");
     setExpiryMonth("");
@@ -322,20 +224,15 @@ export function CreditCardsPage() {
 
   const openModal = () => {
     setEditingCardId(null);
-    setRequireCardNumberInput(false);
-    setFormError("");
     resetForm();
     setIsModalOpen(true);
   };
 
-  const openEditModal = async (card: CreditCard) => {
+  const openEditModal = (card: CreditCard) => {
     setEditingCardId(card.id);
-    setRequireCardNumberInput(!card.hasCardNumber);
-    setFormError("");
     setCardName(card.cardName);
     setBankName(card.bankName || SINGAPORE_BANKS[0].name);
     setCardNumber("");
-    setSecurityCode("");
     setThemeKey(card.themeKey || "bank-default");
     setPlainColor(card.themeKey?.startsWith("custom:") ? card.themeKey.replace("custom:", "") : "#1f4ba5");
     setExpiryMonth(card.expiryMonth ? String(card.expiryMonth) : "");
@@ -344,31 +241,11 @@ export function CreditCardsPage() {
     setPaymentDueDay(String(card.paymentDueDay));
     setNotes(card.notes || "");
     setIsModalOpen(true);
-
-    try {
-      const revealed = await fetchJson<RevealedCard>(`/api/credit-cards/${card.id}`);
-      setRevealedCards((prev) => ({
-        ...prev,
-        [card.id]: {
-          fullCardNumber: revealed.fullCardNumber,
-          securityCode: revealed.securityCode,
-        },
-      }));
-      const normalizedNumber = normalizeCardNumber(revealed.fullCardNumber).slice(0, 16);
-      setCardNumber(normalizedNumber);
-      setRequireCardNumberInput(normalizedNumber.length !== 16);
-      setSecurityCode(normalizeSecurityCode(revealed.securityCode).slice(0, 4));
-    } catch {
-      // Keep editable fields prefilled even if secure fields cannot be decrypted.
-      setRequireCardNumberInput(true);
-    }
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingCardId(null);
-    setRequireCardNumberInput(false);
-    setFormError("");
     resetForm();
   };
 
@@ -403,44 +280,6 @@ export function CreditCardsPage() {
     });
   };
 
-  const revealCardDetails = async (cardId: string, field: "number" | "cvv") => {
-    setRevealingField({ cardId, field });
-    try {
-      const revealed = await fetchJson<RevealedCard>(`/api/credit-cards/${cardId}`);
-      setRevealedCards((prev) => ({
-        ...prev,
-        [cardId]: {
-          fullCardNumber: revealed.fullCardNumber,
-          securityCode: revealed.securityCode,
-        },
-      }));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to reveal card details");
-    } finally {
-      setRevealingField((current) =>
-        current?.cardId === cardId && current.field === field ? null : current
-      );
-    }
-  };
-
-  const handleCopyNumber = (cardId: string) => {
-    const digits = normalizeCardNumber(revealedCards[cardId]?.fullCardNumber);
-    if (digits.length === 16) {
-      copyFullCard.mutate(digits);
-      return;
-    }
-    void revealCardDetails(cardId, "number");
-  };
-
-  const handleCopyCvv = (cardId: string) => {
-    const cvv = normalizeSecurityCode(revealedCards[cardId]?.securityCode);
-    if (cvv.length >= 3 && cvv.length <= 4) {
-      copyCvv.mutate(cvv);
-      return;
-    }
-    void revealCardDetails(cardId, "cvv");
-  };
-
   return (
     <div className="cc-container">
       {/* Header with Add Button */}
@@ -470,21 +309,7 @@ export function CreditCardsPage() {
           const isFlipped = flippedCardId === card.id;
           const gradient = getCardGradient(card.bankName, card.themeKey);
           const bankInitials = getBankInitials(card.bankName);
-          const revealedNumber = normalizeCardNumber(revealedCards[card.id]?.fullCardNumber);
-          const revealedCvv = normalizeSecurityCode(revealedCards[card.id]?.securityCode);
-          const isRevealingNumber = revealingField?.cardId === card.id && revealingField.field === "number";
-          const isRevealingCvv = revealingField?.cardId === card.id && revealingField.field === "cvv";
           const collapsedCardNumber = card.last4Digit ? `•••• ${card.last4Digit}` : card.maskedNumber;
-          const headerCardNumber =
-            revealedNumber.length === 16
-              ? revealedNumber.replace(/(\d{4})(?=\d)/g, "$1 ").trim()
-              : card.maskedNumber;
-          const headerCvv =
-            revealedNumber.length === 16 && revealedCvv.length >= 3 && revealedCvv.length <= 4
-              ? revealedCvv
-              : card.hasSecurityCode
-                ? "•••"
-                : "—";
 
           // Wallet collapse logic: only selected card is expanded
           const useWalletView = isMobileView && sortedCards.length > 1 && !isStackExpanded;
@@ -540,14 +365,11 @@ export function CreditCardsPage() {
               <div className="cc-card-back">
                 <div className="cc-back-header">
                   <div className="cc-back-header-meta">
-                    <span className="cc-back-number mono">{headerCardNumber}</span>
+                    <span className="cc-back-number mono">{card.maskedNumber}</span>
                     <span className="cc-back-expiry mono">
                       {card.expiryMonth && card.expiryYear
                         ? `${String(card.expiryMonth).padStart(2, "0")}/${card.expiryYear}`
                         : "—"}
-                    </span>
-                    <span className="cc-back-cvv mono">
-                      {headerCvv}
                     </span>
                   </div>
                 </div>
@@ -575,42 +397,6 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="cc-back-actions">
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleCopyNumber(card.id);
-                    }}
-                    disabled={copyFullCard.isPending || isRevealingNumber || !card.hasCardNumber}
-                  >
-                    {isRevealingNumber
-                      ? "Revealing..."
-                      : copyFullCard.isPending
-                        ? "Copying..."
-                        : !card.hasCardNumber
-                          ? "No Number Saved"
-                          : revealedNumber.length === 16
-                            ? "Copy Number"
-                            : "Reveal Number"}
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleCopyCvv(card.id);
-                    }}
-                    disabled={copyCvv.isPending || isRevealingCvv || !card.hasSecurityCode}
-                  >
-                    {isRevealingCvv
-                      ? "Revealing..."
-                      : copyCvv.isPending
-                        ? "Copying..."
-                        : !card.hasSecurityCode
-                          ? "No CVV Saved"
-                          : revealedCvv.length >= 3 && revealedCvv.length <= 4
-                            ? "Copy CVV"
-                            : "Reveal CVV"}
-                  </button>
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={(event) => {
@@ -719,17 +505,9 @@ export function CreditCardsPage() {
                     onChange={(e) => {
                       const normalized = e.target.value.replace(/\D/g, "").slice(0, 16);
                       setCardNumber(normalized);
-                      if (editingCardId && normalized.length === 16 && formError) {
-                        setFormError("");
-                      }
                     }}
                     maxLength={16}
                   />
-                  {editingCardId && requireCardNumberInput && (
-                    <div style={{ fontSize: "11px", color: "var(--warning)", marginTop: "6px" }}>
-                      This card was saved before encryption was configured. Enter full number if you want Copy Number to work.
-                    </div>
-                  )}
                 </div>
 
                 <div className="form-group cc-span-2">
@@ -801,19 +579,6 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="label">CVV</label>
-                  <input
-                    className="input"
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={4}
-                    placeholder="•••"
-                    value={securityCode}
-                    onChange={(e) => setSecurityCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  />
-                </div>
-
-                <div className="form-group">
                   <label className="label">Statement Day</label>
                   <NumericCalculatorInput
                     min="1"
@@ -850,9 +615,6 @@ export function CreditCardsPage() {
 
               </div>
               <div className="cc-modal-actions">
-                {formError ? (
-                  <div style={{ color: "var(--danger)", fontSize: "12px", marginRight: "auto" }}>{formError}</div>
-                ) : null}
                 {editingCardId ? (
                   <button
                     type="button"

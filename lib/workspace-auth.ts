@@ -104,3 +104,20 @@ export async function requireWorkspaceAccess(requestedWorkspaceId?: string | nul
 
   return { userId, workspaceId: firstMembership.workspaceId };
 }
+
+export async function requireWorkspaceRole(
+  requestedWorkspaceId: string,
+  allowedRoles: readonly string[],
+) {
+  const { userId, workspaceId } = await requireWorkspaceAccess(requestedWorkspaceId);
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+    select: { role: true },
+  });
+
+  if (!membership || !allowedRoles.includes(membership.role)) {
+    throw new ApiAuthError(403, "Forbidden");
+  }
+
+  return { userId, workspaceId, role: membership.role };
+}

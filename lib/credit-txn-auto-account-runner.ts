@@ -28,6 +28,11 @@ type RunnerSummary = {
   alreadyRunning?: boolean;
 };
 
+type RunnerOptions = {
+  jobId?: string;
+  workspaceId?: string;
+};
+
 export const CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE = "CREDIT_TXN_AUTO_ACCOUNT";
 export const CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY = "global";
 
@@ -260,21 +265,27 @@ async function applyRuleToTransaction(
   return applyReceivableRule(db, transaction, rule);
 }
 
-export async function runCreditTxnAutoAccounting(db: PrismaClient = prisma, jobId?: string): Promise<RunnerSummary> {
+export async function runCreditTxnAutoAccounting(
+  db: PrismaClient = prisma,
+  options: RunnerOptions = {},
+): Promise<RunnerSummary> {
+  const { jobId, workspaceId } = options;
+  const jobKey = workspaceId ? `workspace:${workspaceId}` : CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY;
   if (globalThis.__nestCreditTxnAutoAccountRunning) {
     return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId, alreadyRunning: true };
   }
 
   let persistedJobId = jobId;
   if (!persistedJobId) {
-    const activeJob = await findActiveBackgroundJob(CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE, CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY);
+    const activeJob = await findActiveBackgroundJob(CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE, jobKey);
     if (activeJob) {
       return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId: activeJob.id, alreadyRunning: true };
     }
 
     const job = await createBackgroundJob({
       type: CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE,
-      key: CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY,
+      key: jobKey,
+      workspaceId,
       message: "Credit transaction auto-accounting started.",
     });
     persistedJobId = job.id;
@@ -289,7 +300,10 @@ export async function runCreditTxnAutoAccounting(db: PrismaClient = prisma, jobI
     });
 
     const workspaces = await db.workspace.findMany({
-      where: { creditCardAutoRules: { not: null } },
+      where: {
+        creditCardAutoRules: { not: null },
+        ...(workspaceId ? { id: workspaceId } : {}),
+      },
       select: { id: true, creditCardAutoRules: true },
     });
 

@@ -24,7 +24,8 @@ test("service worker caches only GET resources and never queues financial mutati
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /queued:\s*false/);
   assert.doesNotMatch(worker, /addEventListener\(["']sync["']/);
-  assert.match(worker, /SAFE_READ_PATHS/);
+  assert.doesNotMatch(worker, /SAFE_READ_PATHS|\/api\/context|\/api\/dashboard\/summary|\/api\/notifications/);
+  assert.match(worker, /key\.endsWith\("-read"\)/);
   assert.match(worker, /showNotification/);
   assert.match(worker, /hostname === "localhost"/);
   assert.match(worker, /networkFirst\(request, STATIC_CACHE\)/);

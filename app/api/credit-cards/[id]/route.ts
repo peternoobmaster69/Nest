@@ -1,8 +1,6 @@
-import { authOptions } from "@/lib/auth";
-import { decryptText, encryptText } from "@/lib/encryption";
+import { encryptText } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
-import { getServerSession } from "next-auth";
+import { ApiAuthError, requireSessionUserId, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -11,14 +9,13 @@ const UpdateCreditCardSchema = z.object({
   bankName: z.string().max(120).nullable().optional(),
   themeKey: z.string().max(60).nullable().optional(),
   cardNumber: z.string().regex(/^\d{16}$/).optional(),
-  securityCode: z.string().regex(/^\d{3,4}$/).nullable().optional(),
   expiryMonth: z.number().int().min(1).max(12).nullable().optional(),
   expiryYear: z.number().int().min(2000).max(2100).nullable().optional(),
   statementDay: z.number().int().min(1).max(31).optional(),
   paymentDueDay: z.number().int().min(1).max(31).optional(),
   notes: z.string().max(500).nullable().optional(),
   isActive: z.boolean().optional(),
-});
+}).strict();
 
 function normalizeCardNumber(value: string) {
   return value.replace(/\D/g, "");
@@ -30,10 +27,7 @@ function maskedFromLast4(last4: string) {
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requireSessionUserId();
 
     const { id } = await params;
     const card = await prisma.creditCardAccount.findUnique({
@@ -41,60 +35,34 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       select: {
         id: true,
         workspaceId: true,
-        last4Digit: true,
-        encryptedCardNumber: true,
-        encryptionIv: true,
-        encryptionTag: true,
-        encryptedSecurityCode: true,
-        securityCodeIv: true,
-        securityCodeTag: true,
       },
     });
 
     if (!card) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Not found" },
+        { status: 404, headers: { "Cache-Control": "no-store" } },
+      );
     }
 
     await requireWorkspaceAccess(card.workspaceId);
 
-    let fullCardNumber: string | null = null;
-    if (card.encryptedCardNumber && card.encryptionIv && card.encryptionTag) {
-      try {
-        fullCardNumber = decryptText(
-          Buffer.from(card.encryptedCardNumber),
-          Buffer.from(card.encryptionIv),
-          Buffer.from(card.encryptionTag),
-        );
-      } catch {
-        fullCardNumber = null;
-      }
-    }
-
-    let securityCode: string | null = null;
-    if (card.encryptedSecurityCode && card.securityCodeIv && card.securityCodeTag) {
-      try {
-        securityCode = decryptText(
-          Buffer.from(card.encryptedSecurityCode),
-          Buffer.from(card.securityCodeIv),
-          Buffer.from(card.securityCodeTag),
-        );
-      } catch {
-        securityCode = null;
-      }
-    }
-
-    return NextResponse.json({
-      id: card.id,
-      maskedNumber: maskedFromLast4(card.last4Digit),
-      fullCardNumber,
-      securityCode,
-    });
+    return NextResponse.json(
+      { error: "Card detail reveal is disabled" },
+      { status: 410, headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status, headers: { "Cache-Control": "no-store" } },
+      );
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to reveal credit card", message }, { status: 500 });
+    console.error("Failed to handle credit card detail reveal", error);
+    return NextResponse.json(
+      { error: "Failed to reveal credit card" },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }
 
@@ -128,9 +96,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       isActive?: boolean;
       last4Digit?: string;
       encryptedCardNumber?: Buffer | null;
-      encryptedSecurityCode?: Buffer | null;
-      securityCodeIv?: Buffer | null;
-      securityCodeTag?: Buffer | null;
       encryptionIv?: Buffer | null;
       encryptionTag?: Buffer | null;
     } = {};
@@ -159,24 +124,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    if (parsed.data.securityCode !== undefined) {
-      if (!parsed.data.securityCode) {
-        data.encryptedSecurityCode = null;
-        data.securityCodeIv = null;
-        data.securityCodeTag = null;
-      } else {
-        try {
-          const encrypted = encryptText(parsed.data.securityCode);
-          data.encryptedSecurityCode = encrypted.encrypted;
-          data.securityCodeIv = encrypted.iv;
-          data.securityCodeTag = encrypted.tag;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Unknown error";
-          throw new Error(`CVV encryption failed: ${message}`);
-        }
-      }
-    }
-
     let updated;
     try {
       updated = await prisma.creditCardAccount.update({
@@ -196,7 +143,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           bonusLimitCents: true,
           bonusStatementCents: true,
           encryptedCardNumber: true,
-          encryptedSecurityCode: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -221,7 +167,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           bonusLimitCents: true,
           bonusStatementCents: true,
           encryptedCardNumber: true,
-          encryptedSecurityCode: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -229,19 +174,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updated = { ...fallback, themeKey: null };
     }
 
-    const { encryptedCardNumber, encryptedSecurityCode, ...safeUpdated } = updated;
+    const { encryptedCardNumber, ...safeUpdated } = updated;
     return NextResponse.json({
       ...safeUpdated,
       maskedNumber: maskedFromLast4(updated.last4Digit),
       hasCardNumber: Boolean(encryptedCardNumber),
-      hasSecurityCode: Boolean(encryptedSecurityCode),
     });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to update credit card", message }, { status: 500 });
+    console.error("Failed to update credit card", error);
+    return NextResponse.json({ error: "Failed to update credit card" }, { status: 500 });
   }
 }
 
@@ -265,7 +209,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to delete credit card", message }, { status: 500 });
+    console.error("Failed to delete credit card", error);
+    return NextResponse.json({ error: "Failed to delete credit card" }, { status: 500 });
   }
 }

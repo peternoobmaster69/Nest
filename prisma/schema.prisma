@@ -511,9 +511,6 @@ model CreditCardAccount {
   isActive               Boolean                 @default(true)
   encryptedCardNumber    Bytes?
   encryptedHolderName    Bytes?
-  encryptedSecurityCode  Bytes?
-  securityCodeIv         Bytes?
-  securityCodeTag        Bytes?
   encryptionIv           Bytes?
   encryptionTag          Bytes?
   createdAt              DateTime                @default(now())

@@ -1,6 +1,5 @@
-const VERSION = "nest-v3-2";
+const VERSION = "nest-v4";
 const SHELL_CACHE = `${VERSION}-shell`;
-const READ_CACHE = `${VERSION}-read`;
 const STATIC_CACHE = `${VERSION}-static`;
 
 const APP_SHELL = [
@@ -13,12 +12,6 @@ const APP_SHELL = [
   "/icons/icon-maskable-512.png",
 ];
 
-const SAFE_READ_PATHS = new Set([
-  "/api/context",
-  "/api/dashboard/summary",
-  "/api/notifications",
-]);
-
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(APP_SHELL)));
   self.skipWaiting();
@@ -27,8 +20,19 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => !key.startsWith(VERSION)).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys
+        .filter((key) => key.endsWith("-read") || !key.startsWith(VERSION))
+        .map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "PURGE_PRIVATE_CACHES") return;
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key.endsWith("-read")).map((key) => caches.delete(key)),
+    )),
   );
 });
 
@@ -54,10 +58,6 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") {
     event.respondWith(
       fetch(request)
-        .then(async (response) => {
-          if (response.ok) await caches.delete(READ_CACHE);
-          return response;
-        })
         .catch(() => new Response(JSON.stringify({
           error: "offline",
           message: "This change was not submitted because the device is offline.",
@@ -74,11 +74,6 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request).catch(async () => (await caches.open(SHELL_CACHE)).match("/offline") || new Response("Offline", { status: 503 })),
     );
-    return;
-  }
-
-  if (SAFE_READ_PATHS.has(url.pathname)) {
-    event.respondWith(networkFirst(request, READ_CACHE));
     return;
   }
 
