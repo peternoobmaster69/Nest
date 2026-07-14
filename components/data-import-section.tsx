@@ -27,10 +27,20 @@ type Budget = {
   isActive: boolean;
 };
 
+type DuplicateRecord = {
+  date: string;
+  subject: string;
+  amountCents: number;
+  direction: "DEBIT" | "CREDIT";
+  notes: string | null;
+  reason: "EXISTING_TRANSACTION" | "DUPLICATE_IN_PAYLOAD";
+};
+
 type ChunkResult = {
   success: boolean;
   imported: number;
   duplicates: number;
+  duplicateRecords: DuplicateRecord[];
   failed: number;
   total: number;
   errors: string[];
@@ -93,6 +103,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     total: 0,
     imported: 0,
     duplicates: 0,
+    duplicateRecords: [] as DuplicateRecord[],
     failed: 0,
     errors: [] as string[],
   });
@@ -188,6 +199,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     setPreview(validateJson(value));
     setMessage("");
     setRecalcResult(null);
+    setProgress((current) => ({ ...current, duplicates: 0, duplicateRecords: [], errors: [] }));
   };
 
   const importChunk = useCallback(async (
@@ -197,7 +209,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
   ): Promise<ChunkResult> => {
     return fetchJson<ChunkResult>("/api/transactions/bulk-import", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({
         workspaceId: activeWorkspaceId,
         accountId: selectedAccountId,
@@ -249,6 +261,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       total: preview.transactions.length,
       imported: 0,
       duplicates: 0,
+      duplicateRecords: [],
       failed: 0,
       errors: [],
     });
@@ -258,6 +271,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       const totalChunks = Math.ceil(totalTransactions / CHUNK_SIZE);
       let totalImported = 0;
       let totalDuplicates = 0;
+      const allDuplicateRecords: DuplicateRecord[] = [];
       let totalFailed = 0;
       const allErrors: string[] = [];
       const targetBudgetId = selectedBudgetId;
@@ -276,6 +290,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
 
         totalImported += result.imported;
         totalDuplicates += result.duplicates;
+        allDuplicateRecords.push(...result.duplicateRecords);
         totalFailed += result.failed;
         allErrors.push(...result.errors);
 
@@ -284,6 +299,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
           total: totalTransactions,
           imported: totalImported,
           duplicates: totalDuplicates,
+          duplicateRecords: allDuplicateRecords,
           failed: totalFailed,
           errors: allErrors.slice(0, 5), // Keep only first 5 errors
         });
@@ -475,11 +491,12 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
 {
   "Transactions": [
     {
-      "AccountName": "Savings",
+      "AccountName": "Childcare",
       "Direction": "CREDIT",
-      "Subject": "Salary",
-      "Date": "2026-04-03",
-      "AmountCents": 500000
+      "Subject": "Baby Fund",
+      "Date": "2021-04-21",
+      "AmountCents": 150000,
+      "Notes": "Auto Credit"
     }
   ]
 }`}
@@ -586,6 +603,35 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
             <div>...and {progress.failed - progress.errors.length} more</div>
           )}
         </div>
+      )}
+
+      {/* Duplicate details from import */}
+      {!isImporting && progress.duplicateRecords.length > 0 && (
+        <details className="settings-import-duplicates" open>
+          <summary>Skipped duplicates ({progress.duplicateRecords.length})</summary>
+          <div className="settings-import-duplicate-list">
+            {progress.duplicateRecords.map((record, index) => (
+              <div
+                className="settings-import-duplicate-item"
+                key={`${record.date}-${record.subject}-${record.amountCents}-${index}`}
+              >
+                <div>
+                  <strong>{record.subject}</strong>
+                  <span>{record.date}</span>
+                  {record.notes ? <span>Notes: {record.notes}</span> : null}
+                </div>
+                <div className="settings-import-duplicate-meta">
+                  <strong>{record.direction === "CREDIT" ? "+" : "−"}{formatMoney(record.amountCents)} {baseCurrency}</strong>
+                  <span>
+                    {record.reason === "EXISTING_TRANSACTION"
+                      ? "Already exists in this subaccount"
+                      : "Repeated in uploaded JSON"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* Recalculate Results */}

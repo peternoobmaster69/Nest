@@ -1,5 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
+import { createLedgerTransaction, createPostingGroupRecord } from "@/lib/posting-service";
 import {
   completeBackgroundJob,
   createBackgroundJob,
@@ -78,9 +79,22 @@ async function applyDeductRule(
   const shouldCreateDestinationCredit = sourceBudget.id !== destinationBudget.id;
   const externalRef = `credit-auto:${transaction.id}:${rule.id}`;
 
-  await db.$transaction(async (tx) => {
-    const posted = await tx.transaction.create({
-      data: {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.creditCardTransaction.updateMany({
+      where: { id: transaction.id, isAllocated: false },
+      data: { isAllocated: true },
+    });
+    if (claimed.count !== 1) return false;
+
+    const postingGroupId = await createPostingGroupRecord(tx, {
+      workspaceId: transaction.workspaceId,
+      operation: "CREDIT_TRANSACTION_AUTO_ACCOUNT",
+      idempotencyKey: `credit-auto:${transaction.id}:${rule.id}`,
+      sourceType: "CREDIT_CARD_TRANSACTION",
+      sourceId: transaction.id,
+    });
+
+    const posted = await createLedgerTransaction(tx, postingGroupId, {
         workspaceId: transaction.workspaceId,
         accountId: sourceBudget.accountId,
         budgetId: sourceBudget.id,
@@ -91,15 +105,13 @@ async function applyDeductRule(
         subject: transaction.subject,
         details: `Auto-accounted by rule "${rule.name}" from ${transaction.creditCard.cardName} ending ${transaction.creditCard.last4Digit}`,
         externalRef,
+        creditCardTransactionId: transaction.id,
         isSynced: false,
         isFromFamily: false,
-      },
-      select: { id: true },
     });
 
     if (shouldCreateDestinationCredit) {
-      await tx.transaction.create({
-        data: {
+      await createLedgerTransaction(tx, postingGroupId, {
           workspaceId: transaction.workspaceId,
           accountId: destinationBudget.accountId,
           budgetId: destinationBudget.id,
@@ -110,36 +122,31 @@ async function applyDeductRule(
           subject: transaction.subject,
           details: `Auto-accounted by rule "${rule.name}" to ${destinationBudget.name}`,
           externalRef,
+          creditCardTransactionId: transaction.id,
           isSynced: false,
           isFromFamily: false,
-        },
       });
     }
 
     await tx.creditCardTxnLink.create({
       data: {
         creditCardId: transaction.creditCardId,
+        creditCardTransactionId: transaction.id,
         transactionId: posted.id,
         cardNameSnapshot: transaction.creditCard.cardName,
         cardNoEnding: transaction.creditCard.last4Digit,
         txDate: transaction.transactionDate,
         isProcessed: true,
         interfacedAt: new Date(),
-      },
-    });
-
-    await tx.creditCardTransaction.update({
-      where: { id: transaction.id },
-      data: { isAllocated: true },
+      } as Prisma.CreditCardTxnLinkUncheckedCreateInput,
     });
 
     await applyBudgetAvailableDelta(tx, sourceBudget.id, -transaction.amountCents);
     if (shouldCreateDestinationCredit) {
       await applyBudgetAvailableDelta(tx, destinationBudget.id, transaction.amountCents);
     }
+    return true;
   });
-
-  return true;
 }
 
 async function applyReceivableRule(
@@ -177,7 +184,21 @@ async function applyReceivableRule(
   });
   if (!budget) return false;
 
-  await db.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.creditCardTransaction.updateMany({
+      where: { id: transaction.id, isAllocated: false },
+      data: { isAllocated: true },
+    });
+    if (claimed.count !== 1) return false;
+
+    await createPostingGroupRecord(tx, {
+      workspaceId: transaction.workspaceId,
+      operation: "CREDIT_TRANSACTION_AUTO_RECEIVABLE",
+      idempotencyKey: `credit-auto-receivable:${transaction.id}:${rule.id}`,
+      sourceType: "CREDIT_CARD_TRANSACTION",
+      sourceId: transaction.id,
+    });
+
     const groupTitle = formatAutoReceivableGroupTitle(rule.name, transaction.transactionDate);
     const monthStart = new Date(
       Date.UTC(transaction.transactionDate.getUTCFullYear(), transaction.transactionDate.getUTCMonth(), 1),
@@ -236,14 +257,8 @@ ${noteLine}`
         select: { id: true },
       });
     }
-
-    await tx.creditCardTransaction.update({
-      where: { id: transaction.id },
-      data: { isAllocated: true },
-    });
+    return true;
   });
-
-  return true;
 }
 
 async function applyRuleToTransaction(

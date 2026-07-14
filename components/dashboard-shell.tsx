@@ -900,7 +900,7 @@ export function DashboardShell({
     }) =>
       fetchJson("/api/transactions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           workspaceId,
           accountId: payload.accountId,

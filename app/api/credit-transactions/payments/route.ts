@@ -1,4 +1,5 @@
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
+import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -13,7 +14,7 @@ const CreateCreditCardPaymentSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { userId, workspaceId } = await requireWorkspaceAccess();
     const parsed = CreateCreditCardPaymentSchema.safeParse(await request.json());
 
     if (!parsed.success) {
@@ -131,23 +132,23 @@ export async function POST(request: Request) {
     const paymentSubject = `Payment • ${card.cardName} ••${card.last4Digit}`;
     const paymentDetails = `Payment for ${statementMonth}/${statementYear} from ${defaultBudget.name}`;
 
-    const result = await prisma.$transaction(async (db) => {
-      const bankTransaction = await db.transaction.create({
-        data: {
-          workspaceId,
-          accountId: defaultAccount.id,
-          budgetId: defaultBudget.id,
-          kind: "CREDIT_CARD_PAYMENT",
-          direction: "DEBIT",
-          date: now,
-          amountCents,
-          subject: paymentSubject,
-          details: paymentDetails,
-          isSynced: false,
-          isFromFamily: false,
-        },
-        select: { id: true },
+    const posting = await executePosting({
+      workspaceId,
+      operation: "CREDIT_CARD_PAYMENT",
+      idempotencyKey: getIdempotencyKey(request),
+      actorUserId: userId,
+      sourceType: "CREDIT_CARD",
+      sourceId: cardId,
+      request: parsed.data,
+    }, async (db, postingGroupId) => {
+      const currentOutstanding = await db.creditCardTransaction.aggregate({
+        where: { workspaceId, creditCardId: cardId, statementMonth, statementYear },
+        _sum: { amountCents: true },
       });
+      const currentOutstandingCents = currentOutstanding._sum.amountCents ?? 0;
+      if (currentOutstandingCents <= 0 || amountCents > currentOutstandingCents) {
+        throw new PostingConflictError("Payment conflicts with the current outstanding amount.");
+      }
 
       const paymentTransaction = await db.creditCardTransaction.create({
         data: {
@@ -167,6 +168,21 @@ export async function POST(request: Request) {
         include: { creditCard: true },
       });
 
+      const bankTransaction = await createLedgerTransaction(db, postingGroupId, {
+          workspaceId,
+          accountId: defaultAccount.id,
+          budgetId: defaultBudget.id,
+          kind: "CREDIT_CARD_PAYMENT",
+          direction: "DEBIT",
+          date: now,
+          amountCents,
+          subject: paymentSubject,
+          details: paymentDetails,
+          creditCardTransactionId: paymentTransaction.id,
+          isSynced: false,
+          isFromFamily: false,
+      });
+
       await applyBudgetAvailableDelta(db, defaultBudget.id, -amountCents);
 
       return {
@@ -179,11 +195,16 @@ export async function POST(request: Request) {
       ok: true,
       paidAmountCents: amountCents,
       outstandingAmountCents: outstandingAmountCents - amountCents,
-      ...result,
+      ...posting.result,
+      postingGroupId: posting.postingGroupId,
+      replayed: posting.replayed,
     });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to create credit card payment", message }, { status: 500 });

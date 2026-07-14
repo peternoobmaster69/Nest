@@ -299,7 +299,7 @@ export function ReceivablesPage() {
     mutationFn: (payload: { id: string }) =>
       fetchJson(`/api/receivables/${payload.id}/close`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": `receivable-close:${payload.id}` },
         body: JSON.stringify({}),
       }),
     onSuccess: () => {

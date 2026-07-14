@@ -449,6 +449,13 @@ model Transaction {
   isSynced        Boolean              @default(false)
   isFromFamily    Boolean              @default(false)
   externalRef     String?
+  postingGroupId  String?
+  creditCardTransactionId String?
+  receivableId    String?
+  reversalOfId    String?
+  voidedAt        DateTime?
+  voidedByUserId  String?
+  voidReason      String?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -457,6 +464,11 @@ model Transaction {
   group           TransactionGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
   expense         Expense?
   creditCardLinks CreditCardTxnLink[]
+  postingGroup    PostingGroup?       @relation(fields: [postingGroupId], references: [id], onDelete: NoAction)
+  creditCardTransaction CreditCardTransaction? @relation(fields: [creditCardTransactionId], references: [id], onDelete: SetNull)
+  receivable      Receivable?         @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  reversalOf      Transaction?        @relation("TransactionReversal", fields: [reversalOfId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversals       Transaction[]       @relation("TransactionReversal")
   migrationMap    LegacyRecordLink?
 
   @@index([workspaceId, date])
@@ -467,6 +479,49 @@ model Transaction {
   @@index([workspaceId, direction, date])
   @@index([workspaceId, budgetId, direction, date])
   @@index([workspaceId, accountId, date])
+  @@index([postingGroupId])
+  @@index([creditCardTransactionId])
+  @@index([receivableId])
+  @@index([reversalOfId])
+}
+
+model PostingGroup {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  operation       String
+  sourceType      String?
+  sourceId        String?
+  actorUserId     String?
+  idempotencyKey  String
+  status          String        @default("POSTED")
+  reversalOfId    String?
+  reason          String?
+  createdAt       DateTime      @default(now())
+  reversedAt      DateTime?
+  transactions    Transaction[]
+  receivables     Receivable[]
+  reversalOf      PostingGroup? @relation("PostingGroupReversal", fields: [reversalOfId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversals       PostingGroup[] @relation("PostingGroupReversal")
+
+  @@unique([workspaceId, operation, idempotencyKey])
+  @@index([workspaceId, sourceType, sourceId])
+  @@index([reversalOfId])
+}
+
+model IdempotencyRecord {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  operation       String
+  idempotencyKey  String
+  requestHash     String
+  status          String   @default("IN_PROGRESS")
+  postingGroupId  String?
+  resultJson      String?  @db.NVarChar(Max)
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  @@unique([workspaceId, operation, idempotencyKey])
+  @@index([workspaceId, createdAt])
 }
 
 model TransactionGroup {
@@ -529,6 +584,7 @@ model CreditCardTxnLink {
   id               String             @id @default(cuid())
   creditCardId     String
   transactionId    String
+  creditCardTransactionId String?
   cardNameSnapshot String?
   cardNoEnding     String?
   txDate           DateTime
@@ -536,9 +592,11 @@ model CreditCardTxnLink {
   interfacedAt     DateTime?
   creditCard       CreditCardAccount  @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
   transaction      Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  creditCardTransaction CreditCardTransaction? @relation(fields: [creditCardTransactionId], references: [id], onDelete: SetNull)
 
   @@unique([creditCardId, transactionId])
   @@index([txDate])
+  @@index([creditCardTransactionId])
 }
 
 model Receivable {
@@ -561,17 +619,21 @@ model Receivable {
   sourceWorkspaceId String?
   sourceAccountId   String?
   sourceBudgetId    String?
+  postingGroupId    String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   budget           BudgetEnvelope?  @relation(fields: [budgetId], references: [id], onDelete: SetNull)
   statementMonth   Month?           @relation(fields: [statementMonthId], references: [id], onDelete: SetNull)
+  ledgerTransactions Transaction[]
+  postingGroup     PostingGroup?     @relation(fields: [postingGroupId], references: [id], onDelete: NoAction)
   fromUser         User?            @relation("ReceivableFrom", fields: [fromUserId], references: [id], onDelete: NoAction)
   toUser           User?            @relation("ReceivableTo", fields: [toUserId], references: [id], onDelete: NoAction)
 
   @@index([workspaceId, status])
   @@index([sourceWorkspaceId, sourceBudgetId, status])
+  @@index([postingGroupId])
 }
 
 model SalaryEntry {
@@ -791,6 +853,8 @@ model CreditCardTransaction {
   workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   creditCard        CreditCardAccount @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
   alertStagings     CardAlertStaging[]
+  ledgerTransactions Transaction[]
+  ledgerLinks       CreditCardTxnLink[]
 
   @@index([workspaceId])
   @@index([creditCardId])

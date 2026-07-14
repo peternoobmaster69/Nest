@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
+import { claimReceivable, createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -43,11 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Receivable not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(receivable.workspaceId);
-
-    if (receivable.status === "PAID") {
-      return NextResponse.json({ error: "Receivable is already closed." }, { status: 400 });
-    }
+    const { userId } = await requireWorkspaceAccess(receivable.workspaceId);
 
     const workspaceDefaults = await prisma.workspace.findUnique({
       where: { id: receivable.workspaceId },
@@ -138,13 +135,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const closeDate = parsed.data.closeDate ? new Date(parsed.data.closeDate) : new Date();
-    const externalRef = `receivable-close:${receivable.id}:${Date.now()}`;
+    const idempotencyKey = getIdempotencyKey(request, `receivable-close:${receivable.id}`);
+    const externalRef = `receivable-close:${receivable.id}:${idempotencyKey}`;
     const transactionTitle = receivable.title;
     const transactionNotes = receivable.notes ?? null;
 
-    const result = await prisma.$transaction(async (db) => {
-      const incomeTx = await db.transaction.create({
-        data: {
+    const posting = await executePosting({
+      workspaceId: receivable.workspaceId,
+      operation: "RECEIVABLE_CLOSE",
+      idempotencyKey,
+      actorUserId: userId,
+      sourceType: "RECEIVABLE",
+      sourceId: receivable.id,
+      request: { receivableId: receivable.id, ...parsed.data },
+    }, async (db, postingGroupId) => {
+      await claimReceivable(db, receivable.id);
+
+      const incomeTx = await createLedgerTransaction(db, postingGroupId, {
           workspaceId: targetWorkspaceId,
           accountId: targetAccount.id,
           kind: "RECEIVABLE_PAYMENT",
@@ -159,9 +166,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           details: null,
           notes: transactionNotes,
           externalRef,
+          receivableId: receivable.id,
           isSynced: false,
           isFromFamily: false,
-        },
       });
 
       let sourceTxId: string | null = null;
@@ -173,8 +180,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           sourceBudget.id !== targetBudget.id);
 
       if (shouldCreateSourceDeduction && sourceAccount && sourceBudget) {
-        const sourceTx = await db.transaction.create({
-          data: {
+        const sourceTx = await createLedgerTransaction(db, postingGroupId, {
             workspaceId: sourceAccount.workspaceId,
             accountId: sourceAccount.id,
             kind: "TRANSFER",
@@ -186,9 +192,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             details: null,
             notes: transactionNotes,
             externalRef,
+            receivableId: receivable.id,
             isSynced: false,
             isFromFamily: false,
-          },
         });
         sourceTxId = sourceTx.id;
       }
@@ -211,15 +217,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         incomeTransactionId: incomeTx.id,
         sourceTransactionId: sourceTxId,
       };
-    }, {
-      maxWait: 10_000,
-      timeout: 20_000,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...posting.result,
+      postingGroupId: posting.postingGroupId,
+      replayed: posting.replayed,
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to close receivable", message }, { status: 500 });

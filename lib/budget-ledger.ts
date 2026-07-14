@@ -75,6 +75,8 @@ export async function recalculateBudgetAvailableCents(
     where: {
       workspaceId,
       budgetId,
+      voidedAt: null,
+      kind: { not: "REVERSAL" },
     },
     _sum: {
       amountCents: true,

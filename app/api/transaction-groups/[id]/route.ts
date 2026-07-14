@@ -32,7 +32,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     await requireWorkspaceAccess(group.workspaceId);
 
     const members = await prisma.transaction.findMany({
-      where: { workspaceId: group.workspaceId, budgetId: group.budgetId, groupId: id },
+      where: {
+        workspaceId: group.workspaceId,
+        budgetId: group.budgetId,
+        groupId: id,
+        voidedAt: null,
+        kind: { not: "REVERSAL" },
+      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: transactionOptionSelect,
     });
@@ -41,6 +47,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       where: {
         workspaceId: group.workspaceId,
         budgetId: group.budgetId,
+        voidedAt: null,
+        kind: { not: "REVERSAL" },
         ...(search
           ? {
               OR: [
@@ -96,7 +104,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const removeIds = [...new Set(parsed.data.removeTransactionIds ?? [])];
     if (addIds.length) {
       const validTransactions = await prisma.transaction.count({
-        where: { id: { in: addIds }, workspaceId: group.workspaceId, budgetId: group.budgetId },
+        where: {
+          id: { in: addIds },
+          workspaceId: group.workspaceId,
+          budgetId: group.budgetId,
+          voidedAt: null,
+          kind: { not: "REVERSAL" },
+        },
       });
       if (validTransactions !== addIds.length) {
         return NextResponse.json(
@@ -115,7 +129,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       if (addIds.length) {
         await db.transaction.updateMany({
-          where: { id: { in: addIds }, workspaceId: group.workspaceId, budgetId: group.budgetId },
+          where: {
+            id: { in: addIds },
+            workspaceId: group.workspaceId,
+            budgetId: group.budgetId,
+            voidedAt: null,
+            kind: { not: "REVERSAL" },
+          },
           data: { groupId: id },
         });
       }

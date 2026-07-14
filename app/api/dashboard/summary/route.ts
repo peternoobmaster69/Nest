@@ -51,6 +51,8 @@ export async function GET() {
         where: {
           workspaceId,
           budgetId: { not: null },
+          voidedAt: null,
+          kind: { not: "REVERSAL" },
           direction: "DEBIT",
           date: {
             gte: monthStart,
@@ -69,7 +71,7 @@ export async function GET() {
         _sum: { amountCents: true },
       }),
       prisma.transaction.findMany({
-        where: { workspaceId },
+        where: { workspaceId, voidedAt: null, kind: { not: "REVERSAL" } },
         take: 8,
         orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         include: {
@@ -133,6 +135,8 @@ export async function GET() {
           SUM(CAST([amountCents] AS BIGINT)) AS [amountCents]
         FROM [dbo].[Transaction]
         WHERE [workspaceId] = ${workspaceId}
+          AND [voidedAt] IS NULL
+          AND [kind] <> 'REVERSAL'
           AND [date] >= ${cashFlowStart}
           AND [date] < ${nextMonthStart}
         GROUP BY

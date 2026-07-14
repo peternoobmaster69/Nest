@@ -97,17 +97,24 @@ Exit criteria:
 
 ### Phase 1 — Financial ledger correctness and idempotency
 
-Target: 1 week. Owner: backend/data. Status: Not started.
+Target: 1 week. Owner: backend/data. Status: Complete (2026-07-14).
 
-- [ ] Introduce a central posting service for transaction create/update/reversal, transfers, receivable close, credit allocation, card payments, imports, and budget-plan application.
-- [ ] Add a `PostingGroup`/journal identifier and explicit source relations (including `creditCardTransactionId` and `receivableId`) instead of inferring links.
-- [ ] Require a client or server idempotency key for every money-changing POST; persist it under a workspace-scoped unique constraint.
-- [ ] Atomically claim `isAllocated = false` and `status != PAID` records before posting; return the prior successful result for retries.
-- [ ] Replace destructive deletion of posted finance records with void/reversal entries. Preserve immutable history and actor/reason metadata.
-- [ ] Fix the linked credit-card transaction deletion bug and backfill links where they can be identified safely.
-- [ ] Put balance changes and journal records in the same serializable transaction or derive balances from the ledger.
-- [ ] Add reconciliation that compares materialized budget balances with ledger totals and alerts rather than silently repairing.
-- [ ] Add concurrent-request tests for duplicate payment, allocation, transfer, receivable close, import, and job execution.
+- [x] Introduce a central posting service for transaction create/update/reversal, transfers, receivable close, credit allocation, card payments, imports, and budget-plan application.
+- [x] Add a `PostingGroup`/journal identifier and explicit source relations (including `creditCardTransactionId` and `receivableId`) instead of inferring links.
+- [x] Require a client or server idempotency key for every money-changing POST; persist it under a workspace-scoped unique constraint.
+- [x] Atomically claim `isAllocated = false` and open receivables before posting; return the prior successful result for retries.
+- [x] Replace destructive deletion of posted finance records with void/reversal entries. Preserve immutable history and actor/reason metadata.
+- [x] Fix the linked credit-card transaction deletion bug and backfill links where they can be identified safely.
+- [x] Put balance changes and journal records in the same serializable transaction or derive balances from the ledger.
+- [x] Add reconciliation that compares materialized budget balances with ledger totals and alerts rather than silently repairing.
+- [x] Add concurrent-request tests for duplicate payment, allocation, transfer, receivable close, import, and job execution.
+
+Completed evidence (2026-07-14):
+
+- Added and applied `phase_1_posting_ledger_and_idempotency`, including journal/idempotency tables, explicit source links, reversal metadata, indexes, and a conservative credit-link backfill.
+- Added central serializable posting, replay, atomic-claim, reversal, and reconciliation services and migrated every listed balance-changing workflow.
+- SQL Server concurrency integration passed for payment, allocation, transfer, receivable close, import, and job idempotency; allocation and receivable claims each admitted one of two simultaneous writers.
+- Reconciliation returned zero drift for the configured migrated database. Local suite: 48 passed and 1 database test skipped by default; the database concurrency test passed separately. Production build, TypeScript, lint, and Prisma validation passed.
 
 Exit criteria:
 
@@ -120,7 +127,8 @@ Exit criteria:
 
 Target: 1–2 weeks. Owner: backend/product. Status: Not started.
 
-- [ ] Inventory legacy password users and decide whether password login remains a supported product feature.
+- [ ] Inventory legacy password users and decide whether password login remains a supported product feature. 
+Owner: Not needed anymore. remove legacy password flow
 - [ ] If retained, migrate it into the single Auth.js identity model with verified email, password reset, modern hash parameters, session revocation, and rate limits. Otherwise remove it entirely.
 - [ ] Delete the custom `nest-session` cookie, raw `Users`/`Accounts`/`Transactions` access, `/login`, `/register`, duplicate registration form, and unused legacy Accounts pages after migration.
 - [ ] Require `NEXTAUTH_SECRET`/`AUTH_SECRET`, canonical application origin, WebAuthn RP ID/origin, encryption keys, database TLS settings, and cron secrets during production startup.

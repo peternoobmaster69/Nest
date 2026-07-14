@@ -44,6 +44,8 @@ export async function GET(request: Request) {
       where: {
         workspaceId,
         budgetId: { not: null },
+        voidedAt: null,
+        kind: { not: "REVERSAL" },
         direction: "DEBIT",
         date: { gte: monthStart, lt: nextMonthStart },
       },

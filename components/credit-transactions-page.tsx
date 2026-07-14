@@ -837,7 +837,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     }) =>
       fetchJson(`/api/credit-transactions/${payload.id}/accounting`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": `credit-account:${payload.id}` },
         body: JSON.stringify(payload),
       }),
     onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
@@ -919,7 +919,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     }) =>
       fetchJson<CreditCardPaymentResponse>("/api/credit-transactions/payments", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify(payload),
       }),
     onSuccess: (result) => {

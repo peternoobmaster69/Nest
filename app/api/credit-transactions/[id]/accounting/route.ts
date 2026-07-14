@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { claimCreditCardTransaction, createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -48,11 +50,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Credit transaction not found" }, { status: 404 });
     }
 
-    const { workspaceId } = await requireWorkspaceAccess(existing.workspaceId);
-
-    if (existing.isAllocated) {
-      return NextResponse.json({ error: "Credit transaction is already accounted." }, { status: 409 });
-    }
+    const { userId, workspaceId } = await requireWorkspaceAccess(existing.workspaceId);
+    const idempotencyKey = getIdempotencyKey(request, `credit-account:${existing.id}`);
 
     if (parsed.data.action === "DEDUCT") {
       const account = await prisma.financialAccount.findFirst({
@@ -97,11 +96,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         creditCard: { cardName, last4Digit },
       } = existing;
 
-      const result = await prisma.$transaction(
-        async (db) => {
+      const posting = await executePosting({
+        workspaceId,
+        operation: "CREDIT_TRANSACTION_ACCOUNT",
+        idempotencyKey,
+        actorUserId: userId,
+        sourceType: "CREDIT_CARD_TRANSACTION",
+        sourceId: creditCardTxnId,
+        request: { creditCardTransactionId: creditCardTxnId, ...parsed.data },
+      }, async (db, postingGroupId) => {
+          await claimCreditCardTransaction(db, creditCardTxnId);
+
           // Create DEBIT transaction from the selected subaccount
-          const tx = await db.transaction.create({
-            data: {
+          const tx = await createLedgerTransaction(db, postingGroupId, {
               workspaceId,
               accountId: account.id,
               budgetId: budget.id,
@@ -111,10 +118,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               amountCents,
               subject,
               details: `Accounted from ${cardName} ••${last4Digit}`,
+              creditCardTransactionId: creditCardTxnId,
               isSynced: false,
               isFromFamily: false,
-            },
-            select: { id: true },
           });
 
           // Decrement source budget (DEBIT reduces available)
@@ -125,8 +131,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
           // Create CREDIT transaction to the receivable default subaccount if configured
           if (workspace?.receivableDefaultAccountId && workspace?.receivableDefaultBudgetId) {
-            await db.transaction.create({
-              data: {
+            await createLedgerTransaction(db, postingGroupId, {
                 workspaceId,
                 accountId: workspace.receivableDefaultAccountId,
                 budgetId: workspace.receivableDefaultBudgetId,
@@ -136,9 +141,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 amountCents,
                 subject: `Receivable: ${subject}`,
                 details: `Receivable from ${cardName} ••${last4Digit}`,
+                creditCardTransactionId: creditCardTxnId,
                 isSynced: false,
                 isFromFamily: false,
-              },
             });
 
             // Increment receivable budget (CREDIT increases available)
@@ -151,26 +156,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           await db.creditCardTxnLink.create({
             data: {
               creditCardId,
+              creditCardTransactionId: creditCardTxnId,
               transactionId: tx.id,
               cardNameSnapshot: cardName,
               cardNoEnding: last4Digit,
               txDate: transactionDate,
               isProcessed: true,
               interfacedAt: new Date(),
-            },
-          });
-
-          await db.creditCardTransaction.update({
-            where: { id: creditCardTxnId },
-            data: { isAllocated: true },
+            } as Prisma.CreditCardTxnLinkUncheckedCreateInput,
           });
 
           return { transactionId: tx.id };
-        },
-        { maxWait: 5000, timeout: 10000 },
-      );
+      });
 
-      return NextResponse.json({ ok: true, action: "DEDUCT", ...result });
+      return NextResponse.json({
+        ok: true,
+        action: "DEDUCT",
+        ...posting.result,
+        postingGroupId: posting.postingGroupId,
+        replayed: posting.replayed,
+      });
     }
 
     const receivablePayload = parsed.data;
@@ -221,7 +226,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       sourceBudget = budget;
     }
 
-    const created = await prisma.$transaction(async (db) => {
+    const posting = await executePosting({
+      workspaceId,
+      operation: "CREDIT_TRANSACTION_ACCOUNT",
+      idempotencyKey,
+      actorUserId: userId,
+      sourceType: "CREDIT_CARD_TRANSACTION",
+      sourceId: existing.id,
+      request: { creditCardTransactionId: existing.id, ...parsed.data },
+    }, async (db, postingGroupId) => {
+      await claimCreditCardTransaction(db, existing.id);
       const receivable = await db.receivable.create({
         data: {
           workspaceId,
@@ -241,18 +255,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         select: { id: true },
       });
 
-      await db.creditCardTransaction.update({
-        where: { id: existing.id },
-        data: { isAllocated: true },
-      });
+      await db.$executeRaw(Prisma.sql`
+        UPDATE [Receivable] SET [postingGroupId] = ${postingGroupId} WHERE [id] = ${receivable.id}
+      `);
 
       return receivable;
     });
 
-    return NextResponse.json({ ok: true, action: "RECEIVABLE", receivableId: created.id });
+    return NextResponse.json({
+      ok: true,
+      action: "RECEIVABLE",
+      receivableId: posting.result.id,
+      postingGroupId: posting.postingGroupId,
+      replayed: posting.replayed,
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to account for credit transaction", message }, { status: 500 });

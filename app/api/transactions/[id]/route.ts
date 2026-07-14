@@ -1,4 +1,6 @@
 import { applyTransactionBudgetDelta } from "@/lib/budget-ledger";
+import { executePosting, getIdempotencyKey, PostingConflictError, reverseLedgerTransaction } from "@/lib/posting-service";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -41,15 +43,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       throw new Error("Transaction not found");
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    const { userId } = await requireWorkspaceAccess(existing.workspaceId);
 
-    const result = await prisma.$transaction(
-      async (db) => {
+    const posting = await executePosting({
+      workspaceId: existing.workspaceId,
+      operation: "TRANSACTION_UPDATE",
+      idempotencyKey: getIdempotencyKey(request),
+      actorUserId: userId,
+      sourceType: "TRANSACTION",
+      sourceId: id,
+      request: { transactionId: id, ...parsed.data },
+    }, async (db, postingGroupId) => {
+      const ledgerState = await db.$queryRaw<Array<{ postingGroupId: string | null; voidedAt: Date | null }>>(Prisma.sql`
+        SELECT [postingGroupId], [voidedAt]
+        FROM [Transaction] WITH (UPDLOCK, HOLDLOCK)
+        WHERE [id] = ${id}
+      `);
+      if (!ledgerState[0] || ledgerState[0].voidedAt) {
+        throw new PostingConflictError("Transaction is unavailable for update.");
+      }
+      if (ledgerState[0].postingGroupId) {
+        throw new PostingConflictError("Posted transactions are immutable; reverse and replace instead.");
+      }
+      const current = await db.transaction.findUniqueOrThrow({
+        where: { id },
+        select: { budgetId: true, accountId: true, direction: true, amountCents: true },
+      });
+
       const budget = await db.budgetEnvelope.findFirst({
         where: {
           id: parsed.data.budgetId,
           workspaceId: existing.workspaceId,
-          accountId: existing.accountId,
+          accountId: current.accountId,
           isActive: true,
         },
         select: { id: true },
@@ -76,23 +101,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       });
 
       await applyTransactionBudgetDelta(db, {
-        previousBudgetId: existing.budgetId,
-        previousDirection: existing.direction,
-        previousAmountCents: existing.amountCents,
+        previousBudgetId: current.budgetId,
+        previousDirection: current.direction,
+        previousAmountCents: current.amountCents,
         nextBudgetId: updated.budgetId,
         nextDirection: updated.direction,
         nextAmountCents: updated.amountCents,
       });
 
-      return updated;
-      },
-      { maxWait: 5000, timeout: 10000 },
-    );
+      await db.$executeRaw(Prisma.sql`
+        UPDATE [Transaction] SET [postingGroupId] = ${postingGroupId} WHERE [id] = ${id}
+      `);
 
-    return NextResponse.json(result);
+      return updated;
+    });
+
+    return NextResponse.json({
+      ...posting.result,
+      postingGroupId: posting.postingGroupId,
+      replayed: posting.replayed,
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     if (message === "Transaction not found") {
@@ -108,7 +142,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
 
@@ -127,41 +161,22 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       throw new Error("Transaction not found");
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    const { userId } = await requireWorkspaceAccess(existing.workspaceId);
+    const reason = request.headers.get("x-reversal-reason")?.trim() || "User requested transaction reversal";
+    const posting = await reverseLedgerTransaction({
+      transactionId: id,
+      actorUserId: userId,
+      reason: reason.slice(0, 500),
+      idempotencyKey: getIdempotencyKey(request),
+    });
 
-    await prisma.$transaction(
-      async (db) => {
-      // Find and reset any linked credit card transactions
-      const creditCardLink = await db.creditCardTxnLink.findFirst({
-        where: { transactionId: id },
-        select: { creditCardId: true },
-      });
-
-      if (creditCardLink) {
-        await db.creditCardTransaction.update({
-          where: { id: creditCardLink.creditCardId },
-          data: { isAllocated: false },
-        });
-        await db.creditCardTxnLink.deleteMany({
-          where: { transactionId: id },
-        });
-      }
-
-      await db.transaction.delete({ where: { id } });
-
-      await applyTransactionBudgetDelta(db, {
-        previousBudgetId: existing.budgetId,
-        previousDirection: existing.direction,
-        previousAmountCents: existing.amountCents,
-      });
-      },
-      { maxWait: 5000, timeout: 10000 },
-    );
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ...posting.result, postingGroupId: posting.postingGroupId, replayed: posting.replayed });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     if (message === "Transaction not found") {

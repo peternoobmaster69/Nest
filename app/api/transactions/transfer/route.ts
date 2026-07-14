@@ -1,4 +1,5 @@
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
+import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const { workspaceId, sourceBudgetId, destinationBudgetId, title, amountCents } = parsed.data;
-    await requireWorkspaceAccess(workspaceId);
+    const { userId } = await requireWorkspaceAccess(workspaceId);
 
     if (sourceBudgetId === destinationBudgetId) {
       return NextResponse.json({ error: "Source and destination sub accounts must be different." }, { status: 400 });
@@ -46,13 +47,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Both source and destination sub accounts must be active and in the current workspace." }, { status: 400 });
     }
 
-    const externalRef = `subaccount-transfer:${sourceBudgetId}:${destinationBudgetId}:${Date.now()}`;
+    const idempotencyKey = getIdempotencyKey(request);
+    const externalRef = `subaccount-transfer:${idempotencyKey}`;
 
-    const result = await prisma.$transaction(async (db) => {
+    const posting = await executePosting({
+      workspaceId,
+      operation: "SUBACCOUNT_TRANSFER",
+      idempotencyKey,
+      actorUserId: userId,
+      sourceType: "BUDGET_TRANSFER",
+      sourceId: sourceBudgetId,
+      request: parsed.data,
+    }, async (db, postingGroupId) => {
       const date = new Date();
 
-      const transferOut = await db.transaction.create({
-        data: {
+      const transferOut = await createLedgerTransaction(db, postingGroupId, {
           workspaceId,
           accountId: sourceBudget.accountId,
           budgetId: sourceBudget.id,
@@ -65,11 +74,9 @@ export async function POST(request: Request) {
           externalRef,
           isSynced: false,
           isFromFamily: false,
-        },
       });
 
-      const transferIn = await db.transaction.create({
-        data: {
+      const transferIn = await createLedgerTransaction(db, postingGroupId, {
           workspaceId,
           accountId: destinationBudget.accountId,
           budgetId: destinationBudget.id,
@@ -82,7 +89,6 @@ export async function POST(request: Request) {
           externalRef,
           isSynced: false,
           isFromFamily: false,
-        },
       });
 
       await applyBudgetAvailableDelta(db, sourceBudget.id, -amountCents);
@@ -94,10 +100,16 @@ export async function POST(request: Request) {
       };
     });
 
-    return NextResponse.json({ ok: true, ...result }, { status: 201 });
+    return NextResponse.json(
+      { ok: true, ...posting.result, postingGroupId: posting.postingGroupId, replayed: posting.replayed },
+      { status: posting.replayed ? 200 : 201 },
+    );
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to transfer between sub accounts", message }, { status: 500 });

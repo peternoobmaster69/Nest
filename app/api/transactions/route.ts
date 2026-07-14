@@ -1,4 +1,5 @@
 import { applyTransactionBudgetDelta } from "@/lib/budget-ledger";
+import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import type { Prisma } from "@prisma/client";
@@ -86,6 +87,8 @@ export async function GET(request: Request) {
     const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
     const where: Prisma.TransactionWhereInput = {
       workspaceId,
+      voidedAt: null,
+      kind: { not: "REVERSAL" },
       ...(accountId ? { accountId } : {}),
       ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
       ...(groupId ? { groupId } : {}),
@@ -211,7 +214,7 @@ export async function POST(request: Request) {
     }
 
     const { budgetId, groupId, budgetOperation, ...txPayload } = parsed.data;
-    await requireWorkspaceAccess(txPayload.workspaceId);
+    const { userId } = await requireWorkspaceAccess(txPayload.workspaceId);
 
     const account = await prisma.financialAccount.findFirst({
       where: {
@@ -230,16 +233,22 @@ export async function POST(request: Request) {
     const normalizedKind =
       budgetOperation === "ADD" ? "ADJUSTMENT" : budgetOperation === "DEDUCT" ? "EXPENSE" : txPayload.kind;
 
-    const created = await prisma.$transaction(async (db) => {
-      const tx = await db.transaction.create({
-        data: {
+    const posting = await executePosting({
+      workspaceId: txPayload.workspaceId,
+      operation: "TRANSACTION_CREATE",
+      idempotencyKey: getIdempotencyKey(request),
+      actorUserId: userId,
+      sourceType: "TRANSACTION_REQUEST",
+      request: parsed.data,
+    }, async (db, postingGroupId) => {
+      const tx = await createLedgerTransaction(db, postingGroupId, {
           ...txPayload,
           direction: normalizedDirection,
           kind: normalizedKind,
           budgetId,
           date: new Date(txPayload.date),
           isSynced: false,
-        },
+          isFromFamily: false,
       });
 
       const budget = await db.budgetEnvelope.findFirst({
@@ -272,10 +281,16 @@ export async function POST(request: Request) {
       return { tx: linkedTx, updatedBudget };
     });
 
-    return NextResponse.json(created, { status: 201 });
+    return NextResponse.json(
+      { ...posting.result, postingGroupId: posting.postingGroupId, replayed: posting.replayed },
+      { status: posting.replayed ? 200 : 201 },
+    );
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     if (

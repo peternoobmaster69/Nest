@@ -36,6 +36,7 @@ export async function GET(request: Request) {
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       include: {
         transactions: {
+          where: { voidedAt: null, kind: { not: "REVERSAL" } },
           select: { amountCents: true, direction: true, date: true },
         },
       },
@@ -89,7 +90,13 @@ export async function POST(request: Request) {
 
     const uniqueTransactionIds = [...new Set(transactionIds)];
     const transactions = await prisma.transaction.findMany({
-      where: { id: { in: uniqueTransactionIds }, workspaceId, budgetId },
+      where: {
+        id: { in: uniqueTransactionIds },
+        workspaceId,
+        budgetId,
+        voidedAt: null,
+        kind: { not: "REVERSAL" },
+      },
       select: { id: true },
     });
     if (transactions.length !== uniqueTransactionIds.length) {

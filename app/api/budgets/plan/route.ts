@@ -1,4 +1,5 @@
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
+import { executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import {
   getUnappliedMonthlyBudgetItemCents,
   summarizeMonthlyBudgetPlan,
@@ -147,6 +148,9 @@ function validationError(error: z.ZodError) {
 function handleError(error: unknown, fallback: string) {
   if (error instanceof ApiAuthError || error instanceof BudgetPlanRequestError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
+  }
+  if (error instanceof PostingConflictError) {
+    return NextResponse.json({ error: error.message }, { status: 409 });
   }
 
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -551,9 +555,16 @@ export async function POST(request: Request) {
       const parsed = ConfirmMonthlySchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
-      const result = await prisma.$transaction(
-        async (db) => {
+      const { userId, workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const posting = await executePosting({
+        workspaceId,
+        operation: "MONTHLY_BUDGET_CONFIRM",
+        idempotencyKey: getIdempotencyKey(request, `monthly-budget-confirm:${parsed.data.planId}`),
+        actorUserId: userId,
+        sourceType: "MONTHLY_BUDGET_PLAN",
+        sourceId: parsed.data.planId,
+        request: parsed.data,
+      }, async (db, postingGroupId) => {
           const claimed = await db.monthlyBudgetPlan.updateMany({
             where: { id: parsed.data.planId, workspaceId, status: "DRAFT" },
             data: { status: "CONFIRMING" },
@@ -675,7 +686,8 @@ export async function POST(request: Request) {
             }
 
             if (transactionRows.length > 0) {
-              await db.transaction.createMany({ data: transactionRows });
+              const ledgerRows = transactionRows.map((row) => ({ ...row, postingGroupId })) as Prisma.TransactionCreateManyInput[];
+              await db.transaction.createMany({ data: ledgerRows });
               for (const [destinationId, deltaCents] of deltaByDestination) {
                 await applyBudgetAvailableDelta(db, destinationId, deltaCents);
               }
@@ -695,11 +707,13 @@ export async function POST(request: Request) {
             appliedCents,
             appliedToSubAccounts: parsed.data.applyToSubAccounts,
           };
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
+      });
 
-      return NextResponse.json(result);
+      return NextResponse.json({
+        ...posting.result,
+        postingGroupId: posting.postingGroupId,
+        replayed: posting.replayed,
+      });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

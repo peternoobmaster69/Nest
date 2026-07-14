@@ -420,7 +420,7 @@ export function BudgetPlanPage() {
     mutationFn: ({ planId }) =>
       fetchJson("/api/budgets/plan", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": `monthly-budget-confirm:${planId}` },
         body: requestBody("confirmMonthly", workspaceId ?? "", { planId, applyToSubAccounts: true }),
       }),
     onSuccess: () => {

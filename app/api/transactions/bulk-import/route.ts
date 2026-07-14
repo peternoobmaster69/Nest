@@ -1,4 +1,5 @@
 import { applyBudgetAvailableDelta, getBudgetAvailableDeltaCents } from "@/lib/budget-ledger";
+import { executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import type { Prisma } from "@prisma/client";
@@ -30,9 +31,19 @@ const BulkImportSchema = z.object({
 
 type ImportedTransaction = z.infer<typeof ImportedTransactionSchema>;
 
+interface DuplicateRecord {
+  date: string;
+  subject: string;
+  amountCents: number;
+  direction: "DEBIT" | "CREDIT";
+  notes: string | null;
+  reason: "EXISTING_TRANSACTION" | "DUPLICATE_IN_PAYLOAD";
+}
+
 interface ImportResult {
   imported: number;
   duplicates: number;
+  duplicateRecords: DuplicateRecord[];
   failed: number;
   errors: string[];
 }
@@ -79,6 +90,8 @@ async function getExistingDuplicateKeys(
       workspaceId,
       accountId,
       budgetId,
+      voidedAt: null,
+      kind: { not: "REVERSAL" },
       OR: transactions.map((tx) => {
         const { start, end } = getUtcDayRange(tx.date);
         return {
@@ -108,7 +121,7 @@ export async function POST(request: Request) {
 
     const { workspaceId, accountId, budgetId, kind, transactions, chunkIndex, chunkSize, recalculate } = parsed.data;
 
-    await requireWorkspaceAccess(workspaceId);
+    const { userId } = await requireWorkspaceAccess(workspaceId);
 
     // Validate account belongs to workspace
     const account = await prisma.financialAccount.findFirst({
@@ -138,6 +151,7 @@ export async function POST(request: Request) {
     const result: ImportResult = {
       imported: 0,
       duplicates: 0,
+      duplicateRecords: [],
       failed: 0,
       errors: [],
     };
@@ -180,16 +194,25 @@ export async function POST(request: Request) {
     const seenImportKeys = new Set<string>();
     const nonDuplicates = toImport.filter((item) => {
       const duplicateKey = getDuplicateKey(item.date, item.subject, item.tx.AmountCents);
-      if (existingDuplicateKeys.has(duplicateKey) || seenImportKeys.has(duplicateKey)) {
+      const existsInDatabase = existingDuplicateKeys.has(duplicateKey);
+      const repeatedInPayload = seenImportKeys.has(duplicateKey);
+      if (existsInDatabase || repeatedInPayload) {
         result.duplicates++;
+        result.duplicateRecords.push({
+          date: getUtcDayRange(item.date).start.toISOString().slice(0, 10),
+          subject: item.subject,
+          amountCents: item.tx.AmountCents,
+          direction: item.direction,
+          notes: item.tx.Notes?.trim() || null,
+          reason: existsInDatabase ? "EXISTING_TRANSACTION" : "DUPLICATE_IN_PAYLOAD",
+        });
         return false;
       }
       seenImportKeys.add(duplicateKey);
       return true;
     });
 
-    if (nonDuplicates.length > 0) {
-      const data: Prisma.TransactionCreateManyInput[] = nonDuplicates.map((item) => ({
+    const data: Prisma.TransactionCreateManyInput[] = nonDuplicates.map((item) => ({
         workspaceId,
         accountId,
         budgetId,
@@ -204,9 +227,19 @@ export async function POST(request: Request) {
         isFromFamily: false,
       }));
 
-      try {
-        const createResult = await prisma.$transaction(async (db) => {
-          const created = await db.transaction.createMany({ data });
+    try {
+      const posting = await executePosting({
+          workspaceId,
+          operation: "TRANSACTION_BULK_IMPORT",
+          idempotencyKey: getIdempotencyKey(request),
+          actorUserId: userId,
+          sourceType: "IMPORT",
+          sourceId: chunkIndex === undefined ? null : String(chunkIndex),
+          request: parsed.data,
+        }, async (db, postingGroupId) => {
+          if (data.length === 0) return { count: 0 };
+          const ledgerRows = data.map((row) => ({ ...row, postingGroupId })) as Prisma.TransactionCreateManyInput[];
+          const created = await db.transaction.createMany({ data: ledgerRows });
           if (recalculate && created.count > 0) {
             const deltaCents = data.reduce(
               (sum, tx) => sum + getBudgetAvailableDeltaCents(tx.direction, tx.amountCents),
@@ -218,11 +251,17 @@ export async function POST(request: Request) {
           }
           return created;
         });
-        result.imported = createResult.count;
-      } catch (error) {
-        result.failed += nonDuplicates.length;
-        result.errors.push(`Transaction creation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      result.imported = posting.result.count;
+      if (posting.replayed) {
+        result.duplicates = 0;
+        result.duplicateRecords = [];
+        result.failed = 0;
+        result.errors = [];
       }
+    } catch (error) {
+      if (error instanceof PostingConflictError) throw error;
+      result.failed += nonDuplicates.length;
+      result.errors.push(`Transaction creation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
 
     return NextResponse.json({
@@ -238,6 +277,9 @@ export async function POST(request: Request) {
       recalculated: recalculate && result.imported > 0,
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof PostingConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: "Failed to import transactions", message }, { status: 500 });
   }

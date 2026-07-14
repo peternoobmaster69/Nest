@@ -783,7 +783,7 @@ export function TransactionsPage() {
     }) =>
       fetchJson("/api/transactions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           workspaceId,
           accountId: payload.accountId,
@@ -825,7 +825,7 @@ export function TransactionsPage() {
     }) =>
       fetchJson("/api/transactions/transfer", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           workspaceId,
           title: payload.title,
@@ -998,7 +998,7 @@ export function TransactionsPage() {
     mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId: string; groupId?: string | null }) =>
       fetchJson(`/api/transactions/${payload.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           subject: payload.subject,
           notes: payload.notes ?? null,
@@ -1029,7 +1029,10 @@ export function TransactionsPage() {
   });
 
   const deleteTx = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/transactions/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => fetchJson(`/api/transactions/${id}`, {
+      method: "DELETE",
+      headers: { "Idempotency-Key": `transaction-reversal:${id}` },
+    }),
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: ["transactions", workspaceId] });
       const previousTransactions = queryClient.getQueryData<Transaction[]>(["transactions", workspaceId]);

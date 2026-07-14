@@ -37,6 +37,8 @@ export async function GET(request: Request) {
         SUM(CASE WHEN [direction] = 'DEBIT' THEN CAST([amountCents] AS BIGINT) ELSE 0 END) AS [expenseCents]
       FROM [dbo].[Transaction]
       WHERE [workspaceId] = ${workspaceId}
+        AND [voidedAt] IS NULL
+        AND [kind] <> 'REVERSAL'
         ${accountId ? Prisma.sql`AND [accountId] = ${accountId}` : Prisma.empty}
         ${budgetId && budgetId !== "ALL" ? Prisma.sql`AND [budgetId] = ${budgetId}` : Prisma.empty}
       GROUP BY YEAR([date]), MONTH([date])
