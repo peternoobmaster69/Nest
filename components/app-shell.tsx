@@ -22,6 +22,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { NotificationBell } from "@/components/notification-bell";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { MobileAccountPanel } from "@/components/mobile-account-panel";
+import { AskNest } from "@/components/ask-nest";
 
 const MOBILE_DATE_FORMATTER = new Intl.DateTimeFormat("en-SG", {
   day: "2-digit",
@@ -232,6 +233,11 @@ export function AppShell({
             </div>
           </div>
           <div className="tb-actions">
+            <AskNest
+              currentPath={currentPath}
+              pageTitle={title}
+              workspaceName={contextData?.workspaceName}
+            />
             <NotificationBell workspaceId={contextData?.workspaceId} />
           </div>
         </header>

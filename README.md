@@ -62,6 +62,22 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Ask Nest
+
+Ask Nest is a read-only assistant for questions about the active workspace. It uses Azure OpenAI's v1 Responses API with local, workspace-scoped finance tools; the model never receives database credentials or mutation capabilities.
+
+Configure these server-only environment variables:
+
+```env
+AI_WORKLOAD_ENDPOINT="https://your-resource.openai.azure.com"
+AI_WORKLOAD_API_KEY="***"
+AI_WORKLOAD_MODEL="your-model-deployment-name"
+```
+
+`AI_WORKLOAD_ENDPOINT` may be the Azure OpenAI resource root or its `/openai/v1/` base URL. `AI_WORKLOAD_MODEL` must be the Azure deployment name and must support the Responses API, function calling, and structured outputs. Restart the application after changing environment variables.
+
+Ask Nest responses are not cached or persisted by Nest. The initial implementation is session-only, rate-limited, and restricted to read operations in the authenticated active workspace. Azure requests use stateless Responses API calls and carry encrypted reasoning items only between the tool-call turns needed to answer the current question.
+
 ## Credit Card Payment Reminders
 
 Credit card payment reminder emails are sent by calling:
