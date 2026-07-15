@@ -16,6 +16,7 @@ type AppContext = {
   memberCount?: number;
   pendingInviteCount?: number;
   sidebarMoneyPages?: Record<string, boolean>;
+  isAdmin?: boolean;
 };
 
 class ApiError extends Error {

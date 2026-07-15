@@ -55,6 +55,7 @@ export async function GET(request: Request) {
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
     const monthKey = searchParams.get("month");
+    const monthsParam = searchParams.get("months");
     const search = searchParams.get("search")?.trim().slice(0, 120) || "";
     const wantsPaginatedResponse =
       searchParams.get("paginated") === "1" ||
@@ -65,6 +66,7 @@ export async function GET(request: Request) {
       budgetId !== null ||
       groupId !== null ||
       monthKey !== null ||
+      monthsParam !== null ||
       fromDate !== null ||
       toDate !== null ||
       search !== "";
@@ -79,12 +81,34 @@ export async function GET(request: Request) {
     if (monthKey && monthKey !== "ALL" && !monthRange) {
       return NextResponse.json({ error: "month must be in YYYY-MM format" }, { status: 400 });
     }
+    const selectedMonthKeys = monthsParam
+      ? [...new Set(monthsParam.split(",").map((value) => value.trim()).filter(Boolean))]
+      : [];
+    if (selectedMonthKeys.length > 24 || selectedMonthKeys.some((value) => !MONTH_FILTER_PATTERN.test(value))) {
+      return NextResponse.json({ error: "months must contain at most 24 YYYY-MM values" }, { status: 400 });
+    }
+    const selectedMonthRanges = selectedMonthKeys.map((value) => getMonthDateRange(value)!);
 
     const limit = Math.min(
       Math.max(Number.parseInt(limitParam || String(DEFAULT_TRANSACTION_PAGE_LIMIT), 10) || DEFAULT_TRANSACTION_PAGE_LIMIT, 1),
       MAX_TRANSACTION_PAGE_LIMIT,
     );
     const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
+    const andFilters: Prisma.TransactionWhereInput[] = [];
+    if (selectedMonthRanges.length) {
+      andFilters.push({
+        OR: selectedMonthRanges.map((range) => ({ date: { gte: range.start, lt: range.end } })),
+      });
+    }
+    if (search) {
+      andFilters.push({
+        OR: [
+          { subject: { contains: search } },
+          { details: { contains: search } },
+          { notes: { contains: search } },
+        ],
+      });
+    }
     const where: Prisma.TransactionWhereInput = {
       workspaceId,
       voidedAt: null,
@@ -93,18 +117,10 @@ export async function GET(request: Request) {
       ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
       ...(groupId ? { groupId } : {}),
       ...(monthRange ? { date: { gte: monthRange.start, lt: monthRange.end } } : {}),
-      ...(search
-        ? {
-            OR: [
-              { subject: { contains: search } },
-              { details: { contains: search } },
-              { notes: { contains: search } },
-            ],
-          }
-        : {}),
+      ...(andFilters.length ? { AND: andFilters } : {}),
     };
 
-    if (fromDate || toDate) {
+    if ((fromDate || toDate) && !selectedMonthRanges.length) {
       where.date = {};
       if (fromDate) {
         (where.date as Record<string, Date>).gte = new Date(fromDate);

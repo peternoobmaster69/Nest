@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { z } from "zod";
+import { isAdminEmail } from "@/lib/admin-auth";
 
 const UpdateContextSchema = z.object({
   workspaceId: z.string().min(1).optional(),
@@ -36,7 +37,7 @@ type WorkspaceSummary = {
   name: string;
 };
 
-function emptyContextResponse(workspaces: WorkspaceSummary[] = []) {
+function emptyContextResponse(workspaces: WorkspaceSummary[] = [], isAdmin = false) {
   return {
     workspaceId: null,
     defaultAccountId: null,
@@ -53,6 +54,7 @@ function emptyContextResponse(workspaces: WorkspaceSummary[] = []) {
     sidebarMoneyPages: DEFAULT_SIDEBAR_MONEY_PAGES,
     publicNetWorthEnabled: false,
     publicNetWorthToken: null,
+    isAdmin,
   };
 }
 
@@ -69,6 +71,7 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.toLowerCase();
+    const isAdmin = isAdminEmail(email);
     const userLookup =
       session?.user?.id
         ? await prisma.user.findUnique({
@@ -202,11 +205,11 @@ export async function GET() {
     }
 
     if (!selectedWorkspaceId) {
-      return NextResponse.json(emptyContextResponse());
+      return NextResponse.json(emptyContextResponse([], isAdmin));
     }
 
     if (!membershipWorkspaceIds.has(selectedWorkspaceId)) {
-      return NextResponse.json(emptyContextResponse(workspaceSummaries));
+      return NextResponse.json(emptyContextResponse(workspaceSummaries, isAdmin));
     }
 
     const [workspace, pendingInviteCount] = await Promise.all([
@@ -247,7 +250,7 @@ export async function GET() {
     ]);
 
     if (!workspace) {
-      return NextResponse.json(emptyContextResponse(workspaceSummaries));
+      return NextResponse.json(emptyContextResponse(workspaceSummaries, isAdmin));
     }
 
     const response = NextResponse.json({
@@ -270,6 +273,7 @@ export async function GET() {
         name: a.name,
         kind: a.kind,
       })),
+      isAdmin,
     });
     if (cookieWorkspaceId !== workspace.id) {
       return setActiveWorkspaceCookie(response, workspace.id);

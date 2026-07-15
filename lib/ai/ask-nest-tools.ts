@@ -62,6 +62,26 @@ const ReconciliationArgsSchema = z.object({
   account_name: NullableNameSchema,
 }).strict();
 
+const SpendingBreakdownArgsSchema = z.object({
+  start_date: z.string().regex(ISO_DATE_PATTERN),
+  end_date: z.string().regex(ISO_DATE_PATTERN),
+  granularity: z.enum(["MONTH", "YEAR"]),
+  account_name: NullableNameSchema,
+  budget_name: NullableNameSchema,
+}).strict();
+
+const InvestmentSummaryArgsSchema = z.object({
+  account_name: NullableNameSchema,
+  as_of_date: NullableDateSchema,
+}).strict();
+
+const TripSpendingArgsSchema = z.object({
+  start_date: z.string().regex(ISO_DATE_PATTERN),
+  end_date: z.string().regex(ISO_DATE_PATTERN),
+  query: z.string().trim().min(1).max(120).nullable(),
+  destination_hints: z.array(z.string().trim().min(1).max(80)).max(12),
+}).strict();
+
 type DateRange = {
   start: Date;
   endExclusive: Date;
@@ -231,6 +251,61 @@ export const ASK_NEST_TOOLS: FunctionTool[] = [
       required: ["account_name"],
     },
   },
+  {
+    type: "function",
+    name: "get_spending_breakdown",
+    description: "Group debit spending by sub-account and calendar month or year for one bounded date range. Use this for monthly, annual, trend, grouped, or sub-account breakdown questions.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        start_date: { type: "string", description: "Inclusive YYYY-MM-DD start date." },
+        end_date: { type: "string", description: "Inclusive YYYY-MM-DD end date." },
+        granularity: { type: "string", enum: ["MONTH", "YEAR"], description: "Calendar buckets to return." },
+        account_name: { ...nullableString, description: "Optional bank account name fragment, otherwise null." },
+        budget_name: { ...nullableString, description: "Optional sub-account name fragment, otherwise null." },
+      },
+      required: ["start_date", "end_date", "granularity", "account_name", "budget_name"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_investment_summary",
+    description: "Get recorded investment account values and portfolio totals as of a date. This reports Nest data only and does not provide investment advice or market data.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        account_name: { ...nullableString, description: "Optional account, product, or institution name fragment, otherwise null." },
+        as_of_date: { ...nullableString, description: "Latest entry on or before YYYY-MM-DD, or null for today." },
+      },
+      required: ["account_name", "as_of_date"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_trip_spending",
+    description: "Summarize recorded transaction groups that represent trips, holidays, vacations, or travel, including destination-style names and exact debit spending per group. Use this for where-did-I-travel and how-much-per-trip follow-ups.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        start_date: { type: "string", description: "Inclusive YYYY-MM-DD start date." },
+        end_date: { type: "string", description: "Inclusive YYYY-MM-DD end date." },
+        query: { ...nullableString, description: "Optional trip or destination name fragment, otherwise null." },
+        destination_hints: {
+          type: "array",
+          maxItems: 12,
+          items: { type: "string", maxLength: 80 },
+          description: "Destination names copied from the question or a prior grounded answer. Use an empty array when none are available.",
+        },
+      },
+      required: ["start_date", "end_date", "query", "destination_hints"],
+    },
+  },
 ];
 
 function getTodayIso() {
@@ -339,6 +414,57 @@ function evidence(
   href: string,
 ): AskNestEvidence {
   return { id: `${callId}:${suffix}`, label, detail, href };
+}
+
+function transactionHref(filters: Record<string, string | null | undefined>) {
+  const params = new URLSearchParams();
+  params.set("view", "ask-nest");
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/transactions?${query}` : "/transactions";
+}
+
+const COUNTRY_FLAGS = [
+  ["singapore", "🇸🇬"], ["malaysia", "🇲🇾"], ["japan", "🇯🇵"], ["korea", "🇰🇷"],
+  ["south korea", "🇰🇷"], ["china", "🇨🇳"], ["hong kong", "🇭🇰"], ["taiwan", "🇹🇼"],
+  ["thailand", "🇹🇭"], ["vietnam", "🇻🇳"], ["indonesia", "🇮🇩"], ["philippines", "🇵🇭"],
+  ["australia", "🇦🇺"], ["new zealand", "🇳🇿"], ["india", "🇮🇳"], ["sri lanka", "🇱🇰"],
+  ["united kingdom", "🇬🇧"], ["uk", "🇬🇧"], ["england", "🇬🇧"], ["france", "🇫🇷"],
+  ["germany", "🇩🇪"], ["italy", "🇮🇹"], ["spain", "🇪🇸"], ["portugal", "🇵🇹"],
+  ["switzerland", "🇨🇭"], ["netherlands", "🇳🇱"], ["greece", "🇬🇷"], ["turkey", "🇹🇷"],
+  ["united states", "🇺🇸"], ["usa", "🇺🇸"], ["canada", "🇨🇦"], ["mexico", "🇲🇽"],
+  ["dubai", "🇦🇪"], ["uae", "🇦🇪"], ["maldives", "🇲🇻"], ["bali", "🇮🇩"],
+  ["tokyo", "🇯🇵"], ["osaka", "🇯🇵"], ["kyoto", "🇯🇵"], ["fukuoka", "🇯🇵"],
+  ["seoul", "🇰🇷"], ["busan", "🇰🇷"], ["bangkok", "🇹🇭"], ["phuket", "🇹🇭"],
+  ["kuala lumpur", "🇲🇾"], ["penang", "🇲🇾"], ["taipei", "🇹🇼"],
+  ["sydney", "🇦🇺"], ["melbourne", "🇦🇺"], ["perth", "🇦🇺"], ["auckland", "🇳🇿"],
+  ["london", "🇬🇧"], ["paris", "🇫🇷"], ["rome", "🇮🇹"], ["milan", "🇮🇹"],
+  ["barcelona", "🇪🇸"], ["madrid", "🇪🇸"], ["amsterdam", "🇳🇱"], ["zurich", "🇨🇭"],
+  ["new york", "🇺🇸"], ["los angeles", "🇺🇸"], ["san francisco", "🇺🇸"], ["hawaii", "🇺🇸"],
+  ["vancouver", "🇨🇦"], ["toronto", "🇨🇦"], ["hanoi", "🇻🇳"], ["ho chi minh", "🇻🇳"],
+  ["manila", "🇵🇭"], ["cebu", "🇵🇭"], ["jakarta", "🇮🇩"], ["shanghai", "🇨🇳"], ["beijing", "🇨🇳"],
+] as const;
+
+function findDestination(value: string) {
+  const normalized = value.toLocaleLowerCase();
+  return COUNTRY_FLAGS.find(([country]) => (
+    country.length <= 3
+      ? new RegExp(`\\b${country}\\b`, "i").test(normalized)
+      : normalized.includes(country)
+  ));
+}
+
+function getDestinationFlag(value: string, icon: string | null) {
+  if (icon && /^\p{Regional_Indicator}{2}$/u.test(icon)) return icon;
+  return findDestination(value)?.[1] ?? "🧳";
+}
+
+function formatDestinationLabel(value: string) {
+  const trimmed = value.trim();
+  if (/^(uk|usa|uae)$/i.test(trimmed)) return trimmed.toLocaleUpperCase();
+  return trimmed.replace(/\b\w/g, (character) => character.toLocaleUpperCase());
 }
 
 async function loadCardObligations(
@@ -529,7 +655,7 @@ async function compareSpending(rawArgs: unknown, context: AskNestToolContext): P
     "comparison",
     "Spending comparison",
     `${a.start}–${a.end} compared with ${b.start}–${b.end}`,
-    "/transactions",
+    transactionHref({ from: a.start, to: a.end, accountName: args.account_name, budgetName: args.budget_name }),
   );
   return {
     output: {
@@ -541,6 +667,15 @@ async function compareSpending(rawArgs: unknown, context: AskNestToolContext): P
       changeCents,
       change: formatAmount(changeCents, context.currency),
       changePercent,
+      presentation: {
+        type: "trend_chart",
+        title: "Spending comparison",
+        currency: context.currency,
+        points: [
+          { label: b.start.slice(0, 7), valueCents: b.totalCents, formattedValue: b.total },
+          { label: a.start.slice(0, 7), valueCents: a.totalCents, formattedValue: a.total },
+        ],
+      },
     },
     evidence: [comparisonEvidence],
   };
@@ -590,7 +725,13 @@ async function findTransactions(rawArgs: unknown, context: AskNestToolContext): 
     "transactions",
     `${total} matching transaction${total === 1 ? "" : "s"}`,
     `${range.startLabel} to ${range.endLabel}${args.query ? ` · “${args.query}”` : ""}`,
-    "/transactions",
+    transactionHref({
+      from: range.startLabel,
+      to: range.endLabel,
+      search: args.query,
+      accountName: args.account_name,
+      budgetName: args.budget_name,
+    }),
   );
   return {
     output: {
@@ -892,6 +1033,411 @@ async function explainReconciliation(rawArgs: unknown, context: AskNestToolConte
   };
 }
 
+async function getSpendingBreakdown(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = SpendingBreakdownArgsSchema.parse(rawArgs);
+  const range = resolveRange(args.start_date, args.end_date);
+  const where: Prisma.TransactionWhereInput = {
+    ...transactionWhere(context.workspaceId, range, {
+      accountName: args.account_name,
+      budgetName: args.budget_name,
+    }),
+    direction: "DEBIT",
+  };
+  const rows = await prisma.transaction.groupBy({
+    by: ["date", "budgetId"],
+    where,
+    _sum: { amountCents: true },
+    _count: { _all: true },
+    orderBy: { date: "asc" },
+  });
+  const budgetIds = [...new Set(rows.map((row) => row.budgetId).filter((id): id is string => Boolean(id)))];
+  const budgets = budgetIds.length
+    ? await prisma.budgetEnvelope.findMany({
+        where: { workspaceId: context.workspaceId, id: { in: budgetIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const budgetById = new Map(budgets.map((budget) => [budget.id, budget.name]));
+  const buckets = new Map<string, Map<string, { amountCents: number; transactionCount: number }>>();
+
+  for (const row of rows) {
+    const date = formatDate(row.date);
+    const period = args.granularity === "YEAR" ? date.slice(0, 4) : date.slice(0, 7);
+    const budget = row.budgetId ? budgetById.get(row.budgetId) ?? "Unknown sub-account" : "Unassigned";
+    const byBudget = buckets.get(period) ?? new Map();
+    const current = byBudget.get(budget) ?? { amountCents: 0, transactionCount: 0 };
+    current.amountCents += row._sum.amountCents ?? 0;
+    current.transactionCount += row._count._all;
+    byBudget.set(budget, current);
+    buckets.set(period, byBudget);
+  }
+
+  const periods = [...buckets.entries()].map(([period, byBudget]) => {
+    const allSubAccounts = [...byBudget.entries()]
+      .map(([name, value]) => ({
+        name,
+        amountCents: value.amountCents,
+        amount: formatAmount(value.amountCents, context.currency),
+        transactionCount: value.transactionCount,
+      }))
+      .sort((a, b) => b.amountCents - a.amountCents || a.name.localeCompare(b.name));
+    const totalCents = allSubAccounts.reduce((sum, item) => sum + item.amountCents, 0);
+    const visibleSubAccounts = allSubAccounts.slice(0, 30);
+    const remainingSubAccounts = allSubAccounts.slice(30);
+    const other = remainingSubAccounts.length
+      ? {
+          name: `Other (${remainingSubAccounts.length} sub-accounts)`,
+          amountCents: remainingSubAccounts.reduce((sum, item) => sum + item.amountCents, 0),
+          amount: formatAmount(remainingSubAccounts.reduce((sum, item) => sum + item.amountCents, 0), context.currency),
+          transactionCount: remainingSubAccounts.reduce((sum, item) => sum + item.transactionCount, 0),
+        }
+      : null;
+    const subAccounts = other ? [...visibleSubAccounts, other] : visibleSubAccounts;
+    return {
+      period,
+      totalCents,
+      total: formatAmount(totalCents, context.currency),
+      transactionCount: allSubAccounts.reduce((sum, item) => sum + item.transactionCount, 0),
+      subAccounts,
+    };
+  });
+  const totalCents = periods.reduce((sum, period) => sum + period.totalCents, 0);
+  const breakdownEvidence = evidence(
+    context.callId,
+    "spending-breakdown",
+    `${periods.length} ${args.granularity.toLocaleLowerCase()} spending bucket${periods.length === 1 ? "" : "s"}`,
+    `${range.startLabel} to ${range.endLabel} · grouped by sub-account`,
+    transactionHref({
+      from: range.startLabel,
+      to: range.endLabel,
+      accountName: args.account_name,
+      budgetName: args.budget_name,
+    }),
+  );
+  return {
+    output: {
+      ok: true,
+      evidence: [breakdownEvidence],
+      filters: {
+        start: range.startLabel,
+        end: range.endLabel,
+        granularity: args.granularity,
+        accountName: args.account_name,
+        budgetName: args.budget_name,
+      },
+      totalCents,
+      total: formatAmount(totalCents, context.currency),
+      periods,
+      presentation: {
+        type: "trend_chart",
+        title: args.granularity === "MONTH" ? "Monthly spending trend" : "Yearly spending trend",
+        currency: context.currency,
+        points: periods.map((period) => ({
+          label: period.period,
+          valueCents: period.totalCents,
+          formattedValue: period.total,
+        })),
+      },
+    },
+    evidence: [breakdownEvidence],
+  };
+}
+
+async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = InvestmentSummaryArgsSchema.parse(rawArgs);
+  const asOf = args.as_of_date ?? getTodayIso();
+  const endExclusive = addUtcDays(parseIsoDate(asOf, "As-of date"), 1);
+  const accounts = await prisma.investmentAccount.findMany({
+    where: {
+      workspaceId: context.workspaceId,
+      inceptionDate: { lt: endExclusive },
+      ...(args.account_name
+        ? {
+            OR: [
+              { displayName: { contains: args.account_name } },
+              { productName: { contains: args.account_name } },
+              { institutionName: { contains: args.account_name } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ inceptionDate: "asc" }, { createdAt: "asc" }],
+    take: 50,
+    select: {
+      displayName: true,
+      productName: true,
+      institutionName: true,
+      inceptionDate: true,
+      divestedDate: true,
+      isLiquid: true,
+      entries: {
+        where: { date: { lt: endExclusive } },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: { date: true, investedCents: true, currentValueCents: true },
+      },
+    },
+  });
+  const rows = accounts.map((account) => {
+    const latest = account.entries[0] ?? null;
+    const gainLossCents = latest ? latest.currentValueCents - latest.investedCents : 0;
+    return {
+      name: account.displayName || account.productName,
+      product: account.productName,
+      institution: account.institutionName,
+      inceptionDate: formatDate(account.inceptionDate),
+      divestedDate: account.divestedDate ? formatDate(account.divestedDate) : null,
+      isLiquid: account.isLiquid,
+      latestEntryDate: latest ? formatDate(latest.date) : null,
+      investedCents: latest?.investedCents ?? 0,
+      invested: formatAmount(latest?.investedCents ?? 0, context.currency),
+      currentValueCents: latest?.currentValueCents ?? 0,
+      currentValue: formatAmount(latest?.currentValueCents ?? 0, context.currency),
+      gainLossCents,
+      gainLoss: formatAmount(gainLossCents, context.currency),
+      hasValuation: Boolean(latest),
+    };
+  });
+  const investedCents = rows.reduce((sum, row) => sum + row.investedCents, 0);
+  const currentValueCents = rows.reduce((sum, row) => sum + row.currentValueCents, 0);
+  const investmentEvidence = evidence(
+    context.callId,
+    "investments",
+    `${rows.length} investment account${rows.length === 1 ? "" : "s"}`,
+    `Recorded values as of ${asOf}`,
+    "/investments",
+  );
+  return {
+    output: {
+      ok: true,
+      evidence: [investmentEvidence],
+      asOf,
+      accountFilter: args.account_name,
+      totals: {
+        investedCents,
+        invested: formatAmount(investedCents, context.currency),
+        currentValueCents,
+        currentValue: formatAmount(currentValueCents, context.currency),
+        gainLossCents: currentValueCents - investedCents,
+        gainLoss: formatAmount(currentValueCents - investedCents, context.currency),
+      },
+      accounts: rows,
+      presentation: {
+        type: "investment_chart",
+        title: `Recorded investment values as of ${asOf}`,
+        currency: context.currency,
+        items: rows.filter((row) => row.hasValuation).slice(0, 12).map((row) => ({
+          label: row.name,
+          investedCents: row.investedCents,
+          currentValueCents: row.currentValueCents,
+          invested: row.invested,
+          currentValue: row.currentValue,
+        })),
+      },
+    },
+    evidence: [investmentEvidence],
+  };
+}
+
+async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = TripSpendingArgsSchema.parse(rawArgs);
+  const range = resolveRange(args.start_date, args.end_date);
+  const groups = await prisma.transactionGroup.findMany({
+    where: {
+      workspaceId: context.workspaceId,
+      transactions: {
+        some: {
+          workspaceId: context.workspaceId,
+          voidedAt: null,
+          kind: { not: "REVERSAL" },
+          direction: "DEBIT",
+          date: { gte: range.start, lt: range.endExclusive },
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+      budget: { select: { id: true, workspaceId: true, name: true } },
+      transactions: {
+        where: {
+          workspaceId: context.workspaceId,
+          voidedAt: null,
+          kind: { not: "REVERSAL" },
+          direction: "DEBIT",
+          date: { gte: range.start, lt: range.endExclusive },
+        },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+        select: { date: true, amountCents: true },
+      },
+    },
+  });
+  const query = args.query?.toLocaleLowerCase() ?? null;
+  const travelPattern = /\b(trip|holiday|travel|vacation|tour|flight|hotel)\b/i;
+  const candidates = groups.filter((group) => {
+    const text = `${group.name} ${group.budget.workspaceId === context.workspaceId ? group.budget.name : ""}`;
+    return query
+      ? text.toLocaleLowerCase().includes(query)
+      : travelPattern.test(text) || getDestinationFlag(text, group.icon) !== "🧳";
+  });
+  let estimated = false;
+  let disclaimer: string | null = null;
+  let trips = candidates.slice(0, 30).map((group) => {
+    const first = group.transactions[0]?.date;
+    const last = group.transactions.at(-1)?.date;
+    const amountCents = group.transactions.reduce((sum, transaction) => sum + transaction.amountCents, 0);
+    const href = transactionHref({
+      budgetId: group.budget.id,
+      groupId: group.id,
+      from: range.startLabel,
+      to: range.endLabel,
+    });
+    return {
+      id: group.id,
+      name: group.name,
+      flag: getDestinationFlag(`${group.name} ${group.budget.name}`, group.icon),
+      subAccount: group.budget.workspaceId === context.workspaceId ? group.budget.name : "Unavailable",
+      startDate: first ? formatDate(first) : null,
+      endDate: last ? formatDate(last) : null,
+      amountCents,
+      amount: formatAmount(amountCents, context.currency),
+      transactionCount: group.transactions.length,
+      href,
+    };
+  });
+  if (!trips.length) {
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        workspaceId: context.workspaceId,
+        voidedAt: null,
+        kind: { not: "REVERSAL" },
+        direction: "DEBIT",
+        date: { gte: range.start, lt: range.endExclusive },
+      },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      take: 500,
+      select: {
+        date: true,
+        subject: true,
+        details: true,
+        notes: true,
+        amountCents: true,
+        budget: { select: { workspaceId: true, name: true } },
+      },
+    });
+    const hints = [...new Set([
+      ...args.destination_hints,
+      ...(args.query && !travelPattern.test(args.query) ? [args.query] : []),
+    ].map((hint) => hint.trim()).filter(Boolean))];
+    const buckets = new Map<string, {
+      name: string;
+      flag: string;
+      search: string;
+      amountCents: number;
+      transactionCount: number;
+      startDate: Date;
+      endDate: Date;
+      subAccounts: Set<string>;
+    }>();
+    for (const transaction of transactions) {
+      const text = `${transaction.subject} ${transaction.details ?? ""} ${transaction.notes ?? ""}`;
+      const normalized = text.toLocaleLowerCase();
+      const hint = hints.find((value) => normalized.includes(value.toLocaleLowerCase()));
+      const detected = hint ? null : findDestination(text);
+      if (!hint && !detected) continue;
+      const search = hint ?? detected![0];
+      const name = formatDestinationLabel(hint ?? detected![0]);
+      const key = name.toLocaleLowerCase();
+      const bucket = buckets.get(key) ?? {
+        name,
+        flag: getDestinationFlag(hint ?? detected![0], null),
+        search,
+        amountCents: 0,
+        transactionCount: 0,
+        startDate: transaction.date,
+        endDate: transaction.date,
+        subAccounts: new Set<string>(),
+      };
+      bucket.amountCents += transaction.amountCents;
+      bucket.transactionCount += 1;
+      if (transaction.date < bucket.startDate) bucket.startDate = transaction.date;
+      if (transaction.date > bucket.endDate) bucket.endDate = transaction.date;
+      if (transaction.budget?.workspaceId === context.workspaceId) bucket.subAccounts.add(transaction.budget.name);
+      buckets.set(key, bucket);
+    }
+    trips = [...buckets.values()]
+      .sort((a, b) => b.amountCents - a.amountCents)
+      .slice(0, 30)
+      .map((bucket, index) => ({
+        id: `estimated-${index + 1}`,
+        name: bucket.name,
+        flag: bucket.flag,
+        subAccount: [...bucket.subAccounts].join(", ") || "Matched transactions",
+        startDate: formatDate(bucket.startDate),
+        endDate: formatDate(bucket.endDate),
+        amountCents: bucket.amountCents,
+        amount: formatAmount(bucket.amountCents, context.currency),
+        transactionCount: bucket.transactionCount,
+        href: transactionHref({
+          from: range.startLabel,
+          to: range.endLabel,
+          search: bucket.search,
+        }),
+      }));
+    estimated = trips.length > 0;
+    disclaimer = estimated
+      ? "Estimated from transaction text matches because no explicit trip groups were found. Transactions may be missed or assigned to the wrong destination; review the filtered supporting data."
+      : null;
+  }
+  const totalCents = trips.reduce((sum, trip) => sum + trip.amountCents, 0);
+  const summaryEvidence = evidence(
+    context.callId,
+    "trip-summary",
+    `${trips.length} ${estimated ? "estimated destination" : "recorded trip group"}${trips.length === 1 ? "" : "s"}`,
+    `${range.startLabel} to ${range.endLabel}${estimated ? " · text-match estimate" : ""}`,
+    transactionHref({ from: range.startLabel, to: range.endLabel }),
+  );
+  const tripEvidence = trips.slice(0, 7).map((trip, index) => evidence(
+    context.callId,
+    `trip-${index + 1}`,
+    `${trip.flag} ${trip.name}`,
+    `${trip.startDate ?? range.startLabel} to ${trip.endDate ?? range.endLabel} · ${trip.amount}`,
+    trip.href,
+  ));
+  return {
+    output: {
+      ok: true,
+      evidence: [summaryEvidence, ...tripEvidence],
+      period: { start: range.startLabel, end: range.endLabel },
+      query: args.query,
+      method: estimated ? "TRANSACTION_TEXT_ESTIMATE" : "EXPLICIT_TRIP_GROUPS",
+      estimated,
+      disclaimer,
+      totalCents,
+      total: formatAmount(totalCents, context.currency),
+      trips,
+      presentation: {
+        type: "trip_cards",
+        title: estimated ? "Estimated spending by destination" : "Recorded trip spending",
+        disclaimer: disclaimer ?? undefined,
+        items: trips.slice(0, 12).map((trip) => ({
+          label: trip.name,
+          flag: trip.flag,
+          amount: trip.amount,
+          dateRange: trip.startDate === trip.endDate
+            ? trip.startDate ?? range.startLabel
+            : `${trip.startDate ?? range.startLabel} to ${trip.endDate ?? range.endLabel}`,
+          href: trip.href,
+        })),
+      },
+    },
+    evidence: [summaryEvidence, ...tripEvidence],
+  };
+}
+
 export async function executeAskNestTool(
   name: string,
   rawArgs: unknown,
@@ -914,6 +1460,12 @@ export async function executeAskNestTool(
       return getBudgetPlan(rawArgs, context);
     case "explain_reconciliation":
       return explainReconciliation(rawArgs, context);
+    case "get_spending_breakdown":
+      return getSpendingBreakdown(rawArgs, context);
+    case "get_investment_summary":
+      return getInvestmentSummary(rawArgs, context);
+    case "get_trip_spending":
+      return getTripSpending(rawArgs, context);
     default:
       throw new AskNestToolInputError("Ask Nest requested an unsupported read tool.");
   }

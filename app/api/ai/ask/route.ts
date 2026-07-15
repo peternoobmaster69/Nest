@@ -5,11 +5,14 @@ import {
   AuthenticationError,
   RateLimitError,
 } from "openai";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { answerAskNest, AskNestResponseError } from "@/lib/ai/ask-nest";
 import { AiConfigurationError } from "@/lib/ai/config";
 import { consumeAskNestRateLimit } from "@/lib/ai/rate-limit";
+import { prisma } from "@/lib/prisma";
+import { saveAskNestMemories } from "@/lib/ai/memory";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
@@ -83,7 +86,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const answer = await answerAskNest({
+    const result = await answerAskNest({
       workspaceId,
       userId,
       question: parsed.data.question,
@@ -91,6 +94,41 @@ export async function POST(request: Request) {
       pagePath: parsed.data.pagePath,
       history: parsed.data.history,
     });
+    const answer = result.answer;
+    try {
+      const turnId = randomUUID();
+      await prisma.askNestTurn.create({
+        data: {
+          id: turnId,
+          workspaceId,
+          userId,
+          question: parsed.data.question,
+          answerJson: JSON.stringify(answer),
+          pagePath: parsed.data.pagePath,
+          inputTokens: result.tokenUsage?.inputTokens,
+          outputTokens: result.tokenUsage?.outputTokens,
+          totalTokens: result.tokenUsage?.totalTokens,
+        },
+      });
+      const memoryUpdates = await saveAskNestMemories({
+        workspaceId,
+        userId,
+        sourceTurnId: turnId,
+        question: parsed.data.question,
+        candidates: result.memoryCandidates,
+      });
+      if (memoryUpdates.length) {
+        answer.memoryUpdates = memoryUpdates;
+        await prisma.askNestTurn.update({
+          where: { id: turnId },
+          data: { answerJson: JSON.stringify(answer) },
+        });
+      }
+    } catch (historyError) {
+      console.error("Ask Nest history save failed", {
+        name: historyError instanceof Error ? historyError.name : "UnknownError",
+      });
+    }
     return NextResponse.json(answer, { headers: PRIVATE_HEADERS });
   } catch (error) {
     if (error instanceof ApiAuthError) {

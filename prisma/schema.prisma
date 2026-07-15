@@ -36,6 +36,9 @@ model User {
   passkeys        PasskeyCredential[]
   webAuthnChallenges WebAuthnChallenge[]
   pushSubscriptions PushSubscription[]
+  askNestTurns    AskNestTurn[]
+  askNestMemories AskNestMemory[]
+  askNestUsageDaily AskNestUsageDaily[]
 }
 
 model Account {
@@ -121,6 +124,9 @@ model Workspace {
   monthlyBudgetPlans  MonthlyBudgetPlan[]
   inAppNotifications InAppNotification[]
   transactionGroups  TransactionGroup[]
+  askNestTurns       AskNestTurn[]
+  askNestMemories    AskNestMemory[]
+  askNestUsageDaily  AskNestUsageDaily[]
 
   @@index([publicNetWorthToken])
 }
@@ -483,6 +489,71 @@ model Transaction {
   @@index([creditCardTransactionId])
   @@index([receivableId])
   @@index([reversalOfId])
+}
+
+model AskNestTurn {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  question    String    @db.NVarChar(Max)
+  answerJson  String    @db.NVarChar(Max)
+  pagePath    String
+  inputTokens Int?
+  outputTokens Int?
+  totalTokens Int?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memories    AskNestMemory[]
+
+  @@index([workspaceId, userId, createdAt])
+  @@index([createdAt, totalTokens])
+}
+
+model AskNestMemory {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  userId          String
+  ownerHash       String      @db.VarChar(64)
+  keyHash         String      @db.VarChar(64)
+  kind            String
+  key             String
+  content         String      @db.NVarChar(1000)
+  sourceTurnId    String?
+  confidence      Float       @default(1)
+  status          String      @default("ACTIVE")
+  lastConfirmedAt DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceTurn      AskNestTurn? @relation(fields: [sourceTurnId], references: [id], onDelete: SetNull)
+
+  @@unique([ownerHash, keyHash])
+  @@index([ownerHash, status, updatedAt])
+  @@index([sourceTurnId])
+}
+
+model AskNestUsageDaily {
+  id                String    @id @default(cuid())
+  day               String    @db.VarChar(10)
+  workspaceId       String
+  userId            String
+  turnCount         Int       @default(0)
+  trackedTurnCount  Int       @default(0)
+  inputTokens       Int       @default(0)
+  outputTokens      Int       @default(0)
+  totalTokens       Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([day, workspaceId, userId])
+  @@index([day])
+  @@index([userId, day])
+  @@index([workspaceId, day])
 }
 
 model PostingGroup {

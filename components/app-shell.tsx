@@ -17,6 +17,7 @@ import {
   Undo2,
   Users,
   UserRound,
+  ShieldCheck,
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { NotificationBell } from "@/components/notification-bell";
@@ -47,6 +48,7 @@ export type AppShellContext = {
   memberCount?: number;
   pendingInviteCount?: number;
   sidebarMoneyPages?: Record<string, boolean>;
+  isAdmin?: boolean;
 };
 
 export function AppShell({
@@ -102,6 +104,7 @@ export function AppShell({
     "/collaborators",
     "/settings",
     "/accounts",
+    "/admin",
   ].some((path) => currentPath === path || currentPath.startsWith(`${path}/`));
 
   useEffect(() => {
@@ -297,6 +300,12 @@ export function AppShell({
                 <Settings size={20} aria-hidden="true" />
                 <span><strong>Settings</strong><small>Accounts and preferences</small></span>
               </Link>
+              {contextData?.isAdmin ? (
+                <Link className={`mobile-more-link${currentPath === "/admin" ? " is-active" : ""}`} href="/admin" onClick={closeMobileNavigation}>
+                  <ShieldCheck size={20} aria-hidden="true" />
+                  <span><strong>Admin</strong><small>System and Ask Nest oversight</small></span>
+                </Link>
+              ) : null}
                 </nav>
                 <button className="mobile-more-account" type="button" onClick={() => setMobileMoreView("account")}>
                   <span className="mobile-more-account-icon"><UserRound size={19} aria-hidden="true" /></span>

@@ -325,6 +325,7 @@ export function TransactionsPage() {
   const transactionGroupPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const transactionGroupCardsRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTransactionsRef = useRef<HTMLDivElement | null>(null);
+  const requestedGroupIdRef = useRef<string | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
   const [isTransactionGroupPickerOpen, setIsTransactionGroupPickerOpen] = useState(false);
   const [transactionGroupPickerQuery, setTransactionGroupPickerQuery] = useState("");
@@ -460,8 +461,8 @@ export function TransactionsPage() {
   // Month/Year filter state
   const [dateFilter, setDateFilter] = useSessionState<{ from?: string; to?: string }>("nest:view:transactions:dates", {});
   const [activeQuickSelect, setActiveQuickSelect] = useSessionState<string | null>("nest:view:transactions:quick-period", "thisMonth");
-  const [selectedMonth, setSelectedMonth] = useSessionState<number | null>("nest:view:transactions:custom-month", null);
-  const [selectedYear, setSelectedYear] = useSessionState<number>("nest:view:transactions:custom-year", new Date().getFullYear());
+  const [selectedCustomMonths, setSelectedCustomMonths] = useSessionState<string[]>("nest:view:transactions:custom-months", []);
+  const [draftCustomMonths, setDraftCustomMonths] = useState<string[]>([]);
   const [isCustomMonthOpen, setIsCustomMonthOpen] = useState(false);
   const customMonthBtnRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useSessionState("nest:view:transactions:search", "");
@@ -471,13 +472,6 @@ export function TransactionsPage() {
   const currentMonthIndex = new Date().getMonth();
   const currentMonthLabel = MONTH_NAMES[currentMonthIndex];
   const previousMonthLabel = MONTH_NAMES[(currentMonthIndex + 11) % 12];
-
-  // Convert dateFilter to month key format for API compatibility
-  const transactionMonthFilter = useMemo(() => {
-    if (!dateFilter.from) return "";
-    const date = new Date(dateFilter.from);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-  }, [dateFilter.from]);
 
   const getDateRangeForQuickSelect = (type: string) => {
     const now = new Date();
@@ -533,24 +527,36 @@ export function TransactionsPage() {
 
   const handleQuickSelect = (type: string) => {
     setActiveQuickSelect(type);
-    setSelectedMonth(null);
+    setSelectedCustomMonths([]);
     setDateFilter(getDateRangeForQuickSelect(type));
   };
 
-  const handleCustomMonthSelect = (monthIndex: number, year: number) => {
+  const toggleCustomMonth = (monthIndex: number, year: number) => {
+    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    setDraftCustomMonths((current) => (
+      current.includes(monthKey)
+        ? current.filter((value) => value !== monthKey)
+        : [...current, monthKey].sort()
+    ));
+  };
+
+  const applyCustomMonths = () => {
+    if (!draftCustomMonths.length) return;
+    const sorted = [...draftCustomMonths].sort();
+    const [firstYear, firstMonth] = sorted[0].split("-").map(Number);
+    const [lastYear, lastMonth] = sorted.at(-1)!.split("-").map(Number);
     setActiveQuickSelect("custom");
-    setSelectedMonth(monthIndex);
-    setSelectedYear(year);
+    setSelectedCustomMonths(sorted);
     setDateFilter({
-      from: new Date(year, monthIndex, 1).toISOString().split("T")[0],
-      to: new Date(year, monthIndex + 1, 0).toISOString().split("T")[0],
+      from: new Date(Date.UTC(firstYear, firstMonth - 1, 1)).toISOString().split("T")[0],
+      to: new Date(Date.UTC(lastYear, lastMonth, 0)).toISOString().split("T")[0],
     });
     setIsCustomMonthOpen(false);
   };
 
   const clearDateFilter = () => {
     setActiveQuickSelect(null);
-    setSelectedMonth(null);
+    setSelectedCustomMonths([]);
     setDateFilter({});
   };
 
@@ -587,8 +593,9 @@ export function TransactionsPage() {
     if (groupId !== "ALL") scrollTransactionGroupIntoView(groupId);
   };
 
+  const customMonthsFilter = activeQuickSelect === "custom" ? selectedCustomMonths.join(",") : "";
   const transactions = useInfiniteQuery({
-    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionGroupFilter, transactionMonthFilter, debouncedSearchQuery],
+    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionGroupFilter, dateFilter.from, dateFilter.to, customMonthsFilter, debouncedSearchQuery],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
@@ -599,9 +606,12 @@ export function TransactionsPage() {
       if (transactionAccountFilter) params.set("accountId", transactionAccountFilter);
       if (transactionBudgetFilter) params.set("budgetId", transactionBudgetFilter);
       if (transactionGroupFilter) params.set("groupId", transactionGroupFilter);
-      if (dateFilter.from) params.set("from", dateFilter.from);
-      if (dateFilter.to) params.set("to", dateFilter.to);
-      if (transactionMonthFilter) params.set("month", transactionMonthFilter);
+      if (customMonthsFilter) {
+        params.set("months", customMonthsFilter);
+      } else {
+        if (dateFilter.from) params.set("from", dateFilter.from);
+        if (dateFilter.to) params.set("to", dateFilter.to);
+      }
       if (debouncedSearchQuery) params.set("search", debouncedSearchQuery);
       return fetchJson<TransactionsPageResponse>(`/api/transactions?${params.toString()}`);
     },
@@ -687,7 +697,8 @@ export function TransactionsPage() {
   }, [activeBudgetFilterId, selectedBankId, budgets.data]);
 
   useEffect(() => {
-    setActiveGroupFilterId("ALL");
+    setActiveGroupFilterId(requestedGroupIdRef.current || "ALL");
+    requestedGroupIdRef.current = null;
     setIsGroupingMode(false);
     setSelectedTransactionIds([]);
     setIsTransactionGroupPickerOpen(false);
@@ -709,26 +720,68 @@ export function TransactionsPage() {
 
     const requestedAccountId = searchParams.get("accountId");
     const requestedBudgetId = searchParams.get("budgetId");
+    const requestedAccountName = searchParams.get("accountName")?.trim().toLocaleLowerCase();
+    const requestedBudgetName = searchParams.get("budgetName")?.trim().toLocaleLowerCase();
+    const requestedGroupId = searchParams.get("groupId");
+    const requestedFrom = searchParams.get("from");
+    const requestedTo = searchParams.get("to");
+    const requestedMonths = searchParams.get("months");
+    const requestedSearch = searchParams.get("search")?.trim().slice(0, 120) ?? "";
+    const isAskNestView = searchParams.get("view") === "ask-nest";
 
-    if (!requestedAccountId && !requestedBudgetId) {
+    if (!isAskNestView && !requestedAccountId && !requestedBudgetId) {
       setUrlFilterHydrated(true);
       return;
     }
 
     const validAccountId =
-      requestedAccountId && bankAccounts.data.some((bank) => bank.id === requestedAccountId) ? requestedAccountId : "";
-    const validBudget = requestedBudgetId ? budgets.data.find((b) => b.id === requestedBudgetId) : undefined;
+      requestedAccountId && bankAccounts.data.some((bank) => bank.id === requestedAccountId)
+        ? requestedAccountId
+        : requestedAccountName
+          ? bankAccounts.data.find((bank) => (
+              bank.name.toLocaleLowerCase().includes(requestedAccountName) ||
+              bank.bankName?.toLocaleLowerCase().includes(requestedAccountName)
+            ))?.id ?? ""
+          : "";
+    const validBudget = requestedBudgetId
+      ? budgets.data.find((budget) => budget.id === requestedBudgetId)
+      : requestedBudgetName
+        ? budgets.data.find((budget) => budget.name.toLocaleLowerCase().includes(requestedBudgetName))
+        : undefined;
     const targetAccountId = validAccountId || validBudget?.accountId || "";
 
-    if (targetAccountId) {
-      setSelectedBankId(targetAccountId);
-    }
+    setSelectedBankId(targetAccountId);
 
     if (validBudget && (!targetAccountId || validBudget.accountId === targetAccountId)) {
+      requestedGroupIdRef.current = requestedGroupId;
       setActiveBudgetFilterId(validBudget.id);
+      setActiveGroupFilterId(requestedGroupId || "ALL");
     } else {
       setActiveBudgetFilterId("ALL");
+      setActiveGroupFilterId("ALL");
     }
+
+    const validMonths = requestedMonths
+      ? [...new Set(requestedMonths.split(",").filter((value) => /^\d{4}-(0[1-9]|1[0-2])$/.test(value)))].slice(0, 24)
+      : [];
+    if (validMonths.length) {
+      const sorted = [...validMonths].sort();
+      const [firstYear, firstMonth] = sorted[0].split("-").map(Number);
+      const [lastYear, lastMonth] = sorted.at(-1)!.split("-").map(Number);
+      setSelectedCustomMonths(sorted);
+      setActiveQuickSelect("custom");
+      setDateFilter({
+        from: new Date(Date.UTC(firstYear, firstMonth - 1, 1)).toISOString().split("T")[0],
+        to: new Date(Date.UTC(lastYear, lastMonth, 0)).toISOString().split("T")[0],
+      });
+    } else if (requestedFrom || requestedTo) {
+      setSelectedCustomMonths([]);
+      setActiveQuickSelect("custom");
+      setDateFilter({ from: requestedFrom || undefined, to: requestedTo || undefined });
+    } else if (isAskNestView) {
+      clearDateFilter();
+    }
+    setSearchQuery(requestedSearch);
 
     setUrlFilterHydrated(true);
   }, [urlFilterHydrated, bankAccounts.data, budgets.data, searchParams]);
@@ -1140,8 +1193,12 @@ export function TransactionsPage() {
     if (activeQuickSelect === "thisMonth") return currentMonthLabel;
     if (activeQuickSelect === "lastMonth") return previousMonthLabel;
     if (activeQuickSelect === "thisYear") return "This Year";
-    if (activeQuickSelect === "custom" && selectedMonth !== null) {
-      return `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
+    if (activeQuickSelect === "custom" && selectedCustomMonths.length === 1) {
+      const [year, month] = selectedCustomMonths[0].split("-").map(Number);
+      return `${MONTH_NAMES[month - 1]} ${year}`;
+    }
+    if (activeQuickSelect === "custom" && selectedCustomMonths.length > 1) {
+      return `${selectedCustomMonths.length} Months`;
     }
     if (activeQuickSelect === "custom") return "Custom";
     return "All Time";
@@ -2030,7 +2087,7 @@ export function TransactionsPage() {
               className={`tx-filter-pill ${activeQuickSelect === null && !dateFilter.from ? "is-active" : ""}`}
               onClick={() => {
                 setActiveQuickSelect(null);
-                setSelectedMonth(null);
+                setSelectedCustomMonths([]);
                 setDateFilter({});
               }}
             >
@@ -2039,7 +2096,10 @@ export function TransactionsPage() {
             <button
               type="button"
               className={`tx-filter-pill tx-filter-pill-custom ${activeQuickSelect === "custom" ? "is-active" : ""}`}
-              onClick={() => setIsCustomMonthOpen(!isCustomMonthOpen)}
+              onClick={() => {
+                if (!isCustomMonthOpen) setDraftCustomMonths(selectedCustomMonths);
+                setIsCustomMonthOpen(!isCustomMonthOpen);
+              }}
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style={{ marginRight: "4px" }}>
                 <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
@@ -2099,8 +2159,11 @@ export function TransactionsPage() {
             <div className="tx-popover-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsCustomMonthOpen(false))} />
             <div className="tx-month-popover">
               <div className="tx-popover-header">
-                <h4>Select Month</h4>
-                <ModalCloseButton onClick={() => setIsCustomMonthOpen(false)} label="Close Select Month" />
+                <div>
+                  <h4>Select months</h4>
+                  <p>{draftCustomMonths.length ? `${draftCustomMonths.length} selected` : "Choose up to 24 months"}</p>
+                </div>
+                <ModalCloseButton onClick={() => setIsCustomMonthOpen(false)} label="Close Select Months" />
               </div>
               <div className="tx-popover-body">
                 {/* Generate years from current year down to earliest transaction year (or 2020 as default) */}
@@ -2119,12 +2182,16 @@ export function TransactionsPage() {
                       <div className="tx-popover-months">
                         {MONTH_NAMES.map((month, idx) => {
                           const isCurrentMonth = year === new Date().getFullYear() && idx === new Date().getMonth();
+                          const monthKey = `${year}-${String(idx + 1).padStart(2, "0")}`;
+                          const isSelected = draftCustomMonths.includes(monthKey);
                           return (
                             <button
                               key={`${year}-${month}`}
                               type="button"
-                              className={`tx-popover-month ${selectedMonth === idx && selectedYear === year && activeQuickSelect === "custom" ? "is-active" : ""} ${isCurrentMonth ? "is-current" : ""}`}
-                              onClick={() => handleCustomMonthSelect(idx, year)}
+                              className={`tx-popover-month ${isSelected ? "is-active" : ""} ${isCurrentMonth ? "is-current" : ""}`}
+                              aria-pressed={isSelected}
+                              onClick={() => toggleCustomMonth(idx, year)}
+                              disabled={!isSelected && draftCustomMonths.length >= 24}
                             >
                               {month}
                             </button>
@@ -2134,6 +2201,14 @@ export function TransactionsPage() {
                     </div>
                   ));
                 })()}
+              </div>
+              <div className="tx-popover-actions">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDraftCustomMonths([])} disabled={!draftCustomMonths.length}>
+                  Clear
+                </button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={applyCustomMonths} disabled={!draftCustomMonths.length}>
+                  Apply {draftCustomMonths.length ? `(${draftCustomMonths.length})` : ""}
+                </button>
               </div>
             </div>
           </>,

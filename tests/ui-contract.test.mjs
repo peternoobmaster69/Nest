@@ -323,6 +323,23 @@ test("settings uses the shared typography and layout contract", async () => {
   assert.match(settingsContract, /\.settings-public-url-row\s*\{[^}]*grid-template-columns:\s*1fr/s);
 });
 
+test("settings keeps a compact continuous layout", async () => {
+  const [settings, styles] = await Promise.all([
+    readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(settings, /Access &amp; connections/);
+  assert.match(settings, /Workspace preferences/);
+  assert.match(settings, /Automation/);
+  assert.match(settings, /Data tools/);
+  assert.match(settings, /Bank accounts/);
+  assert.doesNotMatch(settings, /role="tablist"|activeSettingsTab|settings-tab/);
+  assert.doesNotMatch(styles, /\.settings-tab/);
+  assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-card-block \{\s*padding: 14px/s);
+  assert.match(styles, /\.st-container \.st-grid[\s\S]*?gap: 10px/s);
+});
+
 test("transaction groups use compact two-row cards and a searchable picker", async () => {
   const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");

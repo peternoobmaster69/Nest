@@ -72,11 +72,24 @@ Configure these server-only environment variables:
 AI_WORKLOAD_ENDPOINT="https://your-resource.openai.azure.com"
 AI_WORKLOAD_API_KEY="***"
 AI_WORKLOAD_MODEL="your-model-deployment-name"
+AI_WORKLOAD_INPUT_COST_PER_1M_USD="your-input-price-per-million-tokens"
+AI_WORKLOAD_OUTPUT_COST_PER_1M_USD="your-output-price-per-million-tokens"
+ADMIN="admin@example.com"
+ASK_NEST_HISTORY_RETENTION_DAYS="90"
+CRON_SECRET="a-long-random-secret"
 ```
 
 `AI_WORKLOAD_ENDPOINT` may be the Azure OpenAI resource root or its `/openai/v1/` base URL. `AI_WORKLOAD_MODEL` must be the Azure deployment name and must support the Responses API, function calling, and structured outputs. Restart the application after changing environment variables.
 
-Ask Nest responses are not cached or persisted by Nest. The initial implementation is session-only, rate-limited, and restricted to read operations in the authenticated active workspace. Azure requests use stateless Responses API calls and carry encrypted reasoning items only between the tool-call turns needed to answer the current question.
+`ADMIN` is the single email address allowed to open `/admin`. The comparison is case-insensitive and the route is unavailable when `ADMIN` is missing.
+
+Set the optional token-rate variables to your Azure deployment's current USD prices. The admin page uses them to estimate Ask Nest cost from recorded input/output tokens; it does not replace Azure billing and does not account for deployment-specific discounts or surcharges.
+
+Ask Nest history and user-approved memory are persisted per user and workspace. Raw questions and answers are retained for 90 days by default, then the daily scheduler rolls their turn/token usage into permanent daily summaries and deletes the raw payloads. Set `ASK_NEST_HISTORY_RETENTION_DAYS` to a whole number from 30 to 3650 to change that period. Memories are retained, but no longer point to an expired conversation.
+
+The `/api/cron/ask-nest-retention` scheduler route runs daily at 02:00 Singapore time (18:00 UTC) through `vercel.json`. It requires `Authorization: Bearer ${CRON_SECRET}` and fails closed if `CRON_SECRET` is not configured.
+
+Finance tools remain read-only, rate-limited, and restricted to the authenticated active workspace. Azure requests use stateless Responses API calls and carry encrypted reasoning items only between the tool-call turns needed to answer the current question.
 
 ## Credit Card Payment Reminders
 

@@ -45,6 +45,9 @@ test("Ask Nest exposes only bounded read tools", async () => {
     "get_receivables",
     "get_budget_plan",
     "explain_reconciliation",
+    "get_spending_breakdown",
+    "get_investment_summary",
+    "get_trip_spending",
   ];
 
   for (const name of expectedTools) {
@@ -55,6 +58,8 @@ test("Ask Nest exposes only bounded read tools", async () => {
   assert.match(tools, /take:\s*args\.limit/);
   assert.doesNotMatch(tools, /prisma\.\w+\.(?:create|update|delete|upsert)\s*\(/);
   assert.doesNotMatch(tools, /rawBody|accessToken|refreshToken|encryptedCardNumber/);
+  assert.match(tools, /transactionHref/);
+  assert.match(tools, /view["'],\s*["']ask-nest/);
 });
 
 test("Ask Nest validates structured answers and grounds displayed currency values", async () => {
@@ -67,7 +72,7 @@ test("Ask Nest validates structured answers and grounds displayed currency value
   assert.match(orchestration, /evidenceById\.get\(id\)/);
 });
 
-test("Ask Nest uses an accessible, session-only panel in the shared shell", async () => {
+test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", async () => {
   const shell = await source("components/app-shell.tsx");
   const panel = await source("components/ask-nest.tsx");
   const styles = await source("app/globals.css");
@@ -79,6 +84,128 @@ test("Ask Nest uses an accessible, session-only panel in the shared shell", asyn
   assert.match(panel, /Read-only/);
   assert.match(panel, /history:\s*getHistory|const history = getHistory/);
   assert.doesNotMatch(panel, /localStorage|sessionStorage/);
+  assert.match(panel, /\/api\/ai\/history\?limit=10/);
+  assert.match(panel, /Load older conversations/);
+  assert.match(panel, /renderWithFormattedDates/);
+  assert.match(panel, /AskNestVisualizationView/);
+  assert.match(panel, /ask-nest-trip-flag/);
+  assert.match(panel, /Select one to add it to the message box/);
+  assert.match(panel, /chooseFollowUp\(followUp\)/);
+  assert.doesNotMatch(panel, /onClick=\{\(\) => void ask\(followUp\)\}/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /\.ask-nest-panel/);
+});
+
+test("Ask Nest derives charts and trip cards from successful tool output", async () => {
+  const orchestration = await source("lib/ai/ask-nest.ts");
+  const tools = await source("lib/ai/ask-nest-tools.ts");
+
+  assert.match(orchestration, /resolveVisualization\(successfulToolOutputs\)/);
+  assert.match(tools, /type:\s*["']trip_cards["']/);
+  assert.match(tools, /type:\s*["']trend_chart["']/);
+  assert.match(tools, /type:\s*["']investment_chart["']/);
+  assert.match(tools, /groupId:\s*group\.id/);
+  assert.match(tools, /destination_hints/);
+  assert.match(tools, /TRANSACTION_TEXT_ESTIMATE/);
+  assert.match(tools, /Estimated from transaction text matches/);
+  assert.match(orchestration, /If get_trip_spending marks a result as estimated/);
+});
+
+test("Transactions supports Ask Nest deep links and multiple custom months", async () => {
+  const page = await source("components/transactions-page.tsx");
+  const route = await source("app/api/transactions/route.ts");
+
+  assert.match(page, /searchParams\.get\(["']view["']\) === ["']ask-nest["']/);
+  assert.match(page, /selectedCustomMonths/);
+  assert.match(page, /draftCustomMonths/);
+  assert.match(page, /Apply \{draftCustomMonths\.length/);
+  assert.match(page, /params\.set\(["']months["']/);
+  assert.match(route, /selectedMonthKeys\.length > 24/);
+  assert.match(route, /selectedMonthRanges\.map/);
+});
+
+test("Ask Nest history is scoped to the authenticated user and workspace", async () => {
+  const history = await source("app/api/ai/history/route.ts");
+  const ask = await source("app/api/ai/ask/route.ts");
+  const schema = await source("prisma/schema.prisma");
+
+  assert.match(history, /const \{ userId, workspaceId \} = await requireWorkspaceAccess\(\)/);
+  assert.match(history, /where: \{ workspaceId, userId \}/);
+  assert.match(history, /take: limit \+ 1/);
+  assert.match(history, /nextCursor/);
+  assert.match(ask, /prisma\.askNestTurn\.create/);
+  assert.match(schema, /model AskNestTurn/);
+  assert.match(schema, /@@index\(\[workspaceId, userId, createdAt\]\)/);
+});
+
+test("Ask Nest persists provider token usage for administration", async () => {
+  const [orchestration, ask, schema, admin] = await Promise.all([
+    source("lib/ai/ask-nest.ts"),
+    source("app/api/ai/ask/route.ts"),
+    source("prisma/schema.prisma"),
+    source("lib/admin-overview.ts"),
+  ]);
+
+  assert.match(orchestration, /response\.usage/);
+  assert.match(orchestration, /tokenUsage: hasTokenUsage \? tokenUsage : null/);
+  assert.match(ask, /inputTokens: result\.tokenUsage\?\.inputTokens/);
+  assert.match(schema, /inputTokens Int\?/);
+  assert.match(schema, /outputTokens Int\?/);
+  assert.match(schema, /totalTokens Int\?/);
+  assert.match(admin, /allTimeTokens/);
+  assert.match(admin, /trackedTokenTurnCount/);
+});
+
+test("Ask Nest retains usage summaries while a daily guarded job purges raw history", async () => {
+  const [retention, route, schema, vercel, readme, admin] = await Promise.all([
+    source("lib/ai/ask-nest-retention.ts"),
+    source("app/api/cron/ask-nest-retention/route.ts"),
+    source("prisma/schema.prisma"),
+    source("vercel.json"),
+    source("README.md"),
+    source("lib/admin-overview.ts"),
+  ]);
+
+  assert.match(retention, /DEFAULT_RETENTION_DAYS = 90/);
+  assert.match(retention, /ASK_NEST_HISTORY_RETENTION_DAYS/);
+  assert.match(retention, /UPDLOCK, READPAST, ROWLOCK/);
+  assert.match(retention, /askNestUsageDaily\.upsert/);
+  assert.match(retention, /askNestMemory\.updateMany/);
+  assert.match(retention, /askNestTurn\.deleteMany/);
+  assert.match(route, /authorizeCronRequest\(request\)/);
+  assert.match(route, /runAskNestRetention\(\)/);
+  assert.match(schema, /model AskNestUsageDaily/);
+  assert.match(schema, /@@unique\(\[day, workspaceId, userId\]\)/);
+  assert.match(vercel, /api\/cron\/ask-nest-retention/);
+  assert.match(readme, /ASK_NEST_HISTORY_RETENTION_DAYS/);
+  assert.match(admin, /archivedUsage/);
+});
+
+test("Ask Nest memory is explicit, scoped, reviewable, and never a financial source", async () => {
+  const orchestration = await source("lib/ai/ask-nest.ts");
+  const memory = await source("lib/ai/memory.ts");
+  const route = await source("app/api/ai/memory/route.ts");
+  const askRoute = await source("app/api/ai/ask/route.ts");
+  const panel = await source("components/ask-nest.tsx");
+  const schema = await source("prisma/schema.prisma");
+
+  assert.match(orchestration, /memory_candidates/);
+  assert.match(orchestration, /loadRelevantAskNestMemories/);
+  assert.match(orchestration, /loadRelevantAskNestTopics/);
+  assert.match(orchestration, /never reuse their old financial figures/);
+  assert.match(orchestration, /never a source for financial facts/);
+  assert.match(memory, /EXPLICIT_MEMORY_PATTERN/);
+  assert.match(memory, /UNSAFE_MEMORY_PATTERN/);
+  assert.match(memory, /FINANCIAL_FACT_PATTERN/);
+  assert.match(memory, /getAskNestOwnerHash/);
+  assert.match(askRoute, /saveAskNestMemories/);
+  assert.match(route, /const \{ userId, workspaceId \} = await requireWorkspaceAccess\(\)/);
+  assert.match(route, /ownerHash/);
+  assert.match(route, /export async function PATCH/);
+  assert.match(route, /export async function DELETE/);
+  assert.match(panel, /What Ask Nest remembers/);
+  assert.match(panel, /Forget everything/);
+  assert.match(panel, /Financial figures are always loaded fresh/);
+  assert.match(schema, /model AskNestMemory/);
+  assert.match(schema, /@@unique\(\[ownerHash, keyHash\]\)/);
 });

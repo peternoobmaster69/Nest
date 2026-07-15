@@ -23,6 +23,7 @@ import {
   Moon,
   ReceiptText,
   Settings,
+  ShieldCheck,
   Sun,
   Undo2,
   Users,
@@ -79,6 +80,7 @@ export function AppSidebar({
     memberCount?: number;
     pendingInviteCount?: number;
     sidebarMoneyPages?: Record<string, boolean>;
+    isAdmin?: boolean;
   };
   contextLoading?: boolean;
 }) {
@@ -95,6 +97,7 @@ export function AppSidebar({
         memberCount?: number;
         pendingInviteCount?: number;
         sidebarMoneyPages?: Record<string, boolean>;
+        isAdmin?: boolean;
       }>;
     },
     enabled: !contextData,
@@ -367,6 +370,11 @@ export function AppSidebar({
         <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href="/settings" onClick={handleNavClick}>
           <Settings className="sb-ic" size={18} aria-hidden="true" />Settings
         </Link>
+        {resolvedContext?.isAdmin ? (
+          <Link className={`sb-item${currentPath === "/admin" ? " on" : ""}`} href="/admin" onClick={handleNavClick}>
+            <ShieldCheck className="sb-ic" size={18} aria-hidden="true" />Admin
+          </Link>
+        ) : null}
 
         {/* Mobile-only logout button */}
         <button className="sb-item sb-logout-mobile" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/signin" }))}>

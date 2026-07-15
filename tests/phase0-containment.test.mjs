@@ -17,6 +17,7 @@ test("all scheduler routes use the fail-closed constant-time cron guard", async 
     "app/api/cron/credit-auto-accounting/route.ts",
     "app/api/cron/credit-card-payment-reminders/route.ts",
     "app/api/cron/gmail-sync/route.ts",
+    "app/api/cron/ask-nest-retention/route.ts",
   ]) {
     const code = await source(route);
     assert.match(code, /authorizeCronRequest\(request\)/, route);
