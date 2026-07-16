@@ -154,6 +154,7 @@ test("payment due card saves from its compact date tag", async () => {
   assert.match(source, /\.cct-due-date-trigger\s*\{[^}]*position:\s*relative[^}]*min-height:\s*28px/s);
   assert.match(source, /\.cct-due-date-control\s*\{[^}]*position:\s*relative[^}]*safe-area-inset-top[^}]*safe-area-inset-bottom/s);
   assert.match(source, /\.cct-due-picker\s*\{[^}]*position:\s*absolute[^}]*bottom:\s*0[^}]*left:\s*50%[^}]*opacity:\s*0[^}]*clip-path:\s*inset\(50%\)/s);
+  assert.match(source, /@media \(hover: none\) and \(pointer: coarse\)\s*\{\s*\.cct-due-picker\s*\{[^}]*inset:\s*0[^}]*width:\s*100%[^}]*height:\s*100%[^}]*pointer-events:\s*auto[^}]*clip-path:\s*none/s);
   assert.match(source, /\.cct-payment-btn\s*\{[^}]*height:\s*26px[^}]*padding:\s*0 9px/s);
 });
 

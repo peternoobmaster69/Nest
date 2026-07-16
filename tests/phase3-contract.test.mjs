@@ -73,7 +73,8 @@ test("push notifications are limited to scheduled card-due reminders and invitat
   assert.match(invitations, /Workspace invitation/);
   assert.doesNotMatch(jobs, /Background task complete|sendPushToUser/);
   assert.match(cardReminders, /sendPushToUser/);
-  assert.match(cardReminders, /shouldSendPaymentReminder\(getDaysUntilDue\(row\.paymentDueDate, today\)\)/);
+  assert.match(cardReminders, /shouldShowPaymentReminder\(getDaysUntilDue\(row\.paymentDueDate, today\)\)/);
+  assert.match(cardReminders, /shouldRealert: shouldSendPaymentReminder\(daysUntilDue\)/);
   assert.match(cardReminders, /\[type\] IN \(\$\{CREDIT_CARD_DUE_TYPE\}, \$\{WORKSPACE_INVITATION_TYPE\}\)/);
   assert.doesNotMatch(reminderRunner, /sendReceivableDatePushReminders/);
   assert.match(settings, /scheduled reminders for credit card payments that are due, plus workspace invitations/);

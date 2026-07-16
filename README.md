@@ -125,7 +125,7 @@ Credit card payment reminder emails are sent by calling:
 POST /api/credit-card-payment-reminders
 ```
 
-Schedule this endpoint to run once per day. It sends reminders for outstanding credit card statement balances that are due in the next 3 days or already overdue, and stops once the statement balance is no longer outstanding.
+Schedule this endpoint to run once per day. It sends reminders for outstanding credit card statement balances 5 days, 3 days, and 1 day before the due date, on the due date, and every overdue day. Reminders stop once the statement balance is no longer outstanding.
 
 Required environment variables:
 

@@ -193,35 +193,52 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
   const htmlRows = rows
     .map((row) => {
       const cardName = `${row.bankName ? `${row.bankName} ` : ""}${row.cardName}`;
+      const daysUntilDue = getDaysUntilDue(row.paymentDueDate, today);
+      const dueColor = daysUntilDue <= 0 ? "#b42318" : daysUntilDue <= 1 ? "#b54708" : "#9a6700";
       return `
         <tr>
-          <td style="padding:8px 0;border-bottom:1px solid #e5e7eb;">${escapeHtml(cardName)}</td>
-          <td style="padding:8px 0;border-bottom:1px solid #e5e7eb;">${escapeHtml(getStatementLabel(row.statementMonth, row.statementYear))}</td>
-          <td style="padding:8px 0;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatMoney(toNumber(row.outstandingCents)))}</td>
-          <td style="padding:8px 0;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(getDueLabel(row.paymentDueDate, today))}</td>
+          <td style="padding:14px 12px;border-bottom:1px solid #e7efea;">
+            <strong>${escapeHtml(cardName)}</strong><br>
+            <span style="color:#65776d;font-size:13px;">${escapeHtml(getStatementLabel(row.statementMonth, row.statementYear))}</span>
+          </td>
+          <td align="right" style="padding:14px 12px;border-bottom:1px solid #e7efea;font-weight:700;white-space:nowrap;">${escapeHtml(formatMoney(toNumber(row.outstandingCents)))}</td>
+          <td align="right" style="padding:14px 12px;border-bottom:1px solid #e7efea;color:${dueColor};white-space:nowrap;">
+            ${escapeHtml(getDueLabel(row.paymentDueDate, today))}<br>
+            <span style="color:#65776d;font-size:12px;">${escapeHtml(formatDate(row.paymentDueDate))}</span>
+          </td>
         </tr>
       `;
     })
     .join("");
 
   const html = `
-    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.5;">
-      <p>${escapeHtml(greeting)}</p>
-      <p>This is a reminder that <strong>${escapeHtml(workspaceName)}</strong> has credit card payments due soon or overdue.</p>
-      <table style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr>
-            <th align="left">Card</th>
-            <th align="left">Statement</th>
-            <th align="right">Outstanding</th>
-            <th align="right">Due</th>
-          </tr>
-        </thead>
-        <tbody>${htmlRows}</tbody>
-      </table>
-      <p><strong>Total outstanding: ${escapeHtml(formatMoney(totalOutstanding))}</strong></p>
-      ${appUrl ? `<p><a href="${escapeHtml(appUrl)}/credit-transactions">Manage payments in Nest</a></p>` : ""}
-      <p style="color:#6b7280;font-size:13px;">You will keep receiving this reminder while the statement balance remains outstanding.</p>
+    <div style="margin:0;padding:28px 12px;background:#f3f7f5;font-family:Arial,sans-serif;color:#17211b;line-height:1.5;">
+      <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dce8e1;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(20,68,43,0.08);">
+        <div style="padding:22px 28px;background:#158f58;color:#ffffff;">
+          <div style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;opacity:0.88;">Nest</div>
+          <div style="margin-top:5px;font-size:24px;font-weight:700;line-height:1.25;">Credit card payment reminder</div>
+        </div>
+        <div style="padding:26px 28px;">
+          <p style="margin:0 0 8px;">${escapeHtml(greeting)}</p>
+          <p style="margin:0 0 22px;color:#42544a;">This is a reminder that <strong>${escapeHtml(workspaceName)}</strong> has credit card payments due soon or overdue.</p>
+          <table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #dce8e1;border-radius:10px;overflow:hidden;">
+            <thead>
+              <tr style="background:#f6faf8;color:#53645b;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">
+                <th align="left" style="padding:11px 12px;border-bottom:1px solid #dce8e1;">Card</th>
+                <th align="right" style="padding:11px 12px;border-bottom:1px solid #dce8e1;">Outstanding</th>
+                <th align="right" style="padding:11px 12px;border-bottom:1px solid #dce8e1;">Due</th>
+              </tr>
+            </thead>
+            <tbody>${htmlRows}</tbody>
+          </table>
+          <div style="margin-top:20px;padding:16px 18px;border-radius:10px;background:#edf8f2;">
+            <span style="color:#53645b;font-size:13px;">Total outstanding</span><br>
+            <strong style="font-size:24px;color:#116f45;">${escapeHtml(formatMoney(totalOutstanding))}</strong>
+          </div>
+          ${appUrl ? `<p style="margin:22px 0 0;"><a href="${escapeHtml(appUrl)}/credit-transactions" style="display:inline-block;padding:11px 17px;border-radius:8px;background:#158f58;color:#ffffff;font-weight:700;text-decoration:none;">Manage payments in Nest</a></p>` : ""}
+          <p style="margin:22px 0 0;color:#718078;font-size:12px;">You will keep receiving this reminder while the statement balance remains outstanding.</p>
+        </div>
+      </div>
     </div>
   `;
 

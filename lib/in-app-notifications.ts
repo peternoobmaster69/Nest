@@ -6,6 +6,7 @@ import {
   getDaysUntilDue,
   REMINDER_LEAD_DAYS,
   shouldSendPaymentReminder,
+  shouldShowPaymentReminder,
   startOfUtcDay,
 } from "@/lib/credit-card-payment-reminder-schedule";
 import { sendPushToUser } from "@/lib/web-push";
@@ -56,7 +57,7 @@ function dueCopy(daysUntilDue: number) {
   return {
     title: "Credit card payment due soon",
     label: `due in ${daysUntilDue} days`,
-    shouldRealert: daysUntilDue === 3,
+    shouldRealert: shouldSendPaymentReminder(daysUntilDue),
   };
 }
 
@@ -92,7 +93,7 @@ async function findDueCards(workspaceId?: string) {
 
   return {
     today,
-    rows: rows.filter((row) => shouldSendPaymentReminder(getDaysUntilDue(row.paymentDueDate, today))),
+    rows: rows.filter((row) => shouldShowPaymentReminder(getDaysUntilDue(row.paymentDueDate, today))),
   };
 }
 

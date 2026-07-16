@@ -1,4 +1,4 @@
-export const REMINDER_LEAD_DAYS = 3;
+export const REMINDER_LEAD_DAYS = 5;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 export function startOfUtcDay(date: Date) {
@@ -14,7 +14,11 @@ export function getDaysUntilDue(dueDate: Date, today: Date) {
 }
 
 export function shouldSendPaymentReminder(daysUntilDue: number) {
-  return daysUntilDue === 3 || daysUntilDue === 1 || daysUntilDue <= 0;
+  return daysUntilDue === 5 || daysUntilDue === 3 || daysUntilDue === 1 || daysUntilDue <= 0;
+}
+
+export function shouldShowPaymentReminder(daysUntilDue: number) {
+  return daysUntilDue <= REMINDER_LEAD_DAYS;
 }
 
 export function getReminderDateKey(date: Date) {

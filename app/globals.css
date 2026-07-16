@@ -10212,6 +10212,23 @@ body[data-modal-scroll-lock="true"] {
   transform: translateX(-50%);
 }
 
+/* iOS Safari only opens its native date UI from a direct tap on the input. */
+@media (hover: none) and (pointer: coarse) {
+  .cct-due-picker {
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    min-block-size: 100%;
+    opacity: 0;
+    pointer-events: auto;
+    clip-path: none;
+    transform: none;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+}
+
 .cct-payment-btn {
   height: 26px;
   min-height: 26px;
