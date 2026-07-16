@@ -81,6 +81,8 @@ test("admin totals retain archived Ask Nest usage after raw history is purged", 
 
   assert.match(overview, /prisma\.askNestUsageDaily\.aggregate/);
   assert.match(overview, /archivedUsageByUser/);
+  assert.match(overview, /archivedRecentUsage/);
+  assert.match(overview, /sevenDaysAgoDay/);
   assert.match(overview, /askNestHistoryRetentionDays/);
   assert.match(page, /Ask Nest history/);
 });
@@ -113,4 +115,18 @@ test("admin page reports whole-database storage without failing when metadata is
   assert.match(overview, /catch \{\s*return null;/);
   assert.match(page, /Database storage/);
   assert.match(page, /formatStorage/);
+});
+
+test("admin overview reports Ask Nest tool quality and usefulness without exposing diagnostics payloads", async () => {
+  const [overview, page] = await Promise.all([
+    read("lib/admin-overview.ts"),
+    read("app/admin/page.tsx"),
+  ]);
+  assert.match(overview, /emptyResultRate/);
+  assert.match(overview, /helpfulRate/);
+  assert.match(overview, /getAskNestSearchGate/);
+  assert.doesNotMatch(overview, /diagnosticsJson:\s*turn\.diagnosticsJson/);
+  assert.match(page, /Tool quality/);
+  assert.match(page, /User feedback/);
+  assert.match(page, /Knowledge search/);
 });

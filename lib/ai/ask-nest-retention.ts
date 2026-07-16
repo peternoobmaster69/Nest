@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const DEFAULT_RETENTION_DAYS = 90;
@@ -15,6 +16,10 @@ type RetentionTurn = {
   inputTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
+  toolCallCount: number;
+  emptyResultCount: number;
+  durationMs: number | null;
+  feedbackRating: string | null;
 };
 
 type DailyUsage = {
@@ -26,6 +31,12 @@ type DailyUsage = {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  toolCallCount: number;
+  emptyResultCount: number;
+  totalDurationMs: number;
+  feedbackCount: number;
+  helpfulCount: number;
+  notHelpfulCount: number;
 };
 
 export function getAskNestHistoryRetentionDays() {
@@ -36,7 +47,7 @@ export function getAskNestHistoryRetentionDays() {
   return Math.min(MAX_RETENTION_DAYS, Math.max(MIN_RETENTION_DAYS, configured));
 }
 
-function getDayKey(date: Date) {
+export function getAskNestUsageDayKey(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: SINGAPORE_TIME_ZONE,
     year: "numeric",
@@ -52,7 +63,7 @@ function summarizeTurns(turns: RetentionTurn[]) {
   const usageByOwnerAndDay = new Map<string, DailyUsage>();
 
   for (const turn of turns) {
-    const day = getDayKey(turn.createdAt);
+    const day = getAskNestUsageDayKey(turn.createdAt);
     const key = `${day}:${turn.workspaceId}:${turn.userId}`;
     const existing = usageByOwnerAndDay.get(key) ?? {
       day,
@@ -63,6 +74,12 @@ function summarizeTurns(turns: RetentionTurn[]) {
       inputTokens: 0,
       outputTokens: 0,
       totalTokens: 0,
+      toolCallCount: 0,
+      emptyResultCount: 0,
+      totalDurationMs: 0,
+      feedbackCount: 0,
+      helpfulCount: 0,
+      notHelpfulCount: 0,
     };
 
     existing.turnCount += 1;
@@ -70,10 +87,82 @@ function summarizeTurns(turns: RetentionTurn[]) {
     existing.inputTokens += turn.inputTokens ?? 0;
     existing.outputTokens += turn.outputTokens ?? 0;
     existing.totalTokens += turn.totalTokens ?? 0;
+    existing.toolCallCount += turn.toolCallCount;
+    existing.emptyResultCount += turn.emptyResultCount;
+    existing.totalDurationMs += turn.durationMs ?? 0;
+    if (turn.feedbackRating === "HELPFUL") {
+      existing.feedbackCount += 1;
+      existing.helpfulCount += 1;
+    } else if (turn.feedbackRating === "NOT_HELPFUL") {
+      existing.feedbackCount += 1;
+      existing.notHelpfulCount += 1;
+    }
     usageByOwnerAndDay.set(key, existing);
   }
 
   return [...usageByOwnerAndDay.values()];
+}
+
+async function archiveAskNestTurns(tx: Prisma.TransactionClient, turns: RetentionTurn[]) {
+  if (!turns.length) return { processed: 0, summaries: 0 };
+
+  const summaries = summarizeTurns(turns);
+  for (const summary of summaries) {
+    await tx.askNestUsageDaily.upsert({
+      where: {
+        day_workspaceId_userId: {
+          day: summary.day,
+          workspaceId: summary.workspaceId,
+          userId: summary.userId,
+        },
+      },
+      create: summary,
+      update: {
+        turnCount: { increment: summary.turnCount },
+        trackedTurnCount: { increment: summary.trackedTurnCount },
+        inputTokens: { increment: summary.inputTokens },
+        outputTokens: { increment: summary.outputTokens },
+        totalTokens: { increment: summary.totalTokens },
+        toolCallCount: { increment: summary.toolCallCount },
+        emptyResultCount: { increment: summary.emptyResultCount },
+        totalDurationMs: { increment: summary.totalDurationMs },
+        feedbackCount: { increment: summary.feedbackCount },
+        helpfulCount: { increment: summary.helpfulCount },
+        notHelpfulCount: { increment: summary.notHelpfulCount },
+      },
+    });
+  }
+
+  const ids = turns.map((turn) => turn.id);
+  await tx.askNestMemory.updateMany({
+    where: { sourceTurnId: { in: ids } },
+    data: { sourceTurnId: null },
+  });
+  await tx.askNestTurn.deleteMany({ where: { id: { in: ids } } });
+
+  return { processed: turns.length, summaries: summaries.length };
+}
+
+export async function clearAskNestHistoryPreservingUsage(params: { workspaceId: string; userId: string }) {
+  return prisma.$transaction(async (tx) => {
+    const turns = await tx.$queryRaw<RetentionTurn[]>`
+      SELECT
+        [id], [workspaceId], [userId], [createdAt], [inputTokens], [outputTokens], [totalTokens],
+        [toolCallCount], [emptyResultCount], [durationMs], [feedbackRating]
+      FROM [dbo].[AskNestTurn] WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+      WHERE [workspaceId] = ${params.workspaceId} AND [userId] = ${params.userId}
+      ORDER BY [createdAt] ASC, [id] ASC
+    `;
+
+    let processed = 0;
+    let summaries = 0;
+    for (let offset = 0; offset < turns.length; offset += DEFAULT_BATCH_SIZE) {
+      const archived = await archiveAskNestTurns(tx, turns.slice(offset, offset + DEFAULT_BATCH_SIZE));
+      processed += archived.processed;
+      summaries += archived.summaries;
+    }
+    return { processed, summaries };
+  });
 }
 
 export type AskNestRetentionResult = {
@@ -102,42 +191,16 @@ export async function runAskNestRetention(options: { now?: Date; batchSize?: num
     const result = await prisma.$transaction(async (tx) => {
       const turns = await tx.$queryRaw<RetentionTurn[]>`
         SELECT TOP (${batchSize})
-          [id], [workspaceId], [userId], [createdAt], [inputTokens], [outputTokens], [totalTokens]
+          [id], [workspaceId], [userId], [createdAt], [inputTokens], [outputTokens], [totalTokens],
+          [toolCallCount], [emptyResultCount], [durationMs], [feedbackRating]
         FROM [dbo].[AskNestTurn] WITH (UPDLOCK, READPAST, ROWLOCK)
         WHERE [createdAt] < ${cutoff}
         ORDER BY [createdAt] ASC, [id] ASC
       `;
       if (!turns.length) return { processed: 0, summaries: 0, hasMore: false };
 
-      const summaries = summarizeTurns(turns);
-      for (const summary of summaries) {
-        await tx.askNestUsageDaily.upsert({
-          where: {
-            day_workspaceId_userId: {
-              day: summary.day,
-              workspaceId: summary.workspaceId,
-              userId: summary.userId,
-            },
-          },
-          create: summary,
-          update: {
-            turnCount: { increment: summary.turnCount },
-            trackedTurnCount: { increment: summary.trackedTurnCount },
-            inputTokens: { increment: summary.inputTokens },
-            outputTokens: { increment: summary.outputTokens },
-            totalTokens: { increment: summary.totalTokens },
-          },
-        });
-      }
-
-      const ids = turns.map((turn) => turn.id);
-      await tx.askNestMemory.updateMany({
-        where: { sourceTurnId: { in: ids } },
-        data: { sourceTurnId: null },
-      });
-      await tx.askNestTurn.deleteMany({ where: { id: { in: ids } } });
-
-      return { processed: turns.length, summaries: summaries.length, hasMore: turns.length === batchSize };
+      const archived = await archiveAskNestTurns(tx, turns);
+      return { ...archived, hasMore: turns.length === batchSize };
     });
 
     if (!result.processed) break;

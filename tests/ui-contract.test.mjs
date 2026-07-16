@@ -86,6 +86,21 @@ test("sidebar does not expose the credit alert diagnostics route", async () => {
   assert.doesNotMatch(source, /href=["']\/credit-alerts["']/);
 });
 
+test("dashboard and transactions share the bank selector presentation", async () => {
+  const dashboard = await readFile(path.join(root, "components/dashboard-shell.tsx"), "utf8");
+  const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+  const dashboardSkeleton = await readFile(path.join(root, "components/skeletons/DashboardSkeleton.tsx"), "utf8");
+  const transactionsSkeleton = await readFile(path.join(root, "components/skeletons/TransactionsSkeleton.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.equal(dashboard.match(/className="bm-edit-btn tx-bank-action-btn"/g)?.length, 2);
+  assert.equal(transactions.match(/className="bm-edit-btn tx-bank-action-btn"/g)?.length, 2);
+  assert.match(dashboardSkeleton, /return <BankSelectorSkeleton \/>/);
+  assert.match(transactionsSkeleton, /return <BankSelectorSkeleton \/>/);
+  assert.match(styles, /@media \(max-width: 767px\) \{\s*\.tx-bank-action-btn \{/);
+  assert.doesNotMatch(styles, /\.txn-page \.tx-bank-action-btn/);
+});
+
 test("mobile editable controls do not trigger viewport focus zoom", async () => {
   const source = await readFile(path.join(root, "app/globals.css"), "utf8");
 

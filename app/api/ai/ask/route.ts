@@ -86,6 +86,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const turnId = randomUUID();
     const result = await answerAskNest({
       workspaceId,
       userId,
@@ -95,8 +96,8 @@ export async function POST(request: Request) {
       history: parsed.data.history,
     });
     const answer = result.answer;
+    answer.turnId = turnId;
     try {
-      const turnId = randomUUID();
       await prisma.askNestTurn.create({
         data: {
           id: turnId,
@@ -108,6 +109,10 @@ export async function POST(request: Request) {
           inputTokens: result.tokenUsage?.inputTokens,
           outputTokens: result.tokenUsage?.outputTokens,
           totalTokens: result.tokenUsage?.totalTokens,
+          diagnosticsJson: JSON.stringify(result.diagnostics),
+          toolCallCount: result.diagnostics.toolCallCount,
+          emptyResultCount: result.diagnostics.emptyResultCount,
+          durationMs: result.diagnostics.durationMs,
         },
       });
       const memoryUpdates = await saveAskNestMemories({
@@ -154,7 +159,8 @@ export async function POST(request: Request) {
       return errorResponse("Ask Nest cannot reach Azure AI right now.", "AI_UNAVAILABLE", 503);
     }
     if (error instanceof AskNestResponseError) {
-      return errorResponse("Ask Nest could not produce a grounded answer. Try rephrasing the question.", "AI_INVALID_RESPONSE", 502);
+      console.warn("Ask Nest response rejected", { code: error.code });
+      return errorResponse(error.publicMessage, error.code, error.status);
     }
     if (error instanceof APIError) {
       console.error("Ask Nest Azure API error", {

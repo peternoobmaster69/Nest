@@ -57,6 +57,7 @@ export type AskNestVisualization =
     };
 
 export type AskNestAnswer = {
+  turnId?: string;
   answer: string;
   highlights: AskNestHighlight[];
   evidence: AskNestEvidence[];
@@ -65,6 +66,15 @@ export type AskNestAnswer = {
   memoryUpdates?: string[];
   scope: AskNestScope;
 };
+
+export type AskNestFeedbackRating = "HELPFUL" | "NOT_HELPFUL";
+
+export type AskNestFeedbackReason =
+  | "WRONG_DATA"
+  | "MISUNDERSTOOD"
+  | "MISSING_DETAIL"
+  | "NO_RESULTS"
+  | "OTHER";
 
 export type AskNestApiError = {
   error: string;

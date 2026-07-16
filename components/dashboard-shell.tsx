@@ -1435,7 +1435,7 @@ export function DashboardShell({
                     {hasMultipleBankAccounts ? (
                       <button
                         type="button"
-                        className="bm-edit-btn"
+                        className="bm-edit-btn tx-bank-action-btn"
                         onClick={() => setIsBankPickerOpen((open) => !open)}
                         aria-label="Choose bank"
                         title="Choose bank"
@@ -1446,7 +1446,7 @@ export function DashboardShell({
                     {selectedBank ? (
                       <button
                         type="button"
-                        className="bm-edit-btn"
+                        className="bm-edit-btn tx-bank-action-btn"
                         onClick={() => openEditBankBalance(selectedBank)}
                         aria-label={`Edit ${selectedBank.name} balance`}
                         title="Edit balance"

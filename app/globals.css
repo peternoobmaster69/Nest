@@ -5766,6 +5766,13 @@ body[data-modal-scroll-lock="true"] {
   background: color-mix(in srgb, var(--brand-500) 7%, var(--bg-surface));
 }
 
+.tx-recent-row.is-deep-linked {
+  scroll-margin-block: 110px;
+  border-color: var(--brand-500);
+  background: color-mix(in srgb, var(--brand-500) 10%, var(--bg-surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 16%, transparent);
+}
+
 .tx-recent-main {
   display: grid;
   min-width: 0;
@@ -11203,7 +11210,7 @@ body[data-modal-scroll-lock="true"] {
 }
 
 @media (max-width: 767px) {
-  .txn-page .tx-bank-action-btn {
+  .tx-bank-action-btn {
     width: 28px;
     min-width: 28px;
     height: 28px;
@@ -16504,6 +16511,17 @@ body[data-modal-scroll-lock="true"] {
   margin-top: 1px;
 }
 
+.ask-nest-error > div {
+  min-width: 0;
+}
+
+.ask-nest-error strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
 .ask-nest-error p {
   margin: 0;
   color: var(--text-primary);
@@ -16872,26 +16890,34 @@ body[data-modal-scroll-lock="true"] {
 }
 
 .ask-nest-chart-values {
-  display: flex;
-  justify-content: flex-end;
-  gap: 14px;
-  margin-top: 4px;
-}
-
-.ask-nest-chart-values span {
   display: grid;
-  gap: 1px;
-  text-align: right;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-subtle);
 }
 
-.ask-nest-chart-values small,
+.ask-nest-chart-values > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.ask-nest-chart-values dt,
 .ask-nest-investment-row small {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
-.ask-nest-chart-values strong {
+.ask-nest-chart-values dd {
+  margin: 0;
+  color: var(--text-primary);
   font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
 }
 
 .ask-nest-investment-legend {
@@ -17028,6 +17054,59 @@ body[data-modal-scroll-lock="true"] {
   line-height: 1.45;
 }
 
+.ask-nest-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.ask-nest-feedback > button,
+.ask-nest-feedback-reasons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-primary);
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ask-nest-feedback > button:hover:not(:disabled),
+.ask-nest-feedback-reasons button:hover:not(:disabled) {
+  border-color: var(--brand-300);
+  color: var(--brand-700);
+}
+
+.ask-nest-feedback button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.ask-nest-feedback-reasons {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.ask-nest-feedback-thanks {
+  color: var(--text-secondary);
+}
+
+.ask-nest-feedback > small {
+  flex-basis: 100%;
+  color: var(--danger);
+}
+
 .ask-nest-followups {
   display: grid;
   gap: 9px;
@@ -17108,17 +17187,23 @@ body[data-modal-scroll-lock="true"] {
 
 .ask-nest-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 8px;
-  padding: 6px 6px 6px 11px;
+  gap: 10px;
+}
+
+.ask-nest-input-shell {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 6px 11px;
   border: 1px solid var(--border-default);
   border-radius: 14px;
   background: var(--bg-surface);
   transition: border-color var(--t), box-shadow var(--t);
 }
 
-.ask-nest-form:focus-within {
+.ask-nest-input-shell:focus-within {
   border-color: var(--brand-500);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 14%, transparent);
 }
@@ -17128,7 +17213,7 @@ body[data-modal-scroll-lock="true"] {
   min-height: 38px;
   max-height: 120px;
   resize: none;
-  padding: 7px 0 4px;
+  padding: 5px 0;
   border: 0;
   outline: 0;
   background: transparent;
@@ -17147,10 +17232,12 @@ body[data-modal-scroll-lock="true"] {
 }
 
 .ask-nest-send {
-  width: 38px;
-  height: 38px;
-  min-height: 38px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  align-self: end;
+  border-radius: 12px;
 }
 
 .ask-nest-footer > p {
@@ -17222,6 +17309,10 @@ html[data-ask-nest-open="true"] {
 
   .ask-nest-form textarea {
     font-size: 16px;
+  }
+
+  .ask-nest-form {
+    gap: 8px;
   }
 
   .ask-nest-question {

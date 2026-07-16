@@ -501,6 +501,13 @@ model AskNestTurn {
   inputTokens Int?
   outputTokens Int?
   totalTokens Int?
+  diagnosticsJson String?   @db.NVarChar(Max)
+  toolCallCount Int         @default(0)
+  emptyResultCount Int      @default(0)
+  durationMs Int?
+  feedbackRating String?
+  feedbackReason String?
+  feedbackAt DateTime?
   createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -508,6 +515,7 @@ model AskNestTurn {
 
   @@index([workspaceId, userId, createdAt])
   @@index([createdAt, totalTokens])
+  @@index([feedbackRating, createdAt])
 }
 
 model AskNestMemory {
@@ -545,6 +553,12 @@ model AskNestUsageDaily {
   inputTokens       Int       @default(0)
   outputTokens      Int       @default(0)
   totalTokens       Int       @default(0)
+  toolCallCount     Int       @default(0)
+  emptyResultCount  Int       @default(0)
+  totalDurationMs   Int       @default(0)
+  feedbackCount     Int       @default(0)
+  helpfulCount      Int       @default(0)
+  notHelpfulCount   Int       @default(0)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

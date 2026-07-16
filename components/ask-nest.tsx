@@ -6,17 +6,22 @@ import {
   Brain,
   CircleAlert,
   LoaderCircle,
+  PencilLine,
   RotateCcw,
   Save,
   Send,
   Sparkles,
   Trash2,
+  ThumbsDown,
+  ThumbsUp,
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   AskNestAnswer,
   AskNestApiError,
+  AskNestFeedbackRating,
+  AskNestFeedbackReason,
   AskNestHistoryMessage,
   AskNestVisualization,
 } from "@/lib/ai/ask-nest-types";
@@ -29,8 +34,14 @@ type AskNestTurn = {
   question: string;
   answer?: AskNestAnswer;
   error?: string;
+  errorCode?: string;
   pending?: boolean;
   createdAt?: string;
+  feedbackRating?: AskNestFeedbackRating | null;
+  feedbackReason?: AskNestFeedbackReason | null;
+  feedbackPrompt?: boolean;
+  feedbackPending?: boolean;
+  feedbackError?: string;
 };
 
 type AskNestHistoryPage = {
@@ -50,10 +61,62 @@ type AskNestMemoryItem = {
   updatedAt: string;
 };
 
+class AskNestRequestError extends Error {
+  code: string;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "AskNestRequestError";
+    this.code = code;
+  }
+}
+
+const EDITABLE_ASK_NEST_ERRORS = new Set([
+  "AI_LOOKUP_LIMIT",
+  "AI_LOOKUP_ROUNDS_EXHAUSTED",
+  "AI_INVALID_TOOL_FILTERS",
+  "AI_NO_MATCHING_DATA",
+  "AI_OUTPUT_LIMIT",
+  "AI_CONTENT_FILTERED",
+  "AI_UNGROUNDED_VALUE",
+  "AI_AMBIGUOUS_CURRENCY",
+]);
+
+const ASK_NEST_ERROR_LABELS: Record<string, string> = {
+  AI_WORKSPACE_UNAVAILABLE: "Workspace unavailable",
+  AI_LOOKUP_LIMIT: "Lookup limit reached",
+  AI_LOOKUP_ROUNDS_EXHAUSTED: "Lookup planning did not finish",
+  AI_INVALID_TOOL_FILTERS: "Invalid data filters",
+  AI_DATA_TOOL_UNAVAILABLE: "Data source unavailable",
+  AI_NO_MATCHING_DATA: "No matching records",
+  AI_OUTPUT_LIMIT: "Answer exceeded the output limit",
+  AI_CONTENT_FILTERED: "Response stopped by content safety",
+  AI_MODEL_GENERATION_FAILED: "Azure AI generation failed",
+  AI_EMPTY_RESPONSE: "No response from Azure AI",
+  AI_INVALID_RESPONSE: "Response format could not be verified",
+  AI_UNGROUNDED_VALUE: "Unsupported financial value blocked",
+  AI_AMBIGUOUS_CURRENCY: "Currency could not be verified",
+  AI_TIMEOUT: "Request timed out",
+  AI_UNAVAILABLE: "Azure AI unavailable",
+  AI_PROVIDER_RATE_LIMITED: "Azure AI is busy",
+};
+
+function askNestErrorLabel(code?: string) {
+  return code ? ASK_NEST_ERROR_LABELS[code] ?? "Ask Nest could not complete the request" : "Ask Nest could not complete the request";
+}
+
 const GENERAL_QUESTIONS = [
   "What needs my attention right now?",
   "How does this month's spending compare with last month?",
   "Which card payments are due next?",
+];
+
+const NOT_USEFUL_REASONS: Array<{ value: AskNestFeedbackReason; label: string }> = [
+  { value: "WRONG_DATA", label: "Wrong figures" },
+  { value: "MISUNDERSTOOD", label: "Misunderstood" },
+  { value: "MISSING_DETAIL", label: "Missing detail" },
+  { value: "NO_RESULTS", label: "No useful results" },
+  { value: "OTHER", label: "Other" },
 ];
 
 function suggestedQuestions(path: string) {
@@ -134,6 +197,15 @@ function renderWithFormattedDates(value: string) {
   });
 }
 
+function formatChartPeriodLabel(value: string, compact = false) {
+  const monthMatch = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!monthMatch) return value;
+  const date = new Date(`${value}-01T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  const month = new Intl.DateTimeFormat("en-SG", { month: "short", timeZone: "UTC" }).format(date);
+  return compact ? `${month} ’${monthMatch[1]!.slice(2)}` : `${month} ${monthMatch[1]}`;
+}
+
 function AskNestVisualizationView({ visualization, onNavigate }: {
   visualization: AskNestVisualization;
   onNavigate: () => void;
@@ -169,10 +241,12 @@ function AskNestVisualizationView({ visualization, onNavigate }: {
     const denominator = Math.max(1, visualization.points.length - 1);
     const coordinates = visualization.points.map((point, index) => ({
       ...point,
+      compactLabel: formatChartPeriodLabel(point.label, true),
+      readableLabel: formatChartPeriodLabel(point.label),
       x: padding.left + (index / denominator) * (width - padding.left - padding.right),
       y: padding.top + (1 - point.valueCents / max) * (height - padding.top - padding.bottom),
     }));
-    const labelEvery = Math.max(1, Math.ceil(coordinates.length / 6));
+    const labelEvery = Math.max(1, Math.ceil(coordinates.length / 4));
     return (
       <figure className="ask-nest-visual ask-nest-chart">
         <figcaption>{visualization.title}</figcaption>
@@ -181,16 +255,21 @@ function AskNestVisualizationView({ visualization, onNavigate }: {
           <polyline points={coordinates.map((point) => `${point.x},${point.y}`).join(" ")} className="ask-nest-chart-line" />
           {coordinates.map((point, index) => (
             <g key={`${point.label}-${index}`}>
-              <circle cx={point.x} cy={point.y} r="4" className="ask-nest-chart-dot"><title>{`${point.label}: ${point.formattedValue}`}</title></circle>
+              <circle cx={point.x} cy={point.y} r="4" className="ask-nest-chart-dot"><title>{`${point.readableLabel}: ${point.formattedValue}`}</title></circle>
               {(index % labelEvery === 0 || index === coordinates.length - 1) ? (
-                <text x={point.x} y={height - 10} textAnchor="middle">{point.label}</text>
+                <text x={point.x} y={height - 10} textAnchor="middle">{point.compactLabel}</text>
               ) : null}
             </g>
           ))}
         </svg>
-        <div className="ask-nest-chart-values">
-          {coordinates.slice(-3).map((point) => <span key={point.label}><small>{point.label}</small><strong>{point.formattedValue}</strong></span>)}
-        </div>
+        <dl className="ask-nest-chart-values" aria-label="Most recent chart values">
+          {coordinates.slice(-3).map((point) => (
+            <div key={point.label}>
+              <dt>{point.readableLabel}</dt>
+              <dd>{point.formattedValue}</dd>
+            </div>
+          ))}
+        </dl>
       </figure>
     );
   }
@@ -482,7 +561,8 @@ export function AskNest({
         const message = payload && "error" in payload
           ? payload.error
           : "Ask Nest could not answer right now.";
-        throw new Error(message);
+        const code = payload && "error" in payload ? payload.code : "AI_INTERNAL_ERROR";
+        throw new AskNestRequestError(message, code);
       }
       setTurns((current) => current.map((turn) => (
         turn.id === id ? { ...turn, answer: payload, pending: false } : turn
@@ -495,7 +575,12 @@ export function AskNest({
       }
       setTurns((current) => current.map((turn) => (
         turn.id === id
-          ? { ...turn, error: error instanceof Error ? error.message : "Ask Nest could not answer right now.", pending: false }
+          ? {
+              ...turn,
+              error: error instanceof Error ? error.message : "Ask Nest could not answer right now.",
+              errorCode: error instanceof AskNestRequestError ? error.code : "AI_INTERNAL_ERROR",
+              pending: false,
+            }
           : turn
       )));
     } finally {
@@ -520,12 +605,48 @@ export function AskNest({
     void ask(turn.question);
   };
 
+  const editFailedQuestion = (turn: AskNestTurn) => {
+    setQuestion(turn.question);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(turn.question.length, turn.question.length);
+    });
+  };
+
   const chooseFollowUp = (followUp: string) => {
     setQuestion(followUp);
     window.requestAnimationFrame(() => {
       inputRef.current?.focus();
       inputRef.current?.setSelectionRange(followUp.length, followUp.length);
     });
+  };
+
+  const submitFeedback = async (
+    turn: AskNestTurn,
+    rating: AskNestFeedbackRating,
+    reason: AskNestFeedbackReason | null,
+  ) => {
+    const turnId = turn.answer?.turnId ?? turn.id;
+    setTurns((current) => current.map((item) => item.id === turn.id
+      ? { ...item, feedbackPending: true, feedbackError: "" }
+      : item));
+    try {
+      const response = await fetch("/api/ai/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ turnId, rating, reason }),
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || "Could not save feedback.");
+      setTurns((current) => current.map((item) => item.id === turn.id
+        ? { ...item, feedbackRating: rating, feedbackReason: reason, feedbackPrompt: false, feedbackPending: false }
+        : item));
+    } catch (error) {
+      setTurns((current) => current.map((item) => item.id === turn.id
+        ? { ...item, feedbackPending: false, feedbackError: error instanceof Error ? error.message : "Could not save feedback." }
+        : item));
+    }
   };
 
   const panel = open ? (
@@ -669,10 +790,21 @@ export function AskNest({
                     <div className="ask-nest-error" role="alert">
                       <CircleAlert size={18} aria-hidden="true" />
                       <div>
+                        <strong>{askNestErrorLabel(turn.errorCode)}</strong>
                         <p>{turn.error}</p>
-                        <button type="button" onClick={() => retry(turn)}>
-                          <RotateCcw size={14} aria-hidden="true" /> Try again
-                        </button>
+                        {turn.errorCode === "AI_WORKSPACE_UNAVAILABLE" ? (
+                          <button type="button" onClick={() => window.location.reload()}>
+                            <RotateCcw size={14} aria-hidden="true" /> Refresh page
+                          </button>
+                        ) : EDITABLE_ASK_NEST_ERRORS.has(turn.errorCode ?? "") ? (
+                          <button type="button" onClick={() => editFailedQuestion(turn)}>
+                            <PencilLine size={14} aria-hidden="true" /> Edit question
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => retry(turn)}>
+                            <RotateCcw size={14} aria-hidden="true" /> Retry same question
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : turn.answer ? (
@@ -718,6 +850,46 @@ export function AskNest({
                           <p>Sources: {turn.answer.scope.toolsUsed.join(", ")}</p>
                         ) : null}
                       </details>
+                      <div className="ask-nest-feedback" aria-label="Rate this Ask Nest answer">
+                        {turn.feedbackRating ? (
+                          <span className="ask-nest-feedback-thanks">Feedback saved · {turn.feedbackRating === "HELPFUL" ? "Helpful" : "Not useful"}</span>
+                        ) : (
+                          <>
+                            <span>Was this useful?</span>
+                            <button
+                              type="button"
+                              onClick={() => void submitFeedback(turn, "HELPFUL", null)}
+                              disabled={turn.feedbackPending}
+                              aria-label="Mark this answer as helpful"
+                            >
+                              <ThumbsUp size={14} aria-hidden="true" /> Helpful
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTurns((current) => current.map((item) => item.id === turn.id ? { ...item, feedbackPrompt: !item.feedbackPrompt, feedbackError: "" } : item))}
+                              disabled={turn.feedbackPending}
+                              aria-expanded={Boolean(turn.feedbackPrompt)}
+                            >
+                              <ThumbsDown size={14} aria-hidden="true" /> Not useful
+                            </button>
+                          </>
+                        )}
+                        {turn.feedbackPrompt && !turn.feedbackRating ? (
+                          <div className="ask-nest-feedback-reasons" aria-label="Why was this answer not useful?">
+                            {NOT_USEFUL_REASONS.map((reason) => (
+                              <button
+                                key={reason.value}
+                                type="button"
+                                onClick={() => void submitFeedback(turn, "NOT_HELPFUL", reason.value)}
+                                disabled={turn.feedbackPending}
+                              >
+                                {reason.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {turn.feedbackError ? <small role="alert">{turn.feedbackError}</small> : null}
+                      </div>
                       {turn.answer.followUpQuestions.length ? (
                         <div className="ask-nest-followups" aria-label="Suggested next questions">
                           <div className="ask-nest-followups-heading">
@@ -752,17 +924,19 @@ export function AskNest({
 
         {!memoryOpen ? <footer className="ask-nest-footer">
           <form className="ask-nest-form" onSubmit={onSubmit}>
-            <label htmlFor="ask-nest-input" className="sr-only">Ask a question about your Nest data</label>
-            <textarea
-              ref={inputRef}
-              id="ask-nest-input"
-              value={question}
-              onChange={(event) => setQuestion(event.target.value.slice(0, 600))}
-              onKeyDown={onInputKeyDown}
-              placeholder={`Ask about ${pageTitle.toLowerCase()}…`}
-              rows={2}
-              disabled={isPending || historyLoading}
-            />
+            <div className="ask-nest-input-shell">
+              <label htmlFor="ask-nest-input" className="sr-only">Ask a question about your Nest data</label>
+              <textarea
+                ref={inputRef}
+                id="ask-nest-input"
+                value={question}
+                onChange={(event) => setQuestion(event.target.value.slice(0, 600))}
+                onKeyDown={onInputKeyDown}
+                placeholder={`Ask about ${pageTitle.toLowerCase()}…`}
+                rows={2}
+                disabled={isPending || historyLoading}
+              />
+            </div>
             <Button
               type="submit"
               variant="primary"

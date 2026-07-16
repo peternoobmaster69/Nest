@@ -4,6 +4,19 @@ import { z } from "zod";
 import { getBankConsistency } from "@/lib/bank-consistency";
 import { prisma } from "@/lib/prisma";
 import type { AskNestEvidence } from "@/lib/ai/ask-nest-types";
+import {
+  buildAskNestSearchTerms,
+  canonicalizeMerchant,
+  resolveAskNestAccount,
+  resolveAskNestBudget,
+  resolveAskNestCard,
+  type AskNestEntityResolution,
+} from "@/lib/ai/entity-resolution";
+import { searchAskNestKnowledge } from "@/lib/ai/knowledge-search";
+import {
+  classifyTransactionCategory,
+  TRANSACTION_CATEGORY_LABELS,
+} from "@/lib/ai/transaction-categories.mjs";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 731;
@@ -23,6 +36,37 @@ const CompareSpendingArgsSchema = z.object({
   period_b_end: z.string().regex(ISO_DATE_PATTERN),
   account_name: NullableNameSchema,
   budget_name: NullableNameSchema,
+}).strict();
+
+const CATEGORY_SPENDING_KEYS = [
+  "ALL",
+  "TRANSPORT",
+  "DINING",
+  "GROCERIES",
+  "UTILITIES",
+  "HOUSING",
+  "SHOPPING",
+  "ENTERTAINMENT",
+  "HEALTHCARE",
+  "EDUCATION",
+  "TRAVEL",
+  "INSURANCE",
+  "PERSONAL_CARE",
+  "CHILDCARE",
+  "PETS",
+  "FEES",
+  "TAXES",
+  "GIFTS_CHARITY",
+] as const;
+
+const CategorySpendingArgsSchema = z.object({
+  category: z.enum(CATEGORY_SPENDING_KEYS),
+  period_a_start: z.string().regex(ISO_DATE_PATTERN),
+  period_a_end: z.string().regex(ISO_DATE_PATTERN),
+  period_b_start: NullableDateSchema,
+  period_b_end: NullableDateSchema,
+  account_name: NullableNameSchema,
+  limit: z.number().int().min(1).max(20),
 }).strict();
 
 const FindTransactionsArgsSchema = z.object({
@@ -82,6 +126,51 @@ const TripSpendingArgsSchema = z.object({
   destination_hints: z.array(z.string().trim().min(1).max(80)).max(12),
 }).strict();
 
+const ExplainCashFlowChangeArgsSchema = z.object({
+  period_a_start: z.string().regex(ISO_DATE_PATTERN),
+  period_a_end: z.string().regex(ISO_DATE_PATTERN),
+  period_b_start: z.string().regex(ISO_DATE_PATTERN),
+  period_b_end: z.string().regex(ISO_DATE_PATTERN),
+  account_name: NullableNameSchema,
+}).strict();
+
+const CompareIncomeArgsSchema = z.object({
+  period_a_start: z.string().regex(ISO_DATE_PATTERN),
+  period_a_end: z.string().regex(ISO_DATE_PATTERN),
+  period_b_start: z.string().regex(ISO_DATE_PATTERN),
+  period_b_end: z.string().regex(ISO_DATE_PATTERN),
+  account_name: NullableNameSchema,
+}).strict();
+
+const TopSpendingDriversArgsSchema = z.object({
+  start_date: z.string().regex(ISO_DATE_PATTERN),
+  end_date: z.string().regex(ISO_DATE_PATTERN),
+  dimension: z.enum(["SUB_ACCOUNT", "MERCHANT"]),
+  account_name: NullableNameSchema,
+  budget_name: NullableNameSchema,
+  limit: z.number().int().min(1).max(20),
+}).strict();
+
+const BudgetVsActualArgsSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  budget_name: NullableNameSchema,
+}).strict();
+
+const RecurringSpendArgsSchema = z.object({
+  start_date: z.string().regex(ISO_DATE_PATTERN),
+  end_date: z.string().regex(ISO_DATE_PATTERN),
+  account_name: NullableNameSchema,
+  budget_name: NullableNameSchema,
+  min_occurrences: z.number().int().min(2).max(24),
+  limit: z.number().int().min(1).max(20),
+}).strict();
+
+const SearchWorkspaceKnowledgeArgsSchema = z.object({
+  query: z.string().trim().min(2).max(300),
+  limit: z.number().int().min(1).max(8),
+}).strict();
+
 type DateRange = {
   start: Date;
   endExclusive: Date;
@@ -101,6 +190,7 @@ type CardObligation = {
 
 export type AskNestToolContext = {
   workspaceId: string;
+  userId: string;
   currency: string;
   callId: string;
 };
@@ -152,6 +242,30 @@ export const ASK_NEST_TOOLS: FunctionTool[] = [
         budget_name: { ...nullableString, description: "Optional budget/sub-account name fragment, otherwise null." },
       },
       required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name", "budget_name"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_category_spending",
+    description: "Calculate debit spending by deterministic real-world transaction category, independent of the sub-account holding the transaction. Supports one period, an optional comparison period, and an ALL-category breakdown. Confirmed totals include high-confidence merchant, description, or explicitly named sub-account matches; ambiguous multi-service merchants are returned separately as possible spending.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        category: {
+          type: "string",
+          enum: CATEGORY_SPENDING_KEYS,
+          description: "Use ALL for a semantic category breakdown; otherwise select the requested category. DINING includes restaurants and food delivery, while GROCERIES is supermarket and grocery delivery spending.",
+        },
+        period_a_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the primary period." },
+        period_a_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the primary period." },
+        period_b_start: { ...nullableString, description: "Inclusive comparison start, or null when no comparison was requested." },
+        period_b_end: { ...nullableString, description: "Inclusive comparison end, or null when no comparison was requested." },
+        account_name: { ...nullableString, description: "Optional account or bank name, otherwise null. Do not put a sub-account name here." },
+        limit: { type: "integer", minimum: 1, maximum: 20, description: "Maximum category or merchant rows to return." },
+      },
+      required: ["category", "period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name", "limit"],
     },
   },
   {
@@ -306,7 +420,117 @@ export const ASK_NEST_TOOLS: FunctionTool[] = [
       required: ["start_date", "end_date", "query", "destination_hints"],
     },
   },
+  {
+    type: "function",
+    name: "explain_cash_flow_change",
+    description: "Explain why net cash flow changed between two explicit periods. Nest calculates income, spending, net change, and the largest recorded merchant or sub-account drivers. Use this for why-is-cash-flow-higher-or-lower questions.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        period_a_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the newer or primary period." },
+        period_a_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the newer or primary period." },
+        period_b_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the comparison period." },
+        period_b_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the comparison period." },
+        account_name: { ...nullableString, description: "Optional account or bank name, including common abbreviations, otherwise null." },
+      },
+      required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name"],
+    },
+  },
+  {
+    type: "function",
+    name: "compare_income",
+    description: "Compare recorded credit inflows between two explicit periods and return deterministic changes and top income sources. Use for salary, earnings, income, or inflow comparisons.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        period_a_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the newer or primary period." },
+        period_a_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the newer or primary period." },
+        period_b_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the comparison period." },
+        period_b_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the comparison period." },
+        account_name: { ...nullableString, description: "Optional account or bank name, otherwise null." },
+      },
+      required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_top_spending_drivers",
+    description: "Rank the largest recorded debit-spending drivers by sub-account or normalized merchant for a bounded date range. Use for where-did-my-money-go and biggest-expense questions.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        start_date: { type: "string", description: "Inclusive YYYY-MM-DD start date." },
+        end_date: { type: "string", description: "Inclusive YYYY-MM-DD end date." },
+        dimension: { type: "string", enum: ["SUB_ACCOUNT", "MERCHANT"] },
+        account_name: { ...nullableString, description: "Optional account or bank name, otherwise null." },
+        budget_name: { ...nullableString, description: "Optional sub-account or category concept such as food, transport, or utilities, otherwise null." },
+        limit: { type: "integer", minimum: 1, maximum: 20 },
+      },
+      required: ["start_date", "end_date", "dimension", "account_name", "budget_name", "limit"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_budget_vs_actual",
+    description: "Compare one monthly budget plan with actual recorded debit spending by destination sub-account. Use for planned-versus-spent, utilization, and budget variance questions.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        year: { type: "integer", minimum: 2000, maximum: 2100 },
+        month: { type: "integer", minimum: 1, maximum: 12 },
+        budget_name: { ...nullableString, description: "Optional sub-account or category concept, otherwise null." },
+      },
+      required: ["year", "month", "budget_name"],
+    },
+  },
+  {
+    type: "function",
+    name: "find_recurring_spend",
+    description: "Detect repeated recorded debit merchants with weekly, fortnightly, monthly, quarterly, or annual cadence inside a bounded range. Results are patterns in Nest data, not confirmed subscriptions.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        start_date: { type: "string", description: "Inclusive YYYY-MM-DD start date." },
+        end_date: { type: "string", description: "Inclusive YYYY-MM-DD end date." },
+        account_name: { ...nullableString, description: "Optional account or bank name, otherwise null." },
+        budget_name: { ...nullableString, description: "Optional sub-account or category concept, otherwise null." },
+        min_occurrences: { type: "integer", minimum: 2, maximum: 24 },
+        limit: { type: "integer", minimum: 1, maximum: 20 },
+      },
+      required: ["start_date", "end_date", "account_name", "budget_name", "min_occurrences", "limit"],
+    },
+  },
 ];
+
+export const ASK_NEST_KNOWLEDGE_TOOL: FunctionTool = {
+  type: "function",
+  name: "search_workspace_knowledge",
+  description: "Hybrid keyword and vector search over user-authorized workspace notes and imported document passages. Use only for unstructured content questions; never use passages as the source for calculated ledger totals.",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: { type: "string", minLength: 2, maxLength: 300, description: "Plain-language passage search query." },
+      limit: { type: "integer", minimum: 1, maximum: 8 },
+    },
+    required: ["query", "limit"],
+  },
+};
+
+export function getAskNestTools(includeKnowledgeSearch: boolean) {
+  return includeKnowledgeSearch ? [...ASK_NEST_TOOLS, ASK_NEST_KNOWLEDGE_TOOL] : ASK_NEST_TOOLS;
+}
 
 function getTodayIso() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -379,17 +603,60 @@ function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+type ResolvedTransactionFilters = {
+  accountName: string | null;
+  budgetName: string | null;
+  accountIds?: string[];
+  budgetIds?: string[];
+  resolutions: AskNestEntityResolution[];
+};
+
+async function resolveTransactionFilters(
+  workspaceId: string,
+  accountName: string | null,
+  budgetName: string | null,
+): Promise<ResolvedTransactionFilters> {
+  const [account, budget] = await Promise.all([
+    resolveAskNestAccount(workspaceId, accountName),
+    resolveAskNestBudget(workspaceId, budgetName),
+  ]);
+  return {
+    accountName,
+    budgetName,
+    ...(account?.matched ? { accountIds: account.ids } : {}),
+    ...(budget?.matched ? { budgetIds: budget.ids } : {}),
+    resolutions: [account, budget].filter((item): item is AskNestEntityResolution => Boolean(item)),
+  };
+}
+
+function resolvedFilterOutput(filters: ResolvedTransactionFilters) {
+  return {
+    accountName: filters.accountName,
+    budgetName: filters.budgetName,
+    entityResolution: filters.resolutions.map((resolution) => ({
+      kind: resolution.kind,
+      input: resolution.input,
+      matched: resolution.matched,
+      labels: resolution.labels,
+      confidence: resolution.confidence,
+      method: resolution.method,
+    })),
+  };
+}
+
 function transactionWhere(
   workspaceId: string,
   range: DateRange,
-  filters?: { accountName?: string | null; budgetName?: string | null },
+  filters?: ResolvedTransactionFilters,
 ): Prisma.TransactionWhereInput {
   return {
     workspaceId,
     voidedAt: null,
     kind: { not: "REVERSAL" },
     date: { gte: range.start, lt: range.endExclusive },
-    ...(filters?.accountName
+    ...(filters?.accountIds?.length
+      ? { accountId: { in: filters.accountIds } }
+      : filters?.accountName
       ? {
           account: {
             workspaceId,
@@ -400,9 +667,30 @@ function transactionWhere(
           },
         }
       : {}),
-    ...(filters?.budgetName
+    ...(filters?.budgetIds?.length
+      ? { budgetId: { in: filters.budgetIds } }
+      : filters?.budgetName
       ? { budget: { workspaceId, name: { contains: filters.budgetName } } }
       : {}),
+  };
+}
+
+function transactionTextWhere(query: string): Prisma.TransactionWhereInput {
+  const terms = buildAskNestSearchTerms(query);
+  const phrase = query.trim();
+  const tokens = terms.filter((term) => !term.includes(" ") && term.toLocaleLowerCase() !== phrase.toLocaleLowerCase());
+  const fieldMatch = (value: string): Prisma.TransactionWhereInput => ({
+    OR: [
+      { subject: { contains: value } },
+      { details: { contains: value } },
+      { notes: { contains: value } },
+    ],
+  });
+  return {
+    OR: [
+      fieldMatch(phrase),
+      ...(tokens.length > 1 ? [{ AND: tokens.map(fieldMatch) }] : []),
+    ],
   };
 }
 
@@ -424,6 +712,70 @@ function transactionHref(filters: Record<string, string | null | undefined>) {
   }
   const query = params.toString();
   return query ? `/transactions?${query}` : "/transactions";
+}
+
+type TransactionEvidenceSource = {
+  id: string;
+  accountId: string;
+  budgetId: string | null;
+  date: Date;
+  subject: string;
+  amountCents: number;
+  budget?: { workspaceId: string; name: string } | null;
+  subAccount?: string;
+};
+
+function transactionRecordEvidence(params: {
+  context: AskNestToolContext;
+  rows: TransactionEvidenceSource[];
+  suffix: string;
+  limit?: number;
+}) {
+  return params.rows.slice(0, params.limit ?? 8).map((row) => {
+    const subAccount = row.subAccount ?? (
+      row.budget?.workspaceId === params.context.workspaceId ? row.budget.name : "Unassigned"
+    );
+    return evidence(
+      params.context.callId,
+      `${params.suffix}-${row.id}`,
+      `${row.subject} · ${formatAmount(row.amountCents, params.context.currency)}`,
+      `${formatDate(row.date)} · ${subAccount}`,
+      transactionHref({
+        accountId: row.accountId,
+        budgetId: row.budgetId,
+        transactionId: row.id,
+      }),
+    );
+  });
+}
+
+async function loadTransactionRecordEvidence(params: {
+  context: AskNestToolContext;
+  where: Prisma.TransactionWhereInput;
+  suffix: string;
+  limit?: number;
+  orderBy?: Prisma.TransactionOrderByWithRelationInput[];
+}) {
+  const rows = await prisma.transaction.findMany({
+    where: { ...params.where, workspaceId: params.context.workspaceId },
+    orderBy: params.orderBy ?? [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    take: params.limit ?? 8,
+    select: {
+      id: true,
+      accountId: true,
+      budgetId: true,
+      date: true,
+      subject: true,
+      amountCents: true,
+      budget: { select: { workspaceId: true, name: true } },
+    },
+  });
+  return transactionRecordEvidence({
+    context: params.context,
+    rows,
+    suffix: params.suffix,
+    limit: params.limit,
+  });
 }
 
 const COUNTRY_FLAGS = [
@@ -600,11 +952,10 @@ async function getFinancialSnapshot(rawArgs: unknown, context: AskNestToolContex
 async function summarizeSpendingPeriod(
   context: AskNestToolContext,
   range: DateRange,
-  accountName: string | null,
-  budgetName: string | null,
+  filters: ResolvedTransactionFilters,
 ) {
   const where: Prisma.TransactionWhereInput = {
-    ...transactionWhere(context.workspaceId, range, { accountName, budgetName }),
+    ...transactionWhere(context.workspaceId, range, filters),
     direction: "DEBIT",
   };
   const rows = await prisma.transaction.groupBy({
@@ -644,9 +995,22 @@ async function compareSpending(rawArgs: unknown, context: AskNestToolContext): P
   const args = CompareSpendingArgsSchema.parse(rawArgs);
   const periodA = resolveRange(args.period_a_start, args.period_a_end);
   const periodB = resolveRange(args.period_b_start, args.period_b_end);
-  const [a, b] = await Promise.all([
-    summarizeSpendingPeriod(context, periodA, args.account_name, args.budget_name),
-    summarizeSpendingPeriod(context, periodB, args.account_name, args.budget_name),
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, args.budget_name);
+  const [a, b, periodAEvidence, periodBEvidence] = await Promise.all([
+    summarizeSpendingPeriod(context, periodA, filters),
+    summarizeSpendingPeriod(context, periodB, filters),
+    loadTransactionRecordEvidence({
+      context,
+      where: { ...transactionWhere(context.workspaceId, periodA, filters), direction: "DEBIT" },
+      suffix: "spending-a",
+      limit: 4,
+    }),
+    loadTransactionRecordEvidence({
+      context,
+      where: { ...transactionWhere(context.workspaceId, periodB, filters), direction: "DEBIT" },
+      suffix: "spending-b",
+      limit: 4,
+    }),
   ]);
   const changeCents = a.totalCents - b.totalCents;
   const changePercent = b.totalCents === 0 ? null : Math.round((changeCents / b.totalCents) * 10_000) / 100;
@@ -657,11 +1021,13 @@ async function compareSpending(rawArgs: unknown, context: AskNestToolContext): P
     `${a.start}–${a.end} compared with ${b.start}–${b.end}`,
     transactionHref({ from: a.start, to: a.end, accountName: args.account_name, budgetName: args.budget_name }),
   );
+  const comparisonEvidenceItems = [...periodAEvidence, ...periodBEvidence];
+  const resolvedComparisonEvidence = comparisonEvidenceItems.length ? comparisonEvidenceItems : [comparisonEvidence];
   return {
     output: {
       ok: true,
-      evidence: [comparisonEvidence],
-      filters: { accountName: args.account_name, budgetName: args.budget_name },
+      evidence: resolvedComparisonEvidence,
+      filters: resolvedFilterOutput(filters),
       periodA: a,
       periodB: b,
       changeCents,
@@ -677,30 +1043,269 @@ async function compareSpending(rawArgs: unknown, context: AskNestToolContext): P
         ],
       },
     },
-    evidence: [comparisonEvidence],
+    evidence: resolvedComparisonEvidence,
+  };
+}
+
+type CategorySpendingKey = (typeof CATEGORY_SPENDING_KEYS)[number];
+type ConcreteCategorySpendingKey = Exclude<CategorySpendingKey, "ALL">;
+
+type CategorizedTransaction = {
+  id: string;
+  accountId: string;
+  budgetId: string | null;
+  date: Date;
+  subject: string;
+  details: string | null;
+  notes: string | null;
+  amountCents: number;
+  account: { workspaceId: string; name: string };
+  budget: { workspaceId: string; name: string } | null;
+  classification: {
+    category: string;
+    label: string;
+    confidence: "HIGH" | "MEDIUM" | "NONE";
+    source: string;
+    rule: string;
+  };
+};
+
+function sumCategoryAmounts(rows: CategorizedTransaction[]) {
+  return rows.reduce((sum, row) => sum + row.amountCents, 0);
+}
+
+function percentage(numerator: number, denominator: number) {
+  return denominator === 0 ? 0 : Math.round((numerator / denominator) * 10_000) / 100;
+}
+
+async function summarizeCategorySpendingPeriod(params: {
+  context: AskNestToolContext;
+  range: DateRange;
+  filters: ResolvedTransactionFilters;
+  category: CategorySpendingKey;
+  limit: number;
+}) {
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      ...transactionWhere(params.context.workspaceId, params.range, params.filters),
+      direction: "DEBIT",
+    },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      accountId: true,
+      budgetId: true,
+      date: true,
+      subject: true,
+      details: true,
+      notes: true,
+      amountCents: true,
+      account: { select: { workspaceId: true, name: true } },
+      budget: { select: { workspaceId: true, name: true } },
+    },
+  });
+  const categorized: CategorizedTransaction[] = transactions.map((transaction) => ({
+    ...transaction,
+    classification: classifyTransactionCategory({
+      subject: transaction.subject,
+      details: transaction.details,
+      notes: transaction.notes,
+      budgetName: transaction.budget?.workspaceId === params.context.workspaceId ? transaction.budget.name : null,
+    }),
+  }));
+  const matchesRequestedCategory = (row: CategorizedTransaction) => (
+    params.category === "ALL" || row.classification.category === params.category
+  );
+  const confirmed = categorized.filter((row) => row.classification.confidence === "HIGH" && matchesRequestedCategory(row));
+  const uncertain = categorized.filter((row) => row.classification.confidence === "MEDIUM" && matchesRequestedCategory(row));
+  const unclassified = categorized.filter((row) => row.classification.confidence === "NONE");
+  const confirmedCents = sumCategoryAmounts(confirmed);
+  const possibleAdditionalCents = sumCategoryAmounts(uncertain);
+  const allDebitCents = sumCategoryAmounts(categorized);
+
+  const categoriesByKey = new Map<string, { category: string; label: string; amountCents: number; transactionCount: number }>();
+  for (const row of confirmed) {
+    const key = row.classification.category;
+    const current = categoriesByKey.get(key) ?? {
+      category: key,
+      label: row.classification.label,
+      amountCents: 0,
+      transactionCount: 0,
+    };
+    current.amountCents += row.amountCents;
+    current.transactionCount += 1;
+    categoriesByKey.set(key, current);
+  }
+  const categories = [...categoriesByKey.values()]
+    .sort((left, right) => right.amountCents - left.amountCents || left.label.localeCompare(right.label))
+    .slice(0, params.limit)
+    .map((row) => ({
+      ...row,
+      amount: formatAmount(row.amountCents, params.context.currency),
+      shareOfAllDebitPercent: percentage(row.amountCents, allDebitCents),
+    }));
+
+  const merchantsByKey = new Map<string, { merchant: string; amountCents: number; transactionCount: number }>();
+  for (const row of confirmed) {
+    const merchant = canonicalizeMerchant(row.subject);
+    const key = merchant.toLocaleLowerCase();
+    const current = merchantsByKey.get(key) ?? { merchant, amountCents: 0, transactionCount: 0 };
+    current.amountCents += row.amountCents;
+    current.transactionCount += 1;
+    merchantsByKey.set(key, current);
+  }
+  const merchants = [...merchantsByKey.values()]
+    .sort((left, right) => right.amountCents - left.amountCents || left.merchant.localeCompare(right.merchant))
+    .slice(0, params.limit)
+    .map((row) => ({
+      ...row,
+      amount: formatAmount(row.amountCents, params.context.currency),
+      shareOfConfirmedPercent: percentage(row.amountCents, confirmedCents),
+    }));
+
+  return {
+    start: params.range.startLabel,
+    end: params.range.endLabel,
+    category: params.category,
+    categoryLabel: params.category === "ALL"
+      ? "All categories"
+      : TRANSACTION_CATEGORY_LABELS[params.category as ConcreteCategorySpendingKey],
+    confirmedCents,
+    confirmed: formatAmount(confirmedCents, params.context.currency),
+    confirmedTransactionCount: confirmed.length,
+    possibleAdditionalCents,
+    possibleAdditional: formatAmount(possibleAdditionalCents, params.context.currency),
+    possibleTransactionCount: uncertain.length,
+    potentialMaximumCents: confirmedCents + possibleAdditionalCents,
+    potentialMaximum: formatAmount(confirmedCents + possibleAdditionalCents, params.context.currency),
+    allDebitCents,
+    allDebit: formatAmount(allDebitCents, params.context.currency),
+    allDebitTransactionCount: categorized.length,
+    unclassifiedCents: sumCategoryAmounts(unclassified),
+    unclassified: formatAmount(sumCategoryAmounts(unclassified), params.context.currency),
+    unclassifiedTransactionCount: unclassified.length,
+    confirmedCoveragePercent: percentage(
+      sumCategoryAmounts(categorized.filter((row) => row.classification.confidence === "HIGH")),
+      allDebitCents,
+    ),
+    categories,
+    merchants: params.category === "ALL" ? [] : merchants,
+    supportingTransactions: [...confirmed, ...uncertain].slice(0, 8).map((row) => ({
+      id: row.id,
+      accountId: row.accountId,
+      budgetId: row.budgetId,
+      date: row.date,
+      subject: row.subject,
+      amountCents: row.amountCents,
+      amount: formatAmount(row.amountCents, params.context.currency),
+      subAccount: row.budget?.workspaceId === params.context.workspaceId ? row.budget.name : "Unassigned",
+      confidence: row.classification.confidence,
+    })),
+    uncertainTransactions: uncertain.slice(0, 10).map((row) => ({
+      date: formatDate(row.date),
+      subject: row.subject,
+      amountCents: row.amountCents,
+      amount: formatAmount(row.amountCents, params.context.currency),
+      account: row.account.workspaceId === params.context.workspaceId ? row.account.name : "Unavailable",
+      subAccount: row.budget?.workspaceId === params.context.workspaceId ? row.budget.name : "Unassigned",
+      reason: row.classification.rule,
+    })),
+  };
+}
+
+async function getCategorySpending(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = CategorySpendingArgsSchema.parse(rawArgs);
+  if (Boolean(args.period_b_start) !== Boolean(args.period_b_end)) {
+    throw new AskNestToolInputError("Comparison start and end dates must either both be supplied or both be null.");
+  }
+  const periodA = resolveRange(args.period_a_start, args.period_a_end);
+  const periodB = args.period_b_start && args.period_b_end
+    ? resolveRange(args.period_b_start, args.period_b_end)
+    : null;
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, null);
+  const [a, b] = await Promise.all([
+    summarizeCategorySpendingPeriod({ context, range: periodA, filters, category: args.category, limit: args.limit }),
+    periodB
+      ? summarizeCategorySpendingPeriod({ context, range: periodB, filters, category: args.category, limit: args.limit })
+      : Promise.resolve(null),
+  ]);
+  const changeCents = b ? a.confirmedCents - b.confirmedCents : null;
+  const changePercent = b && b.confirmedCents !== 0
+    ? Math.round(((a.confirmedCents - b.confirmedCents) / b.confirmedCents) * 10_000) / 100
+    : null;
+  const categoryLabel = args.category === "ALL"
+    ? "Semantic spending categories"
+    : `${TRANSACTION_CATEGORY_LABELS[args.category as ConcreteCategorySpendingKey]} spending`;
+  const categoryEvidence = evidence(
+    context.callId,
+    "category-spending",
+    categoryLabel,
+    b
+      ? `${a.start}–${a.end} compared with ${b.start}–${b.end}`
+      : `${a.start} to ${a.end} · ${a.allDebitTransactionCount} debit transactions analyzed`,
+    transactionHref({ from: a.start, to: a.end, accountName: args.account_name }),
+  );
+  const transactionEvidence = [
+    ...transactionRecordEvidence({
+      context,
+      rows: a.supportingTransactions,
+      suffix: "category-a",
+      limit: b ? 4 : 8,
+    }),
+    ...(b
+      ? transactionRecordEvidence({
+          context,
+          rows: b.supportingTransactions,
+          suffix: "category-b",
+          limit: 4,
+        })
+      : []),
+  ].slice(0, 8);
+  const categoryEvidenceItems = transactionEvidence.length ? transactionEvidence : [categoryEvidence];
+  return {
+    output: {
+      ok: true,
+      evidence: categoryEvidenceItems,
+      method: "DETERMINISTIC_TRANSACTION_CLASSIFICATION",
+      disclaimer: "Confirmed totals use high-confidence merchant, description, or clearly named sub-account rules. Possible spending is shown separately and is not included in confirmed totals. Uncategorized transactions may make category totals incomplete.",
+      filters: {
+        category: args.category,
+        ...resolvedFilterOutput(filters),
+      },
+      periodA: a,
+      periodB: b,
+      changeCents,
+      change: changeCents === null ? null : formatAmount(changeCents, context.currency),
+      changePercent,
+      returned: args.category === "ALL" ? a.categories.length : a.merchants.length,
+      ...(b
+        ? {
+            presentation: {
+              type: "trend_chart",
+              title: categoryLabel,
+              currency: context.currency,
+              points: [
+                { label: b.start.slice(0, 7), valueCents: b.confirmedCents, formattedValue: b.confirmed },
+                { label: a.start.slice(0, 7), valueCents: a.confirmedCents, formattedValue: a.confirmed },
+              ],
+            },
+          }
+        : {}),
+    },
+    evidence: categoryEvidenceItems,
   };
 }
 
 async function findTransactions(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = FindTransactionsArgsSchema.parse(rawArgs);
   const range = recentRange(args.start_date, args.end_date);
-  const baseWhere = transactionWhere(context.workspaceId, range, {
-    accountName: args.account_name,
-    budgetName: args.budget_name,
-  });
+  const textQuery = args.query;
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, args.budget_name);
+  const baseWhere = transactionWhere(context.workspaceId, range, filters);
   const where: Prisma.TransactionWhereInput = {
     ...baseWhere,
-    ...(args.query
-      ? {
-          AND: [
-            {
-              OR: [
-                { subject: { contains: args.query } },
-                { details: { contains: args.query } },
-              ],
-            },
-          ],
-        }
+    ...(textQuery
+      ? { AND: [transactionTextWhere(textQuery)] }
       : {}),
   };
   const [rows, total] = await Promise.all([
@@ -709,6 +1314,9 @@ async function findTransactions(rawArgs: unknown, context: AskNestToolContext): 
       orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
       take: args.limit,
       select: {
+        id: true,
+        accountId: true,
+        budgetId: true,
         date: true,
         subject: true,
         amountCents: true,
@@ -733,20 +1341,24 @@ async function findTransactions(rawArgs: unknown, context: AskNestToolContext): 
       budgetName: args.budget_name,
     }),
   );
+  const recordEvidence = transactionRecordEvidence({ context, rows, suffix: "transaction" });
+  const transactionEvidenceItems = recordEvidence.length ? recordEvidence : [transactionEvidence];
   return {
     output: {
       ok: true,
-      evidence: [transactionEvidence],
+      evidence: transactionEvidenceItems,
       filters: {
-        query: args.query,
+        query: textQuery,
         start: range.startLabel,
         end: range.endLabel,
-        accountName: args.account_name,
-        budgetName: args.budget_name,
+        ...resolvedFilterOutput(filters),
       },
       totalMatches: total,
       returned: rows.length,
       transactions: rows.map((row) => ({
+        id: row.id,
+        accountId: row.accountId,
+        budgetId: row.budgetId,
         date: formatDate(row.date),
         subject: row.subject,
         amountCents: row.amountCents,
@@ -758,7 +1370,7 @@ async function findTransactions(rawArgs: unknown, context: AskNestToolContext): 
         budget: row.budget?.workspaceId === context.workspaceId ? row.budget.name : "Unassigned",
       })),
     },
-    evidence: [transactionEvidence],
+    evidence: transactionEvidenceItems,
   };
 }
 
@@ -789,6 +1401,7 @@ async function getCardObligations(rawArgs: unknown, context: AskNestToolContext)
 async function findCardTransactions(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = FindCardTransactionsArgsSchema.parse(rawArgs);
   const range = recentRange(args.start_date, args.end_date);
+  const cardResolution = await resolveAskNestCard(context.workspaceId, args.card_name);
   const where: Prisma.CreditCardTransactionWhereInput = {
     workspaceId: context.workspaceId,
     transactionDate: { gte: range.start, lt: range.endExclusive },
@@ -798,7 +1411,9 @@ async function findCardTransactions(rawArgs: unknown, context: AskNestToolContex
       : args.allocation_status === "UNALLOCATED"
         ? { isAllocated: false }
         : {}),
-    ...(args.card_name
+    ...(cardResolution?.matched
+      ? { creditCardId: { in: cardResolution.ids } }
+      : args.card_name
       ? {
           creditCard: {
             workspaceId: context.workspaceId,
@@ -853,6 +1468,12 @@ async function findCardTransactions(rawArgs: unknown, context: AskNestToolContex
         start: range.startLabel,
         end: range.endLabel,
         cardName: args.card_name,
+        entityResolution: cardResolution ? {
+          matched: cardResolution.matched,
+          labels: cardResolution.labels,
+          confidence: cardResolution.confidence,
+          method: cardResolution.method,
+        } : null,
         allocationStatus: args.allocation_status,
       },
       totalMatches: total,
@@ -1001,9 +1622,14 @@ async function getBudgetPlan(rawArgs: unknown, context: AskNestToolContext): Pro
 
 async function explainReconciliation(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = ReconciliationArgsSchema.parse(rawArgs);
-  const allRows = await getBankConsistency(prisma, context.workspaceId);
+  const [allRows, accountResolution] = await Promise.all([
+    getBankConsistency(prisma, context.workspaceId),
+    resolveAskNestAccount(context.workspaceId, args.account_name),
+  ]);
   const accountQuery = args.account_name?.toLocaleLowerCase();
-  const rows = accountQuery
+  const rows = accountResolution?.matched
+    ? allRows.filter((row) => accountResolution.ids.includes(row.id))
+    : accountQuery
     ? allRows.filter((row) => row.name.toLocaleLowerCase().includes(accountQuery))
     : allRows;
   const reconciliationEvidence = evidence(
@@ -1018,6 +1644,12 @@ async function explainReconciliation(rawArgs: unknown, context: AskNestToolConte
       ok: true,
       evidence: [reconciliationEvidence],
       accountFilter: args.account_name,
+      entityResolution: accountResolution ? {
+        matched: accountResolution.matched,
+        labels: accountResolution.labels,
+        confidence: accountResolution.confidence,
+        method: accountResolution.method,
+      } : null,
       rows: rows.map((row) => ({
         name: row.name,
         configuredBalanceCents: row.currentBalanceCents,
@@ -1036,20 +1668,21 @@ async function explainReconciliation(rawArgs: unknown, context: AskNestToolConte
 async function getSpendingBreakdown(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = SpendingBreakdownArgsSchema.parse(rawArgs);
   const range = resolveRange(args.start_date, args.end_date);
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, args.budget_name);
   const where: Prisma.TransactionWhereInput = {
-    ...transactionWhere(context.workspaceId, range, {
-      accountName: args.account_name,
-      budgetName: args.budget_name,
-    }),
+    ...transactionWhere(context.workspaceId, range, filters),
     direction: "DEBIT",
   };
-  const rows = await prisma.transaction.groupBy({
-    by: ["date", "budgetId"],
-    where,
-    _sum: { amountCents: true },
-    _count: { _all: true },
-    orderBy: { date: "asc" },
-  });
+  const [rows, recordEvidence] = await Promise.all([
+    prisma.transaction.groupBy({
+      by: ["date", "budgetId"],
+      where,
+      _sum: { amountCents: true },
+      _count: { _all: true },
+      orderBy: { date: "asc" },
+    }),
+    loadTransactionRecordEvidence({ context, where, suffix: "spending-breakdown" }),
+  ]);
   const budgetIds = [...new Set(rows.map((row) => row.budgetId).filter((id): id is string => Boolean(id)))];
   const budgets = budgetIds.length
     ? await prisma.budgetEnvelope.findMany({
@@ -1114,16 +1747,16 @@ async function getSpendingBreakdown(rawArgs: unknown, context: AskNestToolContex
       budgetName: args.budget_name,
     }),
   );
+  const breakdownEvidenceItems = recordEvidence.length ? recordEvidence : [breakdownEvidence];
   return {
     output: {
       ok: true,
-      evidence: [breakdownEvidence],
+      evidence: breakdownEvidenceItems,
       filters: {
         start: range.startLabel,
         end: range.endLabel,
         granularity: args.granularity,
-        accountName: args.account_name,
-        budgetName: args.budget_name,
+        ...resolvedFilterOutput(filters),
       },
       totalCents,
       total: formatAmount(totalCents, context.currency),
@@ -1139,7 +1772,7 @@ async function getSpendingBreakdown(rawArgs: unknown, context: AskNestToolContex
         })),
       },
     },
-    evidence: [breakdownEvidence],
+    evidence: breakdownEvidenceItems,
   };
 }
 
@@ -1438,6 +2071,536 @@ async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): P
   };
 }
 
+async function summarizeCashFlowPeriod(
+  context: AskNestToolContext,
+  range: DateRange,
+  filters: ResolvedTransactionFilters,
+) {
+  const where = transactionWhere(context.workspaceId, range, filters);
+  const [directions, subjects] = await Promise.all([
+    prisma.transaction.groupBy({
+      by: ["direction"],
+      where,
+      _sum: { amountCents: true },
+      _count: { _all: true },
+    }),
+    prisma.transaction.groupBy({
+      by: ["subject", "direction"],
+      where,
+      _sum: { amountCents: true },
+      _count: { _all: true },
+      orderBy: { _sum: { amountCents: "desc" } },
+      take: 120,
+    }),
+  ]);
+  const incomeCents = directions.find((row) => row.direction === "CREDIT")?._sum.amountCents ?? 0;
+  const spendingCents = directions.find((row) => row.direction === "DEBIT")?._sum.amountCents ?? 0;
+  return {
+    start: range.startLabel,
+    end: range.endLabel,
+    incomeCents,
+    income: formatAmount(incomeCents, context.currency),
+    spendingCents,
+    spending: formatAmount(spendingCents, context.currency),
+    netCents: incomeCents - spendingCents,
+    net: formatAmount(incomeCents - spendingCents, context.currency),
+    transactionCount: directions.reduce((sum, row) => sum + row._count._all, 0),
+    subjects: subjects.map((row) => ({
+      name: canonicalizeMerchant(row.subject),
+      direction: row.direction,
+      amountCents: row._sum.amountCents ?? 0,
+      transactionCount: row._count._all,
+    })),
+  };
+}
+
+function changedSubjectDrivers(
+  periodA: Awaited<ReturnType<typeof summarizeCashFlowPeriod>>,
+  periodB: Awaited<ReturnType<typeof summarizeCashFlowPeriod>>,
+  currency: string,
+  direction?: "CREDIT" | "DEBIT",
+) {
+  const totals = new Map<string, { name: string; direction: string; periodACents: number; periodBCents: number }>();
+  for (const row of periodA.subjects) {
+    if (direction && row.direction !== direction) continue;
+    const key = `${row.direction}:${row.name.toLocaleLowerCase()}`;
+    const current = totals.get(key) ?? { name: row.name, direction: row.direction, periodACents: 0, periodBCents: 0 };
+    current.periodACents += row.amountCents;
+    totals.set(key, current);
+  }
+  for (const row of periodB.subjects) {
+    if (direction && row.direction !== direction) continue;
+    const key = `${row.direction}:${row.name.toLocaleLowerCase()}`;
+    const current = totals.get(key) ?? { name: row.name, direction: row.direction, periodACents: 0, periodBCents: 0 };
+    current.periodBCents += row.amountCents;
+    totals.set(key, current);
+  }
+  return [...totals.values()]
+    .map((row) => {
+      const changeCents = row.periodACents - row.periodBCents;
+      return {
+        ...row,
+        periodA: formatAmount(row.periodACents, currency),
+        periodB: formatAmount(row.periodBCents, currency),
+        changeCents,
+        change: formatAmount(changeCents, currency),
+      };
+    })
+    .sort((left, right) => Math.abs(right.changeCents) - Math.abs(left.changeCents) || left.name.localeCompare(right.name))
+    .slice(0, 10);
+}
+
+async function explainCashFlowChange(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = ExplainCashFlowChangeArgsSchema.parse(rawArgs);
+  const periodA = resolveRange(args.period_a_start, args.period_a_end);
+  const periodB = resolveRange(args.period_b_start, args.period_b_end);
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, null);
+  const [a, b, periodAEvidence, periodBEvidence] = await Promise.all([
+    summarizeCashFlowPeriod(context, periodA, filters),
+    summarizeCashFlowPeriod(context, periodB, filters),
+    loadTransactionRecordEvidence({
+      context,
+      where: transactionWhere(context.workspaceId, periodA, filters),
+      suffix: "cash-flow-a",
+      limit: 4,
+    }),
+    loadTransactionRecordEvidence({
+      context,
+      where: transactionWhere(context.workspaceId, periodB, filters),
+      suffix: "cash-flow-b",
+      limit: 4,
+    }),
+  ]);
+  const incomeChangeCents = a.incomeCents - b.incomeCents;
+  const spendingChangeCents = a.spendingCents - b.spendingCents;
+  const netChangeCents = a.netCents - b.netCents;
+  const cashFlowEvidence = evidence(
+    context.callId,
+    "cash-flow-change",
+    "Cash-flow change",
+    `${a.start}–${a.end} compared with ${b.start}–${b.end}`,
+    transactionHref({ from: a.start, to: a.end, accountName: args.account_name }),
+  );
+  const cashFlowEvidenceItems = [...periodAEvidence, ...periodBEvidence];
+  const resolvedCashFlowEvidence = cashFlowEvidenceItems.length ? cashFlowEvidenceItems : [cashFlowEvidence];
+  return {
+    output: {
+      ok: true,
+      evidence: resolvedCashFlowEvidence,
+      filters: resolvedFilterOutput(filters),
+      periodA: { ...a, subjects: undefined },
+      periodB: { ...b, subjects: undefined },
+      change: {
+        incomeCents: incomeChangeCents,
+        income: formatAmount(incomeChangeCents, context.currency),
+        spendingCents: spendingChangeCents,
+        spending: formatAmount(spendingChangeCents, context.currency),
+        netCents: netChangeCents,
+        net: formatAmount(netChangeCents, context.currency),
+      },
+      drivers: changedSubjectDrivers(a, b, context.currency),
+    },
+    evidence: resolvedCashFlowEvidence,
+  };
+}
+
+async function compareIncome(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = CompareIncomeArgsSchema.parse(rawArgs);
+  const periodA = resolveRange(args.period_a_start, args.period_a_end);
+  const periodB = resolveRange(args.period_b_start, args.period_b_end);
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, null);
+  const [a, b, periodAEvidence, periodBEvidence] = await Promise.all([
+    summarizeCashFlowPeriod(context, periodA, filters),
+    summarizeCashFlowPeriod(context, periodB, filters),
+    loadTransactionRecordEvidence({
+      context,
+      where: { ...transactionWhere(context.workspaceId, periodA, filters), direction: "CREDIT" },
+      suffix: "income-a",
+      limit: 4,
+    }),
+    loadTransactionRecordEvidence({
+      context,
+      where: { ...transactionWhere(context.workspaceId, periodB, filters), direction: "CREDIT" },
+      suffix: "income-b",
+      limit: 4,
+    }),
+  ]);
+  const changeCents = a.incomeCents - b.incomeCents;
+  const changePercent = b.incomeCents === 0 ? null : Math.round((changeCents / b.incomeCents) * 10_000) / 100;
+  const incomeEvidence = evidence(
+    context.callId,
+    "income-comparison",
+    "Income comparison",
+    `${a.start}–${a.end} compared with ${b.start}–${b.end}`,
+    transactionHref({ from: a.start, to: a.end, accountName: args.account_name }),
+  );
+  const incomeEvidenceItems = [...periodAEvidence, ...periodBEvidence];
+  const resolvedIncomeEvidence = incomeEvidenceItems.length ? incomeEvidenceItems : [incomeEvidence];
+  return {
+    output: {
+      ok: true,
+      evidence: resolvedIncomeEvidence,
+      filters: resolvedFilterOutput(filters),
+      periodA: { start: a.start, end: a.end, totalCents: a.incomeCents, total: a.income },
+      periodB: { start: b.start, end: b.end, totalCents: b.incomeCents, total: b.income },
+      changeCents,
+      change: formatAmount(changeCents, context.currency),
+      changePercent,
+      sources: changedSubjectDrivers(a, b, context.currency, "CREDIT"),
+    },
+    evidence: resolvedIncomeEvidence,
+  };
+}
+
+async function getTopSpendingDrivers(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = TopSpendingDriversArgsSchema.parse(rawArgs);
+  const range = resolveRange(args.start_date, args.end_date);
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, args.budget_name);
+  const where: Prisma.TransactionWhereInput = {
+    ...transactionWhere(context.workspaceId, range, filters),
+    direction: "DEBIT",
+  };
+  const totalAggregate = await prisma.transaction.aggregate({ where, _sum: { amountCents: true }, _count: { _all: true } });
+  const totalCents = totalAggregate._sum.amountCents ?? 0;
+  let drivers: Array<{ name: string; amountCents: number; transactionCount: number }>;
+  if (args.dimension === "SUB_ACCOUNT") {
+    const rows = await prisma.transaction.groupBy({
+      by: ["budgetId"],
+      where,
+      _sum: { amountCents: true },
+      _count: { _all: true },
+      orderBy: { _sum: { amountCents: "desc" } },
+      take: 100,
+    });
+    const budgetIds = rows.map((row) => row.budgetId).filter((id): id is string => Boolean(id));
+    const budgets = budgetIds.length ? await prisma.budgetEnvelope.findMany({
+      where: { workspaceId: context.workspaceId, id: { in: budgetIds } },
+      select: { id: true, name: true },
+    }) : [];
+    const budgetById = new Map(budgets.map((budget) => [budget.id, budget.name]));
+    drivers = rows.map((row) => ({
+      name: row.budgetId ? budgetById.get(row.budgetId) ?? "Unknown sub-account" : "Unassigned",
+      amountCents: row._sum.amountCents ?? 0,
+      transactionCount: row._count._all,
+    }));
+  } else {
+    const rows = await prisma.transaction.groupBy({
+      by: ["subject"],
+      where,
+      _sum: { amountCents: true },
+      _count: { _all: true },
+      orderBy: { _sum: { amountCents: "desc" } },
+      take: 500,
+    });
+    const normalized = new Map<string, { name: string; amountCents: number; transactionCount: number }>();
+    for (const row of rows) {
+      const name = canonicalizeMerchant(row.subject);
+      const key = name.toLocaleLowerCase();
+      const current = normalized.get(key) ?? { name, amountCents: 0, transactionCount: 0 };
+      current.amountCents += row._sum.amountCents ?? 0;
+      current.transactionCount += row._count._all;
+      normalized.set(key, current);
+    }
+    drivers = [...normalized.values()].sort((left, right) => right.amountCents - left.amountCents || left.name.localeCompare(right.name));
+  }
+  const visibleDrivers = drivers.slice(0, args.limit).map((driver) => ({
+    ...driver,
+    amount: formatAmount(driver.amountCents, context.currency),
+    sharePercent: totalCents === 0 ? 0 : Math.round((driver.amountCents / totalCents) * 10_000) / 100,
+  }));
+  const driverEvidence = evidence(
+    context.callId,
+    "spending-drivers",
+    `Top spending by ${args.dimension === "MERCHANT" ? "merchant" : "sub-account"}`,
+    `${range.startLabel} to ${range.endLabel} · ${totalAggregate._count._all} debit transactions`,
+    transactionHref({ from: range.startLabel, to: range.endLabel, accountName: args.account_name, budgetName: args.budget_name }),
+  );
+  const driverRecordEvidence = await loadTransactionRecordEvidence({
+    context,
+    where,
+    suffix: "spending-driver",
+    orderBy: [{ amountCents: "desc" }, { date: "desc" }, { id: "desc" }],
+  });
+  const driverEvidenceItems = driverRecordEvidence.length ? driverRecordEvidence : [driverEvidence];
+  return {
+    output: {
+      ok: true,
+      evidence: driverEvidenceItems,
+      filters: { start: range.startLabel, end: range.endLabel, dimension: args.dimension, ...resolvedFilterOutput(filters) },
+      totalCents,
+      total: formatAmount(totalCents, context.currency),
+      transactionCount: totalAggregate._count._all,
+      returned: visibleDrivers.length,
+      drivers: visibleDrivers,
+    },
+    evidence: driverEvidenceItems,
+  };
+}
+
+async function getBudgetVsActual(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = BudgetVsActualArgsSchema.parse(rawArgs);
+  const period = `${args.year}-${String(args.month).padStart(2, "0")}`;
+  const start = `${period}-01`;
+  const endDate = new Date(Date.UTC(args.month === 12 ? args.year + 1 : args.year, args.month === 12 ? 0 : args.month, 0));
+  const end = formatDate(endDate);
+  const range = resolveRange(start, end);
+  const budgetResolution = await resolveAskNestBudget(context.workspaceId, args.budget_name);
+  const filters: ResolvedTransactionFilters = {
+    accountName: null,
+    budgetName: args.budget_name,
+    ...(budgetResolution?.matched ? { budgetIds: budgetResolution.ids } : {}),
+    resolutions: budgetResolution ? [budgetResolution] : [],
+  };
+  const actualWhere: Prisma.TransactionWhereInput = {
+    ...transactionWhere(context.workspaceId, range, filters),
+    direction: "DEBIT",
+  };
+  const [plan, actualRows, actualRecordEvidence] = await Promise.all([
+    prisma.monthlyBudgetPlan.findUnique({
+      where: { workspaceId_year_month: { workspaceId: context.workspaceId, year: args.year, month: args.month } },
+      select: {
+        status: true,
+        updatedAt: true,
+        items: {
+          select: {
+            title: true,
+            amountCents: true,
+            destinationSubAccountId: true,
+            destinationSubAccount: { select: { workspaceId: true, name: true } },
+          },
+        },
+      },
+    }),
+    prisma.transaction.groupBy({
+      by: ["budgetId"],
+      where: actualWhere,
+      _sum: { amountCents: true },
+      _count: { _all: true },
+    }),
+    loadTransactionRecordEvidence({ context, where: actualWhere, suffix: "budget-actual" }),
+  ]);
+  const actualBudgetIds = actualRows.map((row) => row.budgetId).filter((id): id is string => Boolean(id));
+  const actualBudgets = actualBudgetIds.length ? await prisma.budgetEnvelope.findMany({
+    where: { workspaceId: context.workspaceId, id: { in: actualBudgetIds } },
+    select: { id: true, name: true },
+  }) : [];
+  const names = new Map(actualBudgets.map((budget) => [budget.id, budget.name]));
+  const comparisons = new Map<string, { name: string; plannedCents: number; actualCents: number; transactionCount: number }>();
+  for (const item of plan?.items ?? []) {
+    if (budgetResolution?.matched && (!item.destinationSubAccountId || !budgetResolution.ids.includes(item.destinationSubAccountId))) continue;
+    if (!budgetResolution?.matched && args.budget_name) {
+      const label = item.destinationSubAccount?.name ?? item.title;
+      if (!label.toLocaleLowerCase().includes(args.budget_name.toLocaleLowerCase())) continue;
+    }
+    const key = item.destinationSubAccountId ?? `plan:${item.title.toLocaleLowerCase()}`;
+    const current = comparisons.get(key) ?? {
+      name: item.destinationSubAccount?.workspaceId === context.workspaceId ? item.destinationSubAccount.name : item.title,
+      plannedCents: 0,
+      actualCents: 0,
+      transactionCount: 0,
+    };
+    current.plannedCents += item.amountCents;
+    comparisons.set(key, current);
+  }
+  for (const row of actualRows) {
+    const key = row.budgetId ?? "unassigned";
+    const current = comparisons.get(key) ?? {
+      name: row.budgetId ? names.get(row.budgetId) ?? "Unknown sub-account" : "Unassigned",
+      plannedCents: 0,
+      actualCents: 0,
+      transactionCount: 0,
+    };
+    current.actualCents += row._sum.amountCents ?? 0;
+    current.transactionCount += row._count._all;
+    comparisons.set(key, current);
+  }
+  const rows = [...comparisons.values()].map((row) => {
+    const varianceCents = row.plannedCents - row.actualCents;
+    return {
+      ...row,
+      planned: formatAmount(row.plannedCents, context.currency),
+      actual: formatAmount(row.actualCents, context.currency),
+      varianceCents,
+      variance: formatAmount(varianceCents, context.currency),
+      usagePercent: row.plannedCents === 0 ? null : Math.round((row.actualCents / row.plannedCents) * 10_000) / 100,
+      status: row.plannedCents === 0 && row.actualCents > 0 ? "UNPLANNED" : varianceCents < 0 ? "OVER" : varianceCents > 0 ? "UNDER" : "ON_PLAN",
+    };
+  }).sort((left, right) => right.actualCents - left.actualCents || left.name.localeCompare(right.name));
+  const plannedCents = rows.reduce((sum, row) => sum + row.plannedCents, 0);
+  const actualCents = rows.reduce((sum, row) => sum + row.actualCents, 0);
+  const budgetEvidence = evidence(
+    context.callId,
+    "budget-vs-actual",
+    `Budget versus actual for ${period}`,
+    plan ? `${plan.status} plan · updated ${formatDate(plan.updatedAt)}` : "No monthly budget plan found",
+    "/budgets/plan",
+  );
+  const budgetEvidenceItems = actualRecordEvidence.length ? actualRecordEvidence : [budgetEvidence];
+  return {
+    output: {
+      ok: true,
+      evidence: budgetEvidenceItems,
+      period,
+      foundPlan: Boolean(plan),
+      planStatus: plan?.status ?? null,
+      filters: resolvedFilterOutput(filters),
+      totals: {
+        plannedCents,
+        planned: formatAmount(plannedCents, context.currency),
+        actualCents,
+        actual: formatAmount(actualCents, context.currency),
+        varianceCents: plannedCents - actualCents,
+        variance: formatAmount(plannedCents - actualCents, context.currency),
+      },
+      returned: rows.length,
+      rows,
+    },
+    evidence: budgetEvidenceItems,
+  };
+}
+
+function recurringCadence(medianDays: number) {
+  if (medianDays >= 5 && medianDays <= 9) return "WEEKLY";
+  if (medianDays >= 12 && medianDays <= 17) return "FORTNIGHTLY";
+  if (medianDays >= 25 && medianDays <= 35) return "MONTHLY";
+  if (medianDays >= 75 && medianDays <= 100) return "QUARTERLY";
+  if (medianDays >= 330 && medianDays <= 400) return "ANNUAL";
+  return null;
+}
+
+async function findRecurringSpend(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = RecurringSpendArgsSchema.parse(rawArgs);
+  const range = resolveRange(args.start_date, args.end_date);
+  const filters = await resolveTransactionFilters(context.workspaceId, args.account_name, args.budget_name);
+  const transactions = await prisma.transaction.findMany({
+    where: { ...transactionWhere(context.workspaceId, range, filters), direction: "DEBIT" },
+    orderBy: [{ date: "asc" }, { id: "asc" }],
+    take: 2_000,
+    select: {
+      id: true,
+      accountId: true,
+      budgetId: true,
+      date: true,
+      subject: true,
+      amountCents: true,
+      budget: { select: { workspaceId: true, name: true } },
+    },
+  });
+  const merchants = new Map<string, { name: string; dates: Date[]; amounts: number[] }>();
+  for (const transaction of transactions) {
+    const name = canonicalizeMerchant(transaction.subject);
+    const key = name.toLocaleLowerCase();
+    const current = merchants.get(key) ?? { name, dates: [], amounts: [] };
+    current.dates.push(transaction.date);
+    current.amounts.push(transaction.amountCents);
+    merchants.set(key, current);
+  }
+  const patterns = [...merchants.values()].flatMap((merchant) => {
+    if (merchant.dates.length < args.min_occurrences) return [];
+    const intervals = merchant.dates.slice(1).map((date, index) => Math.round((date.getTime() - merchant.dates[index]!.getTime()) / 86_400_000));
+    const orderedIntervals = [...intervals].sort((left, right) => left - right);
+    const medianDays = orderedIntervals[Math.floor(orderedIntervals.length / 2)] ?? 0;
+    const cadence = recurringCadence(medianDays);
+    if (!cadence) return [];
+    const totalCents = merchant.amounts.reduce((sum, amount) => sum + amount, 0);
+    const averageCents = Math.round(totalCents / merchant.amounts.length);
+    return [{
+      merchant: merchant.name,
+      cadence,
+      medianIntervalDays: medianDays,
+      occurrences: merchant.dates.length,
+      firstDate: formatDate(merchant.dates[0]!),
+      lastDate: formatDate(merchant.dates.at(-1)!),
+      averageCents,
+      average: formatAmount(averageCents, context.currency),
+      totalCents,
+      total: formatAmount(totalCents, context.currency),
+      amountRange: `${formatAmount(Math.min(...merchant.amounts), context.currency)} to ${formatAmount(Math.max(...merchant.amounts), context.currency)}`,
+    }];
+  }).sort((left, right) => right.totalCents - left.totalCents || left.merchant.localeCompare(right.merchant));
+  const visiblePatterns = patterns.slice(0, args.limit);
+  const recurringEvidence = evidence(
+    context.callId,
+    "recurring-spend",
+    `${visiblePatterns.length} potential recurring payment pattern${visiblePatterns.length === 1 ? "" : "s"}`,
+    `${range.startLabel} to ${range.endLabel} · analyzed ${transactions.length}${transactions.length === 2_000 ? "+" : ""} debit transactions`,
+    transactionHref({ from: range.startLabel, to: range.endLabel, accountName: args.account_name, budgetName: args.budget_name }),
+  );
+  const recurringMerchantKeys = new Set(visiblePatterns.map((pattern) => pattern.merchant.toLocaleLowerCase()));
+  const recurringRecordEvidence = transactionRecordEvidence({
+    context,
+    rows: transactions.filter((transaction) => (
+      recurringMerchantKeys.has(canonicalizeMerchant(transaction.subject).toLocaleLowerCase())
+    )),
+    suffix: "recurring-transaction",
+  });
+  const recurringEvidenceItems = recurringRecordEvidence.length ? recurringRecordEvidence : [recurringEvidence];
+  return {
+    output: {
+      ok: true,
+      evidence: recurringEvidenceItems,
+      disclaimer: "Potential recurring patterns are inferred from recorded dates and normalized merchant text. Review the supporting transactions before treating them as subscriptions or obligations.",
+      filters: { start: range.startLabel, end: range.endLabel, minOccurrences: args.min_occurrences, ...resolvedFilterOutput(filters) },
+      analyzedTransactions: transactions.length,
+      truncated: transactions.length === 2_000,
+      totalMatches: patterns.length,
+      returned: visiblePatterns.length,
+      patterns: visiblePatterns,
+    },
+    evidence: recurringEvidenceItems,
+  };
+}
+
+async function searchWorkspaceKnowledge(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = SearchWorkspaceKnowledgeArgsSchema.parse(rawArgs);
+  try {
+    const results = await searchAskNestKnowledge({
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      query: args.query,
+      limit: args.limit,
+    });
+    const knowledgeEvidence = results.map((result, index) => evidence(
+      context.callId,
+      `knowledge-${index + 1}`,
+      result.title,
+      `${result.sourceType} · hybrid workspace search`,
+      result.href,
+    ));
+    return {
+      output: {
+        ok: true,
+        method: "AZURE_AI_SEARCH_HYBRID",
+        query: args.query,
+        totalMatches: results.length,
+        returned: results.length,
+        evidence: knowledgeEvidence,
+        passages: results.map((result, index) => ({
+          evidenceId: knowledgeEvidence[index]?.id,
+          title: result.title,
+          content: result.content,
+          sourceType: result.sourceType,
+          sourceId: result.sourceId,
+          score: result.score,
+          rerankerScore: result.rerankerScore,
+        })),
+      },
+      evidence: knowledgeEvidence,
+    };
+  } catch {
+    return {
+      output: {
+        ok: false,
+        unavailable: true,
+        totalMatches: 0,
+        returned: 0,
+        error: "Workspace knowledge search is temporarily unavailable. Do not infer an answer from missing passages.",
+      },
+      evidence: [],
+    };
+  }
+}
+
 export async function executeAskNestTool(
   name: string,
   rawArgs: unknown,
@@ -1448,6 +2611,8 @@ export async function executeAskNestTool(
       return getFinancialSnapshot(rawArgs, context);
     case "compare_spending":
       return compareSpending(rawArgs, context);
+    case "get_category_spending":
+      return getCategorySpending(rawArgs, context);
     case "find_transactions":
       return findTransactions(rawArgs, context);
     case "get_card_obligations":
@@ -1466,6 +2631,18 @@ export async function executeAskNestTool(
       return getInvestmentSummary(rawArgs, context);
     case "get_trip_spending":
       return getTripSpending(rawArgs, context);
+    case "explain_cash_flow_change":
+      return explainCashFlowChange(rawArgs, context);
+    case "compare_income":
+      return compareIncome(rawArgs, context);
+    case "get_top_spending_drivers":
+      return getTopSpendingDrivers(rawArgs, context);
+    case "get_budget_vs_actual":
+      return getBudgetVsActual(rawArgs, context);
+    case "find_recurring_spend":
+      return findRecurringSpend(rawArgs, context);
+    case "search_workspace_knowledge":
+      return searchWorkspaceKnowledge(rawArgs, context);
     default:
       throw new AskNestToolInputError("Ask Nest requested an unsupported read tool.");
   }

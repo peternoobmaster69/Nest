@@ -1,4 +1,4 @@
-import { Bot, Brain, HardDrive, KeyRound, ShieldCheck, Sigma } from "lucide-react";
+import { Bot, Brain, Gauge, HardDrive, KeyRound, ShieldCheck, Sigma, ThumbsUp } from "lucide-react";
 import { AdminDirectories } from "@/components/admin-directories";
 import { PageFrame } from "@/components/page-frame";
 import { requireAdminPage } from "@/lib/admin-auth";
@@ -34,6 +34,10 @@ function formatStorage(megabytes: number) {
   return `${megabytes.toLocaleString("en-US", { maximumFractionDigits: 2 })} MB`;
 }
 
+function formatPercent(value: number) {
+  return `${(value * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+}
+
 export default async function AdminPage() {
   const session = await requireAdminPage();
   const overview = await getAdminOverview();
@@ -62,6 +66,8 @@ export default async function AdminPage() {
           <article className="admin-stat"><Bot aria-hidden="true" /><span>Ask Nest turns</span><strong>{overview.stats.totalTurns.toLocaleString()}</strong><small>{overview.stats.recentTurnCount.toLocaleString()} in the last 7 days</small></article>
           <article className="admin-stat"><Brain aria-hidden="true" /><span>Active memories</span><strong>{overview.stats.activeMemoryCount.toLocaleString()}</strong><small>{overview.stats.inactiveMemoryCount.toLocaleString()} inactive</small></article>
           <article className="admin-stat"><Sigma aria-hidden="true" /><span>Tracked tokens</span><strong>{overview.tokenUsage.allTime.totalTokens.toLocaleString()}</strong><small>{overview.tokenUsage.last7Days.totalTokens.toLocaleString()} in the last 7 days · {overview.tokenUsage.trackedTurnCount.toLocaleString()} tracked turns</small></article>
+          <article className="admin-stat"><Gauge aria-hidden="true" /><span>Tool quality</span><strong>{overview.quality.toolCallCount.toLocaleString()} calls</strong><small>{formatPercent(overview.quality.emptyResultRate)} empty-result rate</small></article>
+          <article className="admin-stat"><ThumbsUp aria-hidden="true" /><span>User feedback</span><strong>{overview.quality.feedbackCount ? formatPercent(overview.quality.helpfulRate) : "No ratings"}</strong><small>{overview.quality.helpfulCount.toLocaleString()} helpful · {overview.quality.notHelpfulCount.toLocaleString()} not useful</small></article>
           <article className="admin-stat"><HardDrive aria-hidden="true" /><span>Database storage</span><strong>{overview.databaseStorage ? formatStorage(overview.databaseStorage.totalAllocatedMb) : "Unavailable"}</strong><small>{overview.databaseStorage ? `${formatStorage(overview.databaseStorage.dataUsedMb)} data used · ${formatStorage(overview.databaseStorage.logAllocatedMb)} log allocated` : "Storage metadata could not be read"}</small></article>
         </section>
 
@@ -94,6 +100,7 @@ export default async function AdminPage() {
               <div><dt>AI cost rates</dt><dd className={overview.configuration.aiCostRatesConfigured ? "is-good" : "is-bad"}>{statusLabel(overview.configuration.aiCostRatesConfigured)}</dd></div>
               <div><dt>AI model</dt><dd>{overview.configuration.aiModel || "Not configured"}</dd></div>
               <div><dt>Ask Nest history</dt><dd>{overview.configuration.askNestHistoryRetentionDays} days</dd></div>
+              <div><dt>Knowledge search</dt><dd className={overview.configuration.askNestSearch.active ? "is-good" : ""}>{overview.configuration.askNestSearch.reason.replaceAll("_", " ")}</dd></div>
             </dl>
           </section>
 
@@ -114,7 +121,7 @@ export default async function AdminPage() {
           {overview.recentTurns.length ? (
             <div className="admin-table-wrap">
               <table className="admin-table">
-                <thead><tr><th>Time</th><th>User / workspace</th><th>Question</th><th>Context</th><th>Tokens</th><th>Grounding</th></tr></thead>
+                <thead><tr><th>Time</th><th>User / workspace</th><th>Question</th><th>Context</th><th>Tokens</th><th>Grounding</th><th>Feedback</th></tr></thead>
                 <tbody>
                   {overview.recentTurns.map((turn) => (
                     <tr key={turn.id}>
@@ -123,7 +130,8 @@ export default async function AdminPage() {
                       <td className="admin-question" title={turn.question}>{turn.question}</td>
                       <td><code>{turn.pagePath}</code></td>
                       <td>{turn.totalTokens === null ? <span>Untracked</span> : <><strong>{turn.totalTokens.toLocaleString()} total</strong><span>{turn.inputTokens?.toLocaleString() ?? 0} in · {turn.outputTokens?.toLocaleString() ?? 0} out</span></>}</td>
-                      <td><strong>{turn.toolsUsed.length ? turn.toolsUsed.join(", ") : "No tool metadata"}</strong><span>{turn.evidenceCount} evidence · {turn.memoryUpdateCount} memory updates</span></td>
+                      <td><strong>{turn.toolsUsed.length ? turn.toolsUsed.join(", ") : "No tool metadata"}</strong><span>{turn.toolCallCount} calls · {turn.emptyResultCount} empty · {turn.durationMs === null ? "latency untracked" : `${turn.durationMs.toLocaleString()} ms`}</span><span>{turn.evidenceCount} evidence · {turn.memoryUpdateCount} memory updates</span></td>
+                      <td><strong>{turn.feedbackRating?.replaceAll("_", " ") ?? "Not rated"}</strong>{turn.feedbackReason ? <span>{turn.feedbackReason.replaceAll("_", " ")}</span> : null}</td>
                     </tr>
                   ))}
                 </tbody>

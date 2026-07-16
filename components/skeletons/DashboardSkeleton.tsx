@@ -1,11 +1,12 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import { BankSelectorSkeleton } from "@/components/skeletons/BankSelectorSkeleton";
 
 /*
 Structural inventory: Dashboard data regions
 Route: /
 Layout regions: persistent AppSidebar and topbar render as chrome; only dashboard body data regions skeletonize.
 Content blocks:
-- Bank selector row: .bank-selector-row padding 10px 12px; current loaded ALL state uses .bank-icon-default at 36x20, a 15px/1.5 amount line, and one 22x22 dropdown button. A second edit button appears only for a selected bank, so the all-bank skeleton does not reserve it.
+- Bank selector row: shared with the transactions page so both routes reserve the same logo, balance, and action space while loading.
 - Net worth strip: .bank-selector-row.dashboard-mini-card; label is 11px uppercase, primary value is 22px/1.5, breakdown is inline 11px links, right metric has 16px left padding and border.
 - Hero card: .hero-card, padding 18px 20px, margin-bottom 14px; left total block has 12px uppercase label, 28px/1 amount, 12px subcopy, chip row of 22px pills.
 - Credit-card summary panel: .card.cc-home-panel in .grid-2; header, three 68px stats, repeated grouped rows.
@@ -31,19 +32,7 @@ Structural inventory: Dashboard bank selector
 Maps to .bank-selector-row > .bank-selector-summary with the same flex/gap/padding. Replaces logo, balance, and action buttons only.
 */
 export function DashboardBankSelectorSkeleton() {
-  return (
-    <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
-      <div className="bank-selector-summary">
-        <div className="bank-selector-main">
-          <Skeleton width={36} height={20} borderRadius="999px" />
-          <Skeleton width={82} height={23} borderRadius="4px" />
-        </div>
-        <div className="bank-selector-actions">
-          <Skeleton width={22} height={22} borderRadius="6px" />
-        </div>
-      </div>
-    </div>
-  );
+  return <BankSelectorSkeleton />;
 }
 
 /*

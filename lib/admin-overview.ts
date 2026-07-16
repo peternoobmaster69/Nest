@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { getAskNestHistoryRetentionDays } from "@/lib/ai/ask-nest-retention";
+import { getAskNestHistoryRetentionDays, getAskNestUsageDayKey } from "@/lib/ai/ask-nest-retention";
+import { getAskNestSearchGate } from "@/lib/ai/knowledge-search";
 
 type StoredAnswer = {
   scope?: { toolsUsed?: unknown };
@@ -117,12 +118,13 @@ async function getDatabaseStorage() {
 export async function getAdminOverview() {
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgoDay = getAskNestUsageDayKey(sevenDaysAgo);
 
   const [
     totalUsers,
     totalWorkspaces,
     rawTotalTurns,
-    recentTurnCount,
+    rawRecentTurnCount,
     activeMemoryCount,
     inactiveMemoryCount,
     memoryKinds,
@@ -131,10 +133,14 @@ export async function getAdminOverview() {
     workspaces,
     allTimeTokens,
     archivedUsage,
+    archivedRecentUsage,
     recentTokens,
     trackedTokenTurnCount,
     archivedUsageByUser,
     archivedUsageByWorkspace,
+    rawQuality,
+    rawHelpfulCount,
+    rawNotHelpfulCount,
     databaseStorage,
   ] = await Promise.all([
     prisma.user.count(),
@@ -160,6 +166,11 @@ export async function getAdminOverview() {
         inputTokens: true,
         outputTokens: true,
         totalTokens: true,
+        toolCallCount: true,
+        emptyResultCount: true,
+        durationMs: true,
+        feedbackRating: true,
+        feedbackReason: true,
         createdAt: true,
         workspace: { select: { name: true } },
         user: { select: { email: true, name: true } },
@@ -232,7 +243,17 @@ export async function getAdminOverview() {
         inputTokens: true,
         outputTokens: true,
         totalTokens: true,
+        toolCallCount: true,
+        emptyResultCount: true,
+        totalDurationMs: true,
+        feedbackCount: true,
+        helpfulCount: true,
+        notHelpfulCount: true,
       },
+    }),
+    prisma.askNestUsageDaily.aggregate({
+      where: { day: { gte: sevenDaysAgoDay } },
+      _sum: { turnCount: true, inputTokens: true, outputTokens: true, totalTokens: true },
     }),
     prisma.askNestTurn.aggregate({
       where: { createdAt: { gte: sevenDaysAgo } },
@@ -247,14 +268,24 @@ export async function getAdminOverview() {
       by: ["workspaceId"],
       _sum: { turnCount: true },
     }),
+    prisma.askNestTurn.aggregate({
+      _sum: { toolCallCount: true, emptyResultCount: true, durationMs: true },
+    }),
+    prisma.askNestTurn.count({ where: { feedbackRating: "HELPFUL" } }),
+    prisma.askNestTurn.count({ where: { feedbackRating: "NOT_HELPFUL" } }),
     getDatabaseStorage(),
   ]);
   const archivedTokenUsage = tokenTotals(archivedUsage);
   const allTimeTokenUsage = addTokenTotals(tokenTotals(allTimeTokens), archivedTokenUsage);
-  const recentTokenUsage = tokenTotals(recentTokens);
+  const recentTokenUsage = addTokenTotals(tokenTotals(recentTokens), tokenTotals(archivedRecentUsage));
   const costRates = getAiCostRates();
   const archivedTurnCount = archivedUsage._sum.turnCount ?? 0;
   const archivedTrackedTurnCount = archivedUsage._sum.trackedTurnCount ?? 0;
+  const toolCallCount = (rawQuality._sum.toolCallCount ?? 0) + (archivedUsage._sum.toolCallCount ?? 0);
+  const emptyResultCount = (rawQuality._sum.emptyResultCount ?? 0) + (archivedUsage._sum.emptyResultCount ?? 0);
+  const feedbackCount = rawHelpfulCount + rawNotHelpfulCount + (archivedUsage._sum.feedbackCount ?? 0);
+  const helpfulCount = rawHelpfulCount + (archivedUsage._sum.helpfulCount ?? 0);
+  const notHelpfulCount = rawNotHelpfulCount + (archivedUsage._sum.notHelpfulCount ?? 0);
   const archivedTurnsByUser = new Map(
     archivedUsageByUser.map((entry) => [entry.userId, entry._sum.turnCount ?? 0]),
   );
@@ -268,7 +299,7 @@ export async function getAdminOverview() {
       totalUsers,
       totalWorkspaces,
       totalTurns: rawTotalTurns + archivedTurnCount,
-      recentTurnCount,
+      recentTurnCount: rawRecentTurnCount + (archivedRecentUsage._sum.turnCount ?? 0),
       activeMemoryCount,
       inactiveMemoryCount,
     },
@@ -282,6 +313,15 @@ export async function getAdminOverview() {
         allTime: estimateTokenCost(allTimeTokenUsage, costRates),
         last7Days: estimateTokenCost(recentTokenUsage, costRates),
       } : null,
+    },
+    quality: {
+      toolCallCount,
+      emptyResultCount,
+      emptyResultRate: toolCallCount ? emptyResultCount / toolCallCount : 0,
+      feedbackCount,
+      helpfulCount,
+      notHelpfulCount,
+      helpfulRate: feedbackCount ? helpfulCount / feedbackCount : 0,
     },
     memoryKinds: memoryKinds.map((entry) => ({
       kind: entry.kind,
@@ -303,6 +343,11 @@ export async function getAdminOverview() {
         inputTokens: turn.inputTokens,
         outputTokens: turn.outputTokens,
         totalTokens: turn.totalTokens,
+        toolCallCount: turn.toolCallCount,
+        emptyResultCount: turn.emptyResultCount,
+        durationMs: turn.durationMs,
+        feedbackRating: turn.feedbackRating,
+        feedbackReason: turn.feedbackReason,
         estimatedCostUsd: turn.totalTokens === null || !costRates
           ? null
           : estimateTokenCost(usage, costRates).totalCostUsd,
@@ -352,6 +397,7 @@ export async function getAdminOverview() {
       aiModel: process.env.AI_WORKLOAD_MODEL?.trim() || null,
       aiCostRatesConfigured: Boolean(costRates),
       askNestHistoryRetentionDays: getAskNestHistoryRetentionDays(),
+      askNestSearch: getAskNestSearchGate(),
     },
   };
 }

@@ -39,6 +39,7 @@ test("Ask Nest exposes only bounded read tools", async () => {
   const expectedTools = [
     "get_financial_snapshot",
     "compare_spending",
+    "get_category_spending",
     "find_transactions",
     "find_card_transactions",
     "get_card_obligations",
@@ -48,6 +49,11 @@ test("Ask Nest exposes only bounded read tools", async () => {
     "get_spending_breakdown",
     "get_investment_summary",
     "get_trip_spending",
+    "explain_cash_flow_change",
+    "compare_income",
+    "get_top_spending_drivers",
+    "get_budget_vs_actual",
+    "find_recurring_spend",
   ];
 
   for (const name of expectedTools) {
@@ -72,6 +78,35 @@ test("Ask Nest validates structured answers and grounds displayed currency value
   assert.match(orchestration, /evidenceById\.get\(id\)/);
 });
 
+test("Ask Nest reports the specific reason a response could not be grounded", async () => {
+  const [orchestration, route, panel] = await Promise.all([
+    source("lib/ai/ask-nest.ts"),
+    source("app/api/ai/ask/route.ts"),
+    source("components/ask-nest.tsx"),
+  ]);
+
+  for (const code of [
+    "AI_LOOKUP_LIMIT",
+    "AI_LOOKUP_ROUNDS_EXHAUSTED",
+    "AI_INVALID_TOOL_FILTERS",
+    "AI_NO_MATCHING_DATA",
+    "AI_OUTPUT_LIMIT",
+    "AI_CONTENT_FILTERED",
+    "AI_UNGROUNDED_VALUE",
+    "AI_AMBIGUOUS_CURRENCY",
+  ]) {
+    assert.match(orchestration, new RegExp(code));
+  }
+  assert.match(orchestration, /not too many transaction results/);
+  assert.match(orchestration, /incomplete_details\?\.reason/);
+  assert.match(route, /errorResponse\(error\.publicMessage, error\.code, error\.status\)/);
+  assert.doesNotMatch(route, /could not produce a grounded answer\. Try rephrasing/);
+  assert.match(panel, /payload\.code/);
+  assert.match(panel, /Edit question/);
+  assert.match(panel, /Retry same question/);
+  assert.match(panel, /ASK_NEST_ERROR_LABELS/);
+});
+
 test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", async () => {
   const shell = await source("components/app-shell.tsx");
   const panel = await source("components/ask-nest.tsx");
@@ -88,12 +123,31 @@ test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", as
   assert.match(panel, /Load older conversations/);
   assert.match(panel, /renderWithFormattedDates/);
   assert.match(panel, /AskNestVisualizationView/);
+  assert.match(panel, /formatChartPeriodLabel/);
+  assert.match(panel, /Most recent chart values/);
+  assert.match(panel, /coordinates\.length \/ 4/);
   assert.match(panel, /ask-nest-trip-flag/);
   assert.match(panel, /Select one to add it to the message box/);
   assert.match(panel, /chooseFollowUp\(followUp\)/);
   assert.doesNotMatch(panel, /onClick=\{\(\) => void ask\(followUp\)\}/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /\.ask-nest-panel/);
+  assert.match(panel, /ask-nest-input-shell/);
+  assert.match(styles, /\.ask-nest-input-shell:focus-within/);
+});
+
+test("Ask Nest uses semantic categories independently of sub-account names", async () => {
+  const orchestration = await source("lib/ai/ask-nest.ts");
+  const tools = await source("lib/ai/ask-nest-tools.ts");
+  const categories = await source("lib/ai/transaction-categories.mjs");
+
+  assert.match(tools, /name: ["']get_category_spending["']/);
+  assert.match(tools, /DETERMINISTIC_TRANSACTION_CLASSIFICATION/);
+  assert.match(tools, /possibleAdditionalCents/);
+  assert.doesNotMatch(tools, /implicitBudgetQuery/);
+  assert.match(categories, /SimplyGo/i);
+  assert.match(categories, /AMBIGUOUS_GRAB/);
+  assert.match(orchestration, /Never add possibleAdditional to it/);
 });
 
 test("Ask Nest derives charts and trip cards from successful tool output", async () => {
@@ -114,8 +168,19 @@ test("Ask Nest derives charts and trip cards from successful tool output", async
 test("Transactions supports Ask Nest deep links and multiple custom months", async () => {
   const page = await source("components/transactions-page.tsx");
   const route = await source("app/api/transactions/route.ts");
+  const tools = await source("lib/ai/ask-nest-tools.ts");
+  const styles = await source("app/globals.css");
 
   assert.match(page, /searchParams\.get\(["']view["']\) === ["']ask-nest["']/);
+  assert.match(page, /searchParams\.get\(["']transactionId["']\)/);
+  assert.match(page, /params\.set\(["']transactionId["'], targetTransactionId\)/);
+  assert.match(page, /document\.getElementById\(`transaction-\$\{targetTransactionId\}`\)/);
+  assert.match(page, /isDeepLinked \? ["'] is-deep-linked["']/);
+  assert.match(route, /transactionId \? \{ id: transactionId \} : \{\}/);
+  assert.match(tools, /function transactionRecordEvidence/);
+  assert.match(tools, /accountId: row\.accountId[\s\S]*?budgetId: row\.budgetId[\s\S]*?transactionId: row\.id/);
+  assert.match(tools, /categoryEvidenceItems = transactionEvidence\.length \? transactionEvidence : \[categoryEvidence\]/);
+  assert.match(styles, /\.tx-recent-row\.is-deep-linked/);
   assert.match(page, /selectedCustomMonths/);
   assert.match(page, /draftCustomMonths/);
   assert.match(page, /Apply \{draftCustomMonths\.length/);
@@ -181,6 +246,24 @@ test("Ask Nest retains usage summaries while a daily guarded job purges raw hist
   assert.match(admin, /archivedUsage/);
 });
 
+test("clearing Ask Nest chat archives usage before deleting raw turns", async () => {
+  const [history, retention, admin] = await Promise.all([
+    source("app/api/ai/history/route.ts"),
+    source("lib/ai/ask-nest-retention.ts"),
+    source("lib/admin-overview.ts"),
+  ]);
+
+  assert.match(history, /clearAskNestHistoryPreservingUsage\(\{ workspaceId, userId \}\)/);
+  assert.doesNotMatch(history, /prisma\.askNestTurn\.deleteMany/);
+  assert.match(retention, /export async function clearAskNestHistoryPreservingUsage/);
+  assert.match(retention, /UPDLOCK, HOLDLOCK, ROWLOCK/);
+  assert.match(retention, /archiveAskNestTurns\(tx, turns\)/);
+  assert.match(retention, /askNestUsageDaily\.upsert/);
+  assert.match(retention, /askNestTurn\.deleteMany/);
+  assert.match(admin, /archivedRecentUsage/);
+  assert.match(admin, /addTokenTotals\(tokenTotals\(recentTokens\), tokenTotals\(archivedRecentUsage\)\)/);
+});
+
 test("Ask Nest memory is explicit, scoped, reviewable, and never a financial source", async () => {
   const orchestration = await source("lib/ai/ask-nest.ts");
   const memory = await source("lib/ai/memory.ts");
@@ -208,4 +291,41 @@ test("Ask Nest memory is explicit, scoped, reviewable, and never a financial sou
   assert.match(panel, /Financial figures are always loaded fresh/);
   assert.match(schema, /model AskNestMemory/);
   assert.match(schema, /@@unique\(\[ownerHash, keyHash\]\)/);
+});
+
+test("Ask Nest records bounded quality diagnostics and accepts scoped usefulness feedback", async () => {
+  const [orchestration, askRoute, feedbackRoute, schema, panel, retention] = await Promise.all([
+    source("lib/ai/ask-nest.ts"),
+    source("app/api/ai/ask/route.ts"),
+    source("app/api/ai/feedback/route.ts"),
+    source("prisma/schema.prisma"),
+    source("components/ask-nest.tsx"),
+    source("lib/ai/ask-nest-retention.ts"),
+  ]);
+  assert.match(orchestration, /toolDiagnostics/);
+  assert.match(orchestration, /diagnosticArguments/);
+  assert.match(orchestration, /emptyResultCount/);
+  assert.match(askRoute, /diagnosticsJson: JSON\.stringify\(result\.diagnostics\)/);
+  assert.match(feedbackRoute, /where: \{ id: parsed\.data\.turnId, workspaceId, userId \}/);
+  assert.match(panel, /Was this useful\?/);
+  assert.match(panel, /WRONG_DATA/);
+  assert.match(schema, /feedbackRating String\?/);
+  assert.match(retention, /helpfulCount/);
+  assert.match(retention, /notHelpfulCount/);
+});
+
+test("Ask Nest hybrid knowledge search is workspace-filtered and evaluation-gated", async () => {
+  const [search, orchestration, tools] = await Promise.all([
+    source("lib/ai/knowledge-search.ts"),
+    source("lib/ai/ask-nest.ts"),
+    source("lib/ai/ask-nest-tools.ts"),
+  ]);
+  assert.match(search, /ASK_NEST_SEARCH_EVAL_PASS/);
+  assert.match(search, /workspaceId eq/);
+  assert.match(search, /userId eq/);
+  assert.match(search, /filterMode: "preFilter"/);
+  assert.match(search, /kind: "text"/);
+  assert.match(search, /queryType: "semantic"/);
+  assert.match(orchestration, /routing\.needsHybridRetrieval/);
+  assert.match(tools, /search_workspace_knowledge/);
 });

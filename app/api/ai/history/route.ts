@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { AskNestAnswer } from "@/lib/ai/ask-nest-types";
+import { clearAskNestHistoryPreservingUsage } from "@/lib/ai/ask-nest-retention";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 
@@ -30,7 +31,14 @@ export async function GET(request: Request) {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      select: { id: true, question: true, answerJson: true, createdAt: true },
+      select: {
+        id: true,
+        question: true,
+        answerJson: true,
+        feedbackRating: true,
+        feedbackReason: true,
+        createdAt: true,
+      },
     });
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
@@ -39,7 +47,9 @@ export async function GET(request: Request) {
         return [{
           id: row.id,
           question: row.question,
-          answer: JSON.parse(row.answerJson) as AskNestAnswer,
+          answer: { ...(JSON.parse(row.answerJson) as AskNestAnswer), turnId: row.id },
+          feedbackRating: row.feedbackRating,
+          feedbackReason: row.feedbackReason,
           createdAt: row.createdAt.toISOString(),
         }];
       } catch {
@@ -62,7 +72,7 @@ export async function GET(request: Request) {
 export async function DELETE() {
   try {
     const { userId, workspaceId } = await requireWorkspaceAccess();
-    await prisma.askNestTurn.deleteMany({ where: { workspaceId, userId } });
+    await clearAskNestHistoryPreservingUsage({ workspaceId, userId });
     return new NextResponse(null, { status: 204, headers: PRIVATE_HEADERS });
   } catch (error) {
     if (error instanceof ApiAuthError) {

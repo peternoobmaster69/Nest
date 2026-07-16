@@ -287,6 +287,8 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 export function TransactionsPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+  const urlFilterKey = searchParams.toString();
+  const targetTransactionId = searchParams.get("transactionId")?.trim().slice(0, 180) ?? "";
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [notes, setNotes] = useState("");
@@ -299,7 +301,8 @@ export function TransactionsPage() {
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [activeBudgetFilterId, setActiveBudgetFilterId] = useSessionState<string>("nest:view:transactions:budget", "ALL");
   const [activeGroupFilterId, setActiveGroupFilterId] = useSessionState<string>("nest:view:transactions:group", "ALL");
-  const [urlFilterHydrated, setUrlFilterHydrated] = useState(false);
+  const [hydratedUrlFilterKey, setHydratedUrlFilterKey] = useState<string | null>(null);
+  const urlFilterHydrated = hydratedUrlFilterKey === urlFilterKey;
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
   const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
@@ -324,6 +327,7 @@ export function TransactionsPage() {
   const transactionGroupPickerRef = useRef<HTMLDivElement | null>(null);
   const transactionGroupPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const transactionGroupCardsRef = useRef<HTMLDivElement | null>(null);
+  const focusedTransactionIdRef = useRef<string | null>(null);
   const loadMoreTransactionsRef = useRef<HTMLDivElement | null>(null);
   const requestedGroupIdRef = useRef<string | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
@@ -595,7 +599,7 @@ export function TransactionsPage() {
 
   const customMonthsFilter = activeQuickSelect === "custom" ? selectedCustomMonths.join(",") : "";
   const transactions = useInfiniteQuery({
-    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionGroupFilter, dateFilter.from, dateFilter.to, customMonthsFilter, debouncedSearchQuery],
+    queryKey: ["transactions", workspaceId, transactionAccountFilter, transactionBudgetFilter, transactionGroupFilter, targetTransactionId, dateFilter.from, dateFilter.to, customMonthsFilter, debouncedSearchQuery],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({
         workspaceId: workspaceId ?? "",
@@ -606,6 +610,7 @@ export function TransactionsPage() {
       if (transactionAccountFilter) params.set("accountId", transactionAccountFilter);
       if (transactionBudgetFilter) params.set("budgetId", transactionBudgetFilter);
       if (transactionGroupFilter) params.set("groupId", transactionGroupFilter);
+      if (targetTransactionId) params.set("transactionId", targetTransactionId);
       if (customMonthsFilter) {
         params.set("months", customMonthsFilter);
       } else {
@@ -723,14 +728,15 @@ export function TransactionsPage() {
     const requestedAccountName = searchParams.get("accountName")?.trim().toLocaleLowerCase();
     const requestedBudgetName = searchParams.get("budgetName")?.trim().toLocaleLowerCase();
     const requestedGroupId = searchParams.get("groupId");
+    const requestedTransactionId = searchParams.get("transactionId");
     const requestedFrom = searchParams.get("from");
     const requestedTo = searchParams.get("to");
     const requestedMonths = searchParams.get("months");
     const requestedSearch = searchParams.get("search")?.trim().slice(0, 120) ?? "";
     const isAskNestView = searchParams.get("view") === "ask-nest";
 
-    if (!isAskNestView && !requestedAccountId && !requestedBudgetId) {
-      setUrlFilterHydrated(true);
+    if (!isAskNestView && !requestedAccountId && !requestedBudgetId && !requestedTransactionId) {
+      setHydratedUrlFilterKey(urlFilterKey);
       return;
     }
 
@@ -783,8 +789,25 @@ export function TransactionsPage() {
     }
     setSearchQuery(requestedSearch);
 
-    setUrlFilterHydrated(true);
-  }, [urlFilterHydrated, bankAccounts.data, budgets.data, searchParams]);
+    setHydratedUrlFilterKey(urlFilterKey);
+  }, [urlFilterHydrated, urlFilterKey, bankAccounts.data, budgets.data, searchParams]);
+
+  useEffect(() => {
+    if (!targetTransactionId) focusedTransactionIdRef.current = null;
+  }, [targetTransactionId]);
+
+  useEffect(() => {
+    if (!urlFilterHydrated || !targetTransactionId || transactions.isLoading) return;
+    if (focusedTransactionIdRef.current === targetTransactionId) return;
+    if (!transactionList.some((transaction) => transaction.id === targetTransactionId)) return;
+
+    focusedTransactionIdRef.current = targetTransactionId;
+    window.requestAnimationFrame(() => {
+      const row = document.getElementById(`transaction-${targetTransactionId}`);
+      row?.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "center" });
+      row?.focus({ preventScroll: true });
+    });
+  }, [targetTransactionId, transactionList, transactions.isLoading, urlFilterHydrated]);
 
   // Close bank picker when clicking outside
   useEffect(() => {
@@ -2304,11 +2327,13 @@ export function TransactionsPage() {
                   const isDeleting = deletingTransactionIds.includes(tx.id);
                   const isIncome = tx.direction === "CREDIT";
                   const isSelected = selectedTransactionIds.includes(tx.id);
+                  const isDeepLinked = targetTransactionId === tx.id;
                   const signedAmount = isIncome ? tx.amountCents : -tx.amountCents;
                   return (
                     <div
                       key={tx.id}
-                      className={`crud-row tx-recent-row${isDeleting ? " crud-row-deleting" : ""}${isSelected ? " is-selected" : ""}`}
+                      id={`transaction-${tx.id}`}
+                      className={`crud-row tx-recent-row${isDeleting ? " crud-row-deleting" : ""}${isSelected ? " is-selected" : ""}${isDeepLinked ? " is-deep-linked" : ""}`}
                       onClick={() => {
                         if (isDeleting) return;
                         if (isGroupingMode) toggleTransactionSelection(tx.id);

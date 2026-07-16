@@ -52,6 +52,7 @@ export async function GET(request: Request) {
     const accountId = searchParams.get("accountId");
     const budgetId = searchParams.get("budgetId");
     const groupId = searchParams.get("groupId");
+    const transactionId = searchParams.get("transactionId")?.trim().slice(0, 180) || "";
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
     const monthKey = searchParams.get("month");
@@ -65,6 +66,7 @@ export async function GET(request: Request) {
       accountId !== null ||
       budgetId !== null ||
       groupId !== null ||
+      transactionId !== "" ||
       monthKey !== null ||
       monthsParam !== null ||
       fromDate !== null ||
@@ -113,6 +115,7 @@ export async function GET(request: Request) {
       workspaceId,
       voidedAt: null,
       kind: { not: "REVERSAL" },
+      ...(transactionId ? { id: transactionId } : {}),
       ...(accountId ? { accountId } : {}),
       ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
       ...(groupId ? { groupId } : {}),

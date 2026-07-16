@@ -85,11 +85,37 @@ CRON_SECRET="a-long-random-secret"
 
 Set the optional token-rate variables to your Azure deployment's current USD prices. The admin page uses them to estimate Ask Nest cost from recorded input/output tokens; it does not replace Azure billing and does not account for deployment-specific discounts or surcharges.
 
-Ask Nest history and user-approved memory are persisted per user and workspace. Raw questions and answers are retained for 90 days by default, then the daily scheduler rolls their turn/token usage into permanent daily summaries and deletes the raw payloads. Set `ASK_NEST_HISTORY_RETENTION_DAYS` to a whole number from 30 to 3650 to change that period. Memories are retained, but no longer point to an expired conversation.
+Ask Nest history and user-approved memory are persisted per user and workspace. Raw questions and answers are retained for 90 days by default, then the daily scheduler rolls their turn/token usage into permanent daily summaries and deletes the raw payloads. Clearing a conversation performs the same roll-up before removing its raw messages, so administrative usage and cost estimates are preserved. Set `ASK_NEST_HISTORY_RETENTION_DAYS` to a whole number from 30 to 3650 to change that period. Memories are retained, but no longer point to an expired conversation.
 
 The `/api/cron/ask-nest-retention` scheduler route runs daily at 02:00 Singapore time (18:00 UTC) through `vercel.json`. It requires `Authorization: Bearer ${CRON_SECRET}` and fails closed if `CRON_SECRET` is not configured.
 
 Finance tools remain read-only, rate-limited, and restricted to the authenticated active workspace. Azure requests use stateless Responses API calls and carry encrypted reasoning items only between the tool-call turns needed to answer the current question.
+
+Real-world category questions such as “How much did I spend on transport?” use deterministic transaction classification rather than sub-account names or vector search. High-confidence merchant and description matches form the confirmed total; ambiguous multi-service merchants such as a generic `Grab` or `Gojek` entry are reported separately as possible spending. The category layer also covers dining, groceries, utilities, housing, shopping, entertainment, healthcare, education, travel, insurance, personal care, childcare, pets, fees, taxes, gifts, and charity.
+
+Run the checked-in Ask Nest routing and retrieval gate before changing prompts, tool schemas, or models:
+
+```bash
+npm run ai:eval
+```
+
+The golden set lives in `evals/ask-nest/golden.json` and covers tool choice plus questions that genuinely require unstructured retrieval. A failing gate exits non-zero.
+
+### Optional Azure AI Search knowledge retrieval
+
+Structured balances, totals, comparisons, and due dates always come from Azure SQL tools. Azure AI Search is optional and is used only for workspace notes or imported document passages. It requires all of these server-only settings:
+
+```env
+ASK_NEST_SEARCH_ENABLED="true"
+ASK_NEST_SEARCH_EVAL_PASS="true"
+AZURE_SEARCH_ENDPOINT="https://your-search-service.search.windows.net"
+AZURE_SEARCH_INDEX="ask-nest-knowledge"
+AZURE_SEARCH_SEMANTIC_CONFIGURATION="ask-nest-semantic"
+# Optional local fallback. Prefer managed identity with Search Index Data Reader.
+AZURE_SEARCH_QUERY_KEY="***"
+```
+
+`ASK_NEST_SEARCH_EVAL_PASS` is an explicit deployment gate: leave it unset until the indexed corpus passes a representative retrieval evaluation. The search index must expose retrievable `id`, `title`, `content`, `sourceType`, `sourceId`, and `sourceUrl` fields; filterable `workspaceId` and `userId` fields; a `contentVector` field with a configured query-time vectorizer; and the named semantic configuration. Ask Nest issues one hybrid keyword/vector query with a workspace-and-user prefilter. Query keys and managed-identity credentials stay server-side.
 
 ## Credit Card Payment Reminders
 

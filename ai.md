@@ -430,11 +430,9 @@ Production rollout should use feature flags, a small workspace cohort, sampled s
 
 ## Explicitly out of scope
 
-- A site-wide chatbot or anthropomorphic financial companion.
 - Background agents that make unsupervised changes.
 - Automatic transfers, card payments, receivable closure, budget application, or investment trades.
 - Credit scoring, loan eligibility, insurance pricing, or recommendations for financial products.
-- Tax, legal, or investment advice.
 - Scraping external financial accounts without a user-authorized integration.
 - Vectorizing the entire transaction ledger without a demonstrated retrieval need.
 - Persistent personal memory without inspect, edit, export, and delete controls.
