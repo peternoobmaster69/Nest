@@ -29,6 +29,7 @@ export async function getWorkspaceNetWorthPayload(
     db.investmentAccount.findMany({
       where: { workspaceId },
       select: {
+        isLiquid: true,
         entries: {
           orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           take: 1,
@@ -45,9 +46,14 @@ export async function getWorkspaceNetWorthPayload(
     (sum, account) => sum + (account.entries[0]?.currentValueCents ?? 0),
     0,
   );
+  const liquidInvestmentCents = investmentAccounts.reduce(
+    (sum, account) => sum + (account.isLiquid ? (account.entries[0]?.currentValueCents ?? 0) : 0),
+    0,
+  );
 
   return {
     amount: centsToAmount(savingsCents + investmentCents),
+    liquidAmt: centsToAmount(savingsCents + liquidInvestmentCents),
     base: "Savings",
     currency: workspace?.baseCurrency || "SGD",
   };
