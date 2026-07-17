@@ -304,6 +304,10 @@ export function SettingsPage() {
     publicNetWorthEnabled && publicNetWorthToken && publicOrigin
       ? `${publicOrigin}/api/public/net-worth/${publicNetWorthToken}`
       : "";
+  const publicCardsDueUrl =
+    publicNetWorthEnabled && publicNetWorthToken && publicOrigin
+      ? `${publicOrigin}/api/public/cards-due/${publicNetWorthToken}`
+      : "";
 
   const accounts = useQuery({
     queryKey: ["bank-accounts", workspaceId],
@@ -606,7 +610,7 @@ export function SettingsPage() {
           : current,
       );
       setOptimisticPublicNetWorthEnabled(null);
-      setPublicNetWorthMessage(data.publicNetWorthEnabled ? "Public net worth URL enabled." : "Public net worth URL disabled.");
+      setPublicNetWorthMessage(data.publicNetWorthEnabled ? "Public API URLs enabled." : "Public API URLs disabled.");
       queryClient.invalidateQueries({ queryKey: ["app-context"] });
     },
     onError: (error) => {
@@ -626,6 +630,16 @@ export function SettingsPage() {
     try {
       await navigator.clipboard.writeText(publicNetWorthUrl);
       setPublicNetWorthMessage("Public net worth URL copied.");
+    } catch {
+      setPublicNetWorthMessage("Copy failed. Select the URL and copy it manually.");
+    }
+  };
+
+  const copyPublicCardsDueUrl = async () => {
+    if (!publicCardsDueUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicCardsDueUrl);
+      setPublicNetWorthMessage("Public cards-due URL copied.");
     } catch {
       setPublicNetWorthMessage("Copy failed. Select the URL and copy it manually.");
     }
@@ -1062,12 +1076,12 @@ export function SettingsPage() {
       <div className="card settings-card-block">
         <div className="settings-row settings-row-toggle">
           <div>
-            <div className="settings-section-title">Public Net Worth API</div>
+            <div className="settings-section-title">Public APIs</div>
             <div className="settings-section-copy">
-              Read-only JSON endpoint for the current workspace.
+              Read-only JSON endpoints for the current workspace.
             </div>
           </div>
-          <label className="auto-rule-switch" aria-label="Public net worth API enabled">
+          <label className="auto-rule-switch" aria-label="Public APIs enabled">
             <input
               type="checkbox"
               checked={publicNetWorthEnabled}
@@ -1080,7 +1094,7 @@ export function SettingsPage() {
         {publicNetWorthEnabled ? (
           <div className="settings-row settings-row-spaced">
             <div>
-              <div className="settings-section-title">Fixed URL</div>
+              <div className="settings-section-title">Net worth URL</div>
               <div className="settings-section-copy">
                 Returns amount, base, and currency only.
               </div>
@@ -1092,6 +1106,28 @@ export function SettingsPage() {
                 type="button"
                 onClick={copyPublicNetWorthUrl}
                 disabled={!publicNetWorthUrl}
+              >
+                <Copy size={14} aria-hidden="true" />
+                Copy
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {publicNetWorthEnabled ? (
+          <div className="settings-row settings-row-spaced">
+            <div>
+              <div className="settings-section-title">Cards due URL</div>
+              <div className="settings-section-copy">
+                Returns bank, last four digits, and amount for cards due within seven days.
+              </div>
+            </div>
+            <div className="settings-public-url-row">
+              <input className="input" value={publicCardsDueUrl || "Generating URL..."} readOnly />
+              <button
+                className="btn btn-ghost btn-xs"
+                type="button"
+                onClick={copyPublicCardsDueUrl}
+                disabled={!publicCardsDueUrl}
               >
                 <Copy size={14} aria-hidden="true" />
                 Copy
