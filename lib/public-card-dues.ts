@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { addUtcDays, startOfUtcDay } from "@/lib/credit-card-payment-reminder-schedule";
 
-const DUE_WINDOW_DAYS = 7;
+const DUE_WINDOW_DAYS = 14;
 
 function statementKey(cardId: string, statementMonth: number, statementYear: number) {
   return `${cardId}:${statementYear}:${statementMonth}`;
@@ -97,6 +97,6 @@ export async function getWorkspaceCardsDuePayload(
         }];
       })
       .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-      .map(({ bank, last4, amount }) => ({ bank, last4, amount })),
+      .map(({ bank, last4, amount, dueDate }) => ({ bank, last4, amount, dueDate })),
   };
 }
