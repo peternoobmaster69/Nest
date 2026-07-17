@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getSmartReviewFingerprint, isSmartReviewGeneratedAtFresh } from "@/lib/ai/smart-review";
 import { claimCreditCardTransaction, createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
@@ -10,6 +11,10 @@ const CreditTxnAccountingSchema = z.discriminatedUnion("action", [
     action: z.literal("DEDUCT"),
     accountId: z.string().min(1),
     budgetId: z.string().min(1),
+    destinationAccountId: z.string().min(1).optional(),
+    destinationBudgetId: z.string().min(1).optional(),
+    smartReviewFingerprint: z.string().length(64).optional(),
+    smartReviewGeneratedAt: z.string().datetime().optional(),
   }),
   z.object({
     action: z.literal("RECEIVABLE"),
@@ -21,8 +26,23 @@ const CreditTxnAccountingSchema = z.discriminatedUnion("action", [
     notes: z.string().optional(),
     accountId: z.string().min(1).optional(),
     budgetId: z.string().min(1).optional(),
+    smartReviewFingerprint: z.string().length(64).optional(),
+    smartReviewGeneratedAt: z.string().datetime().optional(),
   }),
-]);
+]).superRefine((value, context) => {
+  if (Boolean(value.smartReviewFingerprint) !== Boolean(value.smartReviewGeneratedAt)) {
+    context.addIssue({
+      code: "custom",
+      message: "Smart Review fingerprint and generation time must be supplied together.",
+    });
+  }
+  if (value.action === "DEDUCT" && Boolean(value.destinationAccountId) !== Boolean(value.destinationBudgetId)) {
+    context.addIssue({
+      code: "custom",
+      message: "Select both destination account and destination sub account.",
+    });
+  }
+});
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -52,6 +72,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { userId, workspaceId } = await requireWorkspaceAccess(existing.workspaceId);
     const idempotencyKey = getIdempotencyKey(request, `credit-account:${existing.id}`);
+
+    if (parsed.data.smartReviewFingerprint && parsed.data.smartReviewGeneratedAt) {
+      if (!isSmartReviewGeneratedAtFresh(parsed.data.smartReviewGeneratedAt)) {
+        return NextResponse.json(
+          { error: "This Smart Review suggestion expired. Refresh suggestions before approving it." },
+          { status: 409 },
+        );
+      }
+      const currentFingerprint = await getSmartReviewFingerprint({
+        workspaceId,
+        userId,
+        transactionId: existing.id,
+      });
+      if (!currentFingerprint || currentFingerprint !== parsed.data.smartReviewFingerprint) {
+        return NextResponse.json(
+          { error: "This Smart Review suggestion is stale. Refresh suggestions before approving it." },
+          { status: 409 },
+        );
+      }
+    }
 
     if (parsed.data.action === "DEDUCT") {
       const account = await prisma.financialAccount.findFirst({
@@ -85,6 +125,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         where: { id: workspaceId },
         select: { receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
       });
+
+      const destinationAccountId = parsed.data.destinationAccountId ?? workspace?.receivableDefaultAccountId;
+      const destinationBudgetId = parsed.data.destinationBudgetId ?? workspace?.receivableDefaultBudgetId;
+      let destination:
+        | { accountId: string; accountName: string; budgetId: string; budgetName: string }
+        | null = null;
+      if (destinationAccountId || destinationBudgetId) {
+        if (!destinationAccountId || !destinationBudgetId) {
+          return NextResponse.json({ error: "Select both destination account and destination sub account." }, { status: 400 });
+        }
+        const selectedDestination = await prisma.budgetEnvelope.findFirst({
+          where: {
+            id: destinationBudgetId,
+            workspaceId,
+            accountId: destinationAccountId,
+            isActive: true,
+            account: { kind: "BANK", isActive: true },
+          },
+          select: {
+            id: true,
+            name: true,
+            accountId: true,
+            account: { select: { name: true } },
+          },
+        });
+        if (!selectedDestination) {
+          return NextResponse.json({ error: "Selected destination sub account is invalid." }, { status: 400 });
+        }
+        if (selectedDestination.id === budget.id) {
+          return NextResponse.json({ error: "Source and destination sub accounts must be different." }, { status: 400 });
+        }
+        destination = {
+          accountId: selectedDestination.accountId,
+          accountName: selectedDestination.account.name,
+          budgetId: selectedDestination.id,
+          budgetName: selectedDestination.name,
+        };
+      }
 
       // Pre-capture values to avoid accessing inside transaction
       const {
@@ -129,12 +207,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             data: { availableCents: { decrement: amountCents } },
           });
 
-          // Create CREDIT transaction to the receivable default subaccount if configured
-          if (workspace?.receivableDefaultAccountId && workspace?.receivableDefaultBudgetId) {
+          // Create the explicit or workspace-default destination entry when configured.
+          if (destination) {
             await createLedgerTransaction(db, postingGroupId, {
                 workspaceId,
-                accountId: workspace.receivableDefaultAccountId,
-                budgetId: workspace.receivableDefaultBudgetId,
+                accountId: destination.accountId,
+                budgetId: destination.budgetId,
                 kind: "CREDIT_CARD_PAYMENT",
                 direction: "CREDIT",
                 date: transactionDate,
@@ -146,9 +224,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 isFromFamily: false,
             });
 
-            // Increment receivable budget (CREDIT increases available)
+            // Increment destination budget (CREDIT increases available)
             await db.budgetEnvelope.update({
-              where: { id: workspace.receivableDefaultBudgetId },
+              where: { id: destination.budgetId },
               data: { availableCents: { increment: amountCents } },
             });
           }

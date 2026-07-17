@@ -312,6 +312,22 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(styles, /\.body\s*\{[^}]*padding:\s*14px 12px calc\(16px \+ var\(--mobile-nav-height\)\)/s);
 });
 
+test("long application pages expose an accessible scroll-to-top control", async () => {
+  const [shell, styles] = await Promise.all([
+    readFile(path.join(root, "components/app-shell.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(shell, /scrollContainer\.scrollHeight > scrollContainer\.clientHeight \* 1\.5/);
+  assert.match(shell, /scrollContainer\.scrollTop > revealOffset/);
+  assert.match(shell, /bodyScrollRef\.current\?\.scrollTo\(\{ top: 0, behavior: getMotionSafeScrollBehavior\(\) \}\)/);
+  assert.match(shell, /aria-label="Scroll to top"/);
+  assert.match(shell, /tabIndex=\{showScrollToTop \? 0 : -1\}/);
+  assert.match(styles, /\.scroll-to-top-button\s*\{[^}]*position:\s*fixed[^}]*width:\s*44px[^}]*height:\s*44px/s);
+  assert.match(styles, /@media \(max-width: 768px\), \(max-width: 960px\) and \(max-height: 500px\) and \(pointer: coarse\)[\s\S]*?\.scroll-to-top-button\s*\{[^}]*bottom:\s*calc\(var\(--mobile-nav-height\) \+ 12px\)[^}]*left:/s);
+  assert.match(styles, /html\[data-modal-scroll-lock="true"\] \.scroll-to-top-button/);
+});
+
 test("settings uses the shared typography and layout contract", async () => {
   const settings = await readFile(path.join(root, "components/settings-page.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
@@ -354,6 +370,22 @@ test("settings keeps a compact continuous layout", async () => {
   assert.doesNotMatch(styles, /\.settings-tab/);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-card-block \{\s*padding: 14px/s);
   assert.match(styles, /\.st-container \.st-grid[\s\S]*?gap: 10px/s);
+});
+
+test("Gmail sync uses one responsive status surface", async () => {
+  const [settings, styles] = await Promise.all([
+    readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(settings, /const isGmailSyncActive = Boolean/);
+  assert.match(settings, /\{isGmailSyncActive && gmailSyncProgress \?/);
+  assert.match(settings, /\{!isGmailSyncActive && gmailNotice \?/);
+  assert.doesNotMatch(settings, /gmailMessage \? <div className="settings-message settings-message-spaced"/);
+  assert.match(settings, /className="gmail-sync-progress-header"/);
+  assert.match(settings, /className=\{`gmail-sync-notice is-\$\{gmailNotice\.tone\}`\}/);
+  assert.match(styles, /\.gmail-sync-progress-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/s);
+  assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.gmail-sync-notice-copy\s*\{[^}]*display:\s*grid/s);
 });
 
 test("transaction groups use compact two-row cards and a searchable picker", async () => {

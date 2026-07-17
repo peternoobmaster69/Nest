@@ -16,7 +16,13 @@ import { useSearchParams } from "next/navigation";
 import { useSessionState } from "@/lib/use-session-state";
 import { getMotionSafeScrollBehavior } from "@/lib/motion";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Plus } from "lucide-react";
+import type {
+  SmartReviewAction,
+  SmartReviewResponse,
+  SmartReviewRuleDraft,
+  SmartReviewSuggestion,
+} from "@/lib/ai/smart-review-types";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, PencilLine, Plus, RefreshCw, Sparkles, X } from "lucide-react";
 
 type CreditCard = {
   id: string;
@@ -107,7 +113,15 @@ type PaymentDueMonthsResponse = {
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (typeof payload?.error === "string") message = payload.error;
+      else if (typeof payload?.message === "string") message = payload.message;
+    } catch {}
+    throw new Error(message);
+  }
   return res.json();
 }
 
@@ -230,6 +244,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const paymentDueInputRef = useRef<HTMLInputElement | null>(null);
   const [deductAccountId, setDeductAccountId] = useState("");
   const [deductBudgetId, setDeductBudgetId] = useState("");
+  const [deductDestinationAccountId, setDeductDestinationAccountId] = useState("");
+  const [deductDestinationBudgetId, setDeductDestinationBudgetId] = useState("");
   const [receivableDate, setReceivableDate] = useState("");
   const [receivableTxnDate, setReceivableTxnDate] = useState("");
   const [receivableAmount, setReceivableAmount] = useState("");
@@ -253,6 +269,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [isMobileMonthPickerOpen, setIsMobileMonthPickerOpen] = useState(false);
   const [isMobileYearPickerOpen, setIsMobileYearPickerOpen] = useState(false);
   const [mobileCardQuery, setMobileCardQuery] = useState("");
+  const [isSmartReviewMode, setIsSmartReviewMode] = useSessionState("nest:view:credit-transactions:smart-review", false);
+  const [dismissedSmartReviewIds, setDismissedSmartReviewIds] = useState<string[]>([]);
+  const [suggestedRulePrompt, setSuggestedRulePrompt] = useState<SmartReviewRuleDraft | null>(null);
 
   // Form state
   const [formCardId, setFormCardId] = useState("");
@@ -610,6 +629,65 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     return transactions.filter((t) => !t.isAllocated);
   }, [transactions, showUnaccountedOnly]);
 
+  const smartReviewTransactionIds = useMemo(
+    () => filteredTransactions.filter((transaction) => !transaction.isAllocated).map((transaction) => transaction.id).slice(0, 250),
+    [filteredTransactions],
+  );
+  const smartReview = useQuery({
+    queryKey: [
+      "smart-review",
+      context.data?.workspaceId,
+      selectedCardId,
+      selectedYear,
+      selectedMonth,
+      showUnaccountedOnly,
+      smartReviewTransactionIds.join(","),
+    ],
+    queryFn: () => fetchJson<SmartReviewResponse>("/api/ai/smart-review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transactionIds: smartReviewTransactionIds }),
+    }),
+    enabled: isSmartReviewMode && smartReviewTransactionIds.length > 0,
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const smartReviewByTransactionId = useMemo(
+    () => new Map((smartReview.data?.suggestions ?? []).map((suggestion) => [suggestion.transactionId, suggestion])),
+    [smartReview.data?.suggestions],
+  );
+  const smartReviewCounts = useMemo(() => {
+    const values = (smartReview.data?.suggestions ?? []).filter(
+      (suggestion) => !dismissedSmartReviewIds.includes(suggestion.transactionId),
+    );
+    return {
+      remaining: values.length,
+      strong: values.filter((suggestion) => suggestion.confidence === "STRONG_MATCH").length,
+      needsReview: values.filter((suggestion) => suggestion.confidence === "NEEDS_REVIEW").length,
+      needsChoice: values.filter((suggestion) => suggestion.confidence === "NO_RELIABLE_MATCH").length,
+    };
+  }, [dismissedSmartReviewIds, smartReview.data?.suggestions]);
+  const smartReviewSummary = useMemo(() => {
+    if (smartReviewCounts.remaining === 0) {
+      return (smartReview.data?.suggestions.length ?? 0) > 0
+        ? "All suggestions dismissed."
+        : "You’re all caught up.";
+    }
+    const parts: string[] = [];
+    if (smartReviewCounts.strong) parts.push(`${smartReviewCounts.strong} ready to approve`);
+    if (smartReviewCounts.needsReview) {
+      parts.push(`${smartReviewCounts.needsReview} ${smartReviewCounts.needsReview === 1 ? "needs" : "need"} a closer look`);
+    }
+    if (smartReviewCounts.needsChoice) {
+      parts.push(`${smartReviewCounts.needsChoice} ${smartReviewCounts.needsChoice === 1 ? "needs" : "need"} a category`);
+    }
+    return parts.join(" · ");
+  }, [smartReview.data?.suggestions.length, smartReviewCounts]);
+
+  useEffect(() => {
+    setDismissedSmartReviewIds([]);
+  }, [smartReview.data?.generatedAt]);
+
   const transactionDateGroups = useMemo(() => {
     const groups: Array<{
       key: string;
@@ -829,17 +907,25 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       action: "DEDUCT" | "RECEIVABLE";
       accountId?: string;
       budgetId?: string;
+      destinationAccountId?: string;
+      destinationBudgetId?: string;
       receivableDate?: string;
       transactionDate?: string;
       amountCents?: number;
       title?: string;
       notes?: string;
+      smartReviewFingerprint?: string;
+      smartReviewGeneratedAt?: string;
+      ruleDraft?: SmartReviewRuleDraft;
     }) =>
-      fetchJson(`/api/credit-transactions/${payload.id}/accounting`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": `credit-account:${payload.id}` },
-        body: JSON.stringify(payload),
-      }),
+      {
+        const { ruleDraft: _ruleDraft, ...requestPayload } = payload;
+        return fetchJson(`/api/credit-transactions/${payload.id}/accounting`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": `credit-account:${payload.id}` },
+          body: JSON.stringify(requestPayload),
+        });
+      },
     onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
     onSuccess: (_result, variables, mutationContext) => {
       setImportMessage(
@@ -854,6 +940,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         });
       }
       invalidateCreditAccountingDependencies();
+      void queryClient.invalidateQueries({ queryKey: ["smart-review", context.data?.workspaceId], refetchType: "active" });
+      if (variables.ruleDraft) setSuggestedRulePrompt(variables.ruleDraft);
       if (variables.action === "DEDUCT") {
         closeAccountingModal();
       } else {
@@ -862,6 +950,64 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     },
     onError: (error) => {
       setImportMessage(error instanceof Error ? error.message : "Failed to account for credit transaction.");
+    },
+  });
+
+  const updateSmartReviewName = useMutation({
+    mutationFn: ({ id, subject }: { id: string; subject: string }) =>
+      fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject }),
+      }),
+    onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
+    onSuccess: (transaction: CreditCardTransaction, _variables, mutationContext) => {
+      syncCreditTransactionCaches({ previousTx: mutationContext?.previousTx ?? null, nextTx: transaction });
+      setImportMessage(`Transaction name updated to “${transaction.subject}”.`);
+      invalidateCreditTransactionDependencies();
+      void queryClient.invalidateQueries({ queryKey: ["smart-review", context.data?.workspaceId], refetchType: "active" });
+    },
+    onError: (error) => {
+      setImportMessage(error instanceof Error ? error.message : "Failed to update the transaction name.");
+    },
+  });
+
+  const createSuggestedRule = useMutation({
+    mutationFn: async (draft: SmartReviewRuleDraft) => {
+      if (!context.data?.workspaceId) throw new Error("Workspace is unavailable.");
+      const current = await fetchJson<{ workspaceId: string; rules: Array<Record<string, unknown>> }>(
+        `/api/credit-transactions/auto-rules?workspaceId=${context.data.workspaceId}`,
+      );
+      const duplicate = current.rules.some((rule) =>
+        Array.isArray(rule.filters) && rule.filters.some((filter) =>
+          typeof filter === "string" && filter.trim().toLocaleLowerCase() === draft.filter.toLocaleLowerCase(),
+        ),
+      );
+      if (duplicate) return { alreadyExists: true };
+      const rule = {
+        id: crypto.randomUUID(),
+        name: draft.name,
+        enabled: true,
+        action: "DEDUCT_SAME_WORKSPACE",
+        filters: [draft.filter],
+        sourceBudgetId: draft.sourceBudgetId,
+        destinationBudgetId: draft.destinationBudgetId,
+      };
+      await fetchJson("/api/credit-transactions/auto-rules", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: context.data.workspaceId, rules: [...current.rules, rule] }),
+      });
+      return { alreadyExists: false };
+    },
+    onSuccess: (result) => {
+      setImportMessage(result.alreadyExists ? "A matching auto-accounting rule already exists." : "Auto-accounting rule created.");
+      setSuggestedRulePrompt(null);
+      void queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", context.data?.workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["smart-review", context.data?.workspaceId], refetchType: "active" });
+    },
+    onError: (error) => {
+      setImportMessage(error instanceof Error ? error.message : "Failed to create the suggested rule.");
     },
   });
 
@@ -986,6 +1132,18 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         ? deductBudgetId
         : (budgetsForAccount[0]?.id ?? "");
     setDeductBudgetId(initialBudgetId);
+
+    const initialDestinationAccountId =
+      defaultReceivableAccountId && validAccountIds.has(defaultReceivableAccountId)
+        ? defaultReceivableAccountId
+        : "";
+    const destinationBudgets = (budgets.data ?? []).filter((budget) => budget.accountId === initialDestinationAccountId);
+    setDeductDestinationAccountId(initialDestinationAccountId);
+    setDeductDestinationBudgetId(
+      defaultReceivableBudgetId && destinationBudgets.some((budget) => budget.id === defaultReceivableBudgetId)
+        ? defaultReceivableBudgetId
+        : (destinationBudgets[0]?.id ?? ""),
+    );
     setIsAccountingModalOpen(true);
   };
 
@@ -1040,6 +1198,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     () => (budgets.data ?? []).filter((budget) => budget.accountId === deductAccountId),
     [budgets.data, deductAccountId],
   );
+  const filteredDestinationBudgets = useMemo(
+    () => (budgets.data ?? []).filter((budget) => budget.accountId === deductDestinationAccountId),
+    [budgets.data, deductDestinationAccountId],
+  );
 
   const onSubmitDeduct = (event: FormEvent) => {
     event.preventDefault();
@@ -1049,6 +1211,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       action: "DEDUCT",
       accountId: deductAccountId,
       budgetId: deductBudgetId,
+      ...(deductDestinationAccountId && deductDestinationBudgetId ? {
+        destinationAccountId: deductDestinationAccountId,
+        destinationBudgetId: deductDestinationBudgetId,
+      } : {}),
     });
   };
 
@@ -1243,6 +1409,92 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       statementYear: selectedYear,
       amountCents: payableAmountCents,
     });
+  };
+
+  const describeSmartReviewAction = (action: SmartReviewAction | null) => {
+    if (!action) return "No accounting action suggested";
+    if (action.type === "RECEIVABLE") {
+      return action.budgetName
+        ? `Create receivable · ${action.budgetName}`
+        : "Create receivable";
+    }
+    return action.destinationBudgetName
+      ? `${action.budgetName} → ${action.destinationBudgetName}`
+      : `Deduct from ${action.accountName} · ${action.budgetName}`;
+  };
+
+  const openSmartReviewEditor = (transaction: CreditCardTransaction, suggestion: SmartReviewSuggestion) => {
+    const action = suggestion.action;
+    if (!action) {
+      openEditModal(transaction);
+      return;
+    }
+    if (action.type === "DEDUCT") {
+      openDeductModal(transaction);
+      setDeductAccountId(action.accountId);
+      setDeductBudgetId(action.budgetId);
+      setDeductDestinationAccountId(action.destinationAccountId ?? "");
+      setDeductDestinationBudgetId(action.destinationBudgetId ?? "");
+      return;
+    }
+    openReceivableModal(transaction);
+    if (action.sourceWorkspaceId && action.sourceWorkspaceId !== context.data?.workspaceId) {
+      setUseCrossWorkspaceReceivableSource(true);
+      setReceivableSourceWorkspaceId(action.sourceWorkspaceId);
+      setReceivableSourceAccountId(action.accountId ?? "");
+      setReceivableSourceBudgetId(action.budgetId ?? "");
+    }
+  };
+
+  const approveSmartReview = (transaction: CreditCardTransaction, suggestion: SmartReviewSuggestion) => {
+    if (!suggestion.action || !suggestion.canApprove) return;
+    const reviewFields = {
+      smartReviewFingerprint: suggestion.inputFingerprint,
+      smartReviewGeneratedAt: suggestion.generatedAt,
+      ruleDraft: suggestion.ruleDraft,
+    };
+    if (suggestion.action.type === "DEDUCT") {
+      accountCreditTxn.mutate({
+        id: transaction.id,
+        action: "DEDUCT",
+        accountId: suggestion.action.accountId,
+        budgetId: suggestion.action.budgetId,
+        destinationAccountId: suggestion.action.destinationAccountId,
+        destinationBudgetId: suggestion.action.destinationBudgetId,
+        ...reviewFields,
+      });
+      return;
+    }
+    if (transaction.amountCents <= 0) return;
+    accountCreditTxn.mutate({
+      id: transaction.id,
+      action: "RECEIVABLE",
+      receivableDate: new Date(`${toMonthEndDateInputValue(transaction.transactionDate)}T00:00:00.000Z`).toISOString(),
+      transactionDate: new Date(transaction.transactionDate).toISOString(),
+      title: suggestion.normalizedMerchant || transaction.subject,
+      amountCents: transaction.amountCents,
+      accountId: suggestion.action.accountId,
+      budgetId: suggestion.action.budgetId,
+      ...reviewFields,
+    });
+  };
+
+  const dismissAllSmartReviewSuggestions = () => {
+    setDismissedSmartReviewIds((smartReview.data?.suggestions ?? []).map((suggestion) => suggestion.transactionId));
+  };
+
+  const confirmSuggestedRule = async () => {
+    if (!suggestedRulePrompt) return;
+    const examples = suggestedRulePrompt.previewSubjects.length
+      ? ` Recent examples: ${suggestedRulePrompt.previewSubjects.join("; ")}.`
+      : "";
+    const confirmed = await confirm({
+      title: "Create auto-accounting rule?",
+      message: `Future transaction subjects containing “${suggestedRulePrompt.filter}” will use this accounting path. The filter matches ${suggestedRulePrompt.recentMatchCount} recent transaction${suggestedRulePrompt.recentMatchCount === 1 ? "" : "s"}.${examples}`,
+      confirmLabel: "Create Rule",
+      cancelLabel: "Not Now",
+    });
+    if (confirmed) createSuggestedRule.mutate(suggestedRulePrompt);
   };
 
   return (
@@ -1686,6 +1938,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             <span>Unaccounted only</span>
           </label>
         ) : null}
+        <button
+          type="button"
+          className={`btn cct-smart-review-toggle${isSmartReviewMode ? " is-active" : ""}`}
+          aria-pressed={isSmartReviewMode}
+          onClick={() => setIsSmartReviewMode((current) => !current)}
+        >
+          <Sparkles size={16} aria-hidden="true" />
+          <span>Review suggestions</span>
+        </button>
         <button className="btn btn-primary mobile-primary-create" onClick={openModal} aria-label="Add card transaction" title="Add card transaction">
           <Plus size={18} aria-hidden="true" />
           <span className="mobile-primary-create-label">Add Transaction</span>
@@ -1723,6 +1984,64 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             {importMaybankCsv.isPending ? `Importing CSV ${Math.round(importProgress)}%` : "Import complete"}
           </div>
         </div>
+      ) : null}
+
+      {suggestedRulePrompt ? (
+        <section className="cct-rule-prompt" aria-label="Suggested auto-accounting rule">
+          <div>
+            <strong>Create a rule for {suggestedRulePrompt.filter}?</strong>
+            <span>
+              You have used this path {suggestedRulePrompt.recentMatchCount} times. Preview the recent matches before saving an ordinary auto-accounting rule.
+            </span>
+          </div>
+          <div className="cct-rule-prompt-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setSuggestedRulePrompt(null)}>Not now</button>
+            <button type="button" className="btn btn-primary" onClick={confirmSuggestedRule} disabled={createSuggestedRule.isPending}>
+              {createSuggestedRule.isPending ? "Creating…" : "Preview & create"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {isSmartReviewMode ? (
+        <section className="cct-smart-review-summary" aria-live="polite" aria-busy={smartReview.isLoading || smartReview.isFetching}>
+          <div className="cct-smart-review-summary-copy">
+            <span className="cct-smart-review-icon" aria-hidden="true"><Sparkles size={18} /></span>
+            <div>
+              <strong>Smart Review</strong>
+              {smartReview.isLoading ? (
+                <span>Checking rules, prior accounting, duplicates, and merchant patterns…</span>
+              ) : smartReview.isError ? (
+                <span>Suggestions could not load. The normal accounting controls still work.</span>
+              ) : smartReview.data ? (
+                <span>{smartReviewSummary}</span>
+              ) : (
+                <span>No visible unaccounted transactions to review.</span>
+              )}
+            </div>
+          </div>
+          <div className="cct-smart-review-summary-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={dismissAllSmartReviewSuggestions}
+              disabled={smartReviewCounts.remaining === 0}
+            >
+              <X size={15} aria-hidden="true" />
+              <span>Dismiss all</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost cct-smart-review-refresh"
+              onClick={() => smartReview.refetch()}
+              disabled={smartReview.isFetching || smartReviewTransactionIds.length === 0}
+              aria-label="Refresh Smart Review suggestions"
+            >
+              <RefreshCw size={15} aria-hidden="true" />
+              <span>{smartReview.isFetching ? "Checking…" : "Refresh"}</span>
+            </button>
+          </div>
+        </section>
       ) : null}
 
       {/* Transactions Table */}
@@ -1763,10 +2082,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </tr>
                 {group.transactions.map((tx) => {
                   const isDeleting = deletingTransactionIds.includes(tx.id);
+                  const reviewSuggestion = smartReviewByTransactionId.get(tx.id);
+                  const showReviewSuggestion = Boolean(
+                    isSmartReviewMode &&
+                    !tx.isAllocated &&
+                    reviewSuggestion &&
+                    !dismissedSmartReviewIds.includes(tx.id),
+                  );
+                  const isReviewApprovalPending = accountCreditTxn.isPending && accountCreditTxn.variables?.id === tx.id;
+                  const hasNameRecommendation = Boolean(reviewSuggestion?.nameRecommendation);
+                  const isNameUpdatePending = updateSmartReviewName.isPending && updateSmartReviewName.variables?.id === tx.id;
                   return (
+                    <Fragment key={tx.id}>
                     <tr
-                      key={tx.id}
-                      className={`cct-transaction-row ${tx.isAllocated ? "allocated" : "unallocated"}${isDeleting ? " cct-row-deleting" : ""}`}
+                      className={`cct-transaction-row ${tx.isAllocated ? "allocated" : "unallocated"}${isDeleting ? " cct-row-deleting" : ""}${showReviewSuggestion ? " has-smart-review" : ""}`}
                     >
                       <td className="cct-tx-date" data-label="Date">
                         <span className="cct-tx-day">{formatDate(tx.transactionDate)}</span>
@@ -1834,6 +2163,132 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                         </button>
                       </td>
                     </tr>
+                    {showReviewSuggestion && reviewSuggestion ? (
+                      <tr className={`cct-smart-review-row is-${reviewSuggestion.state.toLocaleLowerCase().replaceAll("_", "-")}`}>
+                        <td colSpan={5}>
+                          <article className="cct-smart-review-card" aria-label={`Smart Review for ${tx.subject}`}>
+                            <div className="cct-smart-review-card-header">
+                              {hasNameRecommendation ? (
+                                <div className="cct-smart-review-merchant">
+                                  <span className="cct-smart-review-eyebrow">Name recommendation</span>
+                                  <strong className="cct-smart-review-recommended-name">{reviewSuggestion.nameRecommendation}</strong>
+                                  <span className="cct-smart-review-original">Current: “{tx.subject}”</span>
+                                </div>
+                              ) : null}
+                              <div className="cct-smart-review-badges">
+                                <span className={`cct-smart-review-badge is-${reviewSuggestion.confidence.toLocaleLowerCase().replaceAll("_", "-")}`}>
+                                  {reviewSuggestion.confidence === "STRONG_MATCH"
+                                    ? "Strong match"
+                                    : reviewSuggestion.confidence === "NEEDS_REVIEW"
+                                      ? "Needs review"
+                                      : "No reliable match"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="cct-smart-review-body">
+                              <div className="cct-smart-review-proposal">
+                                <div>
+                                  <span>Suggested</span>
+                                  <strong>
+                                    {reviewSuggestion.state === "POSSIBLE_DUPLICATE"
+                                        ? "Check possible duplicate"
+                                        : reviewSuggestion.state === "POSSIBLE_REVERSAL"
+                                          ? "Check possible reversal"
+                                          : describeSmartReviewAction(reviewSuggestion.action)}
+                                  </strong>
+                                </div>
+                                {reviewSuggestion.action ? (
+                                  <small>
+                                    Effect: {formatCurrency(tx.amountCents)} will be {
+                                      reviewSuggestion.action.type === "DEDUCT"
+                                        ? `deducted from ${reviewSuggestion.action.budgetName}${reviewSuggestion.action.destinationBudgetName ? ` and credited to ${reviewSuggestion.action.destinationBudgetName}` : ""}`
+                                        : "recorded as a receivable"
+                                    }. Nothing changes until you confirm.
+                                  </small>
+                                ) : null}
+                              </div>
+                              <ul className="cct-smart-review-evidence">
+                                {reviewSuggestion.evidence.map((item) => <li key={item}>{item}</li>)}
+                                {reviewSuggestion.relatedTransaction ? (
+                                  <li>
+                                    Related: {formatDate(reviewSuggestion.relatedTransaction.transactionDate)} · {reviewSuggestion.relatedTransaction.subject}
+                                  </li>
+                                ) : null}
+                              </ul>
+                            </div>
+
+                            <div className="cct-smart-review-card-actions">
+                              <button
+                                type="button"
+                                className="btn btn-ghost cct-smart-review-dismiss"
+                                onClick={() => setDismissedSmartReviewIds((current) => [...current, tx.id])}
+                              >
+                                <X size={14} aria-hidden="true" />
+                                Dismiss
+                              </button>
+                              {hasNameRecommendation ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost cct-smart-review-name-update"
+                                  onClick={() => reviewSuggestion.nameRecommendation && updateSmartReviewName.mutate({
+                                    id: tx.id,
+                                    subject: reviewSuggestion.nameRecommendation,
+                                  })}
+                                  disabled={updateSmartReviewName.isPending || accountCreditTxn.isPending || isDeleting}
+                                  aria-busy={isNameUpdatePending}
+                                >
+                                  <PencilLine size={14} aria-hidden="true" />
+                                  {isNameUpdatePending ? "Updating…" : "Update name"}
+                                </button>
+                              ) : null}
+                              {reviewSuggestion.action ? (
+                                <button
+                                  type="button"
+                                  className={`btn ${reviewSuggestion.canApprove ? "btn-ghost" : "btn-primary"}`}
+                                  onClick={() => openSmartReviewEditor(tx, reviewSuggestion)}
+                                  disabled={accountCreditTxn.isPending || updateSmartReviewName.isPending || isDeleting}
+                                >
+                                  Review &amp; apply
+                                </button>
+                              ) : null}
+                              {reviewSuggestion.canApprove ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  onClick={() => approveSmartReview(tx, reviewSuggestion)}
+                                  disabled={accountCreditTxn.isPending || updateSmartReviewName.isPending || isDeleting}
+                                  aria-busy={isReviewApprovalPending}
+                                >
+                                  {isReviewApprovalPending ? "Approving…" : "Approve"}
+                                </button>
+                              ) : null}
+                              {!reviewSuggestion.action ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    onClick={() => openDeductModal(tx)}
+                                    disabled={accountCreditTxn.isPending || updateSmartReviewName.isPending || isDeleting}
+                                  >
+                                    Deduct
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => openReceivableModal(tx)}
+                                    disabled={accountCreditTxn.isPending || updateSmartReviewName.isPending || isDeleting}
+                                  >
+                                    Create receivable
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          </article>
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   );
                 })}
               </Fragment>
@@ -2026,6 +2481,45 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     ))}
                   </select>
                 </div>
+                <div className="cct-accounting-flow-label cct-span-2">
+                  <span>Optional destination</span>
+                  <small>Creates the matching credit entry. Nest uses the workspace default when configured.</small>
+                </div>
+                <div className="form-group cct-span-2">
+                  <label className="label">Destination Account</label>
+                  <select
+                    className="input"
+                    value={deductDestinationAccountId}
+                    onChange={(event) => {
+                      const nextAccountId = event.target.value;
+                      setDeductDestinationAccountId(nextAccountId);
+                      setDeductDestinationBudgetId(
+                        (budgets.data ?? []).find((budget) => budget.accountId === nextAccountId)?.id ?? "",
+                      );
+                    }}
+                  >
+                    <option value="">Use workspace default</option>
+                    {(bankAccounts.data ?? []).map((account) => (
+                      <option key={account.id} value={account.id}>{account.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {deductDestinationAccountId ? (
+                  <div className="form-group cct-span-2">
+                    <label className="label">Destination Sub Account</label>
+                    <select
+                      className="input"
+                      value={deductDestinationBudgetId}
+                      onChange={(event) => setDeductDestinationBudgetId(event.target.value)}
+                      required
+                    >
+                      <option value="" disabled>Select destination sub account</option>
+                      {filteredDestinationBudgets.map((budget) => (
+                        <option key={budget.id} value={budget.id}>{budget.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
               </div>
               <div className="cct-modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={closeAccountingModal}>

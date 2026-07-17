@@ -2,9 +2,9 @@
 
 > A product and experience proposal for adding useful, calm, and trustworthy AI to Nest with Microsoft Foundry.
 
-**Status:** Ask Nest MVP implemented; controlled rollout and evaluation remain
+**Status:** Ask Nest MVP and Smart Review implemented; controlled rollout and evaluation remain
 
-**Last updated:** 15 July 2026
+**Last updated:** 17 July 2026
 
 **Scope:** Personal finance assistance inside the existing Nest experience; not financial advice and not autonomous money movement.
 
@@ -17,7 +17,7 @@ The best first release is the contextual, read-only **Ask Nest** experience. It 
 Implementation decision (15 July 2026): use this order:
 
 1. **Ask Nest** — contextual, read-only questions answered with supporting figures and links to the records used.
-2. **Smart Review** — suggestions for unallocated credit-card transactions, with one-tap approval and clear reasons.
+2. **Smart Review** — suggestions for unaccounted credit-card transactions, with one-tap approval for strong matches and clear reasons for every result.
 3. **Money Brief** — at most three timely observations on the dashboard, built from verified calculations.
 4. **Document Capture** — assisted import of statements and receipts through a review-before-posting flow.
 5. **Budget Scenarios** — translate a user’s intent into a draft scenario, then run the numbers in deterministic code.
@@ -90,13 +90,19 @@ Card alerts and imports capture the amount and merchant, but the user still has 
 
 ### Proposed experience
 
-Add a **Review suggestions** mode to Credit Card Transactions. For each unallocated transaction, Nest can suggest:
+Add a **Review suggestions** mode to Credit Card Transactions. For each visible unaccounted transaction, Nest can suggest:
 
 - a normalized merchant name;
 - a source and destination sub-account from valid workspace choices;
 - whether the transaction resembles a receivable rather than personal spending;
 - an existing deterministic rule that matches the user’s intent;
 - a possible duplicate or reversal for review.
+
+When normalization materially shortens a noisy imported subject or removes alert/reference text, the suggestion shows both values and offers a one-click **Update name** action. Case-only rewrites are not recommendations, and known brand casing and abbreviations are preserved. Suggestions without a safe automatic accounting match still provide direct **Deduct** and **Create receivable** paths instead of sending the user to a generic transaction form. The review summary supports refreshing or dismissing all visible suggestions.
+
+Accounted transactions remain historical evidence for matching, but Smart Review never generates a review card for them.
+
+Deterministic matching checks ordinary categorized ledger transactions and active sub-account names as well as accounted card history and explicit rules. A merchant such as McDonald therefore recommends the sub-account already used for similar McDonald transactions before model assistance is considered.
 
 Each suggestion contains four things: the proposed action, the evidence, the effect, and the controls.
 

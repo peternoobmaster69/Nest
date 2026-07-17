@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowUp,
   ChartNoAxesCombined,
   ChartPie,
   CreditCard,
@@ -24,6 +25,9 @@ import { NotificationBell } from "@/components/notification-bell";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { MobileAccountPanel } from "@/components/mobile-account-panel";
 import { AskNest } from "@/components/ask-nest";
+import { getMotionSafeScrollBehavior } from "@/lib/motion";
+
+const SCROLL_TO_TOP_MIN_OFFSET = 480;
 
 const MOBILE_DATE_FORMATTER = new Intl.DateTimeFormat("en-SG", {
   day: "2-digit",
@@ -80,6 +84,9 @@ export function AppShell({
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [mobileMoreView, setMobileMoreView] = useState<"navigation" | "account">("navigation");
   const [mobileCurrentDate, setMobileCurrentDate] = useState<{ dateTime: string; label: string } | null>(null);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
+  const bodyScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileMoreRef = useRef<HTMLElement | null>(null);
   const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarMoneyPages = contextData?.sidebarMoneyPages ?? {
@@ -142,6 +149,32 @@ export function AppShell({
   }, [currentPath]);
 
   useEffect(() => {
+    const scrollContainer = bodyScrollRef.current;
+    if (!scrollContainer) return;
+
+    let animationFrame = 0;
+    const updateVisibility = () => {
+      animationFrame = 0;
+      const isLongPage = scrollContainer.scrollHeight > scrollContainer.clientHeight * 1.5;
+      const revealOffset = Math.max(SCROLL_TO_TOP_MIN_OFFSET, scrollContainer.clientHeight * 0.75);
+      setShowScrollToTop(isLongPage && scrollContainer.scrollTop > revealOffset);
+    };
+    const scheduleUpdate = () => {
+      if (animationFrame) return;
+      animationFrame = window.requestAnimationFrame(updateVisibility);
+    };
+
+    updateVisibility();
+    scrollContainer.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      scrollContainer.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [currentPath]);
+
+  useEffect(() => {
     if (!mobileMoreOpen) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusFrame = window.requestAnimationFrame(() => {
@@ -195,6 +228,11 @@ export function AppShell({
     setSidebarOpen(false);
   };
 
+  const scrollToTop = () => {
+    bodyScrollRef.current?.scrollTo({ top: 0, behavior: getMotionSafeScrollBehavior() });
+    mainRef.current?.focus({ preventScroll: true });
+  };
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -210,7 +248,7 @@ export function AppShell({
         contextData={contextData}
         contextLoading={contextLoading}
       />
-      <main className="main" id="main-content" tabIndex={-1}>
+      <main ref={mainRef} className="main" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div className="tb-left">
             <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
@@ -244,8 +282,20 @@ export function AppShell({
             <NotificationBell workspaceId={contextData?.workspaceId} />
           </div>
         </header>
-        <div className="body">{children}</div>
+        <div ref={bodyScrollRef} className="body">{children}</div>
       </main>
+
+      <button
+        type="button"
+        className={`scroll-to-top-button${showScrollToTop ? " is-visible" : ""}`}
+        onClick={scrollToTop}
+        aria-label="Scroll to top"
+        title="Back to top"
+        aria-hidden={!showScrollToTop}
+        tabIndex={showScrollToTop ? 0 : -1}
+      >
+        <ArrowUp size={20} aria-hidden="true" />
+      </button>
 
       {mobileMoreOpen ? (
         <>

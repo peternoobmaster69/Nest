@@ -8,7 +8,24 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, ChevronDown, ChevronUp, Copy, Pencil, Play, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  CircleAlert,
+  Copy,
+  Info,
+  LoaderCircle,
+  Pencil,
+  Play,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { DataImportSection } from "@/components/data-import-section";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
@@ -104,6 +121,12 @@ type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
   message?: string;
 };
 
+type GmailNotice = {
+  title: string;
+  detail: string | null;
+  tone: "success" | "info" | "error";
+};
+
 function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSummary {
   return (
     typeof data.scannedMessages === "number" &&
@@ -117,6 +140,27 @@ function formatGmailSyncSummary(data: GmailSyncSummary) {
   return data.skipped && data.reason
     ? data.reason
     : `Synced ${data.scannedMessages} emails: ${data.processed} processed, ${data.duplicates} duplicates, ${data.failed} failed.`;
+}
+
+function getGmailNotice(message: string, phase?: GmailSyncProgress["phase"]): GmailNotice | null {
+  const normalized = message.trim();
+  if (!normalized) return null;
+
+  const lastSyncedMarker = " Last synced at ";
+  const lastSyncedIndex = normalized.indexOf(lastSyncedMarker);
+  const title = lastSyncedIndex >= 0
+    ? normalized.slice(0, lastSyncedIndex).replace(/\.$/, "")
+    : normalized;
+  const detail = lastSyncedIndex >= 0
+    ? normalized.slice(lastSyncedIndex + 1)
+    : null;
+  const tone = phase === "error" || /failed|denied|forbidden|error/i.test(normalized)
+    ? "error"
+    : /skipped|queued|running|syncing|disconnected/i.test(normalized)
+      ? "info"
+      : "success";
+
+  return { title, detail, tone };
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -898,6 +942,15 @@ export function SettingsPage() {
         (budget) => budget.isActive && budget.accountId === editingAutoRule.sourceAccountId,
       )
     : [];
+  const isGmailSyncActive = Boolean(
+    gmailSyncProgress && gmailSyncProgress.phase !== "complete" && gmailSyncProgress.phase !== "error",
+  );
+  const gmailNotice = getGmailNotice(gmailMessage, gmailSyncProgress?.phase);
+  const GmailNoticeIcon = gmailNotice?.tone === "success"
+    ? CheckCircle2
+    : gmailNotice?.tone === "error"
+      ? CircleAlert
+      : Info;
 
   return (
     <div className="st-container">
@@ -950,15 +1003,32 @@ export function SettingsPage() {
         ) : (
           <div className="settings-muted-message">Not connected.</div>
         )}
-        {gmailSyncProgress ? (
-          <div className="gmail-sync-progress-wrap" aria-label="Gmail inbox sync progress" aria-live="polite">
+        {isGmailSyncActive && gmailSyncProgress ? (
+          <div className="gmail-sync-progress-wrap" role="status" aria-label="Gmail inbox sync progress" aria-live="polite">
+            <div className="gmail-sync-progress-header">
+              <LoaderCircle className="gmail-sync-spinner" size={18} aria-hidden="true" />
+              <div className="gmail-sync-progress-copy">
+                <strong>Syncing Gmail inbox</strong>
+                <span>{gmailSyncProgress.message || "Reading card alerts…"}</span>
+              </div>
+              <span className="gmail-sync-progress-value">{Math.round(gmailSyncProgress.progress)}%</span>
+            </div>
             <progress className="gmail-sync-progress" value={Math.min(gmailSyncProgress.progress, 100)} max={100} />
-            <div className="gmail-sync-progress-text">
-              {gmailSyncProgress.message || `Syncing inbox ${Math.round(gmailSyncProgress.progress)}%`}
+          </div>
+        ) : null}
+        {!isGmailSyncActive && gmailNotice ? (
+          <div
+            className={`gmail-sync-notice is-${gmailNotice.tone}`}
+            role={gmailNotice.tone === "error" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            <GmailNoticeIcon size={18} aria-hidden="true" />
+            <div className="gmail-sync-notice-copy">
+              <strong>{gmailNotice.title}</strong>
+              {gmailNotice.detail ? <span>{gmailNotice.detail}</span> : null}
             </div>
           </div>
         ) : null}
-        {gmailMessage ? <div className="settings-message settings-message-spaced">{gmailMessage}</div> : null}
       </div>
 
       <header className="settings-page-section-header">
