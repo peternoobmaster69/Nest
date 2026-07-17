@@ -278,6 +278,7 @@ export function AppShell({
               currentPath={currentPath}
               pageTitle={title}
               workspaceName={contextData?.workspaceName}
+              userName={userName}
             />
             <NotificationBell workspaceId={contextData?.workspaceId} />
           </div>

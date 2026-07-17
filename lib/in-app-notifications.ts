@@ -10,6 +10,7 @@ import {
   startOfUtcDay,
 } from "@/lib/credit-card-payment-reminder-schedule";
 import { sendPushToUser } from "@/lib/web-push";
+import { buildCreditCardStatementPath, buildWorkspaceEntryHref } from "@/lib/workspace-entry";
 
 const CREDIT_CARD_DUE_TYPE = "CREDIT_CARD_DUE";
 const WORKSPACE_INVITATION_TYPE = "WORKSPACE_INVITATION";
@@ -111,6 +112,11 @@ async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCar
     const copy = dueCopy(daysUntilDue);
     const amount = formatMoney(Number(row.outstandingCents));
     const message = `${row.cardName} ending ${row.last4Digit} has ${amount} outstanding and is ${copy.label}.`;
+    const href = buildWorkspaceEntryHref(workspaceId, buildCreditCardStatementPath({
+      cardId: row.cardId,
+      statementMonth: row.statementMonth,
+      statementYear: row.statementYear,
+    }));
     const metadataJson = JSON.stringify({
       cardId: row.cardId,
       statementMonth: row.statementMonth,
@@ -126,12 +132,13 @@ async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCar
       WHEN MATCHED AND (
         target.[title] <> ${copy.title}
         OR target.[message] <> ${message}
+        OR ISNULL(target.[href], '') <> ${href}
         OR ISNULL(target.[metadataJson], '') <> ${metadataJson}
       ) THEN
         UPDATE SET
           [title] = ${copy.title},
           [message] = ${message},
-          [href] = '/credit-transactions',
+          [href] = ${href},
           [metadataJson] = ${metadataJson},
           [readAt] = CASE
             WHEN target.[message] <> ${message} AND ${copy.shouldRealert ? 1 : 0} = 1 THEN NULL
@@ -140,14 +147,14 @@ async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCar
           [updatedAt] = CURRENT_TIMESTAMP
       WHEN NOT MATCHED THEN
         INSERT ([id], [userId], [workspaceId], [type], [dedupeKey], [title], [message], [href], [metadataJson], [createdAt], [updatedAt])
-        VALUES (${randomUUID()}, ${userId}, ${workspaceId}, ${CREDIT_CARD_DUE_TYPE}, ${dedupeKey}, ${copy.title}, ${message}, '/credit-transactions', ${metadataJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        VALUES (${randomUUID()}, ${userId}, ${workspaceId}, ${CREDIT_CARD_DUE_TYPE}, ${dedupeKey}, ${copy.title}, ${message}, ${href}, ${metadataJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
     `);
 
     if (deliverPush && copy.shouldRealert) {
       await sendPushToUser(userId, {
         title: copy.title,
         message,
-        href: "/credit-transactions",
+        href,
         tag: dedupeKey,
       });
     }

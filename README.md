@@ -77,6 +77,11 @@ AI_WORKLOAD_OUTPUT_COST_PER_1M_USD="your-output-price-per-million-tokens"
 ADMIN="admin@example.com"
 ASK_NEST_HISTORY_RETENTION_DAYS="90"
 CRON_SECRET="a-long-random-secret"
+MASSIVE_API_BASE_URL="https://api.massive.com"
+MASSIVE_API_KEY="***"
+SERPAPI_BASE_URL="https://serpapi.com"
+SERPAPI_API_KEY="***"
+SERPAPI_MONTHLY_REQUEST_LIMIT="200"
 ```
 
 `AI_WORKLOAD_ENDPOINT` may be the Azure OpenAI resource root or its `/openai/v1/` base URL. `AI_WORKLOAD_MODEL` must be the Azure deployment name and must support the Responses API, function calling, and structured outputs. Restart the application after changing environment variables.
@@ -90,6 +95,10 @@ Ask Nest history and user-approved memory are persisted per user and workspace. 
 The `/api/cron/ask-nest-retention` scheduler route runs daily at 02:00 Singapore time (18:00 UTC) through `vercel.json`. It requires `Authorization: Bearer ${CRON_SECRET}` and fails closed if `CRON_SECRET` is not configured.
 
 Finance tools remain read-only, rate-limited, and restricted to the authenticated active workspace. Azure requests use stateless Responses API calls and carry encrypted reasoning items only between the tool-call turns needed to answer the current question.
+
+`MASSIVE_API_KEY` optionally enables adjusted end-of-day US stock history. Massive Basic traffic is cached for one hour and serialized to stay below five upstream calls per minute. `SERPAPI_API_KEY` optionally enables recent public Google News results with direct publisher links. Identical news searches are cached for one hour, and `SERPAPI_MONTHLY_REQUEST_LIMIT` defaults to 200 to preserve a safety reserve within the 250-search free plan. Before each uncached news request, Nest uses SerpApi's free Account API to verify the real remaining allowance, including usage outside Nest. Keep these variables server-only; do not use `NEXT_PUBLIC_` names. SerpApi requires the API key as its `api_key` request parameter, but the Vercel environment variable must be named `SERPAPI_API_KEY`.
+
+Ask Nest never sends names, balances, transaction details, account names, or card details to news search. Third-party headlines are treated as untrusted reporting, attributed to their publishers, and kept separate from deterministic market figures. The assistant can summarize cited information but does not provide personalized buy, sell, or hold recommendations.
 
 Real-world category questions such as “How much did I spend on transport?” use deterministic transaction classification rather than sub-account names or vector search. High-confidence merchant and description matches form the confirmed total; ambiguous multi-service merchants such as a generic `Grab` or `Gojek` entry are reported separately as possible spending. The category layer also covers dining, groceries, utilities, housing, shopping, entertainment, healthcare, education, travel, insurance, personal care, childcare, pets, fees, taxes, gifts, and charity.
 

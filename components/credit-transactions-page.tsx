@@ -291,9 +291,13 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     const savedCard = readCookie(CREDIT_TX_CARD_COOKIE);
 
     if (queryMonth !== null) {
-      const parsedMonth = parseInt(queryMonth, 10);
-      if (parsedMonth >= 1 && parsedMonth <= 12) {
-        setSelectedMonth(parsedMonth - 1);
+      if (queryMonth === "all" || queryMonth === "-1") {
+        setSelectedMonth(-1);
+      } else {
+        const parsedMonth = parseInt(queryMonth, 10);
+        if (parsedMonth >= 1 && parsedMonth <= 12) {
+          setSelectedMonth(parsedMonth - 1);
+        }
       }
     } else if (savedMonth !== null) {
       const parsedSavedMonth = parseInt(savedMonth, 10);

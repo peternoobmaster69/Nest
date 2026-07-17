@@ -34,6 +34,22 @@ test("Ask Nest derives workspace scope from the session and never accepts a work
   assert.doesNotMatch(orchestration, /Current workspace:\s*\$\{/);
 });
 
+test("Ask Nest personalizes greetings with the authenticated user's profile name", async () => {
+  const [orchestration, shell, panel] = await Promise.all([
+    source("lib/ai/ask-nest.ts"),
+    source("components/app-shell.tsx"),
+    source("components/ask-nest.tsx"),
+  ]);
+
+  assert.match(orchestration, /prisma\.user\.findUnique\([\s\S]*?where: \{ id: input\.userId \}[\s\S]*?select: \{ name: true \}/);
+  assert.match(orchestration, /userName: normalizeAuthenticatedUserName\(user\?\.name\)/);
+  assert.match(orchestration, /Authenticated user display name \(untrusted profile data\)/);
+  assert.match(orchestration, /display name is not null[\s\S]*?Greet them by name when they greet you or begin a new conversation/);
+  assert.match(orchestration, /Do not repeat the name mechanically/);
+  assert.match(shell, /<AskNest[\s\S]*?userName=\{userName\}/);
+  assert.match(panel, /greetingName \? `Hi \$\{greetingName\}, ask about the money already in Nest`/);
+});
+
 test("Ask Nest exposes only bounded read tools", async () => {
   const tools = await source("lib/ai/ask-nest-tools.ts");
   const expectedTools = [
@@ -48,6 +64,8 @@ test("Ask Nest exposes only bounded read tools", async () => {
     "explain_reconciliation",
     "get_spending_breakdown",
     "get_investment_summary",
+    "get_market_history",
+    "search_market_news",
     "get_trip_spending",
     "explain_cash_flow_change",
     "compare_income",
@@ -76,6 +94,24 @@ test("Ask Nest validates structured answers and grounds displayed currency value
   assert.match(orchestration, /GeneratedAnswerSchema\.parse/);
   assert.match(orchestration, /assertGroundedCurrencyValues\(generated, toolOutputs\)/);
   assert.match(orchestration, /evidenceById\.get\(id\)/);
+});
+
+test("Ask Nest distinguishes outstanding statements from distinct credit cards", async () => {
+  const [orchestration, tools] = await Promise.all([
+    source("lib/ai/ask-nest.ts"),
+    source("lib/ai/ask-nest-tools.ts"),
+  ]);
+
+  assert.match(tools, /statementCount counts statements and cardCount counts distinct cards/);
+  assert.match(tools, /const cardCount = new Set\(statements\.map\(\(statement\) => statement\.cardId\)\)\.size/);
+  assert.match(tools, /statementCount,[\s\S]*?cardCount,[\s\S]*?summary:/);
+  assert.match(tools, /nextStatements: outstandingCardStatements\.slice/);
+  assert.match(tools, /outstandingCardStatements:\s*\{[\s\S]*?\.\.\.cardStatementSummary/);
+  assert.doesNotMatch(tools, /cardObligations:\s*\{/);
+  assert.match(tools, /ALL_CARD_STATEMENTS_HREF = "\/credit-transactions\?cardId=all&month=all"/);
+  assert.match(tools, /"All recorded payment due dates",[\s\S]*?ALL_CARD_STATEMENTS_HREF/);
+  assert.match(orchestration, /Say “statements” when using statementCount/);
+  assert.match(orchestration, /never describe statementCount as the number of cards/);
 });
 
 test("Ask Nest reports the specific reason a response could not be grounded", async () => {
@@ -151,13 +187,18 @@ test("Ask Nest uses semantic categories independently of sub-account names", asy
 });
 
 test("Ask Nest derives charts and trip cards from successful tool output", async () => {
-  const orchestration = await source("lib/ai/ask-nest.ts");
-  const tools = await source("lib/ai/ask-nest-tools.ts");
+  const [orchestration, tools, panel] = await Promise.all([
+    source("lib/ai/ask-nest.ts"),
+    source("lib/ai/ask-nest-tools.ts"),
+    source("components/ask-nest.tsx"),
+  ]);
 
   assert.match(orchestration, /resolveVisualization\(successfulToolOutputs\)/);
   assert.match(tools, /type:\s*["']trip_cards["']/);
   assert.match(tools, /type:\s*["']trend_chart["']/);
   assert.match(tools, /type:\s*["']investment_chart["']/);
+  assert.match(tools, /items: rows\.filter[\s\S]*?id: row\.id,[\s\S]*?label: row\.name/);
+  assert.match(panel, /ask-nest-investment-row" key=\{item\.id\}/);
   assert.match(tools, /groupId:\s*group\.id/);
   assert.match(tools, /destination_hints/);
   assert.match(tools, /TRANSACTION_TEXT_ESTIMATE/);

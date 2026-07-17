@@ -23,6 +23,7 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 import { useToast } from "@/components/toast-provider";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { buildCreditCardStatementPath } from "@/lib/workspace-entry";
 
 const ALL_BANKS_FILTER = "ALL";
 const RECENT_TRANSACTION_LIMIT = 5;
@@ -1206,12 +1207,11 @@ export function DashboardShell({
     router.push(`/transactions?${params.toString()}`);
   }, [router]);
   const goToCreditCardStatement = useCallback((card: CreditCardDueCard) => {
-    const params = new URLSearchParams({
+    router.push(buildCreditCardStatementPath({
       cardId: card.cardId,
-      month: String(card.statementMonth),
-      year: String(card.statementYear),
-    });
-    router.push(`/credit-transactions?${params.toString()}`);
+      statementMonth: card.statementMonth,
+      statementYear: card.statementYear,
+    }));
   }, [router]);
   const budgetNameById = useMemo(
     () => new Map((budgetsQuery.data ?? []).map((b) => [b.id, b.name])),

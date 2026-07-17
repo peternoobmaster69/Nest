@@ -48,6 +48,7 @@ export type AskNestVisualization =
       title: string;
       currency: string;
       items: Array<{
+        id: string;
         label: string;
         investedCents: number;
         currentValueCents: number;

@@ -1028,6 +1028,38 @@ model BackgroundJob {
   @@index([leaseExpiresAt])
 }
 
+model MassiveMarketDataCache {
+  cacheKey    String   @id @db.NVarChar(450)
+  payloadJson String   @db.NVarChar(Max)
+  fetchedAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+model MassiveApiThrottle {
+  provider      String   @id @db.NVarChar(100)
+  nextAllowedAt DateTime
+  updatedAt     DateTime @updatedAt
+}
+
+model SerpApiNewsCache {
+  cacheKey    String   @id @db.NVarChar(450)
+  payloadJson String   @db.NVarChar(Max)
+  fetchedAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+model SerpApiQuota {
+  provider      String   @id @db.NVarChar(100)
+  windowKey    String   @db.NVarChar(32)
+  requestCount Int      @default(0)
+  nextAllowedAt DateTime
+  updatedAt     DateTime @updatedAt
+}
+
 model InAppNotification {
   id           String    @id @default(cuid())
   userId       String

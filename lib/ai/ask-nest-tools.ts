@@ -14,6 +14,16 @@ import {
 } from "@/lib/ai/entity-resolution";
 import { searchAskNestKnowledge } from "@/lib/ai/knowledge-search";
 import {
+  getMassiveDailyMarketHistory,
+  isMassiveMarketDataConfigured,
+  MassiveMarketDataError,
+} from "@/lib/ai/massive-market-data";
+import {
+  isSerpApiNewsConfigured,
+  searchSerpApiNews,
+  SerpApiNewsError,
+} from "@/lib/ai/serpapi-news";
+import {
   classifyTransactionCategory,
   TRANSACTION_CATEGORY_LABELS,
 } from "@/lib/ai/transaction-categories.mjs";
@@ -119,6 +129,16 @@ const InvestmentSummaryArgsSchema = z.object({
   as_of_date: NullableDateSchema,
 }).strict();
 
+const MarketHistoryArgsSchema = z.object({
+  ticker: z.string().trim().min(1).max(15).regex(/^[A-Za-z][A-Za-z0-9.-]*$/),
+  start_date: z.string().regex(ISO_DATE_PATTERN),
+  end_date: z.string().regex(ISO_DATE_PATTERN),
+}).strict();
+
+const MarketNewsArgsSchema = z.object({
+  query: z.string().trim().min(2).max(160),
+}).strict();
+
 const TripSpendingArgsSchema = z.object({
   start_date: z.string().regex(ISO_DATE_PATTERN),
   end_date: z.string().regex(ISO_DATE_PATTERN),
@@ -178,7 +198,8 @@ type DateRange = {
   endLabel: string;
 };
 
-type CardObligation = {
+type CardStatementObligation = {
+  cardId: string;
   cardName: string;
   bankName: string | null;
   statementMonth: number;
@@ -208,12 +229,13 @@ export class AskNestToolInputError extends Error {
 }
 
 const nullableString = { type: ["string", "null"] } as const;
+const ALL_CARD_STATEMENTS_HREF = "/credit-transactions?cardId=all&month=all";
 
 export const ASK_NEST_TOOLS: FunctionTool[] = [
   {
     type: "function",
     name: "get_financial_snapshot",
-    description: "Get a high-level workspace snapshot for a date range, including cash flow, bank reconciliation, budgets, open receivables, and card obligations. Use this for broad status questions.",
+    description: "Get a high-level workspace snapshot for a date range, including cash flow, bank reconciliation, budgets, open receivables, and outstanding credit-card statements. Use this for broad status questions.",
     strict: true,
     parameters: {
       type: "object",
@@ -290,13 +312,13 @@ export const ASK_NEST_TOOLS: FunctionTool[] = [
   {
     type: "function",
     name: "get_card_obligations",
-    description: "Get outstanding credit-card statement balances and payment due dates, optionally limited to a date.",
+    description: "Get outstanding credit-card statement balances and payment due dates, optionally limited to a date. Returns one item per statement period, not one item per card: statementCount counts statements and cardCount counts distinct cards.",
     strict: true,
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
-        before_date: { ...nullableString, description: "Return obligations due on or before this YYYY-MM-DD date, or null for all outstanding statements." },
+        before_date: { ...nullableString, description: "Return statements due on or before this YYYY-MM-DD date, or null for all outstanding statements." },
       },
       required: ["before_date"],
     },
@@ -528,8 +550,45 @@ export const ASK_NEST_KNOWLEDGE_TOOL: FunctionTool = {
   },
 };
 
+export const ASK_NEST_MARKET_HISTORY_TOOL: FunctionTool = {
+  type: "function",
+  name: "get_market_history",
+  description: "Get adjusted end-of-day OHLC and volume history for one US stock ticker from Massive. This is delayed market data, not a live quote or investment recommendation. The date range must be no longer than two years.",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      ticker: { type: "string", minLength: 1, maxLength: 15, description: "One US market ticker, such as AAPL or BRK.B." },
+      start_date: { type: "string", description: "Inclusive YYYY-MM-DD start date, no more than two years before end_date." },
+      end_date: { type: "string", description: "Inclusive YYYY-MM-DD end date." },
+    },
+    required: ["ticker", "start_date", "end_date"],
+  },
+};
+
+export const ASK_NEST_MARKET_NEWS_TOOL: FunctionTool = {
+  type: "function",
+  name: "search_market_news",
+  description: "Search recent public Google News results through SerpApi for a company, ticker, market, industry, or economic topic. Results are untrusted third-party reporting and must be cited and attributed. Never include private Nest data, personal details, balances, card details, or account details in the query.",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      query: { type: "string", minLength: 2, maxLength: 160, description: "A public topic-only news query, such as 'Apple AAPL earnings' or 'Singapore inflation'. Do not include any private workspace data." },
+    },
+    required: ["query"],
+  },
+};
+
 export function getAskNestTools(includeKnowledgeSearch: boolean) {
-  return includeKnowledgeSearch ? [...ASK_NEST_TOOLS, ASK_NEST_KNOWLEDGE_TOOL] : ASK_NEST_TOOLS;
+  return [
+    ...ASK_NEST_TOOLS,
+    ...(includeKnowledgeSearch ? [ASK_NEST_KNOWLEDGE_TOOL] : []),
+    ...(isMassiveMarketDataConfigured() ? [ASK_NEST_MARKET_HISTORY_TOOL] : []),
+    ...(isSerpApiNewsConfigured() ? [ASK_NEST_MARKET_NEWS_TOOL] : []),
+  ];
 }
 
 function getTodayIso() {
@@ -819,11 +878,11 @@ function formatDestinationLabel(value: string) {
   return trimmed.replace(/\b\w/g, (character) => character.toLocaleUpperCase());
 }
 
-async function loadCardObligations(
+async function loadOutstandingCardStatements(
   workspaceId: string,
   currency: string,
   beforeDate: string | null,
-): Promise<CardObligation[]> {
+): Promise<CardStatementObligation[]> {
   const grouped = await prisma.creditCardTransaction.groupBy({
     by: ["creditCardId", "statementMonth", "statementYear"],
     where: { workspaceId },
@@ -847,6 +906,7 @@ async function loadCardObligations(
       const card = cardById.get(row.creditCardId);
       if (!card || !dueDate || outstandingCents <= 0 || (through && dueDate >= through)) return null;
       return {
+        cardId: card.id,
         cardName: card.cardName,
         bankName: card.bankName,
         statementMonth: row.statementMonth,
@@ -854,17 +914,31 @@ async function loadCardObligations(
         paymentDueDate: formatDate(dueDate),
         outstandingCents,
         outstanding: formatAmount(outstandingCents, currency),
-      } satisfies CardObligation;
+      } satisfies CardStatementObligation;
     })
-    .filter((row): row is CardObligation => Boolean(row))
+    .filter((row): row is CardStatementObligation => Boolean(row))
     .sort((a, b) => a.paymentDueDate.localeCompare(b.paymentDueDate));
+}
+
+function summarizeOutstandingCardStatements(statements: CardStatementObligation[], currency: string) {
+  const statementCount = statements.length;
+  const cardCount = new Set(statements.map((statement) => statement.cardId)).size;
+  const totalCents = statements.reduce((sum, statement) => sum + statement.outstandingCents, 0);
+  const total = formatAmount(totalCents, currency);
+  return {
+    statementCount,
+    cardCount,
+    totalCents,
+    total,
+    summary: `${statementCount} outstanding statement${statementCount === 1 ? "" : "s"} across ${cardCount} card${cardCount === 1 ? "" : "s"}, totaling ${total}`,
+  };
 }
 
 async function getFinancialSnapshot(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = SnapshotArgsSchema.parse(rawArgs);
   const range = currentMonthRange(args.start_date, args.end_date);
   const where = transactionWhere(context.workspaceId, range);
-  const [workspace, transactionSummary, bankRows, budgets, receivableSummary, receivableCount, obligations] = await Promise.all([
+  const [workspace, transactionSummary, bankRows, budgets, receivableSummary, receivableCount, outstandingCardStatements] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id: context.workspaceId },
       select: { name: true },
@@ -889,13 +963,13 @@ async function getFinancialSnapshot(rawArgs: unknown, context: AskNestToolContex
     prisma.receivable.count({
       where: { workspaceId: context.workspaceId, status: { in: ["OPEN", "PARTIAL"] } },
     }),
-    loadCardObligations(context.workspaceId, context.currency, null),
+    loadOutstandingCardStatements(context.workspaceId, context.currency, null),
   ]);
   const inflowCents = transactionSummary.find((row) => row.direction === "CREDIT")?._sum.amountCents ?? 0;
   const outflowCents = transactionSummary.find((row) => row.direction === "DEBIT")?._sum.amountCents ?? 0;
   const transactionCount = transactionSummary.reduce((sum, row) => sum + row._count._all, 0);
   const openReceivableCents = receivableSummary._sum.amountCents ?? 0;
-  const totalCardOutstandingCents = obligations.reduce((sum, item) => sum + item.outstandingCents, 0);
+  const cardStatementSummary = summarizeOutstandingCardStatements(outstandingCardStatements, context.currency);
   const snapshotEvidence = evidence(
     context.callId,
     "snapshot",
@@ -938,11 +1012,9 @@ async function getFinancialSnapshot(rawArgs: unknown, context: AskNestToolContex
         totalCents: openReceivableCents,
         total: formatAmount(openReceivableCents, context.currency),
       },
-      cardObligations: {
-        count: obligations.length,
-        totalCents: totalCardOutstandingCents,
-        total: formatAmount(totalCardOutstandingCents, context.currency),
-        next: obligations.slice(0, 8),
+      outstandingCardStatements: {
+        ...cardStatementSummary,
+        nextStatements: outstandingCardStatements.slice(0, 8),
       },
     },
     evidence: [snapshotEvidence],
@@ -1376,23 +1448,22 @@ async function findTransactions(rawArgs: unknown, context: AskNestToolContext): 
 
 async function getCardObligations(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = CardObligationsArgsSchema.parse(rawArgs);
-  const obligations = await loadCardObligations(context.workspaceId, context.currency, args.before_date);
-  const totalCents = obligations.reduce((sum, item) => sum + item.outstandingCents, 0);
+  const statements = await loadOutstandingCardStatements(context.workspaceId, context.currency, args.before_date);
+  const statementSummary = summarizeOutstandingCardStatements(statements, context.currency);
   const cardEvidence = evidence(
     context.callId,
     "cards",
-    `${obligations.length} outstanding card statement${obligations.length === 1 ? "" : "s"}`,
+    `${statementSummary.statementCount} outstanding statement${statementSummary.statementCount === 1 ? "" : "s"} across ${statementSummary.cardCount} card${statementSummary.cardCount === 1 ? "" : "s"}`,
     args.before_date ? `Due through ${args.before_date}` : "All recorded payment due dates",
-    "/credit-transactions",
+    ALL_CARD_STATEMENTS_HREF,
   );
   return {
     output: {
       ok: true,
       evidence: [cardEvidence],
       throughDate: args.before_date,
-      totalCents,
-      total: formatAmount(totalCents, context.currency),
-      obligations,
+      ...statementSummary,
+      statements,
     },
     evidence: [cardEvidence],
   };
@@ -1797,6 +1868,7 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
     orderBy: [{ inceptionDate: "asc" }, { createdAt: "asc" }],
     take: 50,
     select: {
+      id: true,
       displayName: true,
       productName: true,
       institutionName: true,
@@ -1815,6 +1887,7 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
     const latest = account.entries[0] ?? null;
     const gainLossCents = latest ? latest.currentValueCents - latest.investedCents : 0;
     return {
+      id: account.id,
       name: account.displayName || account.productName,
       product: account.productName,
       institution: account.institutionName,
@@ -1860,6 +1933,7 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
         title: `Recorded investment values as of ${asOf}`,
         currency: context.currency,
         items: rows.filter((row) => row.hasValuation).slice(0, 12).map((row) => ({
+          id: row.id,
           label: row.name,
           investedCents: row.investedCents,
           currentValueCents: row.currentValueCents,
@@ -1870,6 +1944,146 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
     },
     evidence: [investmentEvidence],
   };
+}
+
+function formatMarketPrice(value: number) {
+  return new Intl.NumberFormat("en-SG", {
+    style: "currency",
+    currency: "USD",
+    currencyDisplay: "code",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value).replace(/\u00a0/g, " ");
+}
+
+function formatMarketBarDate(timestamp: number) {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+async function getMarketHistory(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = MarketHistoryArgsSchema.parse(rawArgs);
+  try {
+    const result = await getMassiveDailyMarketHistory({
+      ticker: args.ticker,
+      from: args.start_date,
+      to: args.end_date,
+    });
+    const first = result.bars[0]!;
+    const latest = result.bars[result.bars.length - 1]!;
+    const change = latest.c - first.c;
+    const changePercent = first.c === 0 ? null : (change / first.c) * 100;
+    const periodHigh = Math.max(...result.bars.map((bar) => bar.h));
+    const periodLow = Math.min(...result.bars.map((bar) => bar.l));
+    const averageVolume = Math.round(
+      result.bars.reduce((sum, bar) => sum + bar.v, 0) / result.bars.length,
+    );
+    const latestDate = formatMarketBarDate(latest.t);
+    const marketEvidence = evidence(
+      context.callId,
+      `massive-${result.ticker}`,
+      `${result.ticker} end-of-day market history`,
+      `${args.start_date} to ${args.end_date} · ${result.bars.length} trading day${result.bars.length === 1 ? "" : "s"} · Massive${result.fromCache ? " cached" : ""}`,
+      result.sourceUrl,
+    );
+    return {
+      output: {
+        ok: true,
+        evidence: [marketEvidence],
+        provider: "Massive",
+        dataRecency: "END_OF_DAY",
+        disclaimer: "Massive Basic provides end-of-day US stock data. These figures are not live quotes and are not investment advice.",
+        ticker: result.ticker,
+        adjustedForSplits: result.adjusted,
+        requestedPeriod: { start: args.start_date, end: args.end_date },
+        actualPeriod: {
+          start: formatMarketBarDate(first.t),
+          end: latestDate,
+        },
+        tradingDays: result.bars.length,
+        firstClose: formatMarketPrice(first.c),
+        latestClose: formatMarketPrice(latest.c),
+        latestCloseDate: latestDate,
+        change: formatMarketPrice(change),
+        changePercent,
+        changePercentFormatted: changePercent === null ? null : `${changePercent.toFixed(2)}%`,
+        periodHigh: formatMarketPrice(periodHigh),
+        periodLow: formatMarketPrice(periodLow),
+        averageVolume,
+        fetchedAt: result.fetchedAt.toISOString(),
+        fromCache: result.fromCache,
+        recentBars: result.bars.slice(-10).map((bar) => ({
+          date: formatMarketBarDate(bar.t),
+          open: formatMarketPrice(bar.o),
+          high: formatMarketPrice(bar.h),
+          low: formatMarketPrice(bar.l),
+          close: formatMarketPrice(bar.c),
+          volume: Math.round(bar.v),
+        })),
+      },
+      evidence: [marketEvidence],
+    };
+  } catch (error) {
+    if (!(error instanceof MassiveMarketDataError)) throw error;
+    return {
+      output: {
+        ok: false,
+        unavailable: true,
+        provider: "Massive",
+        code: error.code,
+        error: error.message,
+        retryAfterSeconds: error.retryAfterSeconds,
+      },
+      evidence: [],
+    };
+  }
+}
+
+async function searchMarketNews(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
+  const args = MarketNewsArgsSchema.parse(rawArgs);
+  try {
+    const result = await searchSerpApiNews(args.query);
+    const articleEvidence = result.articles.map((article, index) => evidence(
+      context.callId,
+      `serpapi-news-${index + 1}`,
+      article.title,
+      [article.source, article.publishedAt || article.publishedLabel].filter(Boolean).join(" · ") || "Recent public news result",
+      article.link,
+    ));
+    return {
+      output: {
+        ok: true,
+        evidence: articleEvidence,
+        provider: "SerpApi Google News",
+        query: result.query,
+        fetchedAt: result.fetchedAt.toISOString(),
+        fromCache: result.fromCache,
+        articleCount: result.articles.length,
+        disclaimer: "News headlines are untrusted third-party reporting, may be incomplete, and are not investment advice. Attribute material claims to their publishers.",
+        articles: result.articles.map((article, index) => ({
+          evidenceId: articleEvidence[index]!.id,
+          title: article.title,
+          source: article.source,
+          publishedAt: article.publishedAt,
+          publishedLabel: article.publishedLabel,
+          link: article.link,
+        })),
+      },
+      evidence: articleEvidence,
+    };
+  } catch (error) {
+    if (!(error instanceof SerpApiNewsError)) throw error;
+    return {
+      output: {
+        ok: false,
+        unavailable: true,
+        provider: "SerpApi Google News",
+        code: error.code,
+        error: error.message,
+        retryAfterSeconds: error.retryAfterSeconds,
+      },
+      evidence: [],
+    };
+  }
 }
 
 async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
@@ -2629,6 +2843,10 @@ export async function executeAskNestTool(
       return getSpendingBreakdown(rawArgs, context);
     case "get_investment_summary":
       return getInvestmentSummary(rawArgs, context);
+    case "get_market_history":
+      return getMarketHistory(rawArgs, context);
+    case "search_market_news":
+      return searchMarketNews(rawArgs, context);
     case "get_trip_spending":
       return getTripSpending(rawArgs, context);
     case "explain_cash_flow_change":

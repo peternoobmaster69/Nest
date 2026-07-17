@@ -27,7 +27,13 @@ const providerIcons: Record<string, string> = {
   github: "⚡",
 };
 
-export function SignInPanel({ serviceMessage }: { serviceMessage?: string | null }) {
+export function SignInPanel({
+  serviceMessage,
+  callbackUrl = "/",
+}: {
+  serviceMessage?: string | null;
+  callbackUrl?: string;
+}) {
   const [providers, setProviders] = useState<ProviderMap>({});
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(serviceMessage ?? null);
@@ -85,7 +91,7 @@ export function SignInPanel({ serviceMessage }: { serviceMessage?: string | null
       });
       const verified = await verifyResponse.json();
       if (!verifyResponse.ok || !verified.loginToken) throw new Error(verified.error || "Passkey sign-in failed.");
-      const result = await signIn("passkey", { loginToken: verified.loginToken, redirect: false, callbackUrl: "/" });
+      const result = await signIn("passkey", { loginToken: verified.loginToken, redirect: false, callbackUrl });
       if (result?.error) throw new Error("Passkey sign-in failed.");
       window.location.assign(result?.url || "/");
     } catch (error) {
@@ -143,7 +149,7 @@ export function SignInPanel({ serviceMessage }: { serviceMessage?: string | null
             <button
               key={provider.id}
               className="signin-provider-btn"
-              onClick={() => signIn(provider.id, { callbackUrl: "/" })}
+              onClick={() => signIn(provider.id, { callbackUrl })}
             >
               <span className="signin-provider-icon">
                 {providerIcons[provider.id] || "🔐"}

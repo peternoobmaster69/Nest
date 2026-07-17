@@ -12,6 +12,7 @@ import {
 } from "@/lib/credit-card-payment-reminder-schedule";
 import { completeBackgroundJob, createBackgroundJob, failBackgroundJob } from "@/lib/background-jobs";
 import { syncCreditCardDueNotificationsForAllUsers } from "@/lib/in-app-notifications";
+import { buildAbsoluteWorkspaceEntryUrl, buildCreditCardStatementPath } from "@/lib/workspace-entry";
 
 const DELIVERY_JOB_TYPE = "CREDIT_CARD_PAYMENT_REMINDER_EMAIL";
 
@@ -160,30 +161,54 @@ async function findRecipients(workspaceIds: string[]) {
 }
 
 function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], today: Date): ReminderEmail {
-  const workspaceName = rows[0]?.workspaceName || "your workspace";
+  const workspaceLabel = rows[0]?.workspaceName
+    ? `${rows[0].workspaceName} workspace`
+    : "your workspace";
   const totalOutstanding = rows.reduce((sum, row) => sum + toNumber(row.outstandingCents), 0);
   const subject = `Credit card payment reminder: ${formatMoney(totalOutstanding)} due`;
   const appUrl = process.env.NEXTAUTH_URL || process.env.APP_URL || "";
+  const managePaymentsDestination = rows.length === 1
+    ? buildCreditCardStatementPath({
+        cardId: rows[0].cardId,
+        statementMonth: rows[0].statementMonth,
+        statementYear: rows[0].statementYear,
+      })
+    : "/credit-transactions";
+  const managePaymentsUrl = buildAbsoluteWorkspaceEntryUrl(
+    appUrl,
+    recipient.workspaceId,
+    managePaymentsDestination,
+  );
   const greeting = recipient.name ? `Hi ${recipient.name},` : "Hi,";
 
   const lines = rows.map((row) => {
     const bankPrefix = row.bankName ? `${row.bankName} ` : "";
-    return [
+    const statementUrl = buildAbsoluteWorkspaceEntryUrl(
+      appUrl,
+      recipient.workspaceId,
+      buildCreditCardStatementPath({
+        cardId: row.cardId,
+        statementMonth: row.statementMonth,
+        statementYear: row.statementYear,
+      }),
+    );
+    const summary = [
       `${bankPrefix}${row.cardName}`,
       getStatementLabel(row.statementMonth, row.statementYear),
       `${formatMoney(toNumber(row.outstandingCents))} ${getDueLabel(row.paymentDueDate, today)} (${formatDate(row.paymentDueDate)})`,
     ].join(" - ");
+    return statementUrl ? `${summary}\n  View statement: ${statementUrl}` : summary;
   });
 
   const text = [
     greeting,
     "",
-    `This is a reminder that ${workspaceName} has credit card payments due soon or overdue:`,
+    `This is a reminder that ${workspaceLabel} has credit card payments due soon or overdue:`,
     "",
     ...lines.map((line) => `- ${line}`),
     "",
     `Total outstanding: ${formatMoney(totalOutstanding)}`,
-    appUrl ? `Manage payments: ${appUrl}/credit-transactions` : "",
+    managePaymentsUrl ? `Manage payments: ${managePaymentsUrl}` : "",
     "",
     "You will keep receiving this reminder while the statement balance remains outstanding.",
   ]
@@ -195,10 +220,22 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
       const cardName = `${row.bankName ? `${row.bankName} ` : ""}${row.cardName}`;
       const daysUntilDue = getDaysUntilDue(row.paymentDueDate, today);
       const dueColor = daysUntilDue <= 0 ? "#b42318" : daysUntilDue <= 1 ? "#b54708" : "#9a6700";
+      const statementUrl = buildAbsoluteWorkspaceEntryUrl(
+        appUrl,
+        recipient.workspaceId,
+        buildCreditCardStatementPath({
+          cardId: row.cardId,
+          statementMonth: row.statementMonth,
+          statementYear: row.statementYear,
+        }),
+      );
+      const cardLabel = statementUrl
+        ? `<a href="${escapeHtml(statementUrl)}" style="color:#116f45;text-decoration:underline;"><strong>${escapeHtml(cardName)}</strong></a>`
+        : `<strong>${escapeHtml(cardName)}</strong>`;
       return `
         <tr>
           <td style="padding:14px 12px;border-bottom:1px solid #e7efea;">
-            <strong>${escapeHtml(cardName)}</strong><br>
+            ${cardLabel}<br>
             <span style="color:#65776d;font-size:13px;">${escapeHtml(getStatementLabel(row.statementMonth, row.statementYear))}</span>
           </td>
           <td align="right" style="padding:14px 12px;border-bottom:1px solid #e7efea;font-weight:700;white-space:nowrap;">${escapeHtml(formatMoney(toNumber(row.outstandingCents)))}</td>
@@ -220,7 +257,7 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
         </div>
         <div style="padding:26px 28px;">
           <p style="margin:0 0 8px;">${escapeHtml(greeting)}</p>
-          <p style="margin:0 0 22px;color:#42544a;">This is a reminder that <strong>${escapeHtml(workspaceName)}</strong> has credit card payments due soon or overdue.</p>
+          <p style="margin:0 0 22px;color:#42544a;">This is a reminder that <strong>${escapeHtml(workspaceLabel)}</strong> has credit card payments due soon or overdue.</p>
           <table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #dce8e1;border-radius:10px;overflow:hidden;">
             <thead>
               <tr style="background:#f6faf8;color:#53645b;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">
@@ -235,7 +272,7 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
             <span style="color:#53645b;font-size:13px;">Total outstanding</span><br>
             <strong style="font-size:24px;color:#116f45;">${escapeHtml(formatMoney(totalOutstanding))}</strong>
           </div>
-          ${appUrl ? `<p style="margin:22px 0 0;"><a href="${escapeHtml(appUrl)}/credit-transactions" style="display:inline-block;padding:11px 17px;border-radius:8px;background:#158f58;color:#ffffff;font-weight:700;text-decoration:none;">Manage payments in Nest</a></p>` : ""}
+          ${managePaymentsUrl ? `<p style="margin:22px 0 0;"><a href="${escapeHtml(managePaymentsUrl)}" style="display:inline-block;padding:11px 17px;border-radius:8px;background:#158f58;color:#ffffff;font-weight:700;text-decoration:none;">Manage payments in Nest</a></p>` : ""}
           <p style="margin:22px 0 0;color:#718078;font-size:12px;">You will keep receiving this reminder while the statement balance remains outstanding.</p>
         </div>
       </div>

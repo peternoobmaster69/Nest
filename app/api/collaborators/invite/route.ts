@@ -3,6 +3,7 @@ import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sendPushToUser } from "@/lib/web-push";
+import { buildWorkspaceEntryHref } from "@/lib/workspace-entry";
 
 const InviteSchema = z.object({
   workspaceId: z.string().min(1),
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
       await sendPushToUser(targetUser.id, {
         title: "Workspace invitation",
         message: "You were added to a shared Nest workspace.",
-        href: "/collaborators",
+        href: buildWorkspaceEntryHref(workspaceId, "/collaborators"),
         tag: `workspace-invite:${invite.id}`,
       });
     }

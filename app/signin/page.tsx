@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { DATABASE_UNAVAILABLE_MESSAGE, isDatabaseUnavailableError } from "@/lib/database-errors";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import { normalizeInternalAppPath } from "@/lib/workspace-entry";
 
 function getSignInErrorMessage(error: string | undefined) {
   if (!error) return null;
@@ -28,17 +29,18 @@ export default async function SignInPage({
 }) {
   const params = (await searchParams) ?? {};
   const signInErrorMessage = getSignInErrorMessage(params.error);
+  const callbackUrl = normalizeInternalAppPath(params.callbackUrl);
 
   try {
     const session = await getServerSession(authOptions);
     if (session?.user) {
-      redirect("/");
+      redirect(callbackUrl);
     }
   } catch (error) {
     if (isDatabaseUnavailableError(error)) {
-      return <SignInPanel serviceMessage={DATABASE_UNAVAILABLE_MESSAGE} />;
+      return <SignInPanel serviceMessage={DATABASE_UNAVAILABLE_MESSAGE} callbackUrl={callbackUrl} />;
     }
     throw error;
   }
-  return <SignInPanel serviceMessage={signInErrorMessage} />;
+  return <SignInPanel serviceMessage={signInErrorMessage} callbackUrl={callbackUrl} />;
 }

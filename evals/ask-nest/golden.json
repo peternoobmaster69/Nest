@@ -66,6 +66,13 @@
 
   { "id": "invest-01", "question": "Summarize my investment portfolio", "pagePath": "/investments", "expectedTool": "get_investment_summary", "retrieval": false },
   { "id": "invest-02", "question": "What is the recorded gain on my investments?", "pagePath": "/investments", "expectedTool": "get_investment_summary", "retrieval": false },
+  { "id": "market-01", "question": "How has AAPL stock performed over the last month?", "pagePath": "/investments", "expectedTool": "get_market_history", "retrieval": false },
+  { "id": "market-02", "question": "Show the price and volume history for ticker MSFT", "pagePath": "/investments", "expectedTool": "get_market_history", "retrieval": false },
+  { "id": "market-03", "question": "What is AAPL's latest price?", "pagePath": "/investments", "expectedTool": "get_market_history", "retrieval": false },
+  { "id": "news-01", "question": "What is the latest news about Apple and AAPL?", "pagePath": "/investments", "expectedTool": "search_market_news", "retrieval": false },
+  { "id": "news-02", "question": "Show recent headlines about Singapore inflation", "pagePath": "/investments", "expectedTool": "search_market_news", "retrieval": false },
+  { "id": "news-03", "question": "How has NVDA stock performed and what news was reported?", "pagePath": "/investments", "expectedTool": "get_market_history", "retrieval": false },
+  { "id": "news-04", "question": "How has NVDA stock performed and what news was reported?", "pagePath": "/investments", "expectedTool": "search_market_news", "retrieval": false },
   { "id": "trip-01", "question": "How much did I spend on my Japan trip?", "pagePath": "/transactions", "expectedTool": "get_trip_spending", "retrieval": false },
   { "id": "trip-02", "question": "Where did I travel last year?", "pagePath": "/transactions", "expectedTool": "get_trip_spending", "retrieval": false },
   { "id": "plan-01", "question": "Show the monthly budget plan for July", "pagePath": "/budgets/plan", "expectedTool": "get_budget_plan", "retrieval": false },

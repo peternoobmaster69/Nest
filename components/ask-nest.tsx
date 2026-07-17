@@ -282,7 +282,7 @@ function AskNestVisualizationView({ visualization, onNavigate }: {
       <div className="ask-nest-investment-legend"><span className="is-invested">Invested</span><span className="is-current">Current</span></div>
       <div className="ask-nest-investment-rows">
         {visualization.items.map((item) => (
-          <div className="ask-nest-investment-row" key={item.label}>
+          <div className="ask-nest-investment-row" key={item.id}>
             <strong>{item.label}</strong>
             <div className="ask-nest-investment-bars">
               <span className="is-invested" style={{ width: `${Math.max(2, item.investedCents / max * 100)}%` }} title={`Invested ${item.invested}`} />
@@ -300,10 +300,12 @@ export function AskNest({
   currentPath,
   pageTitle,
   workspaceName,
+  userName,
 }: {
   currentPath: string;
   pageTitle: string;
   workspaceName?: string | null;
+  userName?: string | null;
 }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -326,6 +328,7 @@ export function AskNest({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const prompts = useMemo(() => suggestedQuestions(currentPath), [currentPath]);
+  const greetingName = userName?.trim().split(/\s+/)[0] || "";
   const isPending = turns.some((turn) => turn.pending);
 
   useEffect(() => setMounted(true), []);
@@ -757,9 +760,9 @@ export function AskNest({
           ) : !turns.length ? (
             <div className="ask-nest-welcome">
               <span className="ask-nest-readonly-label">Read-only</span>
-              <h3>Ask about the money already in Nest</h3>
+              <h3>{greetingName ? `Hi ${greetingName}, ask about the money already in Nest` : "Ask about the money already in Nest"}</h3>
               <p>
-                Ask for comparisons, card obligations, receivables, budget details, or an explanation of a bank discrepancy.
+                Ask for comparisons, card payments, receivables, budget details, or an explanation of a bank discrepancy.
               </p>
               <div className="ask-nest-prompts" aria-label="Suggested questions">
                 {prompts.map((prompt) => (
@@ -832,7 +835,12 @@ export function AskNest({
                       {turn.answer.evidence.length ? (
                         <div className="ask-nest-evidence">
                           <span>Supporting data</span>
-                          {turn.answer.evidence.map((item) => (
+                          {turn.answer.evidence.map((item) => item.href.startsWith("https://") ? (
+                            <a key={item.id} href={item.href} target="_blank" rel="noreferrer">
+                              <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
+                              <ArrowUpRight size={15} aria-hidden="true" />
+                            </a>
+                          ) : (
                             <Link key={item.id} href={item.href} onClick={() => setOpen(false)}>
                               <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
                               <ArrowUpRight size={15} aria-hidden="true" />

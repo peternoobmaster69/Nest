@@ -168,7 +168,13 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
                 };
 
                 return notification.href ? (
-                  <Link key={notification.id} href={notification.href} className={`notification-item${notification.readAt ? "" : " unread"}`} onClick={onOpen}>
+                  <Link
+                    key={notification.id}
+                    href={notification.href}
+                    prefetch={false}
+                    className={`notification-item${notification.readAt ? "" : " unread"}`}
+                    onClick={onOpen}
+                  >
                     {content}
                   </Link>
                 ) : (
