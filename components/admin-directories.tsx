@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Users } from "lucide-react";
+import { Building2, ChevronDown, Users } from "lucide-react";
 import { useState } from "react";
 import type { getAdminOverview } from "@/lib/admin-overview";
 
@@ -36,7 +36,7 @@ export function AdminDirectories({
           aria-expanded={openDirectory === "users"}
           aria-controls="admin-users"
         >
-          <Users aria-hidden="true" /><span>Users</span><strong>{users.length.toLocaleString()}</strong><small>{openDirectory === "users" ? "Hide user details" : "View user details"}</small>
+          <Users aria-hidden="true" /><span>Users</span><strong>{users.length.toLocaleString()}</strong>
         </button>
         <button
           type="button"
@@ -45,23 +45,27 @@ export function AdminDirectories({
           aria-expanded={openDirectory === "workspaces"}
           aria-controls="admin-workspaces"
         >
-          <Building2 aria-hidden="true" /><span>Workspaces</span><strong>{workspaces.length.toLocaleString()}</strong><small>{openDirectory === "workspaces" ? "Hide workspace details" : "View workspace details"}</small>
+          <Building2 aria-hidden="true" /><span>Workspaces</span><strong>{workspaces.length.toLocaleString()}</strong>
         </button>
       </section>
 
       {openDirectory === "users" ? (
         <section id="admin-users" className="card admin-panel admin-directory">
-          <div className="admin-panel-heading"><div><h2>Users</h2><p>Registered accounts and their workspace access.</p></div><span className="admin-count-badge">{users.length.toLocaleString()}</span></div>
+          <div className="admin-panel-heading"><h2>Users</h2></div>
           {users.length ? (
             <div className="admin-table-wrap">
-              <table className="admin-table admin-directory-table">
+              <table className="admin-table admin-directory-table admin-responsive-table">
                 <thead><tr><th>User</th><th>Joined</th><th>Workspace access</th><th>Ask Nest</th><th>Sessions</th></tr></thead>
                 <tbody>
                   {users.map((user) => (
                     <tr key={user.id}>
-                      <td><strong>{user.name || "Unnamed user"}</strong><span>{user.email || "No email"}</span><code title={user.id}>{user.id}</code></td>
-                      <td><time dateTime={user.createdAt.toISOString()}>{DATE_FORMAT.format(user.createdAt)}</time></td>
-                      <td>
+                      <td data-label="User">
+                        <strong>{user.name || "Unnamed user"}</strong>
+                        <span>{user.email || "No email"}</span>
+                        <details className="admin-inline-details"><summary>ID</summary><code title={user.id}>{user.id}</code></details>
+                      </td>
+                      <td data-label="Joined"><time dateTime={user.createdAt.toISOString()}>{DATE_FORMAT.format(user.createdAt)}</time></td>
+                      <td data-label="Workspace access">
                         {user.memberships.length ? (
                           <div className="admin-memberships">
                             {user.memberships.map((membership) => (
@@ -74,8 +78,8 @@ export function AdminDirectories({
                           </div>
                         ) : <span>No workspace access</span>}
                       </td>
-                      <td><strong>{user.counts.askNestTurns.toLocaleString()} turns</strong><span>{user.counts.askNestMemories.toLocaleString()} memories</span></td>
-                      <td>{user.counts.sessions.toLocaleString()}</td>
+                      <td data-label="Ask Nest"><strong>{user.counts.askNestTurns.toLocaleString()} turns</strong><span>{user.counts.askNestMemories.toLocaleString()} memories</span></td>
+                      <td data-label="Sessions">{user.counts.sessions.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -87,39 +91,47 @@ export function AdminDirectories({
 
       {openDirectory === "workspaces" ? (
         <section id="admin-workspaces" className="card admin-panel admin-directory">
-          <div className="admin-panel-heading"><div><h2>Workspaces</h2><p>Workspace membership, configuration, and record counts.</p></div><span className="admin-count-badge">{workspaces.length.toLocaleString()}</span></div>
+          <div className="admin-panel-heading"><h2>Workspaces</h2></div>
           {workspaces.length ? (
             <div className="admin-workspace-list">
               {workspaces.map((workspace) => (
                 <article className="admin-workspace" key={workspace.id}>
                   <div className="admin-workspace-head">
-                    <div><h3>{workspace.name}</h3><code title={workspace.id}>{workspace.id}</code></div>
+                    <div><h3>{workspace.name}</h3></div>
                     <div className="admin-workspace-tags"><span>{workspace.baseCurrency}</span><span>{workspace.isShared ? "Shared" : "Private"}</span></div>
                   </div>
-                  <dl className="admin-workspace-counts">
+                  <dl className="admin-workspace-counts admin-workspace-primary-counts">
                     <div><dt>Members</dt><dd>{workspace.counts.members}</dd></div>
                     <div><dt>Accounts</dt><dd>{workspace.counts.financials}</dd></div>
                     <div><dt>Transactions</dt><dd>{workspace.counts.transactions}</dd></div>
-                    <div><dt>Budgets</dt><dd>{workspace.counts.budgetEnvelopes}</dd></div>
-                    <div><dt>Cards</dt><dd>{workspace.counts.creditCards}</dd></div>
-                    <div><dt>Receivables</dt><dd>{workspace.counts.receivables}</dd></div>
-                    <div><dt>Investments</dt><dd>{workspace.counts.investmentAccounts}</dd></div>
-                    <div><dt>Ask Nest</dt><dd>{workspace.counts.askNestTurns}</dd></div>
-                    <div><dt>Memories</dt><dd>{workspace.counts.askNestMemories}</dd></div>
                   </dl>
-                  <div className="admin-workspace-meta">
-                    <span>Created {DATE_FORMAT.format(workspace.createdAt)}</span>
-                    <span>Updated {DATE_FORMAT.format(workspace.updatedAt)}</span>
-                  </div>
-                  <div className="admin-workspace-members">
-                    <h4>Members</h4>
-                    {workspace.members.length ? workspace.members.map((member) => (
-                      <div key={member.userId}>
-                        <span><strong>{member.userName || member.userEmail || "Unnamed user"}</strong>{member.userName && member.userEmail ? <small>{member.userEmail}</small> : null}</span>
-                        <span className="admin-role-badge">{member.role}</span>
+                  <details className="admin-workspace-details">
+                    <summary><span>Details</span><ChevronDown size={16} aria-hidden="true" /></summary>
+                    <div className="admin-workspace-details-body">
+                      <code className="admin-workspace-id" title={workspace.id}>{workspace.id}</code>
+                      <dl className="admin-workspace-counts admin-workspace-secondary-counts">
+                        <div><dt>Budgets</dt><dd>{workspace.counts.budgetEnvelopes}</dd></div>
+                        <div><dt>Cards</dt><dd>{workspace.counts.creditCards}</dd></div>
+                        <div><dt>Receivables</dt><dd>{workspace.counts.receivables}</dd></div>
+                        <div><dt>Investments</dt><dd>{workspace.counts.investmentAccounts}</dd></div>
+                        <div><dt>Ask Nest</dt><dd>{workspace.counts.askNestTurns}</dd></div>
+                        <div><dt>Memories</dt><dd>{workspace.counts.askNestMemories}</dd></div>
+                      </dl>
+                      <div className="admin-workspace-meta">
+                        <span>Created {DATE_FORMAT.format(workspace.createdAt)}</span>
+                        <span>Updated {DATE_FORMAT.format(workspace.updatedAt)}</span>
                       </div>
-                    )) : <p>No members.</p>}
-                  </div>
+                      <div className="admin-workspace-members">
+                        <h4>Members</h4>
+                        {workspace.members.length ? workspace.members.map((member) => (
+                          <div key={member.userId}>
+                            <span><strong>{member.userName || member.userEmail || "Unnamed user"}</strong>{member.userName && member.userEmail ? <small>{member.userEmail}</small> : null}</span>
+                            <span className="admin-role-badge">{member.role}</span>
+                          </div>
+                        )) : <p>No members.</p>}
+                      </div>
+                    </div>
+                  </details>
                 </article>
               ))}
             </div>
