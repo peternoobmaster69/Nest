@@ -6,22 +6,30 @@ Structural inventory: Dashboard data regions
 Route: /
 Layout regions: persistent AppSidebar and topbar render as chrome; only dashboard body data regions skeletonize.
 Content blocks:
-- Bank selector row: shared with the transactions page so both routes reserve the same logo, balance, and action space while loading.
-- Net worth strip: .bank-selector-row.dashboard-mini-card; label is 11px uppercase, primary value is 22px/1.5, breakdown is inline 11px links, right metric has 16px left padding and border.
-- Hero card: .hero-card, padding 18px 20px, margin-bottom 14px; left total block has 12px uppercase label, 28px/1 amount, 12px subcopy, chip row of 22px pills.
-- Credit-card summary panel: .card.cc-home-panel in .grid-2; header, three 68px stats, repeated grouped rows.
-- Recent transactions panel: .card in .grid-2; static heading/action remain; rows are .crud-row-like list entries with icon, two text lines, right amount.
+- Unified overview: bank identity, available balance, primary actions, three metrics, and compact sub-account shortcuts.
+- Main grid: dominant cash-flow panel, compact payment-due panel, then a full-width recent transaction list.
 Do not skeletonize: sidebar, mobile hamburger/topbar, greeting title, static "View all" buttons, card section headings.
 */
 export function DashboardSkeleton() {
   return (
     <>
-      <DashboardBankSelectorSkeleton />
-      <DashboardNetWorthSkeleton />
-      <DashboardHeroSkeleton />
-      <div className="grid-2" style={{ marginTop: "14px" }}>
+      <DashboardOverviewSkeleton />
+      <div className="dashboard-home-grid">
+        <section className="card cash-flow-card dashboard-cash-flow-panel">
+          <div className="cash-flow-head">
+            <Skeleton width={132} height={28} borderRadius="8px" />
+            <Skeleton width={148} height={18} borderRadius="6px" />
+          </div>
+          <div className="cash-flow-chart-skeleton skeleton" />
+        </section>
         <DashboardCreditCardPanelSkeleton />
-        <DashboardRecentTransactionsSkeleton />
+        <section className="card dashboard-recent-panel">
+          <div className="dashboard-section-header">
+            <Skeleton width={156} height={28} borderRadius="8px" />
+            <Skeleton width={68} height={28} borderRadius="8px" />
+          </div>
+          <DashboardRecentTransactionsSkeleton />
+        </section>
       </div>
     </>
   );
@@ -33,6 +41,55 @@ Maps to .bank-selector-row > .bank-selector-summary with the same flex/gap/paddi
 */
 export function DashboardBankSelectorSkeleton() {
   return <BankSelectorSkeleton />;
+}
+
+/* Mirrors the unified dashboard overview so loading does not shift its three responsive regions. */
+export function DashboardOverviewSkeleton() {
+  return (
+    <section className="dashboard-overview-card" aria-label="Loading account overview">
+      <header className="dashboard-overview-header">
+        <div className="dashboard-overview-bank">
+          <Skeleton width={40} height={30} borderRadius="9px" />
+          <div className="dashboard-overview-bank-copy">
+            <Skeleton width={48} height={10} borderRadius="4px" />
+            <Skeleton width={130} height={16} borderRadius="4px" />
+          </div>
+        </div>
+        <Skeleton width={32} height={32} borderRadius="8px" />
+      </header>
+
+      <div className="dashboard-overview-main">
+        <div>
+          <Skeleton width={132} height={13} borderRadius="4px" />
+          <div style={{ marginTop: "7px" }}><Skeleton width={210} height={40} borderRadius="8px" /></div>
+          <div style={{ marginTop: "8px" }}><Skeleton width={118} height={13} borderRadius="4px" /></div>
+        </div>
+        <div className="dashboard-overview-actions">
+          <Skeleton width={132} height={34} borderRadius="8px" />
+          <Skeleton width={142} height={34} borderRadius="8px" />
+        </div>
+      </div>
+
+      <div className="dashboard-overview-metrics">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <article className="dashboard-overview-metric" key={index}>
+            <Skeleton width={30} height={30} borderRadius="9px" />
+            <div>
+              <Skeleton width={index === 2 ? 62 : 74} height={11} borderRadius="4px" />
+              <Skeleton width={index === 2 ? 112 : 96} height={22} borderRadius="5px" />
+              <Skeleton width={98} height={11} borderRadius="4px" />
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="dashboard-overview-accounts">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} width={index % 2 ? 126 : 146} height={30} borderRadius="999px" />
+        ))}
+      </div>
+    </section>
+  );
 }
 
 /*
@@ -97,23 +154,15 @@ Maps to .card.cc-home-panel: heading/action are static chrome; dynamic stats and
 */
 export function DashboardCreditCardPanelSkeleton() {
   return (
-    <div className="card cc-home-panel">
+    <section className="card cc-home-panel dashboard-payments-panel">
       <div className="cc-home-header">
         <div className="cc-home-title">
           <span aria-hidden="true"> </span>
-          <span>Credit Cards</span>
+          <span>Payments due</span>
         </div>
         <button className="btn btn-ghost btn-xs" type="button" disabled>
           View all
         </button>
-      </div>
-      <div className="cc-home-stats">
-        {Array.from({ length: 3 }).map((_, index) => (
-          <div className="cc-home-stat" key={index}>
-            <Skeleton width={64} height={14} borderRadius="4px" />
-            <Skeleton width={index === 0 ? 96 : 58} height={24} borderRadius="5px" />
-          </div>
-        ))}
       </div>
       <div className="cc-home-list">
         {Array.from({ length: 2 }).map((_, index) => (
@@ -135,7 +184,7 @@ export function DashboardCreditCardPanelSkeleton() {
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -145,27 +194,19 @@ Maps to .simple-list containing repeated row cards with a left copy stack and ri
 */
 export function DashboardRecentTransactionsSkeleton() {
   return (
-    <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-        <div style={{ fontSize: "13px", fontWeight: 600 }}>Recent transactions</div>
-        <button className="btn btn-ghost btn-xs" type="button" disabled>
-          View all
-        </button>
-      </div>
-      <div className="simple-list">
-        {Array.from({ length: 3 }).map((_, index) => (
-          <div className="crud-row" key={index}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
-              <Skeleton width={30} height={30} borderRadius="999px" />
-              <div style={{ display: "grid", gap: "5px", minWidth: 0 }}>
-                <Skeleton width={150} height={17} borderRadius="4px" />
-                <Skeleton width={106} height={13} borderRadius="4px" />
-              </div>
+    <div className="simple-list dashboard-recent-list-skeleton">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div className="crud-row" key={index}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+            <Skeleton width={30} height={30} borderRadius="999px" />
+            <div style={{ display: "grid", gap: "5px", minWidth: 0 }}>
+              <Skeleton width={150} height={17} borderRadius="4px" />
+              <Skeleton width={106} height={13} borderRadius="4px" />
             </div>
-            <Skeleton width={78} height={17} borderRadius="4px" />
           </div>
-        ))}
-      </div>
+          <Skeleton width={78} height={17} borderRadius="4px" />
+        </div>
+      ))}
     </div>
   );
 }

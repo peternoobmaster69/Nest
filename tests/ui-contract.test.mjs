@@ -101,6 +101,55 @@ test("dashboard and transactions share the bank selector presentation", async ()
   assert.doesNotMatch(styles, /\.txn-page \.tx-bank-action-btn/);
 });
 
+test("dashboard uses one responsive overview and a clear content hierarchy", async () => {
+  const component = await readFile(path.join(root, "components/dashboard-shell.tsx"), "utf8");
+  const skeleton = await readFile(path.join(root, "components/skeletons/DashboardSkeleton.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /className="dashboard-overview-card"/);
+  assert.match(component, /Available bank balance/);
+  assert.match(component, />Allocated</);
+  assert.match(component, />Unallocated</);
+  assert.match(component, />Net worth</);
+  assert.match(component, /const DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT = 10;/);
+  assert.match(component, /filteredBudgets\.slice\(0, DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT\)/);
+  assert.match(component, /className="card cash-flow-card dashboard-cash-flow-panel"/);
+  assert.match(component, /className="card cc-home-panel dashboard-payments-panel"/);
+  assert.match(component, /className="card dashboard-recent-panel"/);
+  assert.match(component, /className="dashboard-reconciliation-list"/);
+  assert.match(component, /className="tx-reconciliation dashboard-reconciliation"/);
+  assert.match(component, /discrepancyAmount} unallocated/);
+  assert.match(component, /discrepancyAmount} over-allocated/);
+  assert.doesNotMatch(component, /Bank balance to accounts discrepancy detected/);
+  assert.doesNotMatch(component, /className="hero-card"/);
+  assert.match(skeleton, /export function DashboardOverviewSkeleton\(\)/);
+  assert.match(styles, /\.dashboard-home-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.65fr\)[^}]*grid-template-areas:[^}]*"cash-flow payments"[^}]*"recent recent"/s);
+  assert.match(styles, /@media \(max-width: 1024px\)\s*\{[\s\S]*?grid-template-areas:[\s\S]*?"cash-flow"[\s\S]*?"payments"[\s\S]*?"recent"/);
+  assert.match(styles, /\.cash-flow-chart\s*\{[^}]*height:\s*220px/s);
+});
+
+test("transaction sub-account cards keep compact uniform geometry", async () => {
+  const component = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /hasDisplayedDiscrepancy \? \([\s\S]*?className="tx-reconciliation"[\s\S]*?\) : null/);
+  assert.match(component, /displayedDiscrepancyAmount} unallocated/);
+  assert.match(component, /displayedDiscrepancyAmount} over-allocated/);
+  assert.match(component, /<dt>Bank<\/dt>[\s\S]*?<dt>Sub-accounts<\/dt>/);
+  assert.match(component, /> Edit bank/);
+  assert.match(component, /Use sub-account total/);
+  assert.doesNotMatch(component, /className="tx-balance-comparison"|⚠️ Mismatch:/);
+  assert.match(component, /className="tx-account-card-head"/);
+  assert.match(component, /className="tx-account-receivable-btn"/);
+  assert.match(component, /className="tx-account-card-icon"/);
+  assert.match(source, /\.tx-account-grid\s*\{[^}]*grid-auto-rows:\s*68px[^}]*align-items:\s*stretch/s);
+  assert.match(source, /\.tx-account-card\s*\{[^}]*height:\s*68px[^}]*min-height:\s*68px[^}]*max-height:\s*68px[^}]*padding:\s*6px 8px[^}]*overflow:\s*hidden/s);
+  assert.match(source, /\.tx-account-receivable-btn\s*\{[^}]*min-inline-size:\s*16px[^}]*min-block-size:\s*16px/s);
+  assert.match(source, /\.tx-bank-action-btn\s*\{[^}]*min-inline-size:\s*22px[^}]*min-block-size:\s*22px/s);
+  assert.match(source, /\.tx-subaccount-edit-btn\s*\{[^}]*min-inline-size:\s*18px[^}]*min-block-size:\s*18px/s);
+  assert.match(source, /\.tx-reconciliation\s*\{[^}]*padding:\s*8px 10px/s);
+});
+
 test("mobile editable controls do not trigger viewport focus zoom", async () => {
   const source = await readFile(path.join(root, "app/globals.css"), "utf8");
 
@@ -155,7 +204,18 @@ test("payment due card saves from its compact date tag", async () => {
   assert.match(source, /\.cct-due-date-control\s*\{[^}]*position:\s*relative[^}]*safe-area-inset-top[^}]*safe-area-inset-bottom/s);
   assert.match(source, /\.cct-due-picker\s*\{[^}]*position:\s*absolute[^}]*bottom:\s*0[^}]*left:\s*50%[^}]*opacity:\s*0[^}]*clip-path:\s*inset\(50%\)/s);
   assert.match(source, /@media \(hover: none\) and \(pointer: coarse\)\s*\{\s*\.cct-due-picker\s*\{[^}]*inset:\s*0[^}]*width:\s*100%[^}]*height:\s*100%[^}]*pointer-events:\s*auto[^}]*clip-path:\s*none/s);
-  assert.match(source, /\.cct-payment-btn\s*\{[^}]*height:\s*26px[^}]*padding:\s*0 9px/s);
+  assert.match(source, /\.cct-due-date-control\s*\{[^}]*max-width:\s*100%[^}]*isolation:\s*isolate/s);
+  assert.match(source, /@media \(hover: none\) and \(pointer: coarse\)\s*\{\s*\.cct-due-picker\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+  assert.match(source, /\.cct-payment-btn\s*\{[^}]*position:\s*relative[^}]*z-index:\s*2[^}]*height:\s*26px[^}]*padding:\s*0 9px/s);
+});
+
+test("credit transaction form keeps statement month and year on one row", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /className="cct-statement-period"[\s\S]*?Statement Month[\s\S]*?Statement Year/);
+  assert.match(source, /\.cct-statement-period\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1\.2fr\) minmax\(120px, 0\.8fr\)/s);
+  assert.match(source, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.cct-statement-period\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.2fr\) minmax\(96px, 0\.8fr\)/s);
 });
 
 test("month dropdown identifies outstanding payment due dates", async () => {
@@ -205,12 +265,14 @@ test("all modal families use the centered viewport contract", async () => {
   assert.match(contract, /border-radius:\s*var\(--modal-radius\)\s*!important/);
 });
 
-test("small-screen modals fill the available screen width", async () => {
+test("small-screen modals use the available width without stretching short forms", async () => {
   const source = await readFile(path.join(root, "app/globals.css"), "utf8");
   const contract = source.slice(source.indexOf("MODAL VIEWPORT CONTRACT"));
 
   assert.match(contract, /@media\s*\(max-width:\s*820px\)/);
   assert.match(contract, /body\s+:is\([\s\S]*?\.modal-container[\s\S]*?\.auto-rule-modal[\s\S]*?\)\[class\]\s*\{[\s\S]*?width:\s*calc\(100vw - 10px\)\s*!important[\s\S]*?max-width:\s*calc\(100vw - 10px\)\s*!important/);
+  assert.match(contract, /body\s+:is\([\s\S]*?\.modal-container[\s\S]*?\.inv-modal[\s\S]*?\)\[class\]\s*\{[\s\S]*?height:\s*auto\s*!important[\s\S]*?max-height:\s*calc\(100dvh - 10px\)\s*!important/);
+  assert.doesNotMatch(contract, /height:\s*100dvh\s*!important/);
   assert.match(contract, /@media\s*\(max-width:\s*820px\)[\s\S]*?padding-right:\s*5px\s*!important[\s\S]*?padding-left:\s*5px\s*!important/);
   assert.match(contract, /padding-bottom:\s*max\(16px, env\(safe-area-inset-bottom, 0px\)\)\s*!important/);
   assert.match(contract, /\.tx-month-popover\s*\{[^}]*width:\s*calc\(100vw - 10px\)/s);
@@ -482,7 +544,7 @@ test("core mobile workflows use the Phase 2 interaction contract", async () => {
   const creditTransactions = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
 
   assert.match(styles, /\.mobile-primary-create\s*\{[\s\S]*?position:\s*fixed\s*!important[\s\S]*?bottom:\s*calc\(70px \+ var\(--mobile-nav-safe-bottom\)\)[\s\S]*?width:\s*48px\s*!important[\s\S]*?min-height:\s*48px\s*!important/);
-  assert.match(styles, /body\s+:is\([\s\S]*?\.modal-container[\s\S]*?\.inv-modal[\s\S]*?\)\[class\]\s*\{[\s\S]*?width:\s*100vw\s*!important[\s\S]*?height:\s*100dvh\s*!important/);
+  assert.match(styles, /body\s+:is\([\s\S]*?\.modal-container[\s\S]*?\.inv-modal[\s\S]*?\)\[class\]\s*\{[\s\S]*?width:\s*calc\(100vw - 10px\)\s*!important[\s\S]*?height:\s*auto\s*!important[\s\S]*?max-height:\s*calc\(100dvh - 10px\)\s*!important/);
   assert.match(styles, /\.btn:active:not\(:disabled\)[\s\S]*?transform:\s*scale\(0\.97\)/);
   assert.match(styles, /\.mutation-feedback\.is-success/);
   assert.match(providers, /<MobileWorkflowManager\s*\/>/);

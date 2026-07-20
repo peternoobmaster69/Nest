@@ -2351,31 +2351,33 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   <label className="label">Payment Due Date</label>
                   <input type="date" className="input" value={formPaymentDue} onChange={(e) => setFormPaymentDue(e.target.value)} />
                 </div>
-                <div className="form-group">
-                  <label className="label">Statement Month</label>
-                  <select
-                    className="input"
-                    value={formStatementMonth}
-                    onChange={(e) => setFormStatementMonth(e.target.value)}
-                    required
-                  >
-                    {MONTHS.map((month, idx) => (
-                      <option key={month} value={idx + 1}>
-                        {month}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="label">Statement Year</label>
-                  <NumericCalculatorInput
-                    min="2020"
-                    max="2100"
-                    allowDecimal={false}
-                    value={formStatementYear}
-                    onValueChange={setFormStatementYear}
-                    required
-                  />
+                <div className="cct-statement-period">
+                  <div className="form-group">
+                    <label className="label">Statement Month</label>
+                    <select
+                      className="input"
+                      value={formStatementMonth}
+                      onChange={(e) => setFormStatementMonth(e.target.value)}
+                      required
+                    >
+                      {MONTHS.map((month, idx) => (
+                        <option key={month} value={idx + 1}>
+                          {month}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Statement Year</label>
+                    <NumericCalculatorInput
+                      min="2020"
+                      max="2100"
+                      allowDecimal={false}
+                      value={formStatementYear}
+                      onValueChange={setFormStatementYear}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="form-group cct-span-2">
                   <label className="label">Subject</label>

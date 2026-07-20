@@ -5,7 +5,19 @@ import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } fr
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CreditCard,
+  LayoutGrid,
+  Plus,
+  ReceiptText,
+  RotateCcw,
+  TrendingUp,
+  Wallet,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
@@ -14,9 +26,7 @@ import { AppShell } from "./app-shell";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
 import {
-  DashboardBankSelectorSkeleton,
-  DashboardHeroSkeleton,
-  DashboardNetWorthSkeleton,
+  DashboardOverviewSkeleton,
   DashboardRecentTransactionsSkeleton,
 } from "@/components/skeletons/DashboardSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -27,6 +37,7 @@ import { buildCreditCardStatementPath } from "@/lib/workspace-entry";
 
 const ALL_BANKS_FILTER = "ALL";
 const RECENT_TRANSACTION_LIMIT = 5;
+const DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT = 10;
 const CASH_FLOW_ALL_ACCOUNTS = "ALL";
 const CASH_FLOW_CHART_HEIGHT = 220;
 const CASH_FLOW_CHART_PADDING = { top: 14, right: 14, bottom: 34, left: 42 };
@@ -1396,252 +1407,268 @@ export function DashboardShell({
         topbarTitle={<div className="tb-title">{getGreeting()}, {displayName.split(" ")[0]} 👋</div>}
       >
           {bankAccountsQuery.isLoading || !isDataReady ? (
-            <DashboardBankSelectorSkeleton />
+            <DashboardOverviewSkeleton />
           ) : (
-            <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
-                <div className="bank-selector-summary">
-                  <div className="bank-selector-main">
-                    {selectedBank ? (
-                      (() => {
-                        const bankMeta = getSingaporeBankByName(selectedBank.bankName || selectedBank.name);
-                        const logo = getBankLogoUrl(bankMeta);
-                        return logo && !failedBankLogos[selectedBank.id] ? (
-                          <Image
-                            src={logo}
-                            alt={bankMeta?.name || "Bank"}
-                            width={44}
-                            height={24}
-                            sizes="44px"
-                            className={`bank-logo-img ${bankMeta?.code === "DBS" ? "bank-logo-img-dbs" : ""}`}
-                            loading="lazy"
-                            onError={() => setFailedBankLogos((prev) => ({ ...prev, [selectedBank.id]: true }))}
-                          />
-                        ) : bankMeta ? (
-                          <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
-                            {bankMeta.short}
-                          </span>
-                        ) : (
-                          <span className="bank-icon bank-icon-default">BNK</span>
-                        );
-                      })()
-                    ) : (
-                      <span className="bank-icon bank-icon-default">ALL</span>
-                    )}
-                    <div className={`bank-selector-amount ${getAmountToneClass(filteredBankBalance)}`}>
-                      {formatCents(filteredBankBalance)}
-                    </div>
+            <section className="dashboard-overview-card" aria-labelledby="dashboard-overview-title">
+              <header className="dashboard-overview-header">
+                <div className="dashboard-overview-bank">
+                  {selectedBank ? (
+                    (() => {
+                      const bankMeta = getSingaporeBankByName(selectedBank.bankName || selectedBank.name);
+                      const logo = getBankLogoUrl(bankMeta);
+                      return logo && !failedBankLogos[selectedBank.id] ? (
+                        <Image
+                          src={logo}
+                          alt={bankMeta?.name || "Bank"}
+                          width={44}
+                          height={28}
+                          sizes="44px"
+                          className={`bank-logo-img dashboard-overview-bank-logo ${bankMeta?.code === "DBS" ? "bank-logo-img-dbs" : ""}`}
+                          loading="lazy"
+                          onError={() => setFailedBankLogos((prev) => ({ ...prev, [selectedBank.id]: true }))}
+                        />
+                      ) : bankMeta ? (
+                        <span className="bank-icon dashboard-overview-bank-icon" style={{ backgroundColor: bankMeta.color }}>
+                          {bankMeta.short}
+                        </span>
+                      ) : (
+                        <span className="bank-icon bank-icon-default dashboard-overview-bank-icon">BNK</span>
+                      );
+                    })()
+                  ) : (
+                    <span className="bank-icon bank-icon-default dashboard-overview-bank-icon">ALL</span>
+                  )}
+                  <div className="dashboard-overview-bank-copy">
+                    <span>Viewing</span>
+                    <strong>{selectedBank?.name ?? "All bank accounts"}</strong>
                   </div>
-                  <div className="bank-selector-actions" ref={bankPickerRef}>
-                    {hasMultipleBankAccounts ? (
+                </div>
+                <div className="bank-selector-actions dashboard-overview-bank-actions" ref={bankPickerRef}>
+                  {hasMultipleBankAccounts ? (
+                    <button
+                      type="button"
+                      className="bm-edit-btn tx-bank-action-btn"
+                      onClick={() => setIsBankPickerOpen((open) => !open)}
+                      aria-label="Choose bank"
+                      aria-expanded={isBankPickerOpen}
+                      title="Choose bank"
+                    >
+                      ▾
+                    </button>
+                  ) : null}
+                  {selectedBank ? (
+                    <button
+                      type="button"
+                      className="bm-edit-btn tx-bank-action-btn"
+                      onClick={() => openEditBankBalance(selectedBank)}
+                      aria-label={`Edit ${selectedBank.name} balance`}
+                      title="Edit balance"
+                    >
+                      ✎
+                    </button>
+                  ) : null}
+                  {isBankPickerOpen && hasMultipleBankAccounts ? (
+                    <div className="bank-selector-menu" role="menu" aria-label="Bank options">
                       <button
                         type="button"
-                        className="bm-edit-btn tx-bank-action-btn"
-                        onClick={() => setIsBankPickerOpen((open) => !open)}
-                        aria-label="Choose bank"
-                        title="Choose bank"
+                        className={`bank-selector-option${selectedBankFilterId === "ALL" ? " is-active" : ""}`}
+                        onClick={() => {
+                          setSelectedBankFilterId("ALL");
+                          setIsBankPickerOpen(false);
+                        }}
                       >
-                        ▾
+                        All banks
                       </button>
-                    ) : null}
-                    {selectedBank ? (
-                      <button
-                        type="button"
-                        className="bm-edit-btn tx-bank-action-btn"
-                        onClick={() => openEditBankBalance(selectedBank)}
-                        aria-label={`Edit ${selectedBank.name} balance`}
-                        title="Edit balance"
-                      >
-                        ✎
-                      </button>
-                    ) : null}
-                    {isBankPickerOpen && hasMultipleBankAccounts ? (
-                      <div className="bank-selector-menu" role="menu" aria-label="Bank options">
+                      {bankAccountOptions.map((bank) => (
                         <button
+                          key={bank.id}
                           type="button"
-                          className={`bank-selector-option${selectedBankFilterId === "ALL" ? " is-active" : ""}`}
+                          className={`bank-selector-option${selectedBankFilterId === bank.id ? " is-active" : ""}`}
                           onClick={() => {
-                            setSelectedBankFilterId("ALL");
+                            setSelectedBankFilterId(bank.id);
                             setIsBankPickerOpen(false);
                           }}
                         >
-                          All banks
+                          {bank.name}
                         </button>
-                        {bankAccountOptions.map((bank) => (
-                          <button
-                            key={bank.id}
-                            type="button"
-                            className={`bank-selector-option${selectedBankFilterId === bank.id ? " is-active" : ""}`}
-                            onClick={() => {
-                              setSelectedBankFilterId(bank.id);
-                              setIsBankPickerOpen(false);
-                            }}
-                          >
-                            {bank.name}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-            </div>
-          )}
+              </header>
 
-          {!isDataReady ? (
-            <DashboardNetWorthSkeleton />
-          ) : (
-            <div style={{ marginBottom: "10px" }}>
-              <div className="bank-selector-row dashboard-mini-card">
-                <div className="dashboard-mini-card-stack dashboard-mini-card-strip">
-                  <div className="dashboard-mini-card-primary">
-                    <div className="dashboard-mini-card-label">Net Worth</div>
-                    <div className={`dashboard-mini-card-total ${totalInvestmentsAndSavings > 0 ? "positive" : ""}`}>
-                      {formatCents(totalInvestmentsAndSavings)}
-                    </div>
-                    <div className="dashboard-mini-card-breakdown">
-                      <Link
-                        href="/investments"
-                        className="dashboard-breakdown-item"
-                        style={{ textDecoration: "none", color: "inherit" }}
-                      >
-                        <span className="dashboard-breakdown-icon" style={{ color: "var(--brand-400)" }}>📈</span>
-                        <span className="dashboard-breakdown-value">{formatCents(investmentTotals.current)}</span>
-                      </Link>
-                      <span className="dashboard-breakdown-sep">+</span>
-                      <div className="dashboard-breakdown-item">
-                        <span className="dashboard-breakdown-icon" style={{ color: "var(--success)" }}>🐷</span>
-                        <span className="dashboard-breakdown-value">{formatCents(totalSavings)}</span>
-                      </div>
-                    </div>
+              <div className="dashboard-overview-main">
+                <div>
+                  <div className="dashboard-overview-eyebrow" id="dashboard-overview-title">Available bank balance</div>
+                  <div className={`dashboard-overview-balance${filteredBankBalance < 0 ? " negative" : ""}`}>
+                    {formatCents(filteredBankBalance)}
                   </div>
-                  <div className="dashboard-mini-card-metric dashboard-mini-card-gain">
-                    <div className="dashboard-mini-card-label">
-                      <span className="gain-label-desktop">Investment Gain</span>
-                      <span className="gain-label-mobile">Gain</span>
-                    </div>
-                    <div className={`dashboard-mini-card-value ${getAmountToneClass(investmentGain)}`}>
-                      {formatCents(investmentGain)}
-                    </div>
-                    <div className={`gain-percent ${getAmountToneClass(investmentGain)}`}>
-                      {investmentGain >= 0 ? "" : "-"}
-                      {Math.abs(investmentGainPct).toFixed(2)}%
-                    </div>
-                  </div>
+                  <p>{filteredBudgets.length} sub-account{filteredBudgets.length === 1 ? "" : "s"} in this view</p>
+                </div>
+                <div className="dashboard-overview-actions">
+                  <Link href="/transactions" className="btn btn-primary btn-sm dashboard-overview-action">
+                    <ReceiptText size={16} aria-hidden="true" /> Transactions <ArrowRight size={15} aria-hidden="true" />
+                  </Link>
+                  <button type="button" className="btn btn-ghost btn-sm dashboard-overview-action" onClick={() => setCreateBudgetOpen(true)}>
+                    <Plus size={16} aria-hidden="true" /> New sub-account
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Hero Card */}
-          {!isDataReady ? (
-            <DashboardHeroSkeleton />
-          ) : (
-            <div className="hero-card">
-              <div className="hero-content">
-                  <div className="hero-main">
-                    <div className="hero-label">Total in record</div>
-                    <div className={`hero-amount ${getAmountToneClass(totalBudgeted)}`}>{formatCents(totalBudgeted)}</div>
-                    <div className="hero-sub">Across {filteredBudgets.length} sub-accounts</div>
+              <div className="dashboard-overview-metrics">
+                <article className="dashboard-overview-metric">
+                  <span className="dashboard-overview-metric-icon"><LayoutGrid size={17} aria-hidden="true" /></span>
+                  <div><span>Allocated</span><strong>{formatCents(totalBudgeted)}</strong><small>Across sub-accounts</small></div>
+                </article>
+                <article className="dashboard-overview-metric">
+                  <span className="dashboard-overview-metric-icon"><Wallet size={17} aria-hidden="true" /></span>
+                  <div><span>Unallocated</span><strong>{formatCents(freeAmount)}</strong><small>Available to assign</small></div>
+                </article>
+                <article className="dashboard-overview-metric">
+                  <span className="dashboard-overview-metric-icon"><TrendingUp size={17} aria-hidden="true" /></span>
+                  <div>
+                    <span>Net worth</span>
+                    <strong>{formatCents(totalInvestmentsAndSavings)}</strong>
+                    <small className={getAmountToneClass(investmentGain)}>
+                      {investmentGain >= 0 ? "+" : "−"}{formatCents(Math.abs(investmentGain))} ({investmentGain >= 0 ? "+" : "−"}{Math.abs(investmentGainPct).toFixed(2)}%)
+                    </small>
                   </div>
-                  {freeAmount > 0 && (
-                    <div className="hero-side">
-                      <div className="hero-side-label">Unallocated: <span className={getAmountToneClass(freeAmount)}>{formatCents(freeAmount)}</span></div>
-                      <div className={`hero-side-amount ${getAmountToneClass(filteredBankBalance)}`}>
-                        Available in bank
-                      </div>
-                      <div className={`hero-side-free ${getAmountToneClass(freeAmount)}`}>
-                        {formatCents(filteredBankBalance)}
-                      </div>
-                    </div>
-                  )}
+                </article>
               </div>
 
-              {filteredBudgets.length > 0 && (
-                <div className="hero-chips">
-                  {filteredBudgets.slice(0, 5).map((budget) => (
-                    <div
+              {filteredBudgets.length > 0 ? (
+                <div className="dashboard-overview-accounts" aria-label="Sub-account shortcuts">
+                  {filteredBudgets.slice(0, DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT).map((budget) => (
+                    <button
                       key={budget.id}
-                      className="hero-chip"
-                      onClick={() => router.push(`/transactions?budgetId=${budget.id}&accountId=${budget.accountId}`)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          router.push(`/transactions?budgetId=${budget.id}&accountId=${budget.accountId}`);
-                        }
-                      }}
+                      type="button"
+                      className="dashboard-overview-account"
+                      onClick={() => goToTransactionsForSubAccount(budget.id, budget.accountId ?? "")}
                     >
-                      <span className={`hero-chip-dot ${budget.availableCents < 0 ? "is-negative" : ""}`} aria-hidden="true" />
-                      <div className="hero-chip-label">{budget.name}</div>
-                      <div className="hero-chip-value">{formatCentsShort(budget.availableCents)}</div>
-                    </div>
+                      <span className={`dashboard-overview-account-dot${budget.availableCents < 0 ? " is-negative" : ""}`} aria-hidden="true" />
+                      <span>{budget.name}</span>
+                      <strong>{formatCentsShort(budget.availableCents)}</strong>
+                    </button>
                   ))}
-                  {filteredBudgets.length > 5 && (
-                    <div
-                      className="hero-chip"
-                      onClick={() => router.push("/transactions")}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          router.push("/transactions");
-                        }
-                      }}
-                    >
-                      <div className="hero-chip-label">+{filteredBudgets.length - 5} more</div>
-                      <div className="hero-chip-value">
-                        {formatCentsShort(filteredBudgets.slice(5).reduce((sum, b) => sum + b.availableCents, 0))}
-                      </div>
-                    </div>
-                  )}
+                  {filteredBudgets.length > DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT ? (
+                    <Link href="/transactions" className="dashboard-overview-account dashboard-overview-account-more">
+                      +{filteredBudgets.length - DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT} more
+                    </Link>
+                  ) : null}
                 </div>
-              )}
-            </div>
+              ) : null}
+            </section>
           )}
 
           {filteredBankDiscrepancies.length > 0 && (
-            <div
-              className="alert alert-warn"
-              style={{
-                marginBottom: "14px",
-                borderColor: "var(--danger)",
-                background: "var(--danger-bg)",
-                color: "var(--danger)",
-                padding: "12px 14px",
-              }}
-            >
-              <span className="alert-icon" style={{ color: "var(--danger)", fontSize: "16px" }}>⚠️</span>
-              <div className="alert-body">
-                <div className="alert-title" style={{ color: "var(--danger)", fontWeight: 700 }}>
-                  Bank balance to accounts discrepancy detected
-                </div>
-                {filteredBankDiscrepancies.map((d) => (
-                  <div key={d.id} style={{ fontSize: "12px", color: "var(--danger)" }}>
-                    {d.name}: bank {formatCents(d.currentBalanceCents)} vs accounts {formatCents(d.linkedBudgetTotalCents)}
-                    {" "}({d.discrepancyCents > 0 ? "+" : ""}
-                    {formatCents(d.discrepancyCents)} mismatch)
+            <div className="dashboard-reconciliation-list" aria-label="Balances needing attention">
+              {filteredBankDiscrepancies.map((discrepancy) => {
+                const bank = bankAccountOptions.find((account) => account.id === discrepancy.id);
+                const discrepancyAmount = formatCents(Math.abs(discrepancy.discrepancyCents));
+                const discrepancyLabel = discrepancy.discrepancyCents > 0
+                  ? `${discrepancyAmount} unallocated`
+                  : `${discrepancyAmount} over-allocated`;
+                const discrepancyDescription = discrepancy.discrepancyCents > 0
+                  ? `${discrepancy.name} has funds not represented in sub-accounts.`
+                  : `${discrepancy.name} sub-accounts exceed its bank balance.`;
+
+                return (
+                  <div key={discrepancy.id} className="tx-reconciliation dashboard-reconciliation" role="status">
+                    <div className="tx-reconciliation-status">
+                      <span className="tx-reconciliation-icon" aria-hidden="true"><AlertTriangle size={15} /></span>
+                      <div className="tx-reconciliation-copy">
+                        <strong>{discrepancyLabel}</strong>
+                        <span>{discrepancyDescription}</span>
+                      </div>
+                    </div>
+
+                    <dl className="tx-reconciliation-values">
+                      <div>
+                        <dt>Bank</dt>
+                        <dd>{formatCents(discrepancy.currentBalanceCents)}</dd>
+                      </div>
+                      <div>
+                        <dt>Sub-accounts</dt>
+                        <dd>{formatCents(discrepancy.linkedBudgetTotalCents)}</dd>
+                      </div>
+                    </dl>
+
+                    <div className="tx-reconciliation-actions">
+                      {bank ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs tx-reconciliation-action"
+                          onClick={() => openEditBankBalance(bank)}
+                        >
+                          Edit bank
+                        </button>
+                      ) : null}
+                      <Link
+                        href={`/transactions?accountId=${discrepancy.id}`}
+                        className="btn btn-primary btn-xs tx-reconciliation-action"
+                      >
+                        Review <ArrowRight size={13} aria-hidden="true" />
+                      </Link>
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           )}
 
-          {/* Two Column Layout */}
-          <div
-            className={`dashboard-home-grid${showCreditCardDashboardSection ? " grid-2" : " dashboard-home-grid-no-credit"}`}
-            style={{ marginTop: "14px" }}
-          >
+          <div className={`dashboard-home-grid${showCreditCardDashboardSection ? "" : " dashboard-home-grid-no-credit"}`}>
+            <section className="card cash-flow-card dashboard-cash-flow-panel" aria-labelledby="dashboard-cash-flow-title">
+              <div className="cash-flow-head">
+                <div>
+                  <div className="cash-flow-title" id="dashboard-cash-flow-title">
+                    <span className="dashboard-section-title-icon" aria-hidden="true"><TrendingUp size={16} /></span>
+                    <span>Cash flow</span>
+                  </div>
+                  <div className="cash-flow-subtitle">{selectedCashFlowAccountName} in {cashFlowScopeName} - last 12 months</div>
+                </div>
+                <div className="cash-flow-legend" aria-label="Cash flow legend">
+                  <span><span className="cash-flow-dot cash-flow-dot-in" />In</span>
+                  <span><span className="cash-flow-dot cash-flow-dot-out" />Out</span>
+                  <span><span className="cash-flow-dot cash-flow-dot-net" />Net</span>
+                </div>
+              </div>
+
+              <div className="cash-flow-pills" aria-label="Cash flow account filter">
+                {cashFlowAccountOptions.map((account) => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    className={`cash-flow-pill${selectedCashFlowAccountId === account.id ? " active" : ""}`}
+                    onClick={() => setSelectedCashFlowAccountId(account.id)}
+                  >
+                    {account.name}
+                  </button>
+                ))}
+              </div>
+
+              {isLoading || !isDataReady ? (
+                <div className="cash-flow-chart-skeleton skeleton" />
+              ) : hasCashFlowData ? (
+                <CashFlowChart points={cashFlowPoints} formatShort={formatCentsShort} formatFull={formatCents} />
+              ) : (
+                <EmptyState
+                  icon="$"
+                  title="No cash flow yet"
+                  description="Add income and expense transactions to see your monthly flow."
+                />
+              )}
+            </section>
+
             {/* Credit Card Summary */}
             {showCreditCardDashboardSection ? (
-              <div className="card cc-home-panel">
+              <section className="card cc-home-panel dashboard-payments-panel" aria-labelledby="dashboard-payments-title">
                 <div className="cc-home-header">
                   <div className="cc-home-title">
-                    <span aria-hidden="true">💳</span>
-                    <span>Credit Cards</span>
+                    <span className="dashboard-section-title-icon" aria-hidden="true"><CreditCard size={16} /></span>
+                    <span id="dashboard-payments-title">Payments due</span>
                   </div>
-                  <button className="btn btn-ghost btn-xs" onClick={() => router.push("/credit-transactions")}>
-                    View all →
+                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push("/credit-transactions")}>
+                    <span>View all</span><ArrowRight size={14} aria-hidden="true" />
                   </button>
                 </div>
 
@@ -1741,55 +1768,19 @@ export function DashboardShell({
                     description="Add credit card transactions to track your spending and accounting."
                   />
                 )}
-              </div>
+              </section>
             ) : null}
 
             <div className="dashboard-home-side-stack">
-              <div className="card cash-flow-card">
-                <div className="cash-flow-head">
-                  <div>
-                    <div className="cash-flow-title">📈 Cash flow</div>
-                    <div className="cash-flow-subtitle">{selectedCashFlowAccountName} in {cashFlowScopeName} - last 12 months</div>
-                  </div>
-                  <div className="cash-flow-legend" aria-label="Cash flow legend">
-                    <span><span className="cash-flow-dot cash-flow-dot-in" />In</span>
-                    <span><span className="cash-flow-dot cash-flow-dot-out" />Out</span>
-                    <span><span className="cash-flow-dot cash-flow-dot-net" />Net</span>
-                  </div>
-                </div>
-
-                <div className="cash-flow-pills" aria-label="Cash flow account filter">
-                  {cashFlowAccountOptions.map((account) => (
-                    <button
-                      key={account.id}
-                      type="button"
-                      className={`cash-flow-pill${selectedCashFlowAccountId === account.id ? " active" : ""}`}
-                      onClick={() => setSelectedCashFlowAccountId(account.id)}
-                    >
-                      {account.name}
-                    </button>
-                  ))}
-                </div>
-
-                {isLoading || !isDataReady ? (
-                  <div className="cash-flow-chart-skeleton skeleton" />
-                ) : hasCashFlowData ? (
-                  <CashFlowChart points={cashFlowPoints} formatShort={formatCentsShort} formatFull={formatCents} />
-                ) : (
-                  <EmptyState
-                    icon="$"
-                    title="No cash flow yet"
-                    description="Add income and expense transactions to see your monthly flow."
-                  />
-                )}
-              </div>
-
               {/* Recent Transactions */}
-              <div className="card">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 600 }}>🆕 Recent transactions</div>
-                  <button className="btn btn-ghost btn-xs" onClick={() => router.push("/transactions")}>
-                    View all →
+              <section className="card dashboard-recent-panel" aria-labelledby="dashboard-recent-title">
+                <div className="dashboard-section-header">
+                  <div className="dashboard-section-title" id="dashboard-recent-title">
+                    <span className="dashboard-section-title-icon" aria-hidden="true"><ReceiptText size={16} /></span>
+                    <span>Recent transactions</span>
+                  </div>
+                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push("/transactions")}>
+                    <span>View all</span><ArrowRight size={14} aria-hidden="true" />
                   </button>
                 </div>
 
@@ -1806,7 +1797,7 @@ export function DashboardShell({
                     />
                   )}
                 </div>
-              </div>
+              </section>
             </div>
           </div>
 

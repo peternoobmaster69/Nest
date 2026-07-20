@@ -16,7 +16,7 @@ import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
-import { ArrowLeftRight, Check, Layers3, Pencil, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Check, Layers3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 
 const ALL_BANKS_FILTER = "ALL";
@@ -1263,6 +1263,13 @@ export function TransactionsPage() {
   const displayedLinkedBudgetCents = selectedBank ? visibleBudgetTotalCents : totalLinkedBudgetCents;
   const displayedDiscrepancyCents = displayedBankBalanceCents - displayedLinkedBudgetCents;
   const hasDisplayedDiscrepancy = displayedDiscrepancyCents !== 0;
+  const displayedDiscrepancyAmount = formatCents(Math.abs(displayedDiscrepancyCents));
+  const displayedDiscrepancyLabel = displayedDiscrepancyCents > 0
+    ? `${displayedDiscrepancyAmount} unallocated`
+    : `${displayedDiscrepancyAmount} over-allocated`;
+  const displayedDiscrepancyDescription = displayedDiscrepancyCents > 0
+    ? "Bank balance is higher than the sub-account total."
+    : "Sub-accounts exceed the bank balance.";
   const receivableInfoBudget = useMemo(
     () => visibleBudgets.find((budget) => budget.id === receivableInfoBudgetId) ?? null,
     [visibleBudgets, receivableInfoBudgetId],
@@ -1718,55 +1725,69 @@ export function TransactionsPage() {
             <span>Sub-Accounts</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              style={{
-                fontSize: "12px",
-                color: hasDisplayedDiscrepancy ? "var(--warning)" : "var(--text-secondary)",
-                fontWeight: hasDisplayedDiscrepancy ? 600 : 500,
-              }}
-            >
-              📊 {formatCents(visibleBudgetTotalCents)}&emsp;&emsp;🏦 {formatCents(displayedBankBalanceCents)}&emsp;
-            </div>
             <button
               type="button"
               className="bm-edit-btn tx-subaccount-add-btn"
               onClick={openCreateBudgetModal}
               aria-label="Add new sub-account"
               title="Add new sub-account"
-              style={{ width: "26px", height: "26px", fontSize: "14px" }}
             >
               +
             </button>
           </div>
         </div>
         {hasDisplayedDiscrepancy ? (
-          <div className="tx-discrepancy-banner">
-            <span>⚠️ Mismatch: {formatCents(Math.abs(displayedDiscrepancyCents))}</span>
+          <div className="tx-reconciliation" role="status" aria-live="polite">
+            <div className="tx-reconciliation-status">
+              <span className="tx-reconciliation-icon" aria-hidden="true"><AlertTriangle size={15} /></span>
+              <div className="tx-reconciliation-copy">
+                <strong>{displayedDiscrepancyLabel}</strong>
+                <span>{displayedDiscrepancyDescription}</span>
+              </div>
+            </div>
+
+            <dl className="tx-reconciliation-values">
+              <div>
+                <dt>Bank</dt>
+                <dd>{formatCents(displayedBankBalanceCents)}</dd>
+              </div>
+              <div>
+                <dt>Sub-accounts</dt>
+                <dd>{formatCents(displayedLinkedBudgetCents)}</dd>
+              </div>
+            </dl>
+
+            <div className="tx-reconciliation-actions">
             {selectedBank ? (
-              <button
-                type="button"
-                className="bm-edit-btn"
-                onClick={syncSelectedBankBalance}
-                disabled={updateBankBalance.isPending}
-                aria-label={`Update ${selectedBank.name} balance to match the sub-account total`}
-                title="Update bank balance to match sub-account total"
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  width: "auto",
-                  height: "auto",
-                  fontSize: "18px",
-                  padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  boxShadow: "none",
-                }}
-              >
-                {updateBankBalance.isPending ? "…" : "↻"}
-              </button>
-            ) : null}
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs tx-reconciliation-action"
+                    onClick={() => openEditBankBalance(selectedBank)}
+                  >
+                    <Pencil size={13} aria-hidden="true" /> Edit bank
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-xs tx-reconciliation-action"
+                    onClick={syncSelectedBankBalance}
+                    disabled={updateBankBalance.isPending}
+                    title="Update bank balance to match the sub-account total"
+                  >
+                    <RefreshCw size={13} aria-hidden="true" />
+                    {updateBankBalance.isPending ? "Updating…" : "Use sub-account total"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs tx-reconciliation-action"
+                  onClick={() => setIsBankPickerOpen(true)}
+                >
+                  Choose bank
+                </button>
+              )}
+            </div>
           </div>
         ) : null}
         <div className="account-cards-grid tx-account-grid">
@@ -1842,7 +1863,7 @@ export function TransactionsPage() {
               }}
             >
               <div className="tx-account-card-body">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "4px" }}>
+                <div className="tx-account-card-head">
                   <div className="bm-name">{b.name}</div>
                   <button
                     type="button"
@@ -1859,34 +1880,16 @@ export function TransactionsPage() {
                 </div>
                 <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
                 {b.receivableReservedCents && b.availableCents > 0 ? (
-                  <div
-                    className="bm-target tx-account-card-footer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                  >
+                  <div className="bm-target tx-account-card-footer tx-account-card-receivable">
                     <span>({formatCents(b.receivableReservedCents)})</span>
                     <button
                       type="button"
+                      className="tx-account-receivable-btn"
                       aria-label={`Show receivable breakdown for ${b.name}`}
                       title="Show receivable breakdown"
                       onClick={(event) => {
                         event.stopPropagation();
                         setReceivableInfoBudgetId(b.id);
-                      }}
-                      style={{
-                        width: "16px",
-                        height: "16px",
-                        borderRadius: "999px",
-                        border: "none",
-                        background: "transparent",
-                        color: "var(--text-secondary)",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        lineHeight: 1,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        padding: 0,
                       }}
                     >
                       i
@@ -1900,15 +1903,7 @@ export function TransactionsPage() {
               </div>
               <span
                 aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  bottom: "2px",
-                  right: "4px",
-                  fontSize: "28px",
-                  lineHeight: 1,
-                  opacity: 0.2,
-                  pointerEvents: "none",
-                }}
+                className="tx-account-card-icon"
               >
                 {getBudgetIcon(b.name, b.icon)}
               </span>
