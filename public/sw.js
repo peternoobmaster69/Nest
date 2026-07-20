@@ -1,9 +1,10 @@
-const VERSION = "nest-v4";
+const VERSION = "nest-v5";
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
+const OFFLINE_FALLBACK = "/offline.html";
 
 const APP_SHELL = [
-  "/offline",
+  OFFLINE_FALLBACK,
   "/manifest.webmanifest",
   "/icon.svg",
   "/icons/icon-192.png",
@@ -13,7 +14,18 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil((async () => {
+    const cache = await caches.open(SHELL_CACHE);
+
+    // The fallback must always be available. Optional install assets are cached
+    // independently so one unavailable icon cannot make the whole worker fail.
+    await cache.add(new Request(OFFLINE_FALLBACK, { cache: "reload" }));
+    await Promise.allSettled(
+      APP_SHELL
+        .filter((asset) => asset !== OFFLINE_FALLBACK)
+        .map((asset) => cache.add(new Request(asset, { cache: "reload" }))),
+    );
+  })());
   self.skipWaiting();
 });
 
@@ -53,7 +65,7 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1") return;
+  const isLocalDevelopment = self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
 
   if (request.method !== "GET") {
     event.respondWith(
@@ -72,10 +84,20 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => (await caches.open(SHELL_CACHE)).match("/offline") || new Response("Offline", { status: 503 })),
+      fetch(request).catch(async () => {
+        const fallback = await caches.match(OFFLINE_FALLBACK);
+        return fallback || new Response(
+          "Nest is offline. Reconnect and try again.",
+          { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+        );
+      }),
     );
     return;
   }
+
+  // Avoid retaining constantly changing development bundles while still making
+  // the navigation fallback testable on localhost.
+  if (isLocalDevelopment) return;
 
   if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || url.pathname.endsWith(".svg")) {
     event.respondWith(networkFirst(request, STATIC_CACHE));

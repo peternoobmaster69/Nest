@@ -55,6 +55,28 @@ export function DeviceIntegration() {
   }, []);
 
   useEffect(() => {
+    const keepCurrentScreenAvailable = (event: MouseEvent) => {
+      if (navigator.onLine || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      const target = event.target;
+      const link = target instanceof Element ? target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+      if (destination.pathname === window.location.pathname && destination.search === window.location.search && destination.hash) return;
+
+      event.preventDefault();
+      notifyToast("You are offline. This screen is still available; reconnect before opening another page.", "error");
+    };
+
+    document.addEventListener("click", keepCurrentScreenAvailable, true);
+    return () => document.removeEventListener("click", keepCurrentScreenAvailable, true);
+  }, []);
+
+  useEffect(() => {
     setInstallDismissed(window.sessionStorage.getItem("nest:install-dismissed") === "true" || isStandalone());
     const onInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -87,7 +109,7 @@ export function DeviceIntegration() {
     <>
       {offline ? (
         <div className="offline-banner" role="status" aria-live="polite">
-          <WifiOff size={16} aria-hidden="true" /> Offline: recent read-only data may be available. Changes are disabled.
+          <WifiOff size={16} aria-hidden="true" /> Offline: viewing this screen only. Changes and navigation are paused.
         </div>
       ) : null}
       {installPrompt && !installDismissed ? (

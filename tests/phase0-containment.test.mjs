@@ -67,12 +67,15 @@ test("manual auto-accounting is role-protected and filters the runner to one wor
 
 test("service worker caches static assets only and private read caches are purged on upgrade and logout", async () => {
   const worker = await source("public/sw.js");
+  const offline = await source("public/offline.html");
   const logout = await source("lib/service-worker-cache.ts");
 
   assert.doesNotMatch(worker, /SAFE_READ_PATHS|READ_CACHE/);
   assert.doesNotMatch(worker, /\/api\/context|\/api\/dashboard\/summary|\/api\/notifications/);
   assert.match(worker, /key\.endsWith\("-read"\)/);
   assert.match(worker, /PURGE_PRIVATE_CACHES/);
+  assert.match(worker, /OFFLINE_FALLBACK = "\/offline\.html"/);
+  assert.doesNotMatch(offline, /\/api\//);
   assert.match(logout, /window\.caches\.delete\(key\)/);
   assert.match(logout, /PURGE_PRIVATE_CACHES/);
 });

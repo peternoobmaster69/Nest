@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1c2b1c" />
+    <title>Offline · Nest</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f5f2ed;
+        color: #203022;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+        background:
+          radial-gradient(circle at 50% 0%, rgb(84 117 78 / 18%), transparent 42%),
+          #f5f2ed;
+      }
+
+      main {
+        width: min(100%, 440px);
+        padding: clamp(28px, 7vw, 42px);
+        border: 1px solid #d8d5ce;
+        border-radius: 24px;
+        background: rgb(255 255 255 / 88%);
+        box-shadow: 0 24px 70px rgb(33 46 35 / 12%);
+        text-align: center;
+      }
+
+      .mark {
+        display: grid;
+        place-items: center;
+        width: 54px;
+        height: 54px;
+        margin: 0 auto 22px;
+        border-radius: 17px;
+        background: #1c2b1c;
+        color: #fff;
+        font-size: 24px;
+        font-weight: 750;
+        letter-spacing: -0.04em;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #69736a;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.9rem, 8vw, 2.6rem);
+        line-height: 1.05;
+        letter-spacing: -0.045em;
+      }
+
+      .copy {
+        margin: 16px auto 0;
+        color: #5f6961;
+        line-height: 1.6;
+      }
+
+      .privacy-note {
+        margin: 18px 0 0;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #eef1eb;
+        color: #59635a;
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 24px;
+      }
+
+      button {
+        min-height: 46px;
+        border: 1px solid #cfd4cc;
+        border-radius: 12px;
+        background: transparent;
+        color: #263529;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: #1c2b1c;
+        background: #1c2b1c;
+        color: #fff;
+      }
+
+      button:focus-visible { outline: 3px solid #88a77f; outline-offset: 3px; }
+
+      #status {
+        min-height: 1.4em;
+        margin: 16px 0 0;
+        color: #767d77;
+        font-size: 0.78rem;
+      }
+
+      @media (max-width: 360px) {
+        .actions { grid-template-columns: 1fr; }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root { background: #111612; color: #edf2eb; }
+        body {
+          background:
+            radial-gradient(circle at 50% 0%, rgb(115 151 107 / 19%), transparent 42%),
+            #111612;
+        }
+        main { border-color: #344037; background: rgb(28 36 30 / 92%); box-shadow: 0 24px 70px rgb(0 0 0 / 25%); }
+        .mark, button.primary { background: #dfe9dc; border-color: #dfe9dc; color: #172019; }
+        .eyebrow, .copy, #status { color: #aeb8af; }
+        .privacy-note { background: #252f28; color: #bdc6be; }
+        button { border-color: #465249; color: #e7eee6; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">N</div>
+      <p class="eyebrow">Connection interrupted</p>
+      <h1>You’re offline</h1>
+      <p class="copy">Reconnect to continue. If Nest was already open, go back to keep viewing information loaded on that screen.</p>
+      <p class="privacy-note">For your privacy, financial pages are not stored in the service worker’s shared cache.</p>
+      <div class="actions">
+        <button id="back" type="button">Go back</button>
+        <button id="retry" class="primary" type="button">Try again</button>
+      </div>
+      <p id="status" role="status" aria-live="polite">Waiting for a connection…</p>
+    </main>
+    <script>
+      (() => {
+        const status = document.getElementById("status");
+        const retry = document.getElementById("retry");
+        const back = document.getElementById("back");
+
+        const reconnect = () => {
+          status.textContent = "Connection restored. Reloading…";
+          window.location.reload();
+        };
+
+        retry.addEventListener("click", () => {
+          status.textContent = navigator.onLine ? "Checking connection…" : "Still offline. We’ll retry when you reconnect.";
+          window.location.reload();
+        });
+
+        back.addEventListener("click", () => {
+          if (window.history.length > 1) window.history.back();
+          else status.textContent = "No earlier screen is available in this window.";
+        });
+
+        window.addEventListener("online", reconnect);
+        if (navigator.onLine) reconnect();
+      })();
+    </script>
+  </body>
+</html>

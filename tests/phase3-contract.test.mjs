@@ -20,6 +20,7 @@ test("manifest ships standard, Apple, and maskable production icons", async () =
 
 test("service worker caches only GET resources and never queues financial mutations", async () => {
   const worker = await source("public/sw.js");
+  const offline = await source("public/offline.html");
   const integration = await source("components/device-integration.tsx");
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /queued:\s*false/);
@@ -27,9 +28,14 @@ test("service worker caches only GET resources and never queues financial mutati
   assert.doesNotMatch(worker, /SAFE_READ_PATHS|\/api\/context|\/api\/dashboard\/summary|\/api\/notifications/);
   assert.match(worker, /key\.endsWith\("-read"\)/);
   assert.match(worker, /showNotification/);
-  assert.match(worker, /hostname === "localhost"/);
+  assert.match(worker, /OFFLINE_FALLBACK = "\/offline\.html"/);
+  assert.match(worker, /cache\.add\(new Request\(OFFLINE_FALLBACK/);
+  assert.match(worker, /if \(isLocalDevelopment\) return/);
   assert.match(worker, /networkFirst\(request, STATIC_CACHE\)/);
+  assert.match(offline, /window\.addEventListener\("online", reconnect\)/);
+  assert.match(offline, /financial pages are not stored/i);
   assert.match(integration, /This change was not submitted or queued/);
+  assert.match(integration, /keepCurrentScreenAvailable/);
   assert.match(integration, /serviceWorker\.register\("\/sw\.js"\)/);
 });
 
