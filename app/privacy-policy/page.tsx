@@ -90,14 +90,14 @@ export default function PrivacyPolicyPage() {
 
         <h2>16. Contact</h2>
         <p>
-          Privacy requests: <a href="mailto:privacy@nest.app">privacy@nest.app</a>
+          Privacy requests: <a href="mailto:privacy@htet.info">privacy@htet.info</a>
         </p>
 
         <h2 id="eu-privacy-questions">EU/EEA Privacy Questions and GDPR Requests</h2>
         <p>
           If you are in the EU/EEA, you may ask privacy questions or submit GDPR rights requests (access, erasure, rectification,
           portability, objection, restriction) by emailing{" "}
-          <a href="mailto:privacy@nest.app?subject=EU%20Privacy%20Question%20or%20GDPR%20Request">privacy@nest.app</a> with your
+          <a href="mailto:privacy@htet.info?subject=EU%20Privacy%20Question%20or%20GDPR%20Request">privacy@htet.info</a> with your
           account email and request details. You may also lodge a complaint with your local supervisory authority.
         </p>
       </section>

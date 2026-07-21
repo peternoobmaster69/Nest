@@ -3,7 +3,7 @@
   "info": {
     "title": "API Documentation",
     "version": "1.0.0",
-    "description": "This is the OpenAPI specification for Save Together project."
+    "description": "This is the OpenAPI specification for the Nest project."
   },
   "servers": [
     {

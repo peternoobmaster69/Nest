@@ -1,7 +1,7 @@
 // app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { v4 as uuid } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import {
   DATABASE_UNAVAILABLE_CODE,
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userId = uuid();
+    const userId = randomUUID();
     const passwordHash = await bcrypt.hash(password, 10);
 
     await pool

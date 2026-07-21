@@ -83,7 +83,7 @@ export default function TermsOfServicePage() {
 
         <h2>14. Contact</h2>
         <p>
-          Legal and policy questions: <a href="mailto:legal@nest.app">legal@htet.info </a>
+          Legal and policy questions: <a href="mailto:legal@nest.app">legal@nest.app</a>
         </p>
       </section>
     </main>

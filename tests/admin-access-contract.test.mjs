@@ -68,8 +68,8 @@ test("admin page exposes aggregate and per-turn token usage", async () => {
   assert.match(overview, /tokenUsage:/);
   assert.match(overview, /inputTokens: true/);
   assert.match(overview, /totalTokens: true/);
-  assert.match(page, /Ask Nest usage and estimated cost/);
-  assert.match(page, /Tracked tokens/);
+  assert.match(page, /Usage &amp; cost/);
+  assert.match(page, /All-time input/);
   assert.match(page, />Untracked</);
 });
 
@@ -113,7 +113,7 @@ test("admin page reports whole-database storage without failing when metadata is
   assert.match(overview, /sys\.database_files/);
   assert.match(overview, /totalAllocatedMb/);
   assert.match(overview, /catch \{\s*return null;/);
-  assert.match(page, /Database storage/);
+  assert.match(page, /overview\.databaseStorage \? formatStorage/);
   assert.match(page, /formatStorage/);
 });
 
@@ -126,7 +126,7 @@ test("admin overview reports Ask Nest tool quality and usefulness without exposi
   assert.match(overview, /helpfulRate/);
   assert.match(overview, /getAskNestSearchGate/);
   assert.doesNotMatch(overview, /diagnosticsJson:\s*turn\.diagnosticsJson/);
-  assert.match(page, /Tool quality/);
-  assert.match(page, /User feedback/);
+  assert.match(page, />Tool calls</);
+  assert.match(page, />Helpful</);
   assert.match(page, /Knowledge search/);
 });

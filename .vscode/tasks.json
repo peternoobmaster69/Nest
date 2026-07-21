@@ -11,22 +11,6 @@
 			],
 			"isBackground": true,
 			"problemMatcher": []
-		},
-		{
-			"label": "sqlproj: Build Nest",
-			"type": "process",
-			"command": "dotnet",
-			"args": [
-				"build",
-				"/Users/peter/Development/NEXTjs/nest/Nest/Nest.sqlproj"
-			],
-			"problemMatcher": "$sqlproj-problem-matcher",
-			"isBackground": true,
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			},
-			"detail": "Builds the Nest SQL project"
 		}
 	]
 }

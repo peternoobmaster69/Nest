@@ -1,4 +1,3 @@
-// app/login/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -28,14 +27,12 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        setError(data.error || "Registration failed");
         setLoading(false);
         return;
       }
 
-      // TODO: store auth state (cookie/JWT/next-auth/etc)
-      // For now, just redirect to dashboard/accounts
-      router.push("/accounts");
+      router.push("/login");
     } catch (err) {
       console.error(err);
       setError("Something went wrong");
@@ -52,7 +49,7 @@ export default function LoginPage() {
           <div>
             <label className="block text-sm mb-1">Name</label>
             <input
-              type="name"
+              type="text"
               className="w-full border rounded-md px-3 py-2 text-sm"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -63,11 +60,11 @@ export default function LoginPage() {
           <div>
             <label className="block text-sm mb-1">Phone Number</label>
             <input
-              type="phone"
+              type="tel"
               className="w-full border rounded-md px-3 py-2 text-sm"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              autoComplete="phone"
+              autoComplete="tel"
               required
             />
           </div>
@@ -90,7 +87,7 @@ export default function LoginPage() {
               className="w-full border rounded-md px-3 py-2 text-sm"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
+              autoComplete="new-password"
               required
             />
           </div>

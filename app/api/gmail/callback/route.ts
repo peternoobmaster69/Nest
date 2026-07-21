@@ -49,6 +49,10 @@ export async function GET(request: Request) {
       // Keep empty email if profile fetch fails.
     }
 
+    if (!email) {
+      return NextResponse.redirect(`${origin}/settings?gmail=profile_unavailable`);
+    }
+
     const existing = await prisma.gmailIntegration.findFirst({
       where: { workspaceId: auth.workspaceId, userId: auth.userId },
       select: { id: true, refreshToken: true },
@@ -58,7 +62,7 @@ export async function GET(request: Request) {
       await prisma.gmailIntegration.update({
         where: { id: existing.id },
         data: {
-          email: email || "unknown@gmail.com",
+          email,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token || existing.refreshToken,
           tokenType: tokens.token_type,
@@ -72,7 +76,7 @@ export async function GET(request: Request) {
         data: {
           workspaceId: auth.workspaceId,
           userId: auth.userId,
-          email: email || "unknown@gmail.com",
+          email,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
           tokenType: tokens.token_type,
@@ -92,4 +96,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Failed to complete Gmail connect", message }, { status: 500 });
   }
 }
-

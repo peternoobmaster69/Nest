@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Nest Personal Finance Companion",
-  description: "Nest Personal Finance Companion helps you budget, track cards, and manage personal finances.",
+  description: "Manage bank cash, virtual budgets, credit-card payables, receivables, savings, and investments with full visibility.",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },

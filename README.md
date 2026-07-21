@@ -5,7 +5,10 @@ Nest is a personal finance web application focused on:
 - Virtual budget accounts (envelope style)
 - Credit card tracking with encrypted sensitive fields (AES-256-GCM)
 - Receivables and shared-workspace collaboration
-- Legacy migration from the existing schema in [`public/LegacyAppDbSchema.png`](public/LegacyAppDbSchema.png)
+- Savings, investments, and full money-flow visibility
+
+Read [guide.md](guide.md) for the account, budgeting, payable, receivable,
+savings, and investment model.
 
 Stack:
 
@@ -16,6 +19,12 @@ Stack:
 - React Query for client data fetching
 
 ## Getting Started
+
+Requirements:
+
+- Node.js 22.13 or newer (the recommended major version is in `.nvmrc`)
+- npm
+- SQL Server or Azure SQL
 
 1. Copy environment variables and fill values:
 
@@ -140,8 +149,8 @@ Required environment variables:
 
 ```env
 CREDIT_CARD_REMINDER_SECRET="***"
-RESEND_API_KEY="***"
-CREDIT_CARD_REMINDER_FROM="Nest <billing@example.com>"
+AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING="***"
+AZURE_EMAIL_SENDER="billing@example.com"
 ```
 
 Optional environment variables:
@@ -226,3 +235,14 @@ Apply the `phase_3_device_integration` migration before enabling passkeys or pus
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Prisma SQL Server docs](https://www.prisma.io/docs/orm/overview/databases/sql-server)
 - [NextAuth docs](https://next-auth.js.org/)
+
+## Contributing and Security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report
+vulnerabilities privately using [SECURITY.md](SECURITY.md).
+
+## License
+
+No open-source license has been selected yet. Until a license is added, the
+source is publicly viewable if the repository is made public, but normal
+copyright restrictions still apply.

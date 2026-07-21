@@ -1,0 +1,5 @@
+# The repository owner must approve changes anywhere in Nest.
+* @peternoobmaster69
+
+# Protect the ownership policy itself explicitly.
+/.github/CODEOWNERS @peternoobmaster69
