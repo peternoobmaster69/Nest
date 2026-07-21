@@ -132,11 +132,13 @@ export default async function RewardsRoute() {
 
   const conversions = conversionsRaw.map((conversion) => ({
     ...conversion,
+    conversionRate: Number(conversion.conversionRate),
     createdAt: conversion.createdAt.toISOString(),
   }));
 
   const hotelRewards = hotelRewardsRaw.map((hotel) => ({
     ...hotel,
+    centsPerPoint: Number(hotel.centsPerPoint),
     createdAt: hotel.createdAt.toISOString(),
     updatedAt: hotel.updatedAt.toISOString(),
   }));

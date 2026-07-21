@@ -37,3 +37,48 @@ jobs:
 
       - name: Audit publishable files and production dependencies
         run: npm run audit:public
+
+  sqlserver-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: NestCi_2026_Strong
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P NestCi_2026_Strong -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: "sqlserver://localhost:1433;database=master;user=sa;password=NestCi_2026_Strong;encrypt=true;trustServerCertificate=true"
+      SHADOW_DATABASE_URL: "sqlserver://localhost:1433;database=master;user=sa;password=NestCi_2026_Strong;encrypt=true;trustServerCertificate=true"
+      RUN_PHASE4_DB_TESTS: "true"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bootstrap empty SQL Server from the retained baseline
+        run: npm run db:bootstrap
+
+      - name: Seed database
+        run: npm run prisma:seed
+
+      - name: Exercise database integrity constraints
+        run: node --import tsx --test tests/phase4-database-integrity.integration.test.mjs
+
+      - name: Verify forward deploy is idempotent
+        run: npm run prisma:migrate:deploy

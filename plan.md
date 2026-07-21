@@ -169,18 +169,18 @@ Exit criteria:
 
 ### Phase 4 — Database reproducibility and domain integrity
 
-Target: 1–2 weeks. Owner: data/backend. Status: Not started.
+Target: 1–2 weeks. Owner: data/backend. Status: Implemented and migrated in production; Azure recovery policy remains an operator action.
 
-- [ ] Create and review a complete baseline migration for a clean SQL Server database without rewriting migration history already applied to production.
-- [ ] Add a documented deploy migration command (`migrate deploy`, not `migrate dev`) and a shadow/staging verification workflow.
-- [ ] Reconcile schema drift and remove runtime `Unknown argument/field` fallbacks for `themeKey`, `bankName`, `displayName`, and `isLiquid`.
-- [ ] Add database foreign keys where SQL Server cascade-path constraints permit; document and test any relations that must remain application-managed.
-- [ ] Replace free-form roles/statuses/kinds/directions/job phases with Prisma enums or database check constraints.
-- [ ] Add workspace-consistency constraints/validation for account, budget, group, card, receivable, reward, and integration relations.
-- [ ] Add unique constraints for public tokens, job leases/idempotency keys, ingestion references where appropriate, and source posting links.
-- [ ] Review `Int` range, `Float` conversion rates, date-only/time-zone semantics, and currency rules; use `Decimal` where precision demands it.
-- [ ] Add retention/purge migrations for WebAuthn challenges, background jobs, raw alert bodies, expired invites, old notifications, and audit/error payloads.
-- [ ] Establish encrypted backups, point-in-time recovery, and a quarterly restore drill with recorded recovery time/data loss.
+- [x] Create and review a complete baseline migration for a clean SQL Server database without rewriting migration history already applied to production.
+- [x] Add a documented deploy migration command (`migrate deploy`, not `migrate dev`) and a shadow/staging verification workflow.
+- [x] Reconcile schema drift and remove runtime `Unknown argument/field` fallbacks for `themeKey`, `bankName`, `displayName`, and `isLiquid`.
+- [x] Add database foreign keys where SQL Server cascade-path constraints permit; document and test any relations that must remain application-managed.
+- [x] Replace free-form roles/statuses/kinds/directions/job phases with database check constraints.
+- [x] Add workspace-consistency constraints/validation for account, budget, group, card, receivable, reward, and integration relations.
+- [x] Add unique constraints for public tokens, job leases/idempotency keys, ingestion references where appropriate, and source posting links.
+- [x] Review `Int` range, `Float` conversion rates, date-only/time-zone semantics, and currency rules; use `Decimal` where precision demands it.
+- [x] Add retention/purge migrations for WebAuthn challenges, background jobs, raw alert bodies, expired invites, old notifications, and audit/error payloads.
+- [x] Add the encrypted-backup/PITR configuration and quarterly restore-drill runbook; Azure settings and the first drill remain operator actions.
 
 Exit criteria:
 
@@ -190,7 +190,7 @@ Exit criteria:
 
 ### Phase 5 — Reliable background jobs and integrations
 
-Target: 1 week. Owner: backend/platform. Status: Implemented; migration pending deployment.
+Target: 1 week. Owner: backend/platform. Status: Implemented and migrated in production; application deployment/smoke test remains operational.
 
 - [x] Remove unused in-process `setInterval` schedulers; Vercel/serverless instances are not durable schedulers.
 - [x] Replace query-then-create job exclusion with an atomic lease or a durable queue supporting uniqueness, visibility timeouts, retry/backoff, and dead-letter state.

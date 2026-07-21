@@ -181,6 +181,7 @@ model InvestmentAccount {
   workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   entries         InvestmentEntry[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, createdAt])
 }
 
@@ -245,6 +246,7 @@ model Month {
   receivables Receivable[]
 
   @@unique([workspaceId, year, month])
+  @@unique([workspaceId, id])
   @@index([workspaceId, sortOrder])
 }
 
@@ -284,6 +286,7 @@ model FinancialAccount {
   budgets                        BudgetEnvelope[]
   receivables                    Receivable[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, kind])
 }
 
@@ -310,6 +313,7 @@ model BudgetEnvelope {
   transactionGroups              TransactionGroup[]
   receivables                    Receivable[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, accountId])
 }
 
@@ -330,6 +334,7 @@ model BudgetItem {
   monthlyBudgets          MonthlyBudget[]
   monthlyBudgetPlanItems  MonthlyBudgetPlanItem[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId])
 }
 
@@ -349,6 +354,7 @@ model BudgetSource {
   monthlyBudgetSources     MonthlyBudgetSource[]
   monthlyBudgetPlanSources MonthlyBudgetPlanSource[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId])
 }
 
@@ -482,13 +488,13 @@ model Transaction {
   isSynced                Boolean                @default(false)
   isFromFamily            Boolean                @default(false)
   externalRef             String?
-  postingGroupId          String?
+  postingGroupId          String?                @db.NVarChar(191)
   creditCardTransactionId String?
   receivableId            String?
   reversalOfId            String?
   voidedAt                DateTime?
-  voidedByUserId          String?
-  voidReason              String?
+  voidedByUserId          String?                @db.NVarChar(191)
+  voidReason              String?                @db.NVarChar(500)
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   workspace               Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -504,6 +510,7 @@ model Transaction {
   reversals               Transaction[]          @relation("TransactionReversal")
   migrationMap            LegacyRecordLink?
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, date])
   @@index([accountId, date])
   @@index([workspaceId, budgetId, date])
@@ -598,16 +605,16 @@ model AskNestUsageDaily {
 }
 
 model PostingGroup {
-  id             String         @id @default(cuid())
-  workspaceId    String
-  operation      String
-  sourceType     String?
-  sourceId       String?
-  actorUserId    String?
-  idempotencyKey String
-  status         String         @default("POSTED")
-  reversalOfId   String?
-  reason         String?
+  id             String         @id @default(cuid()) @db.NVarChar(191)
+  workspaceId    String         @db.NVarChar(191)
+  operation      String         @db.NVarChar(120)
+  sourceType     String?        @db.NVarChar(80)
+  sourceId       String?        @db.NVarChar(191)
+  actorUserId    String?        @db.NVarChar(191)
+  idempotencyKey String         @db.NVarChar(191)
+  status         String         @default("POSTED") @db.NVarChar(40)
+  reversalOfId   String?        @db.NVarChar(191)
+  reason         String?        @db.NVarChar(500)
   createdAt      DateTime       @default(now())
   reversedAt     DateTime?
   transactions   Transaction[]
@@ -621,13 +628,13 @@ model PostingGroup {
 }
 
 model IdempotencyRecord {
-  id             String    @id @default(cuid())
-  workspaceId    String
-  operation      String
-  idempotencyKey String
-  requestHash    String
-  status         String    @default("IN_PROGRESS")
-  postingGroupId String?
+  id             String    @id @default(cuid()) @db.NVarChar(191)
+  workspaceId    String    @db.NVarChar(191)
+  operation      String    @db.NVarChar(120)
+  idempotencyKey String    @db.NVarChar(191)
+  requestHash    String    @db.NVarChar(64)
+  status         String    @default("IN_PROGRESS") @db.NVarChar(40)
+  postingGroupId String?   @db.NVarChar(191)
   resultJson     String?   @db.NVarChar(Max)
   createdAt      DateTime  @default(now())
   completedAt    DateTime?
@@ -648,6 +655,7 @@ model TransactionGroup {
   budget       BudgetEnvelope @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, budgetId, updatedAt])
 }
 
@@ -685,6 +693,7 @@ model CreditCardAccount {
   alertStagings       CardAlertStaging[]
 
   @@unique([workspaceId, cardName])
+  @@unique([workspaceId, id])
   @@index([workspaceId, isActive])
 }
 
@@ -727,7 +736,7 @@ model Receivable {
   sourceWorkspaceId  String?
   sourceAccountId    String?
   sourceBudgetId     String?
-  postingGroupId     String?
+  postingGroupId     String?            @db.NVarChar(191)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -739,6 +748,7 @@ model Receivable {
   fromUser           User?             @relation("ReceivableFrom", fields: [fromUserId], references: [id], onDelete: NoAction)
   toUser             User?             @relation("ReceivableTo", fields: [toUserId], references: [id], onDelete: NoAction)
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, status])
   @@index([sourceWorkspaceId, sourceBudgetId, status])
   @@index([postingGroupId])
@@ -884,6 +894,7 @@ model FrequentFlyerAccount {
   mileRedemptions     MileRedemption[]  @relation("FrequentFlyerMileRedemptions")
 
   @@unique([workspaceId, programName])
+  @@unique([workspaceId, id])
   @@index([workspaceId, isActive])
 }
 
@@ -895,7 +906,7 @@ model HotelRewardAccount {
   accountNumber String?
   currentPoints Int       @default(0)
   targetPoints  Int?
-  centsPerPoint Float     @default(0)
+  centsPerPoint Decimal   @default(0) @db.Decimal(19, 8)
   notes         String?
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
@@ -903,6 +914,7 @@ model HotelRewardAccount {
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, programName])
+  @@unique([workspaceId, id])
   @@index([workspaceId, isActive])
 }
 
@@ -919,6 +931,7 @@ model CreditCardReward {
   conversions      PointConversion[]
 
   @@unique([creditCardId])
+  @@unique([workspaceId, id])
   @@index([workspaceId])
 }
 
@@ -929,13 +942,14 @@ model PointConversion {
   frequentFlyerId    String?
   fromPoints         Int
   toMiles            Int
-  conversionRate     Float // miles per point (e.g., 0.625 for 5:8 ratio)
+  conversionRate     Decimal               @db.Decimal(19, 8) // miles per point (e.g., 0.625 for 5:8 ratio)
   description        String?
   createdAt          DateTime              @default(now())
   workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   creditCardReward   CreditCardReward?     @relation(fields: [creditCardRewardId], references: [id], onDelete: SetNull)
   frequentFlyer      FrequentFlyerAccount? @relation(fields: [frequentFlyerId], references: [id], onDelete: SetNull)
 
+  @@unique([workspaceId, id])
   @@index([workspaceId])
   @@index([creditCardRewardId])
   @@index([frequentFlyerId])
@@ -964,6 +978,7 @@ model CreditCardTransaction {
   ledgerTransactions Transaction[]
   ledgerLinks        CreditCardTxnLink[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId])
   @@index([creditCardId])
   @@index([statementYear, statementMonth])
@@ -1029,6 +1044,7 @@ model GmailIntegration {
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, email])
+  @@unique([workspaceId, id])
   @@index([workspaceId, isActive])
 }
 

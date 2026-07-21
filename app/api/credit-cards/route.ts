@@ -32,52 +32,26 @@ export async function GET(request: Request) {
 
     await requireWorkspaceAccess(workspaceId);
 
-    let cards;
-    try {
-      cards = await prisma.creditCardAccount.findMany({
-        where: { workspaceId, isActive: true },
-        orderBy: { updatedAt: "desc" },
-        select: {
-          id: true,
-          cardName: true,
-          bankName: true,
-          themeKey: true,
-          last4Digit: true,
-          statementDay: true,
-          paymentDueDay: true,
-          expiryMonth: true,
-          expiryYear: true,
-          notes: true,
-          bonusLimitCents: true,
-          bonusStatementCents: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (!message.includes("Unknown field `themeKey`")) throw error;
-      const fallbackCards = await prisma.creditCardAccount.findMany({
-        where: { workspaceId, isActive: true },
-        orderBy: { updatedAt: "desc" },
-        select: {
-          id: true,
-          cardName: true,
-          bankName: true,
-          last4Digit: true,
-          statementDay: true,
-          paymentDueDay: true,
-          expiryMonth: true,
-          expiryYear: true,
-          notes: true,
-          bonusLimitCents: true,
-          bonusStatementCents: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      cards = fallbackCards.map((card) => ({ ...card, themeKey: null }));
-    }
+    const cards = await prisma.creditCardAccount.findMany({
+      where: { workspaceId, isActive: true },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        cardName: true,
+        bankName: true,
+        themeKey: true,
+        last4Digit: true,
+        statementDay: true,
+        paymentDueDay: true,
+        expiryMonth: true,
+        expiryYear: true,
+        notes: true,
+        bonusLimitCents: true,
+        bonusStatementCents: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
     return NextResponse.json(
       cards.map((card) => {
@@ -103,73 +77,37 @@ export async function POST(request: Request) {
 
     await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
 
-    let created;
-    try {
-      created = await prisma.creditCardAccount.create({
-        data: {
-          workspaceId: parsed.data.workspaceId,
-          cardName: parsed.data.cardName.trim(),
-          bankName: parsed.data.bankName?.trim() || null,
-          themeKey: parsed.data.themeKey?.trim() || null,
-          last4Digit: parsed.data.last4Digit,
-          expiryMonth: parsed.data.expiryMonth ?? null,
-          expiryYear: parsed.data.expiryYear ?? null,
-          statementDay: parsed.data.statementDay,
-          paymentDueDay: parsed.data.paymentDueDay,
-          notes: parsed.data.notes?.trim() || null,
-          isActive: true,
-        },
-        select: {
-          id: true,
-          cardName: true,
-          bankName: true,
-          themeKey: true,
-          last4Digit: true,
-          statementDay: true,
-          paymentDueDay: true,
-          expiryMonth: true,
-          expiryYear: true,
-          notes: true,
-          bonusLimitCents: true,
-          bonusStatementCents: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (!message.includes("Unknown argument `themeKey`")) throw error;
-      const fallback = await prisma.creditCardAccount.create({
-        data: {
-          workspaceId: parsed.data.workspaceId,
-          cardName: parsed.data.cardName.trim(),
-          bankName: parsed.data.bankName?.trim() || null,
-          last4Digit: parsed.data.last4Digit,
-          expiryMonth: parsed.data.expiryMonth ?? null,
-          expiryYear: parsed.data.expiryYear ?? null,
-          statementDay: parsed.data.statementDay,
-          paymentDueDay: parsed.data.paymentDueDay,
-          notes: parsed.data.notes?.trim() || null,
-          isActive: true,
-        },
-        select: {
-          id: true,
-          cardName: true,
-          bankName: true,
-          last4Digit: true,
-          statementDay: true,
-          paymentDueDay: true,
-          expiryMonth: true,
-          expiryYear: true,
-          notes: true,
-          bonusLimitCents: true,
-          bonusStatementCents: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      created = { ...fallback, themeKey: null };
-    }
+    const created = await prisma.creditCardAccount.create({
+      data: {
+        workspaceId: parsed.data.workspaceId,
+        cardName: parsed.data.cardName.trim(),
+        bankName: parsed.data.bankName?.trim() || null,
+        themeKey: parsed.data.themeKey?.trim() || null,
+        last4Digit: parsed.data.last4Digit,
+        expiryMonth: parsed.data.expiryMonth ?? null,
+        expiryYear: parsed.data.expiryYear ?? null,
+        statementDay: parsed.data.statementDay,
+        paymentDueDay: parsed.data.paymentDueDay,
+        notes: parsed.data.notes?.trim() || null,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        cardName: true,
+        bankName: true,
+        themeKey: true,
+        last4Digit: true,
+        statementDay: true,
+        paymentDueDay: true,
+        expiryMonth: true,
+        expiryYear: true,
+        notes: true,
+        bonusLimitCents: true,
+        bonusStatementCents: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
     return NextResponse.json(
       {

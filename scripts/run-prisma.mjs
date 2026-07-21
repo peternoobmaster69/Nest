@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
-function loadDotEnv(dotenvPath) {
+export function loadDotEnv(dotenvPath) {
   if (!fs.existsSync(dotenvPath)) return;
   const content = fs.readFileSync(dotenvPath, "utf8");
 
@@ -37,7 +38,7 @@ function toBooleanString(value, defaultValue) {
   return normalized === "false" || normalized === "0" ? "false" : "true";
 }
 
-function resolveDatabaseUrl(env) {
+export function resolveDatabaseUrl(env) {
   const rawDatabaseUrl = env.DATABASE_URL?.trim();
   if (rawDatabaseUrl?.startsWith("sqlserver://")) {
     return rawDatabaseUrl;
@@ -49,7 +50,7 @@ function resolveDatabaseUrl(env) {
   const password = requireValue(env.AZURE_SQL_PASSWORD, "AZURE_SQL_PASSWORD");
   const encrypt = toBooleanString(env.AZURE_SQL_ENCRYPT, "true");
   const trustServerCertificate = toBooleanString(
-    env.AZURE_SQL_TRUST_SERVER_CERTIFICATE || env.AZURE_SQL_TRUST_SERVER_CERTIFICAT,
+    env.AZURE_SQL_TRUST_SERVER_CERTIFICATE,
     "false",
   );
 
@@ -57,30 +58,29 @@ function resolveDatabaseUrl(env) {
   return `sqlserver://${hostWithPort};database=${database};user=${user};password=${password};encrypt=${encrypt};trustServerCertificate=${trustServerCertificate}`;
 }
 
-const projectRoot = process.cwd();
-loadDotEnv(path.join(projectRoot, ".env"));
+export function runPrisma(args, options = {}) {
+  const projectRoot = options.projectRoot ?? process.cwd();
+  loadDotEnv(path.join(projectRoot, ".env"));
+  const resolvedUrl = resolveDatabaseUrl(process.env);
+  const prismaCliPath = path.join(projectRoot, "node_modules", "prisma", "build", "index.js");
+  const result = spawnSync(process.execPath, [prismaCliPath, ...args], {
+    stdio: options.stdio ?? "inherit",
+    env: { ...process.env, DATABASE_URL: resolvedUrl },
+  });
 
-let resolvedUrl;
-try {
-  resolvedUrl = resolveDatabaseUrl(process.env);
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`Prisma exited with status ${result.status ?? "unknown"}.`);
+  }
+  return result;
 }
 
-const prismaCliPath = path.join(projectRoot, "node_modules", "prisma", "build", "index.js");
-const args = process.argv.slice(2);
-const result = spawnSync(process.execPath, [prismaCliPath, ...args], {
-  stdio: "inherit",
-  env: {
-    ...process.env,
-    DATABASE_URL: resolvedUrl,
-  },
-});
-
-if (result.error) {
-  console.error(result.error.message);
-  process.exit(1);
+const entryUrl = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : null;
+if (entryUrl === import.meta.url) {
+  try {
+    runPrisma(process.argv.slice(2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
-
-process.exit(result.status ?? 0);

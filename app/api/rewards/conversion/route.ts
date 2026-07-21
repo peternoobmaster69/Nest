@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(conversion, { status: 201 });
+    return NextResponse.json({ ...conversion, conversionRate: Number(conversion.conversionRate) }, { status: 201 });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -145,7 +145,7 @@ export async function PATCH(request: Request) {
       },
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json({ ...updated, conversionRate: Number(updated.conversionRate) });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

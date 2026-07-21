@@ -26,7 +26,7 @@ export function resolveDatabaseUrl(env: EnvMap = process.env) {
   const password = requireValue(env.AZURE_SQL_PASSWORD, "AZURE_SQL_PASSWORD");
   const encrypt = toBooleanString(env.AZURE_SQL_ENCRYPT, "true");
   const trustServerCertificate = toBooleanString(
-    env.AZURE_SQL_TRUST_SERVER_CERTIFICATE || env.AZURE_SQL_TRUST_SERVER_CERTIFICAT,
+    env.AZURE_SQL_TRUST_SERVER_CERTIFICATE,
     "false",
   );
 

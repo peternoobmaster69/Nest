@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(account, { status: 201 });
+    return NextResponse.json({ ...account, centsPerPoint: Number(account.centsPerPoint) }, { status: 201 });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -97,7 +97,7 @@ export async function PATCH(request: Request) {
       },
     });
 
-    return NextResponse.json(account);
+    return NextResponse.json({ ...account, centsPerPoint: Number(account.centsPerPoint) });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

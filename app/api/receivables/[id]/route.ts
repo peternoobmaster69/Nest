@@ -85,8 +85,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         status: parsed.data.status,
         isFamily: parsed.data.isFamily,
         isMom: parsed.data.isMom,
-        accountId: parsed.data.accountId,
-        budgetId: parsed.data.budgetId,
+        accountId:
+          parsed.data.accountId === undefined
+            ? undefined
+            : sourceWorkspaceId === existing.workspaceId
+              ? parsed.data.accountId
+              : null,
+        budgetId:
+          parsed.data.budgetId === undefined
+            ? undefined
+            : sourceWorkspaceId === existing.workspaceId
+              ? parsed.data.budgetId
+              : null,
         sourceWorkspaceId,
         sourceAccountId: parsed.data.accountId,
         sourceBudgetId: parsed.data.budgetId,

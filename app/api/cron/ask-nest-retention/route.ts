@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runAskNestRetention } from "@/lib/ai/ask-nest-retention";
 import { authorizeCronRequest } from "@/lib/cron-auth";
+import { runDataRetention } from "@/lib/data-retention";
 import { ensureDatabaseReady } from "@/lib/database-readiness";
 
 export const runtime = "nodejs";
@@ -14,10 +15,11 @@ export async function GET(request: Request) {
 
   try {
     await ensureDatabaseReady();
-    const result = await runAskNestRetention();
-    return NextResponse.json({ ok: true, ...result });
+    const askNest = await runAskNestRetention();
+    const result = await runDataRetention();
+    return NextResponse.json({ ok: true, ...result, askNest });
   } catch (error) {
-    console.error("Ask Nest retention failed", error);
-    return NextResponse.json({ error: "Failed to run Ask Nest retention" }, { status: 500 });
+    console.error("Data retention failed", error);
+    return NextResponse.json({ error: "Failed to run data retention" }, { status: 500 });
   }
 }

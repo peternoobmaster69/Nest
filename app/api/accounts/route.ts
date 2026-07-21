@@ -75,40 +75,19 @@ export async function POST(request: Request) {
 
     const accountName = parsed.data.name.trim() || `${parsed.data.bankName || "Bank"} Account`;
 
-    let account;
-    try {
-      account = await prisma.financialAccount.create({
-        data: {
-          workspaceId,
-          accountTypeId: bankType.id,
-          name: accountName,
-          bankName: parsed.data.bankName,
-          kind: "BANK",
-          description: parsed.data.description,
-          startingCents: parsed.data.startingCents,
-          isActive: true,
-          isSynced: false,
-        },
-      });
-    } catch (createError) {
-      const createMessage = createError instanceof Error ? createError.message : "";
-      if (createMessage.includes("Unknown argument `bankName`")) {
-        account = await prisma.financialAccount.create({
-          data: {
-            workspaceId,
-            accountTypeId: bankType.id,
-            name: accountName,
-            kind: "BANK",
-            description: parsed.data.description,
-            startingCents: parsed.data.startingCents,
-            isActive: true,
-            isSynced: false,
-          },
-        });
-      } else {
-        throw createError;
-      }
-    }
+    const account = await prisma.financialAccount.create({
+      data: {
+        workspaceId,
+        accountTypeId: bankType.id,
+        name: accountName,
+        bankName: parsed.data.bankName,
+        kind: "BANK",
+        description: parsed.data.description,
+        startingCents: parsed.data.startingCents,
+        isActive: true,
+        isSynced: false,
+      },
+    });
 
     return NextResponse.json({ workspaceId, account }, { status: 201 });
   } catch (error) {
@@ -116,15 +95,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("Unknown argument `bankName`")) {
-      return NextResponse.json(
-        {
-          error: "Prisma client is out of date for bankName.",
-          message: "Run `npm run prisma:generate` and restart `npm run dev`.",
-        },
-        { status: 500 },
-      );
-    }
     return NextResponse.json({ error: "Failed to create bank account", message }, { status: 500 });
   }
 }

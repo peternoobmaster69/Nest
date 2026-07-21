@@ -18,6 +18,11 @@ test("background jobs use database-enforced scope ownership, leases, retries, an
   }
   assert.match(migration, /UNIQUE NONCLUSTERED INDEX \[BackgroundJob_activeScopeKey_key\][\s\S]*?WHERE \[activeScopeKey\] IS NOT NULL/);
   assert.match(migration, /UNIQUE NONCLUSTERED INDEX \[BackgroundJob_idempotencyKey_key\][\s\S]*?WHERE \[idempotencyKey\] IS NOT NULL/);
+  assert.match(migration, /EXEC\(N'CREATE UNIQUE NONCLUSTERED INDEX \[CardAlertStaging_sourceMessageKey_key\]/);
+  assert.match(migration, /EXEC\(N'CREATE UNIQUE NONCLUSTERED INDEX \[BackgroundJob_activeScopeKey_key\]/);
+  assert.match(migration, /COL_LENGTH\(N'dbo\.BackgroundJob', N'activeScopeKey'\)/);
+  assert.match(migration, /IF NOT EXISTS \(SELECT 1 FROM sys\.indexes/);
+  assert.match(migration, /BEGIN TRY[\s\S]*?BEGIN TRANSACTION[\s\S]*?COMMIT TRANSACTION[\s\S]*?BEGIN CATCH[\s\S]*?ROLLBACK TRANSACTION/);
   assert.match(jobs, /updateMany\([\s\S]*?status: "PENDING"[\s\S]*?leaseToken/);
   assert.match(jobs, /where: \{ id: jobId, status: "RUNNING", leaseToken/);
   assert.match(jobs, /status: "DEAD_LETTER"/);

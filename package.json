@@ -22,6 +22,11 @@
     "prisma:migrate": "node scripts/run-prisma.mjs migrate dev",
     "prisma:migrate:deploy": "node scripts/run-prisma.mjs migrate deploy",
     "prisma:seed": "node prisma/seed.mjs",
+    "db:bootstrap": "node scripts/bootstrap-database.mjs",
+    "db:phase4:preflight": "node scripts/check-phase4-preflight.mjs",
+    "db:phase4:domain-report": "node scripts/report-phase4-domain-values.mjs",
+    "db:migration:report": "node scripts/report-migration-state.mjs",
+    "db:migration:dry-run": "node scripts/dry-run-sql-migration.mjs",
     "icons:generate": "node scripts/generate-app-icons.mjs",
     "vapid:generate": "node scripts/generate-vapid-keys.mjs"
   },

@@ -45,20 +45,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json(updated);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (
-      message.includes("Unknown argument `displayName`") ||
-      message.includes("Invalid column name 'displayName'") ||
-      message.includes("Unknown argument `isLiquid`") ||
-      message.includes("Invalid column name 'isLiquid'")
-    ) {
-      return NextResponse.json(
-        {
-          error: "Database schema is out of sync for investment account fields.",
-          message: "Run `node scripts/run-prisma.mjs db push`, then restart the app server.",
-        },
-        { status: 500 },
-      );
-    }
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }

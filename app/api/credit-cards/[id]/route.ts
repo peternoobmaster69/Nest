@@ -102,53 +102,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (parsed.data.isActive !== undefined) data.isActive = parsed.data.isActive;
     if (parsed.data.last4Digit !== undefined) data.last4Digit = parsed.data.last4Digit;
 
-    let updated;
-    try {
-      updated = await prisma.creditCardAccount.update({
-        where: { id },
-        data,
-        select: {
-          id: true,
-          cardName: true,
-          bankName: true,
-          themeKey: true,
-          last4Digit: true,
-          statementDay: true,
-          paymentDueDay: true,
-          expiryMonth: true,
-          expiryYear: true,
-          notes: true,
-          bonusLimitCents: true,
-          bonusStatementCents: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (!message.includes("Unknown argument `themeKey`")) throw error;
-      const { themeKey: _omitTheme, ...dataWithoutTheme } = data;
-      const fallback = await prisma.creditCardAccount.update({
-        where: { id },
-        data: dataWithoutTheme,
-        select: {
-          id: true,
-          cardName: true,
-          bankName: true,
-          last4Digit: true,
-          statementDay: true,
-          paymentDueDay: true,
-          expiryMonth: true,
-          expiryYear: true,
-          notes: true,
-          bonusLimitCents: true,
-          bonusStatementCents: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      updated = { ...fallback, themeKey: null };
-    }
+    const updated = await prisma.creditCardAccount.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        cardName: true,
+        bankName: true,
+        themeKey: true,
+        last4Digit: true,
+        statementDay: true,
+        paymentDueDay: true,
+        expiryMonth: true,
+        expiryYear: true,
+        notes: true,
+        bonusLimitCents: true,
+        bonusStatementCents: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
     return NextResponse.json({
       ...updated,
