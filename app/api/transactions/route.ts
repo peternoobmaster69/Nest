@@ -233,7 +233,7 @@ export async function POST(request: Request) {
     }
 
     const { budgetId, groupId, budgetOperation, ...txPayload } = parsed.data;
-    const { userId } = await requireWorkspaceAccess(txPayload.workspaceId);
+    const { userId } = await requireWorkspaceAccess(txPayload.workspaceId, "EDITOR");
 
     const account = await prisma.financialAccount.findFirst({
       where: {

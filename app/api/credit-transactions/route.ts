@@ -151,7 +151,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const body = await request.json();
     const parsed = CreateTransactionSchema.safeParse(body);
 

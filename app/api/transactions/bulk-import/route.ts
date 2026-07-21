@@ -121,7 +121,7 @@ export async function POST(request: Request) {
 
     const { workspaceId, accountId, budgetId, kind, transactions, chunkIndex, chunkSize, recalculate } = parsed.data;
 
-    const { userId } = await requireWorkspaceAccess(workspaceId);
+    const { userId } = await requireWorkspaceAccess(workspaceId, "EDITOR");
 
     // Validate account belongs to workspace
     const account = await prisma.financialAccount.findFirst({

@@ -98,7 +98,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       select: { id: true, workspaceId: true, budgetId: true },
     });
     if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
-    await requireWorkspaceAccess(group.workspaceId);
+    await requireWorkspaceAccess(group.workspaceId, "EDITOR");
 
     const addIds = [...new Set(parsed.data.addTransactionIds ?? [])];
     const removeIds = [...new Set(parsed.data.removeTransactionIds ?? [])];
@@ -167,7 +167,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       select: { workspaceId: true },
     });
     if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
-    await requireWorkspaceAccess(group.workspaceId);
+    await requireWorkspaceAccess(group.workspaceId, "EDITOR");
 
     await prisma.$transaction(async (db) => {
       await db.transaction.updateMany({ where: { groupId: id }, data: { groupId: null } });

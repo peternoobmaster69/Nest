@@ -14,7 +14,7 @@ const CreateCreditCardPaymentSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const { userId, workspaceId } = await requireWorkspaceAccess();
+    const { userId, workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const parsed = CreateCreditCardPaymentSchema.safeParse(await request.json());
 
     if (!parsed.success) {

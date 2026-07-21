@@ -35,7 +35,7 @@ test("workspace-scoped notifications and emails route to the exact card statemen
   assert.match(emailReminders, /This is a reminder that \$\{workspaceLabel\} has credit card payments/);
   assert.match(inAppNotifications, /buildCreditCardStatementPath\([\s\S]*?cardId: row\.cardId[\s\S]*?statementMonth: row\.statementMonth[\s\S]*?statementYear: row\.statementYear/);
   assert.match(inAppNotifications, /href,/);
-  assert.match(invitations, /buildWorkspaceEntryHref\(workspaceId, "\/collaborators"\)/);
+  assert.match(invitations, /href: `\/invitations\/\$\{token\}`/);
   assert.match(notificationBell, /href=\{notification\.href\}[\s\S]*?prefetch=\{false\}/);
   assert.match(creditTransactions, /searchParams\.get\("cardId"\)/);
   assert.match(creditTransactions, /searchParams\.get\("month"\)/);

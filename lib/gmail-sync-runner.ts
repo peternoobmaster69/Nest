@@ -14,6 +14,7 @@ import {
   findActiveBackgroundJob,
   updateBackgroundJobProgress,
 } from "@/lib/background-jobs";
+import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
 import { prisma } from "@/lib/prisma";
 
 type GmailIntegrationRecord = {
@@ -23,14 +24,8 @@ type GmailIntegrationRecord = {
   lastSyncedAt: Date | null;
 };
 
-type GmailSyncResult = {
-  scannedMessages: number;
-  processed: number;
-  duplicates: number;
-  failed: number;
+type GmailSyncResult = GmailSyncSummary & {
   jobId?: string;
-  skipped?: boolean;
-  reason?: string;
 };
 
 const activeSyncs = new Set<string>();
@@ -237,7 +232,12 @@ export async function runGmailSyncForIntegration(
       data: { lastSyncedAt: new Date() },
     });
 
-    const completedMessage = `Synced ${ids.length} emails: ${processed} processed, ${duplicates} duplicates, ${failed} failed.`;
+    const completedMessage = formatGmailSyncSummary({
+      scannedMessages: ids.length,
+      processed,
+      duplicates,
+      failed,
+    });
     await publishProgress({
       phase: "complete",
       progress: 100,

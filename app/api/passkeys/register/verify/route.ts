@@ -1,21 +1,27 @@
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { consumeWebAuthnChallenge, getWebAuthnConfig, readWebAuthnChallenge } from "@/lib/passkeys";
+import { claimWebAuthnChallenge, getWebAuthnConfig } from "@/lib/passkeys";
+import { ApiAuthError, requireRecentAuthentication } from "@/lib/workspace-auth";
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const body = await request.json() as { challengeId?: string; name?: string; response?: RegistrationResponseJSON };
+  let userId: string;
+  try {
+    userId = await requireRecentAuthentication();
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const body = await request.json().catch(() => ({})) as { challengeId?: string; name?: string; response?: RegistrationResponseJSON };
   if (!body.challengeId || !body.response) return NextResponse.json({ error: "Invalid passkey response" }, { status: 400 });
   const passkeyName = body.name?.trim().replace(/\s+/g, " ");
   if (!passkeyName || passkeyName.length > 80) {
     return NextResponse.json({ error: "Passkey name must be between 1 and 80 characters" }, { status: 400 });
   }
-  const challenge = await readWebAuthnChallenge(body.challengeId, "REGISTRATION", session.user.id);
+  const challenge = await claimWebAuthnChallenge(body.challengeId, "REGISTRATION", userId);
   if (!challenge) return NextResponse.json({ error: "Passkey challenge expired" }, { status: 400 });
   const { origin, rpID } = getWebAuthnConfig(request);
   try {
@@ -30,7 +36,7 @@ export async function POST(request: Request) {
     const info = verification.registrationInfo;
     await prisma.passkeyCredential.create({
       data: {
-        userId: session.user.id,
+        userId,
         credentialId: info.credential.id,
         publicKey: Buffer.from(info.credential.publicKey),
         counter: BigInt(info.credential.counter),
@@ -41,10 +47,7 @@ export async function POST(request: Request) {
       },
     });
     return NextResponse.json({ verified: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Passkey verification failed";
-    return NextResponse.json({ error: message }, { status: 400 });
-  } finally {
-    await consumeWebAuthnChallenge(challenge.id);
+  } catch {
+    return NextResponse.json({ error: "Passkey verification failed" }, { status: 400 });
   }
 }

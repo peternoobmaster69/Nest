@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     const { workspaceId, budgetId, accountId } = parsed.data;
 
-    await requireWorkspaceAccess(workspaceId);
+    await requireWorkspaceAccess(workspaceId, "EDITOR");
 
     // Build where clause
     const where: { workspaceId: string; isActive: boolean; id?: string; accountId?: string } = {

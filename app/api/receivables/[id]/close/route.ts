@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Receivable not found" }, { status: 404 });
     }
 
-    const { userId } = await requireWorkspaceAccess(receivable.workspaceId);
+    const { userId } = await requireWorkspaceAccess(receivable.workspaceId, "EDITOR");
 
     const workspaceDefaults = await prisma.workspace.findUnique({
       where: { id: receivable.workspaceId },
@@ -107,7 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!account) {
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
       }
-      await requireWorkspaceAccess(account.workspaceId);
+      await requireWorkspaceAccess(account.workspaceId, "EDITOR");
       sourceAccount = account;
 
       if (!effectiveSourceBudgetId) {

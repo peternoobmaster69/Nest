@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    await requireWorkspaceAccess(parsed.data.workspaceId);
+    await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
 
     const created = await prisma.investmentAccount.create({
       data: {

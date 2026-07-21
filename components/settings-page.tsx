@@ -32,6 +32,7 @@ import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/compo
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { SettingsAppAccess } from "@/components/settings-app-access";
+import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
 
 type Context = {
   workspaceId: string | null;
@@ -40,6 +41,7 @@ type Context = {
   baseCurrency?: string | null;
   publicNetWorthEnabled?: boolean | null;
   publicNetWorthToken?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
   workspaces?: Array<{ id: string; name: string }>;
 };
 
@@ -105,15 +107,6 @@ type GmailSyncProgress = {
   updatedAt: number;
 };
 
-type GmailSyncSummary = {
-  scannedMessages: number;
-  processed: number;
-  duplicates: number;
-  failed: number;
-  skipped?: boolean;
-  reason?: string;
-};
-
 type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
   ok?: boolean;
   queued?: boolean;
@@ -136,27 +129,28 @@ function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSum
   );
 }
 
-function formatGmailSyncSummary(data: GmailSyncSummary) {
-  return data.skipped && data.reason
-    ? data.reason
-    : `Synced ${data.scannedMessages} emails: ${data.processed} processed, ${data.duplicates} duplicates, ${data.failed} failed.`;
-}
-
 function getGmailNotice(message: string, phase?: GmailSyncProgress["phase"]): GmailNotice | null {
   const normalized = message.trim();
   if (!normalized) return null;
 
   const lastSyncedMarker = " Last synced at ";
   const lastSyncedIndex = normalized.indexOf(lastSyncedMarker);
+  const sentenceBreakIndex = normalized.indexOf(". ");
   const title = lastSyncedIndex >= 0
     ? normalized.slice(0, lastSyncedIndex).replace(/\.$/, "")
-    : normalized;
+    : sentenceBreakIndex >= 0
+      ? normalized.slice(0, sentenceBreakIndex)
+      : normalized.replace(/\.$/, "");
   const detail = lastSyncedIndex >= 0
     ? normalized.slice(lastSyncedIndex + 1)
-    : null;
-  const tone = phase === "error" || /failed|denied|forbidden|error/i.test(normalized)
+    : sentenceBreakIndex >= 0
+      ? normalized.slice(sentenceBreakIndex + 2)
+      : null;
+  const hasFailure = /failed|denied|forbidden|error|could not be processed|completed with issues/i.test(normalized)
+    && !/\b0 failed\b/i.test(normalized);
+  const tone = phase === "error" || hasFailure
     ? "error"
-    : /skipped|queued|running|syncing|disconnected/i.test(normalized)
+    : /skipped|queued|running|syncing|disconnected|up to date|no new|synced 0 emails/i.test(normalized)
       ? "info"
       : "success";
 
@@ -318,6 +312,7 @@ export function SettingsPage() {
   const gmailStatus = useQuery({
     queryKey: ["gmail-status"],
     queryFn: () => fetchJson<GmailStatus>("/api/gmail/status"),
+    enabled: context.data?.role === "OWNER",
   });
 
   const budgets = useQuery({
@@ -588,14 +583,14 @@ export function SettingsPage() {
   });
 
   const updatePublicNetWorth = useMutation({
-    mutationFn: (enabled: boolean) => {
+    mutationFn: (action: "enable" | "revoke" | "rotate") => {
       if (!workspaceId) throw new Error("No active workspace selected.");
-      return fetchJson<{ publicNetWorthEnabled: boolean | null; publicNetWorthToken: string | null }>("/api/context", {
-        method: "PATCH",
+      return fetchJson<{ publicNetWorthEnabled: boolean; publicNetWorthToken: string | null }>("/api/public-links/net-worth", {
+        method: action === "revoke" ? "DELETE" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId,
-          publicNetWorthEnabled: enabled,
+          rotate: action === "rotate",
         }),
       });
     },
@@ -622,7 +617,12 @@ export function SettingsPage() {
   const onTogglePublicNetWorth = (enabled: boolean) => {
     setPublicNetWorthMessage("");
     setOptimisticPublicNetWorthEnabled(enabled);
-    updatePublicNetWorth.mutate(enabled);
+    updatePublicNetWorth.mutate(enabled ? "enable" : "revoke");
+  };
+
+  const rotatePublicNetWorth = () => {
+    setPublicNetWorthMessage("");
+    updatePublicNetWorth.mutate("rotate");
   };
 
   const copyPublicNetWorthUrl = async () => {
@@ -973,7 +973,7 @@ export function SettingsPage() {
         <p>Install Nest and manage secure sign-in, notifications, and connected services.</p>
       </header>
       <SettingsAppAccess />
-      <div className="card settings-card-block gmail-alerts-card">
+      {context.data?.role === "OWNER" ? <div className="card settings-card-block gmail-alerts-card">
         <div className="gmail-alerts-header">
           <div className="gmail-alerts-copy">
             <div className="gmail-alerts-title-row">
@@ -1043,13 +1043,13 @@ export function SettingsPage() {
             </div>
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       <header className="settings-page-section-header">
         <h2>Workspace preferences</h2>
         <p>Choose shared defaults and control access to workspace data.</p>
       </header>
-      <div className="card settings-card-block">
+      {context.data?.role === "OWNER" ? <><div className="card settings-card-block">
         <div className="settings-row">
           <div>
             <div className="settings-section-title">Currency Display</div>
@@ -1110,6 +1110,15 @@ export function SettingsPage() {
                 <Copy size={14} aria-hidden="true" />
                 Copy
               </button>
+              <button
+                className="btn btn-ghost btn-xs"
+                type="button"
+                onClick={rotatePublicNetWorth}
+                disabled={updatePublicNetWorth.isPending}
+              >
+                <RotateCcw size={14} aria-hidden="true" />
+                Rotate links
+              </button>
             </div>
           </div>
         ) : null}
@@ -1136,7 +1145,7 @@ export function SettingsPage() {
           </div>
         ) : null}
         {publicNetWorthMessage ? <div className="settings-message">{publicNetWorthMessage}</div> : null}
-      </div>
+      </div></> : null}
 
       <div className="card settings-card-block">
         <div className="settings-row">

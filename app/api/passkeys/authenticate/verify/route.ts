@@ -3,20 +3,31 @@ import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  consumeWebAuthnChallenge,
+  claimWebAuthnChallenge,
   createPasskeyLoginTicket,
   getWebAuthnConfig,
   parseTransports,
-  readWebAuthnChallenge,
 } from "@/lib/passkeys";
+import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
 
 export async function POST(request: Request) {
-  const body = await request.json() as { challengeId?: string; response?: AuthenticationResponseJSON };
+  const body = await request.json().catch(() => ({})) as { challengeId?: string; response?: AuthenticationResponseJSON };
   if (!body.challengeId || !body.response) return NextResponse.json({ error: "Invalid passkey response" }, { status: 400 });
-  const challenge = await readWebAuthnChallenge(body.challengeId, "AUTHENTICATION");
+  try {
+    await enforceDistributedRateLimit(request, {
+      scope: "passkey-auth-verify",
+      identifier: body.response.id,
+      limit: 10,
+      windowMs: 5 * 60 * 1000,
+      blockMs: 15 * 60 * 1000,
+    });
+  } catch (error) {
+    return rateLimitResponse(error) ?? NextResponse.json({ error: "Unable to verify passkey" }, { status: 503 });
+  }
+  const challenge = await claimWebAuthnChallenge(body.challengeId, "AUTHENTICATION");
   if (!challenge) return NextResponse.json({ error: "Passkey challenge expired" }, { status: 400 });
   const passkey = await prisma.passkeyCredential.findUnique({ where: { credentialId: body.response.id } });
-  if (!passkey) return NextResponse.json({ error: "Passkey not recognized" }, { status: 401 });
+  if (!passkey) return NextResponse.json({ error: "Passkey verification failed" }, { status: 401 });
   const { origin, rpID } = getWebAuthnConfig(request);
   const credential: WebAuthnCredential = {
     id: passkey.credentialId,
@@ -45,10 +56,7 @@ export async function POST(request: Request) {
     });
     const loginToken = await createPasskeyLoginTicket(passkey.userId);
     return NextResponse.json({ verified: true, loginToken });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Passkey verification failed";
-    return NextResponse.json({ error: message }, { status: 401 });
-  } finally {
-    await consumeWebAuthnChallenge(challenge.id);
+  } catch {
+    return NextResponse.json({ error: "Passkey verification failed" }, { status: 401 });
   }
 }

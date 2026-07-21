@@ -12,7 +12,7 @@ const ImportMaybankSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const parsed = ImportMaybankSchema.safeParse(await request.json());
 
     if (!parsed.success) {

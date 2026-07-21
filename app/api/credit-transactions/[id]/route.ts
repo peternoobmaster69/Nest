@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!existing) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     const updatePayload = parsed.data;
     const data: Prisma.CreditCardTransactionUpdateInput = {};
@@ -100,7 +100,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (!existing) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
     await prisma.creditCardTransaction.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

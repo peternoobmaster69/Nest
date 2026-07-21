@@ -1,12 +1,11 @@
 import { sendCreditCardPaymentReminders } from "@/lib/credit-card-payment-reminders";
+import { authorizeCronRequest } from "@/lib/cron-auth";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
-  const secret = process.env.PAYMENT_REMINDER_CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-
-  if (!secret || authHeader !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = authorizeCronRequest(request);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const result = await sendCreditCardPaymentReminders();

@@ -33,7 +33,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Receivable not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     let sourceWorkspaceId: string | null | undefined = undefined;
     if (parsed.data.accountId !== undefined && parsed.data.accountId !== null) {
@@ -44,7 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!account || account.kind !== "BANK" || !account.isActive) {
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
       }
-      await requireWorkspaceAccess(account.workspaceId);
+      await requireWorkspaceAccess(account.workspaceId, "EDITOR");
       sourceWorkspaceId = account.workspaceId;
     } else if (parsed.data.accountId === null) {
       sourceWorkspaceId = null;
@@ -114,7 +114,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Receivable not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     await prisma.receivable.delete({ where: { id } });
     return NextResponse.json({ ok: true });

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const { workspaceId, sourceBudgetId, destinationBudgetId, title, amountCents } = parsed.data;
-    const { userId } = await requireWorkspaceAccess(workspaceId);
+    const { userId } = await requireWorkspaceAccess(workspaceId, "EDITOR");
 
     if (sourceBudgetId === destinationBudgetId) {
       return NextResponse.json({ error: "Source and destination sub accounts must be different." }, { status: 400 });

@@ -82,7 +82,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     const data: {
       cardName?: string;
@@ -201,7 +201,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     await prisma.creditCardAccount.delete({ where: { id } });
     return NextResponse.json({ ok: true });

@@ -110,7 +110,6 @@ export function AppShell({
     "/budgets",
     "/collaborators",
     "/settings",
-    "/accounts",
     "/admin",
   ].some((path) => currentPath === path || currentPath.startsWith(`${path}/`));
 

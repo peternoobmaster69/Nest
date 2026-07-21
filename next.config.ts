@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: "/login", destination: "/signin", permanent: true },
+      { source: "/register", destination: "/signin", permanent: true },
+      { source: "/accounts/:path*", destination: "/settings", permanent: true },
+    ];
+  },
   turbopack: {
     root: process.cwd(),
   },

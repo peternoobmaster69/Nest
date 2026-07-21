@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Investment account not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(account.workspaceId);
+    await requireWorkspaceAccess(account.workspaceId, "EDITOR");
 
     const created = await prisma.investmentEntry.create({
       data: {

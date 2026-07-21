@@ -1,0 +1,17 @@
+import { authOptions } from "@/lib/auth";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { InvitationResponse } from "./response";
+
+export default async function InvitationPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const path = `/invitations/${encodeURIComponent(token)}`;
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) redirect(`/signin?callbackUrl=${encodeURIComponent(path)}`);
+
+  return (
+    <main style={{ maxWidth: 620, margin: "48px auto", padding: "0 16px" }}>
+      <InvitationResponse token={token} />
+    </main>
+  );
+}

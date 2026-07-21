@@ -1,16 +1,8 @@
 import { exchangeCodeForTokens } from "@/lib/gmail";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { consumeIntegrationOAuthState } from "@/lib/integration-oauth-state";
+import { ApiAuthError, requireRecentAuthentication, requireWorkspaceRole } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
-
-function decodeState(state: string) {
-  try {
-    const json = Buffer.from(state, "base64url").toString("utf8");
-    return JSON.parse(json) as { workspaceId?: string; userId?: string };
-  } catch {
-    return {};
-  }
-}
 
 export async function GET(request: Request) {
   try {
@@ -27,9 +19,13 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${origin}/settings?gmail=invalid_callback`);
     }
 
-    const decoded = decodeState(state);
-    const auth = await requireWorkspaceAccess(decoded.workspaceId);
-    if (decoded.userId && decoded.userId !== auth.userId) {
+    const oauthState = await consumeIntegrationOAuthState(state);
+    if (!oauthState) {
+      return NextResponse.redirect(`${origin}/settings?gmail=invalid_state`);
+    }
+    const recentUserId = await requireRecentAuthentication();
+    const auth = await requireWorkspaceRole(oauthState.workspaceId, "OWNER");
+    if (oauthState.userId !== auth.userId || recentUserId !== auth.userId) {
       return NextResponse.redirect(`${origin}/settings?gmail=forbidden`);
     }
 
@@ -86,6 +82,15 @@ export async function GET(request: Request) {
         },
       });
     }
+
+    await prisma.workspaceAuditLog.create({
+      data: {
+        workspaceId: auth.workspaceId,
+        actorUserId: auth.userId,
+        action: "GMAIL_INTEGRATION_CONNECTED",
+        details: `Gmail integration connected for ${email}.`,
+      },
+    });
 
     return NextResponse.redirect(`${origin}/settings?gmail=connected`);
   } catch (error) {

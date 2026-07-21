@@ -1,9 +1,6 @@
-import { authOptions } from "@/lib/auth";
 import { getBankConsistency } from "@/lib/bank-consistency";
 import { prisma } from "@/lib/prisma";
-import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -53,72 +50,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const parsed = CreateAccountSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const sessionUserId = session.user.id;
-    const sessionEmail = session.user.email ?? null;
-    const sessionName = session.user.name ?? null;
-
-    let userId = sessionUserId;
-    const byId = await prisma.user.findUnique({
-      where: { id: sessionUserId },
-      select: { id: true },
-    });
-
-    if (!byId && sessionEmail) {
-      const byEmail = await prisma.user.findUnique({
-        where: { email: sessionEmail },
-        select: { id: true },
-      });
-      if (byEmail) {
-        userId = byEmail.id;
-      }
-    }
-
-    await prisma.user.upsert({
-      where: { id: userId },
-      update: {
-        email: sessionEmail ?? undefined,
-        name: sessionName ?? undefined,
-      },
-      create: {
-        id: userId,
-        email: sessionEmail ?? undefined,
-        name: sessionName ?? undefined,
-      },
-    });
-
-    let workspaceId = parsed.data.workspaceId;
-
-    if (workspaceId) {
-      const membership = await prisma.workspaceMember.findUnique({
-        where: {
-          workspaceId_userId: {
-            workspaceId,
-            userId,
-          },
-        },
-        select: { workspaceId: true },
-      });
-      if (!membership) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    } else {
-      const workspace = await ensureUserWithDefaultWorkspace({
-        id: userId,
-        email: sessionEmail,
-        name: sessionName,
-      });
-      workspaceId = workspace.id;
-    }
+    const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
 
     let bankType = await prisma.accountType.findFirst({
       where: { workspaceId, label: "Bank" },
@@ -175,6 +112,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ workspaceId, account }, { status: 201 });
   } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     if (message.includes("Unknown argument `bankName`")) {
       return NextResponse.json(

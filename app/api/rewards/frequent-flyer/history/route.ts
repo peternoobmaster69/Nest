@@ -222,7 +222,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const body = await request.json();
     const parsed = PostSchema.safeParse(body);
     if (!parsed.success) {
@@ -280,7 +280,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const body = await request.json();
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) {
@@ -360,7 +360,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const type = searchParams.get("type");

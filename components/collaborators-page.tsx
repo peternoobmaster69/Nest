@@ -29,11 +29,13 @@ type AppContext = {
   workspaceId: string | null;
   workspaceName?: string | null;
   isShared?: boolean;
-  workspaces?: Array<{ id: string; name: string }>;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
+  workspaces?: Array<{ id: string; name: string; role?: "OWNER" | "EDITOR" | "VIEWER" }>;
   sidebarMoneyPages?: Record<string, boolean>;
 };
 
 type CollaboratorData = {
+  role: "OWNER" | "EDITOR" | "VIEWER";
   workspace: { id: string; name: string; isShared: boolean } | null;
   members: Array<{
     id: string;
@@ -44,7 +46,9 @@ type CollaboratorData = {
     id: string;
     invitedEmail: string;
     status: string;
+    role: "EDITOR" | "VIEWER";
     createdAt: string;
+    expiresAt: string | null;
     invitedBy: { id: string; name: string | null; email: string | null } | null;
   }>;
   auditLogs: Array<{
@@ -73,6 +77,7 @@ export function CollaboratorsPage() {
   const queryClient = useQueryClient();
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"EDITOR" | "VIEWER">("EDITOR");
   const [workspaceNameInput, setWorkspaceNameInput] = useState("");
   const [workspaceMode, setWorkspaceMode] = useState<"PRIVATE" | "SHARED">("PRIVATE");
   const [sidebarMoneyPages, setSidebarMoneyPages] = useState<Record<string, boolean>>(DEFAULT_MONEY_PAGES);
@@ -102,6 +107,7 @@ export function CollaboratorsPage() {
         }
       : null;
   const isShared = workspaceMeta?.isShared ?? false;
+  const isOwner = collab.data?.role === "OWNER" || context.data?.role === "OWNER";
 
   useEffect(() => {
     if (!workspaceMeta) return;
@@ -212,13 +218,13 @@ export function CollaboratorsPage() {
 
   const inviteMutation = useMutation({
     mutationFn: () =>
-      fetchJson("/api/collaborators/invite", {
+      fetchJson<{ inviteUrl: string; emailSent: boolean }>("/api/collaborators/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId: workspaceMeta?.id ?? workspaceId, email: inviteEmail }),
+        body: JSON.stringify({ workspaceId: workspaceMeta?.id ?? workspaceId, email: inviteEmail, role: inviteRole }),
       }),
-    onSuccess: async () => {
-      setMessage("Invite sent.");
+    onSuccess: async (data) => {
+      setMessage(data.emailSent ? "Invite sent." : `Invite created. Copy this one-time link: ${data.inviteUrl}`);
       setInviteEmail("");
       await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
       await queryClient.invalidateQueries({ queryKey: ["app-context"] });
@@ -237,6 +243,29 @@ export function CollaboratorsPage() {
       await queryClient.invalidateQueries({ queryKey: ["app-context"] });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to remove collaborator."),
+  });
+
+  const updateMemberRole = useMutation({
+    mutationFn: ({ memberId, role }: { memberId: string; role: "EDITOR" | "VIEWER" }) =>
+      fetchJson(`/api/collaborators/${memberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      }),
+    onSuccess: async () => {
+      setMessage("Collaborator role updated.");
+      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to update collaborator."),
+  });
+
+  const revokeInvite = useMutation({
+    mutationFn: (inviteId: string) => fetchJson(`/api/collaborators/invites/${inviteId}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      setMessage("Invitation revoked.");
+      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to revoke invitation."),
   });
 
   const onCreateWorkspace = (event: FormEvent) => {
@@ -318,7 +347,7 @@ export function CollaboratorsPage() {
         </div>
       </section>
 
-      <section className="card">
+      {isOwner ? <section className="card">
         <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
           <div style={{ fontSize: "13px", fontWeight: 700 }}>Workspace Info</div>
           {updateWorkspace.isPending ? (
@@ -404,9 +433,9 @@ export function CollaboratorsPage() {
             </div>
           </div>
         </div>
-      </section>
+      </section> : null}
 
-      {isShared ? (
+      {isOwner && isShared ? (
         <section className="card">
           <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
             <div style={{ fontSize: "13px", fontWeight: 700 }}>Invite Collaborator</div>
@@ -419,6 +448,10 @@ export function CollaboratorsPage() {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 style={{ maxWidth: "300px" }}
               />
+              <select className="input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value === "VIEWER" ? "VIEWER" : "EDITOR")}>
+                <option value="EDITOR">Editor</option>
+                <option value="VIEWER">Viewer</option>
+              </select>
               <button
                 className="btn btn-primary btn-xs"
                 type="submit"
@@ -428,7 +461,7 @@ export function CollaboratorsPage() {
               </button>
             </form>
             <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-              Invites are sent by email. Existing Nest users are added immediately; others are added after they sign in with the invited email.
+              Invitations require explicit acceptance, expire after seven days, and can be revoked below.
             </div>
           </div>
         </section>
@@ -453,8 +486,18 @@ export function CollaboratorsPage() {
             <div key={member.id} className="crud-row">
               <span>{member.user.name || member.user.email || member.user.id}</span>
               <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-                <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{member.role}</span>
-                {member.role !== "OWNER" ? (
+                {isOwner && member.role !== "OWNER" ? (
+                  <select
+                    className="input"
+                    value={member.role === "MEMBER" ? "EDITOR" : member.role}
+                    onChange={(event) => updateMemberRole.mutate({ memberId: member.id, role: event.target.value === "VIEWER" ? "VIEWER" : "EDITOR" })}
+                    disabled={updateMemberRole.isPending || isWorkspaceChanging}
+                  >
+                    <option value="EDITOR">Editor</option>
+                    <option value="VIEWER">Viewer</option>
+                  </select>
+                ) : <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{member.role}</span>}
+                {isOwner && member.role !== "OWNER" ? (
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => confirmRemoveMember(member.id)}
@@ -472,15 +515,18 @@ export function CollaboratorsPage() {
         </div>
       </section>
 
-      {isShared ? (
+      {isOwner && isShared ? (
         <section className="card">
           <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Pending Invites</div>
           <div className="simple-list">
             {isCollabLoading && <CollaboratorsInvitesSkeleton />}
             {!isCollabLoading && !isCollabError && (collab.data?.invites ?? []).map((invite) => (
               <div key={invite.id} className="crud-row">
-                <span>{invite.invitedEmail}</span>
-                <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{new Date(invite.createdAt).toLocaleString()}</span>
+                <span>{invite.invitedEmail} · {invite.role}</span>
+                <div style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>Expires {invite.expiresAt ? new Date(invite.expiresAt).toLocaleString() : "soon"}</span>
+                  <button className="btn btn-ghost btn-xs" onClick={() => revokeInvite.mutate(invite.id)} disabled={revokeInvite.isPending}>Revoke</button>
+                </div>
               </div>
             ))}
             {!isCollabLoading && !isCollabError && !(collab.data?.invites?.length) && (
@@ -494,7 +540,7 @@ export function CollaboratorsPage() {
         </section>
       ) : null}
 
-      {isShared ? (
+      {isOwner && isShared ? (
         <section className="card">
           <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Audit Logs</div>
           <div className="audit-timeline">

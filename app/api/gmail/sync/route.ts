@@ -19,7 +19,7 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const { workspaceId, userId } = await requireWorkspaceAccess();
+    const { workspaceId, userId } = await requireWorkspaceAccess(null, "OWNER");
     const key = getGmailSyncProgressKey(workspaceId, userId);
     const memoryProgress = getGmailSyncProgress(key);
     if (memoryProgress.phase !== "idle") {
@@ -51,7 +51,7 @@ export async function GET() {
 export async function POST(request: Request) {
   let progressKey = "";
   try {
-    const { workspaceId, userId } = await requireWorkspaceAccess();
+    const { workspaceId, userId } = await requireWorkspaceAccess(null, "OWNER");
     progressKey = getGmailSyncProgressKey(workspaceId, userId);
     const integration = await prisma.gmailIntegration.findFirst({
       where: { workspaceId, userId, isActive: true },

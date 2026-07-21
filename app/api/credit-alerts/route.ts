@@ -46,7 +46,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const parsed = IngestAlertSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

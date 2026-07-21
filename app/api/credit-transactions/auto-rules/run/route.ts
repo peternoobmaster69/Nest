@@ -5,7 +5,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const RunAutoRulesSchema = z.object({ workspaceId: z.string().min(1) });
-const MANUAL_RUN_ROLES = ["OWNER", "EDITOR"] as const;
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +13,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
     }
 
-    const { workspaceId } = await requireWorkspaceRole(parsed.data.workspaceId, MANUAL_RUN_ROLES);
+    const { workspaceId } = await requireWorkspaceRole(parsed.data.workspaceId, "EDITOR");
     const result = await runCreditTxnAutoAccounting(prisma, { workspaceId });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

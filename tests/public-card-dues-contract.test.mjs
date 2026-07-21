@@ -16,7 +16,7 @@ test("public cards-due API is token gated and exposes only the requested card fi
   assert.match(route, /publicNetWorthEnabled:\s*true/);
   assert.match(route, /publicNetWorthToken:\s*token/);
   assert.match(route, /token\.length < 24/);
-  assert.match(route, /Cache-Control.*public, max-age=60, stale-while-revalidate=300/s);
+  assert.match(route, /Cache-Control.*private, no-store/s);
   assert.match(payload, /amountCents:\s*\{ gt: 0 \}[\s\S]*paymentDueDate:\s*\{ not: null \}/);
   assert.match(payload, /const DUE_WINDOW_DAYS = 14/);
   assert.match(payload, /DUE_WINDOW_DAYS \+ 1/);

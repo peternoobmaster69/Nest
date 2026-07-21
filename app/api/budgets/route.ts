@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const auth = await requireWorkspaceAccess(parsed.data.workspaceId);
+    const auth = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
     const createdById = auth.userId;
 
     const bankAccount = await prisma.financialAccount.findFirst({

@@ -43,7 +43,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       throw new Error("Transaction not found");
     }
 
-    const { userId } = await requireWorkspaceAccess(existing.workspaceId);
+    const { userId } = await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     const posting = await executePosting({
       workspaceId: existing.workspaceId,
@@ -161,7 +161,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       throw new Error("Transaction not found");
     }
 
-    const { userId } = await requireWorkspaceAccess(existing.workspaceId);
+    const { userId } = await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
     const reason = request.headers.get("x-reversal-reason")?.trim() || "User requested transaction reversal";
     const posting = await reverseLedgerTransaction({
       transactionId: id,

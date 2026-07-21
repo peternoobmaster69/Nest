@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    await requireWorkspaceAccess(parsed.data.workspaceId);
+    await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
 
     const normalizedCardNumber = parsed.data.cardNumber ? normalizeCardNumber(parsed.data.cardNumber) : "";
     const last4Digit = normalizedCardNumber ? normalizedCardNumber.slice(-4) : "0000";

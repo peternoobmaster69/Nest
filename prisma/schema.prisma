@@ -16,6 +16,7 @@ model User {
   name            String?
   image           String?
   activeWorkspaceId String?
+  sessionVersion  Int               @default(0)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   accounts        Account[]
@@ -137,15 +138,20 @@ model WorkspaceInvite {
   invitedEmail  String
   invitedById   String
   invitedUserId String?
+  role          String    @default("VIEWER")
+  tokenHash     String?   @db.VarChar(64)
   status        String    @default("PENDING")
   createdAt     DateTime  @default(now())
+  expiresAt     DateTime?
   respondedAt   DateTime?
+  revokedAt     DateTime?
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   invitedBy     User      @relation("WorkspaceInviteSender", fields: [invitedById], references: [id], onDelete: NoAction)
   invitedUser   User?     @relation("WorkspaceInviteReceiver", fields: [invitedUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, status])
   @@index([invitedEmail, status])
+  @@index([tokenHash])
 }
 
 model WorkspaceAuditLog {
@@ -195,7 +201,7 @@ model WorkspaceMember {
   id          String    @id @default(cuid())
   workspaceId String
   userId      String
-  role        String    @default("MEMBER")
+  role        String    @default("VIEWER")
   invitedBy   String?
   createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -203,6 +209,26 @@ model WorkspaceMember {
 
   @@unique([workspaceId, userId])
   @@index([userId])
+}
+
+model SecurityRateLimit {
+  keyHash         String   @id @db.VarChar(64)
+  count           Int      @default(0)
+  windowStartedAt DateTime
+  blockedUntil    DateTime?
+  updatedAt       DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model IntegrationOAuthState {
+  tokenHash   String   @id @db.VarChar(64)
+  userId      String
+  workspaceId String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 model Month {

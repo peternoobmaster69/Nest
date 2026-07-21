@@ -109,7 +109,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    await requireWorkspaceAccess(parsed.data.workspaceId);
+    await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
 
     let sourceWorkspaceId: string | null = null;
     if (parsed.data.accountId) {
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
       if (!account || account.kind !== "BANK" || !account.isActive) {
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
       }
-      await requireWorkspaceAccess(account.workspaceId);
+      await requireWorkspaceAccess(account.workspaceId, "EDITOR");
       sourceWorkspaceId = account.workspaceId;
     }
 

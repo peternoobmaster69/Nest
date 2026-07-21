@@ -54,7 +54,7 @@ test("passkeys use one-time challenges, replay counters, and NextAuth handoff ti
   assert.match(register, /requireUserVerification:\s*true/);
   assert.match(register, /Passkey name must be between 1 and 80 characters/);
   assert.match(authenticate, /newCounter/);
-  assert.match(authenticate, /consumeWebAuthnChallenge/);
+  assert.match(authenticate, /claimWebAuthnChallenge/);
   assert.match(management, /export async function PATCH/);
   assert.match(management, /data:\s*\{ name \}/);
   assert.match(settings, /suggestedPasskeyName/);

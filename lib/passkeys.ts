@@ -33,20 +33,24 @@ export async function rememberWebAuthnChallenge(
   });
 }
 
-export async function readWebAuthnChallenge(id: string, purpose: WebAuthnPurpose, userId?: string) {
-  const challenge = await prisma.webAuthnChallenge.findFirst({
-    where: {
-      id,
-      purpose,
-      ...(userId ? { userId } : {}),
-      expiresAt: { gt: new Date() },
-    },
+export async function claimWebAuthnChallenge(
+  id: string,
+  purpose: WebAuthnPurpose,
+  userId?: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const challenge = await tx.webAuthnChallenge.findFirst({
+      where: {
+        id,
+        purpose,
+        ...(userId ? { userId } : {}),
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (!challenge) return null;
+    const claimed = await tx.webAuthnChallenge.deleteMany({ where: { id: challenge.id } });
+    return claimed.count === 1 ? challenge : null;
   });
-  return challenge;
-}
-
-export async function consumeWebAuthnChallenge(id: string) {
-  await prisma.webAuthnChallenge.delete({ where: { id } }).catch(() => undefined);
 }
 
 function hashLoginTicket(ticket: string) {
@@ -76,8 +80,8 @@ export async function consumePasskeyLoginTicket(ticket: string) {
     if (!record || record.purpose !== "LOGIN_TICKET" || !record.user || record.expiresAt <= new Date()) {
       return null;
     }
-    await tx.webAuthnChallenge.delete({ where: { id: record.id } });
-    return record.user;
+    const claimed = await tx.webAuthnChallenge.deleteMany({ where: { id: record.id } });
+    return claimed.count === 1 ? record.user : null;
   });
 }
 

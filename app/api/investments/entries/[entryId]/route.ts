@@ -29,7 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ en
       return NextResponse.json({ error: "Investment entry not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.account.workspaceId);
+    await requireWorkspaceAccess(existing.account.workspaceId, "EDITOR");
 
     const updated = await prisma.investmentEntry.update({
       where: { id: entryId },
@@ -65,7 +65,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ entryId
       return NextResponse.json({ error: "Investment entry not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.account.workspaceId);
+    await requireWorkspaceAccess(existing.account.workspaceId, "EDITOR");
 
     await prisma.investmentEntry.delete({
       where: { id: entryId },

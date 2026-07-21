@@ -10,7 +10,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
     }
 
-    await requireWorkspaceAccess(workspaceId);
+    const access = await requireWorkspaceAccess(workspaceId);
+    const isOwner = access.role === "OWNER";
 
     const [workspace, members, invites, auditLogs] = await Promise.all([
       prisma.workspace.findUnique({
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
         },
         orderBy: { createdAt: "asc" },
       }),
-      prisma.workspaceInvite.findMany({
+      isOwner ? prisma.workspaceInvite.findMany({
         where: { workspaceId, status: "PENDING" },
         include: {
           invitedBy: {
@@ -34,8 +35,8 @@ export async function GET(request: Request) {
           },
         },
         orderBy: { createdAt: "desc" },
-      }),
-      prisma.workspaceAuditLog.findMany({
+      }) : Promise.resolve([]),
+      isOwner ? prisma.workspaceAuditLog.findMany({
         where: { workspaceId },
         include: {
           actorUser: {
@@ -44,10 +45,10 @@ export async function GET(request: Request) {
         },
         orderBy: { createdAt: "desc" },
         take: 60,
-      }),
+      }) : Promise.resolve([]),
     ]);
 
-    return NextResponse.json({ workspace, members, invites, auditLogs });
+    return NextResponse.json({ workspace, members, invites, auditLogs, role: access.role });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

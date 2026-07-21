@@ -1617,7 +1617,8 @@ export function DashboardShell({
           )}
 
           <div className={`dashboard-home-grid${showCreditCardDashboardSection ? "" : " dashboard-home-grid-no-credit"}`}>
-            <section className="card cash-flow-card dashboard-cash-flow-panel" aria-labelledby="dashboard-cash-flow-title">
+            <div className="dashboard-home-main-stack">
+              <section className="card cash-flow-card dashboard-cash-flow-panel" aria-labelledby="dashboard-cash-flow-title">
               <div className="cash-flow-head">
                 <div>
                   <div className="cash-flow-title" id="dashboard-cash-flow-title">
@@ -1658,6 +1659,34 @@ export function DashboardShell({
                 />
               )}
             </section>
+
+              {/* Recent Transactions */}
+              <section className="card dashboard-recent-panel" aria-labelledby="dashboard-recent-title">
+                <div className="dashboard-section-header">
+                  <div className="dashboard-section-title" id="dashboard-recent-title">
+                    <span className="dashboard-section-title-icon" aria-hidden="true"><ReceiptText size={16} /></span>
+                    <span>Recent transactions</span>
+                  </div>
+                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push("/transactions")}>
+                    <span>View all</span><ArrowRight size={14} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div>
+                  {recentTransactionRows.map((row) => (
+                    <DashboardTransactionRow key={row.tx.id} {...row} />
+                  ))}
+                  {transactionsQuery.isLoading && <DashboardRecentTransactionsSkeleton />}
+                  {!transactionsQuery.isLoading && !filteredTransactions.length && (
+                    <EmptyState
+                      icon="📑"
+                      title="No transactions yet"
+                      description="Add your first transaction to start tracking your spending."
+                    />
+                  )}
+                </div>
+              </section>
+            </div>
 
             {/* Credit Card Summary */}
             {showCreditCardDashboardSection ? (
@@ -1771,34 +1800,6 @@ export function DashboardShell({
               </section>
             ) : null}
 
-            <div className="dashboard-home-side-stack">
-              {/* Recent Transactions */}
-              <section className="card dashboard-recent-panel" aria-labelledby="dashboard-recent-title">
-                <div className="dashboard-section-header">
-                  <div className="dashboard-section-title" id="dashboard-recent-title">
-                    <span className="dashboard-section-title-icon" aria-hidden="true"><ReceiptText size={16} /></span>
-                    <span>Recent transactions</span>
-                  </div>
-                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push("/transactions")}>
-                    <span>View all</span><ArrowRight size={14} aria-hidden="true" />
-                  </button>
-                </div>
-
-                <div>
-                  {recentTransactionRows.map((row) => (
-                    <DashboardTransactionRow key={row.tx.id} {...row} />
-                  ))}
-                  {transactionsQuery.isLoading && <DashboardRecentTransactionsSkeleton />}
-                  {!transactionsQuery.isLoading && !filteredTransactions.length && (
-                    <EmptyState
-                      icon="📑"
-                      title="No transactions yet"
-                      description="Add your first transaction to start tracking your spending."
-                    />
-                  )}
-                </div>
-              </section>
-            </div>
           </div>
 
         {createBudgetOpen && (

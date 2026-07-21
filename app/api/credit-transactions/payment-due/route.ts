@@ -92,7 +92,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const parsed = UpdatePaymentDueSchema.safeParse(await request.json());
 
     if (!parsed.success) {

@@ -7,7 +7,7 @@ Route: /
 Layout regions: persistent AppSidebar and topbar render as chrome; only dashboard body data regions skeletonize.
 Content blocks:
 - Unified overview: bank identity, available balance, primary actions, three metrics, and compact sub-account shortcuts.
-- Main grid: dominant cash-flow panel, compact payment-due panel, then a full-width recent transaction list.
+- Main grid: cash flow and recent transactions share the main column; payment due uses the side column.
 Do not skeletonize: sidebar, mobile hamburger/topbar, greeting title, static "View all" buttons, card section headings.
 */
 export function DashboardSkeleton() {
@@ -15,21 +15,23 @@ export function DashboardSkeleton() {
     <>
       <DashboardOverviewSkeleton />
       <div className="dashboard-home-grid">
-        <section className="card cash-flow-card dashboard-cash-flow-panel">
-          <div className="cash-flow-head">
-            <Skeleton width={132} height={28} borderRadius="8px" />
-            <Skeleton width={148} height={18} borderRadius="6px" />
-          </div>
-          <div className="cash-flow-chart-skeleton skeleton" />
-        </section>
+        <div className="dashboard-home-main-stack">
+          <section className="card cash-flow-card dashboard-cash-flow-panel">
+            <div className="cash-flow-head">
+              <Skeleton width={132} height={28} borderRadius="8px" />
+              <Skeleton width={148} height={18} borderRadius="6px" />
+            </div>
+            <div className="cash-flow-chart-skeleton skeleton" />
+          </section>
+          <section className="card dashboard-recent-panel">
+            <div className="dashboard-section-header">
+              <Skeleton width={156} height={28} borderRadius="8px" />
+              <Skeleton width={68} height={28} borderRadius="8px" />
+            </div>
+            <DashboardRecentTransactionsSkeleton />
+          </section>
+        </div>
         <DashboardCreditCardPanelSkeleton />
-        <section className="card dashboard-recent-panel">
-          <div className="dashboard-section-header">
-            <Skeleton width={156} height={28} borderRadius="8px" />
-            <Skeleton width={68} height={28} borderRadius="8px" />
-          </div>
-          <DashboardRecentTransactionsSkeleton />
-        </section>
       </div>
     </>
   );

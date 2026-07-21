@@ -70,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Credit transaction not found" }, { status: 404 });
     }
 
-    const { userId, workspaceId } = await requireWorkspaceAccess(existing.workspaceId);
+    const { userId, workspaceId } = await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
     const idempotencyKey = getIdempotencyKey(request, `credit-account:${existing.id}`);
 
     if (parsed.data.smartReviewFingerprint && parsed.data.smartReviewGeneratedAt) {
@@ -285,7 +285,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!account) {
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
       }
-      await requireWorkspaceAccess(account.workspaceId);
+      await requireWorkspaceAccess(account.workspaceId, "EDITOR");
 
       const budget = await prisma.budgetEnvelope.findFirst({
         where: {

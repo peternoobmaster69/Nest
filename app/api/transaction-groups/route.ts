@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     }
 
     const { workspaceId, budgetId, name, icon, transactionIds } = parsed.data;
-    await requireWorkspaceAccess(workspaceId);
+    await requireWorkspaceAccess(workspaceId, "EDITOR");
 
     const uniqueTransactionIds = [...new Set(transactionIds)];
     const transactions = await prisma.transaction.findMany({

@@ -2,6 +2,7 @@
 
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { signIn } from "next-auth/react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
@@ -25,6 +26,8 @@ type PushStatus = {
   publicKey: string;
   subscribed: boolean;
 };
+
+type AuthProvider = { id: string; name: string; type: string };
 
 type RegistrationOptions = Parameters<typeof startRegistration>[0]["optionsJSON"];
 
@@ -109,6 +112,16 @@ export function SettingsAppAccess() {
   const pushStatus = useQuery({
     queryKey: ["settings-push-status"],
     queryFn: () => jsonRequest<PushStatus>("/api/push-subscriptions"),
+  });
+
+  const authProviders = useQuery({
+    queryKey: ["settings-auth-providers"],
+    queryFn: () => jsonRequest<Record<string, AuthProvider>>("/api/auth/providers"),
+  });
+
+  const linkedAccounts = useQuery({
+    queryKey: ["settings-linked-accounts"],
+    queryFn: () => jsonRequest<{ providers: string[] }>("/api/auth/accounts"),
   });
 
   const installApp = useMutation({
@@ -404,6 +417,41 @@ export function SettingsAppAccess() {
         ) : !passkeys.isLoading && !passkeys.isError ? (
           <div className="settings-muted-message settings-message-spaced">No passkeys added yet.</div>
         ) : null}
+      </div>
+
+      <div className="card settings-card-block">
+        <div className="settings-row settings-row-spaced">
+          <div className="settings-item-copy">
+            <div className="settings-section-title">Linked sign-in accounts</div>
+            <div className="settings-section-copy">
+              Link another verified provider while signed in. Nest never links accounts solely because email addresses match.
+            </div>
+          </div>
+        </div>
+        <div className="simple-list">
+          {Object.values(authProviders.data ?? {}).filter((provider) => provider.type === "oauth").map((provider) => {
+            const linked = linkedAccounts.data?.providers.includes(provider.id) ?? false;
+            return (
+              <div className="crud-row" key={provider.id}>
+                <span>{provider.name}</span>
+                {linked ? (
+                  <span className="settings-status-pill is-enabled">Linked</span>
+                ) : (
+                  <button
+                    className="btn btn-primary btn-xs"
+                    type="button"
+                    onClick={() => signIn(provider.id, { callbackUrl: "/settings" })}
+                  >
+                    Link account
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {!authProviders.isLoading && !Object.values(authProviders.data ?? {}).some((provider) => provider.type === "oauth") ? (
+            <div className="settings-muted-message">No OAuth providers are configured for this deployment.</div>
+          ) : null}
+        </div>
       </div>
 
       {message ? <div className="settings-access-message" role="status">{message}</div> : null}

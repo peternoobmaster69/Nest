@@ -27,7 +27,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Budget not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     const updated = await prisma.budgetEnvelope.update({
       where: { id },
@@ -56,7 +56,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Budget not found" }, { status: 404 });
     }
 
-    await requireWorkspaceAccess(existing.workspaceId);
+    await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     await prisma.budgetEnvelope.delete({ where: { id } });
     return NextResponse.json({ ok: true });

@@ -45,7 +45,6 @@ const PRIVATE_HEADERS = {
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
-  "/accounts": "Accounts",
   "/budgets": "Budgets",
   "/budgets/plan": "Budget Plan",
   "/collaborators": "Workspaces",

@@ -1,6 +1,6 @@
 import { clearActiveWorkspaceCookie, getActiveWorkspaceCookie, setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { ApiAuthError, requireSensitiveWorkspaceAction } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -18,19 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const auth = await requireWorkspaceAccess(id);
-    const membership = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId: id,
-          userId: auth.userId,
-        },
-      },
-      select: { role: true },
-    });
-    if (!membership || membership.role !== "OWNER") {
-      return NextResponse.json({ error: "Only workspace owner can update workspace settings." }, { status: 403 });
-    }
+    const auth = await requireSensitiveWorkspaceAction(id);
 
     const updateData: { name?: string; isShared?: boolean; sidebarMoneyPages?: string } = {};
     if (parsed.data.name !== undefined) updateData.name = parsed.data.name.trim();
@@ -68,19 +56,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
     const activeWorkspaceCookie = await getActiveWorkspaceCookie();
-    const auth = await requireWorkspaceAccess(id);
-    const membership = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId: id,
-          userId: auth.userId,
-        },
-      },
-      select: { role: true },
-    });
-    if (!membership || membership.role !== "OWNER") {
-      return NextResponse.json({ error: "Only workspace owner can delete a workspace." }, { status: 403 });
-    }
+    const auth = await requireSensitiveWorkspaceAction(id);
 
     const workspaceCount = await prisma.workspaceMember.count({
       where: { userId: auth.userId },

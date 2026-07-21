@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { ApiAuthError, requireWorkspaceRole } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const { workspaceId, userId } = await requireWorkspaceAccess();
+    const { workspaceId, userId } = await requireWorkspaceRole(null, "OWNER");
     const integration = await prisma.gmailIntegration.findFirst({
       where: { workspaceId, userId, isActive: true },
       orderBy: { updatedAt: "desc" },

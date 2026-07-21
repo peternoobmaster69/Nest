@@ -1,21 +1,27 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { ApiAuthError, requireRecentAuthentication, requireWorkspaceRole } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 
 export async function POST() {
   try {
-    const { workspaceId, userId } = await requireWorkspaceAccess();
+    const recentUserId = await requireRecentAuthentication();
+    const auth = await requireWorkspaceRole(null, "OWNER");
+    if (recentUserId !== auth.userId) throw new ApiAuthError(401, "Unauthorized");
     await prisma.gmailIntegration.updateMany({
-      where: { workspaceId, userId, isActive: true },
-      data: { isActive: false },
+      where: { workspaceId: auth.workspaceId, userId: auth.userId, isActive: true },
+      data: { isActive: false, accessToken: "", refreshToken: "" },
+    });
+    await prisma.workspaceAuditLog.create({
+      data: {
+        workspaceId: auth.workspaceId,
+        actorUserId: auth.userId,
+        action: "GMAIL_INTEGRATION_DISCONNECTED",
+        details: "Gmail integration disconnected and stored tokens cleared.",
+      },
     });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to disconnect Gmail", message }, { status: 500 });
+    if (error instanceof ApiAuthError) return NextResponse.json({ error: error.message }, { status: error.status });
+    return NextResponse.json({ error: "Failed to disconnect Gmail" }, { status: 500 });
   }
 }
-

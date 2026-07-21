@@ -5,6 +5,16 @@ import path from "node:path";
 
 const root = process.cwd();
 
+test("public landing page offers self-hosted and best-effort hosted paths", async () => {
+  const landing = await readFile(path.join(root, "app/page.tsx"), "utf8");
+
+  assert.match(landing, /Host it yourself/);
+  assert.match(landing, /https:\/\/github\.com\/peternoobmaster69\/SaveTogether/);
+  assert.match(landing, /Use the hosted version/);
+  assert.match(landing, /No SLA/);
+  assert.match(landing, /cloud spending reaches its ceiling/);
+});
+
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(entries.map(async (entry) => {
@@ -56,7 +66,6 @@ test("authenticated feature routes use the shared shell", async () => {
     "app/settings/page.tsx",
     "app/collaborators/page.tsx",
     "app/budgets/plan/page.tsx",
-    "app/accounts/page.tsx",
   ];
 
   for (const route of routes) {
@@ -116,6 +125,7 @@ test("dashboard uses one responsive overview and a clear content hierarchy", asy
   assert.match(component, /className="card cash-flow-card dashboard-cash-flow-panel"/);
   assert.match(component, /className="card cc-home-panel dashboard-payments-panel"/);
   assert.match(component, /className="card dashboard-recent-panel"/);
+  assert.match(component, /className="dashboard-home-main-stack"[\s\S]*?dashboard-cash-flow-panel[\s\S]*?dashboard-recent-panel[\s\S]*?Credit Card Summary/);
   assert.match(component, /className="dashboard-reconciliation-list"/);
   assert.match(component, /className="tx-reconciliation dashboard-reconciliation"/);
   assert.match(component, /discrepancyAmount} unallocated/);
@@ -123,9 +133,12 @@ test("dashboard uses one responsive overview and a clear content hierarchy", asy
   assert.doesNotMatch(component, /Bank balance to accounts discrepancy detected/);
   assert.doesNotMatch(component, /className="hero-card"/);
   assert.match(skeleton, /export function DashboardOverviewSkeleton\(\)/);
-  assert.match(styles, /\.dashboard-home-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.65fr\)[^}]*grid-template-areas:[^}]*"cash-flow payments"[^}]*"recent recent"/s);
+  assert.match(styles, /\.dashboard-home-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.65fr\)[^}]*grid-template-areas:\s*"main payments"/s);
+  assert.match(styles, /\.dashboard-home-main-stack\s*\{[^}]*grid-area:\s*main[^}]*display:\s*grid[^}]*gap:\s*14px/s);
   assert.match(styles, /@media \(max-width: 1024px\)\s*\{[\s\S]*?grid-template-areas:[\s\S]*?"cash-flow"[\s\S]*?"payments"[\s\S]*?"recent"/);
+  assert.match(styles, /@media \(max-width: 1024px\)[\s\S]*?\.dashboard-home-main-stack\s*\{[^}]*display:\s*contents/s);
   assert.match(styles, /\.cash-flow-chart\s*\{[^}]*height:\s*220px/s);
+  assert.match(styles, /\.dashboard-payments-panel \.cc-home-list\s*\{[^}]*max-height:\s*none[^}]*overflow-y:\s*visible/s);
 });
 
 test("transaction sub-account cards keep compact uniform geometry", async () => {
@@ -435,9 +448,10 @@ test("settings keeps a compact continuous layout", async () => {
 });
 
 test("Gmail sync uses one responsive status surface", async () => {
-  const [settings, styles] = await Promise.all([
+  const [settings, styles, summary] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
     readFile(path.join(root, "app/globals.css"), "utf8"),
+    readFile(path.join(root, "lib/gmail-sync-summary.ts"), "utf8"),
   ]);
 
   assert.match(settings, /const isGmailSyncActive = Boolean/);
@@ -448,6 +462,9 @@ test("Gmail sync uses one responsive status surface", async () => {
   assert.match(settings, /className=\{`gmail-sync-notice is-\$\{gmailNotice\.tone\}`\}/);
   assert.match(styles, /\.gmail-sync-progress-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/s);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.gmail-sync-notice-copy\s*\{[^}]*display:\s*grid/s);
+  assert.match(summary, /Inbox is up to date\. No new card alert emails were found\./);
+  assert.doesNotMatch(summary, /Synced \$\{data\.scannedMessages\} emails/);
+  assert.match(settings, /!\/\\b0 failed\\b\/i\.test\(normalized\)/);
 });
 
 test("transaction groups use compact two-row cards and a searchable picker", async () => {

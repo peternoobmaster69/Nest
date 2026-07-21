@@ -20,6 +20,7 @@
     "audit:public": "node scripts/audit-public-readiness.mjs && npm audit --omit=dev --audit-level=high",
     "prisma:generate": "node scripts/run-prisma.mjs generate",
     "prisma:migrate": "node scripts/run-prisma.mjs migrate dev",
+    "prisma:migrate:deploy": "node scripts/run-prisma.mjs migrate deploy",
     "prisma:seed": "node prisma/seed.mjs",
     "icons:generate": "node scripts/generate-app-icons.mjs",
     "vapid:generate": "node scripts/generate-vapid-keys.mjs"
@@ -36,9 +37,7 @@
     "@tanstack/react-query": "^5.90.21",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
-    "bcryptjs": "^3.0.3",
     "lucide-react": "^1.7.0",
-    "mssql": "^12.2.1",
     "next": "16.2.10",
     "next-auth": "^4.24.15",
     "openai": "^6.47.0",
@@ -52,7 +51,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/mssql": "^9.1.11",
     "@types/node": "^22.20.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",

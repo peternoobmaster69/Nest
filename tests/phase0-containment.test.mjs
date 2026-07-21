@@ -18,6 +18,8 @@ test("all scheduler routes use the fail-closed constant-time cron guard", async 
     "app/api/cron/credit-card-payment-reminders/route.ts",
     "app/api/cron/gmail-sync/route.ts",
     "app/api/cron/ask-nest-retention/route.ts",
+    "app/api/credit-card-payment-reminders/route.ts",
+    "app/api/credit-transactions/payment-due/reminders/route.ts",
   ]) {
     const code = await source(route);
     assert.match(code, /authorizeCronRequest\(request\)/, route);
@@ -57,10 +59,9 @@ test("manual auto-accounting is role-protected and filters the runner to one wor
   const auth = await source("lib/workspace-auth.ts");
 
   assert.match(route, /RunAutoRulesSchema[\s\S]*?workspaceId/);
-  assert.match(route, /MANUAL_RUN_ROLES = \["OWNER", "EDITOR"\]/);
-  assert.match(route, /requireWorkspaceRole\(parsed\.data\.workspaceId, MANUAL_RUN_ROLES\)/);
+  assert.match(route, /requireWorkspaceRole\(parsed\.data\.workspaceId, "EDITOR"\)/);
   assert.match(route, /runCreditTxnAutoAccounting\(prisma, \{ workspaceId \}\)/);
-  assert.match(auth, /allowedRoles\.includes\(membership\.role\)/);
+  assert.match(auth, /hasMinimumWorkspaceRole\(role, minimumRole\)/);
   assert.match(runner, /\.\.\.\(workspaceId \? \{ id: workspaceId \} : \{\}\)/);
   assert.match(runner, /workspaceId \? `workspace:\$\{workspaceId\}`/);
 });

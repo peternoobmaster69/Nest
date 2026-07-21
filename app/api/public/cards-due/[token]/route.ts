@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 const PUBLIC_CARDS_DUE_HEADERS = {
-  "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+  "Cache-Control": "private, no-store",
 };
 
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {

@@ -306,7 +306,7 @@ export async function POST(request: Request) {
       const parsed = CreateTemplateItemSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       await requireWorkspaceDestination(prisma, workspaceId, parsed.data.destinationSubAccountId);
 
       const item = await prisma.budgetItem.create({
@@ -327,7 +327,7 @@ export async function POST(request: Request) {
       const parsed = CreateTemplateSourceSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       await requireWorkspaceMember(prisma, workspaceId, parsed.data.ownerId);
 
       const source = await prisma.budgetSource.create({
@@ -347,7 +347,7 @@ export async function POST(request: Request) {
       const parsed = StartBlankSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const plan = await prisma.$transaction(
         async (db) => {
           const existing = await db.monthlyBudgetPlan.findFirst({
@@ -376,7 +376,7 @@ export async function POST(request: Request) {
       const parsed = StartFromSetupSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const plan = await prisma.$transaction(
         async (db) => {
           const existing = await db.monthlyBudgetPlan.findFirst({
@@ -481,7 +481,7 @@ export async function POST(request: Request) {
       const parsed = CreateMonthlyItemSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const item = await prisma.$transaction(
         async (db) => {
           await requireDraftPlan(db, workspaceId, parsed.data.planId);
@@ -509,7 +509,7 @@ export async function POST(request: Request) {
       const parsed = CreateMonthlySourceSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const source = await prisma.$transaction(
         async (db) => {
           await requireDraftPlan(db, workspaceId, parsed.data.planId);
@@ -537,7 +537,7 @@ export async function POST(request: Request) {
       const parsed = DiscardMonthlyDraftSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       await prisma.$transaction(
         async (db) => {
           await requireDraftPlan(db, workspaceId, parsed.data.planId);
@@ -555,7 +555,7 @@ export async function POST(request: Request) {
       const parsed = ConfirmMonthlySchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { userId, workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { userId, workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const posting = await executePosting({
         workspaceId,
         operation: "MONTHLY_BUDGET_CONFIRM",
@@ -731,7 +731,7 @@ export async function PATCH(request: Request) {
       const parsed = UpdateTemplateItemSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const existing = await prisma.budgetItem.findFirst({
         where: { id: parsed.data.id, workspaceId, isActive: true },
         select: { id: true },
@@ -756,7 +756,7 @@ export async function PATCH(request: Request) {
       const parsed = UpdateTemplateSourceSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const existing = await prisma.budgetSource.findFirst({
         where: { id: parsed.data.id, workspaceId, isActive: true },
         select: { id: true },
@@ -780,7 +780,7 @@ export async function PATCH(request: Request) {
       const parsed = UpdateMonthlyItemSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const item = await prisma.$transaction(
         async (db) => {
           await requireDraftPlan(db, workspaceId, parsed.data.planId);
@@ -810,7 +810,7 @@ export async function PATCH(request: Request) {
       const parsed = UpdateMonthlySourceSchema.safeParse(body);
       if (!parsed.success) return validationError(parsed.error);
 
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
       const source = await prisma.$transaction(
         async (db) => {
           await requireDraftPlan(db, workspaceId, parsed.data.planId);
@@ -852,7 +852,7 @@ export async function DELETE(request: Request) {
     });
     if (!parsed.success) return validationError(parsed.error);
 
-    const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId);
+    const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
 
     if (parsed.data.type === "templateItem") {
       const existing = await prisma.budgetItem.findFirst({

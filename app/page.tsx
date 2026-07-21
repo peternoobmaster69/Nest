@@ -9,7 +9,10 @@ import {
   Check,
   CheckCircle2,
   CircleDollarSign,
+  Cloud,
   CreditCard,
+  ExternalLink,
+  GitFork,
   Landmark,
   Layers3,
   PiggyBank,
@@ -34,6 +37,7 @@ export default async function Home() {
             </span>
           </Link>
           <nav className="lp-nav-links" aria-label="Landing page navigation">
+            <a href="#use-nest">Use Nest</a>
             <a href="#how-it-works">How it works</a>
             <a href="#money-flows">Money flows</a>
             <a href="#monthly-rhythm">Monthly rhythm</a>
@@ -55,9 +59,9 @@ export default async function Home() {
               money map—without pretending they are all the same thing.
             </p>
             <div className="lp-hero-actions">
-              <Link href="/signin" className="lp-btn-primary">
-                Start with Nest <ArrowRight size={16} aria-hidden="true" />
-              </Link>
+              <a href="#use-nest" className="lp-btn-primary">
+                Choose how to use Nest <ArrowRight size={16} aria-hidden="true" />
+              </a>
               <a href="#how-it-works" className="lp-btn-secondary">See how it works</a>
             </div>
             <div className="lp-hero-principles" aria-label="Nest's four money views">
@@ -119,6 +123,50 @@ export default async function Home() {
                 <span>Every dollar is visible, even before it has a job.</span>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="lp-section lp-use" id="use-nest" aria-labelledby="use-nest-title">
+          <div className="lp-section-head">
+            <span className="lp-eyebrow">Use Nest your way</span>
+            <h2 id="use-nest-title">Choose where Nest runs.</h2>
+            <p>Run it on infrastructure you control, or get started on the best-effort hosted version.</p>
+          </div>
+          <div className="lp-use-grid">
+            <article className="lp-use-card">
+              <span className="lp-icon-tile is-green"><GitFork size={21} aria-hidden="true" /></span>
+              <div className="lp-use-card-copy">
+                <span className="lp-use-label">Your infrastructure</span>
+                <h3>Host it yourself</h3>
+                <p>Deploy Nest yourself and keep control of the infrastructure, database, and operating costs.</p>
+              </div>
+              <div className="lp-use-card-footer">
+                <small>The GitHub repository will be public soon.</small>
+                <a
+                  href="https://github.com/peternoobmaster69/SaveTogether"
+                  className="lp-btn-secondary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View repository <ExternalLink size={15} aria-hidden="true" />
+                </a>
+              </div>
+            </article>
+
+            <article className="lp-use-card is-hosted">
+              <span className="lp-icon-tile is-blue"><Cloud size={21} aria-hidden="true" /></span>
+              <div className="lp-use-card-copy">
+                <span className="lp-use-label">Best-effort service</span>
+                <h3>Use the hosted version</h3>
+                <p>Sign in and use this deployment without setting up your own infrastructure.</p>
+              </div>
+              <div className="lp-use-card-footer">
+                <small>No SLA. The service may be paused when cloud spending reaches its ceiling.</small>
+                <Link href="/signin" className="lp-btn-primary">
+                  Use hosted Nest <ArrowRight size={15} aria-hidden="true" />
+                </Link>
+              </div>
+            </article>
           </div>
         </section>
 

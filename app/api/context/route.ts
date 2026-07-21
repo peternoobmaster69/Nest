@@ -1,16 +1,20 @@
 import { getActiveWorkspaceCookie, setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
-import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
 import { authOptions } from "@/lib/auth";
 import {
   DATABASE_UNAVAILABLE_CODE,
   DATABASE_UNAVAILABLE_MESSAGE,
   isDatabaseUnavailableError,
 } from "@/lib/database-errors";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import {
+  ApiAuthError,
+  normalizeWorkspaceRole,
+  requireSessionUserId,
+  requireWorkspaceAccess,
+  requireWorkspaceRole,
+} from "@/lib/workspace-auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { randomBytes } from "crypto";
 import { z } from "zod";
 import { isAdminEmail } from "@/lib/admin-auth";
 
@@ -20,7 +24,6 @@ const UpdateContextSchema = z.object({
   baseCurrency: z.enum(["SGD", "USD", "EUR", "GBP", "AUD", "JPY"]).optional(),
   receivableDefaultAccountId: z.string().min(1).nullable().optional(),
   receivableDefaultBudgetId: z.string().min(1).nullable().optional(),
-  publicNetWorthEnabled: z.boolean().optional(),
 });
 
 const DEFAULT_SIDEBAR_MONEY_PAGES = {
@@ -35,6 +38,7 @@ const DEFAULT_SIDEBAR_MONEY_PAGES = {
 type WorkspaceSummary = {
   id: string;
   name: string;
+  role: string;
 };
 
 function emptyContextResponse(workspaces: WorkspaceSummary[] = [], isAdmin = false) {
@@ -72,75 +76,14 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.toLowerCase();
     const isAdmin = isAdminEmail(email);
-    const userLookup =
-      session?.user?.id
-        ? await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { id: true, activeWorkspaceId: true },
-          })
-        : email
-          ? await prisma.user.findUnique({
-              where: { email },
-              select: { id: true, activeWorkspaceId: true },
-            })
-          : null;
+    const userId = await requireSessionUserId();
+    const userLookup = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, activeWorkspaceId: true },
+    });
 
     if (!userLookup?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const userId = userLookup.id;
-    await ensureUserWithDefaultWorkspace({
-      id: userId,
-      email,
-      activeWorkspaceId: userLookup.activeWorkspaceId,
-      name: session?.user?.name,
-    });
-
-    if (email) {
-      const pending = await prisma.workspaceInvite.findMany({
-        where: { invitedEmail: email, status: "PENDING" },
-        select: { id: true, workspaceId: true, invitedById: true },
-      });
-
-      if (pending.length) {
-        const respondedAt = new Date();
-        await prisma.$transaction([
-          ...pending.map((invite) =>
-            prisma.workspaceMember.upsert({
-              where: {
-                workspaceId_userId: {
-                  workspaceId: invite.workspaceId,
-                  userId,
-                },
-              },
-              update: {},
-              create: {
-                workspaceId: invite.workspaceId,
-                userId,
-                role: "MEMBER",
-                invitedBy: invite.invitedById,
-              },
-            }),
-          ),
-          prisma.workspaceInvite.updateMany({
-            where: { id: { in: pending.map((invite) => invite.id) } },
-            data: {
-              status: "ACCEPTED",
-              invitedUserId: userId,
-              respondedAt,
-            },
-          }),
-          prisma.workspaceAuditLog.createMany({
-            data: pending.map((invite) => ({
-              workspaceId: invite.workspaceId,
-              actorUserId: userId,
-              action: "INVITE_ACCEPTED",
-              details: `${email} joined workspace via email invite.`,
-            })),
-          }),
-        ]);
-      }
     }
 
     const memberships = await prisma.workspaceMember.findMany({
@@ -174,35 +117,13 @@ export async function GET() {
     const workspaceSummaries = memberships.map((membership) => ({
       id: membership.workspace.id,
       name: membership.workspace.name,
+      role: normalizeWorkspaceRole(membership.role),
     }));
     const membershipWorkspaceIds = new Set(memberships.map((membership) => membership.workspaceId));
-    let selectedWorkspaceId =
+    const selectedWorkspaceId =
       (activeWorkspaceId && membershipWorkspaceIds.has(activeWorkspaceId) ? activeWorkspaceId : null) ||
       memberships[0]?.workspaceId ||
       null;
-
-    if (!activeWorkspaceId && selectedWorkspaceId && memberships.length > 1) {
-      const scores = memberships.map((membership) => ({
-        workspaceId: membership.workspaceId,
-        score:
-          membership.workspace._count.budgetEnvelopes +
-          membership.workspace._count.transactions +
-          membership.workspace._count.receivables +
-          membership.workspace._count.creditCards +
-          membership.workspace._count.investmentAccounts,
-      }));
-      const best = scores.reduce((currentBest, candidate) => (
-        candidate.score > currentBest.score ? candidate : currentBest
-      ));
-
-      if (best.score > 0 && best.workspaceId !== selectedWorkspaceId) {
-        selectedWorkspaceId = best.workspaceId;
-        await prisma.user.update({
-          where: { id: userId },
-          data: { activeWorkspaceId: best.workspaceId },
-        });
-      }
-    }
 
     if (!selectedWorkspaceId) {
       return NextResponse.json(emptyContextResponse([], isAdmin));
@@ -253,6 +174,12 @@ export async function GET() {
       return NextResponse.json(emptyContextResponse(workspaceSummaries, isAdmin));
     }
 
+    const selectedMembership = memberships.find(
+      (membership) => membership.workspaceId === workspace.id,
+    );
+    const role = normalizeWorkspaceRole(selectedMembership?.role ?? "VIEWER");
+    const isOwner = role === "OWNER";
+
     const response = NextResponse.json({
       workspaceId: workspace.id,
       defaultAccountId: workspace.receivableDefaultAccountId,
@@ -263,10 +190,11 @@ export async function GET() {
       isCollaborative: workspace.isShared && (workspace._count.members > 1 || pendingInviteCount > 0),
       workspaceName: workspace.name,
       memberCount: workspace._count.members,
-      pendingInviteCount,
+      pendingInviteCount: isOwner ? pendingInviteCount : 0,
+      role,
       sidebarMoneyPages: parseSidebarMoneyPages(workspace.sidebarMoneyPages),
-      publicNetWorthEnabled: workspace.publicNetWorthEnabled,
-      publicNetWorthToken: workspace.publicNetWorthToken,
+      publicNetWorthEnabled: isOwner ? workspace.publicNetWorthEnabled : false,
+      publicNetWorthToken: isOwner ? workspace.publicNetWorthToken : null,
       workspaces: workspaceSummaries,
       accounts: workspace.financials.map((a) => ({
         id: a.id,
@@ -319,25 +247,21 @@ export async function PATCH(request: Request) {
       baseCurrency: string;
       receivableDefaultAccountId: string | null;
       receivableDefaultBudgetId: string | null;
-      publicNetWorthEnabled: boolean;
-      publicNetWorthToken: string | null;
     } | null = null;
     if (
       parsed.data.workspaceId &&
       (
         parsed.data.baseCurrency !== undefined ||
         parsed.data.receivableDefaultAccountId !== undefined ||
-        parsed.data.receivableDefaultBudgetId !== undefined ||
-        parsed.data.publicNetWorthEnabled !== undefined
+        parsed.data.receivableDefaultBudgetId !== undefined
       )
     ) {
-      await requireWorkspaceAccess(parsed.data.workspaceId);
+      await requireWorkspaceRole(parsed.data.workspaceId, "OWNER");
       const existingWorkspace = await prisma.workspace.findUnique({
         where: { id: parsed.data.workspaceId },
         select: {
           receivableDefaultAccountId: true,
           receivableDefaultBudgetId: true,
-          publicNetWorthToken: true,
         },
       });
       if (!existingWorkspace) {
@@ -401,19 +325,12 @@ export async function PATCH(request: Request) {
               ? undefined
               : parsed.data.receivableDefaultAccountId,
           receivableDefaultBudgetId: nextBudgetId,
-          publicNetWorthEnabled: parsed.data.publicNetWorthEnabled,
-          publicNetWorthToken:
-            parsed.data.publicNetWorthEnabled && !existingWorkspace.publicNetWorthToken
-              ? randomBytes(32).toString("base64url")
-              : undefined,
         },
         select: {
           id: true,
           baseCurrency: true,
           receivableDefaultAccountId: true,
           receivableDefaultBudgetId: true,
-          publicNetWorthEnabled: true,
-          publicNetWorthToken: true,
         },
       });
     }
@@ -423,8 +340,6 @@ export async function PATCH(request: Request) {
       baseCurrency: updated?.baseCurrency ?? null,
       defaultAccountId: updated?.receivableDefaultAccountId ?? null,
       defaultBudgetId: updated?.receivableDefaultBudgetId ?? null,
-      publicNetWorthEnabled: updated?.publicNetWorthEnabled ?? null,
-      publicNetWorthToken: updated?.publicNetWorthToken ?? null,
       activeWorkspaceId: parsed.data.activeWorkspaceId ?? null,
     });
     if (parsed.data.activeWorkspaceId) {

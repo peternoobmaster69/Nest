@@ -20,7 +20,7 @@ const UpdateCreditCardRewardSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
 
     const body = await request.json();
     const parsed = CreateCreditCardRewardSchema.safeParse(body);
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
 
     const body = await request.json();
     const parsed = UpdateCreditCardRewardSchema.safeParse(body);
@@ -122,7 +122,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { workspaceId } = await requireWorkspaceAccess();
+    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

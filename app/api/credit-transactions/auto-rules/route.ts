@@ -124,7 +124,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    await requireWorkspaceAccess(parsed.data.workspaceId);
+    await requireWorkspaceAccess(parsed.data.workspaceId, "OWNER");
     await validateRuleTargets(parsed.data.workspaceId, parsed.data.rules);
 
     const updated = await prisma.workspace.update({
