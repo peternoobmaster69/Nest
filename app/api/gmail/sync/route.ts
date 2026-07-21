@@ -2,8 +2,6 @@ import { isGmailSyncRunning, runGmailSyncForIntegration } from "@/lib/gmail-sync
 import { GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey } from "@/lib/gmail-sync-runner";
 import {
   backgroundJobToProgress,
-  createBackgroundJob,
-  failBackgroundJob,
   findActiveBackgroundJob,
   findLatestBackgroundJob,
 } from "@/lib/background-jobs";
@@ -16,6 +14,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
+
+export const maxDuration = 300;
 
 export async function GET() {
   try {
@@ -92,24 +92,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const job = await createBackgroundJob({
-      type: GMAIL_SYNC_JOB_TYPE,
-      key: getGmailSyncJobKey(integration.id),
-      workspaceId,
-      userId,
-      message: "Gmail sync queued.",
-    });
-
-    void runGmailSyncForIntegration(integration, new URL(request.url).origin, job.id).catch(async (error) => {
-      console.error("Gmail sync background job error:", error);
-      await failBackgroundJob(job.id, error);
-    });
+    const result = await runGmailSyncForIntegration(integration, new URL(request.url).origin);
 
     return NextResponse.json({
       ok: true,
-      queued: true,
-      jobId: job.id,
-    }, { status: 202 });
+      ...result,
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

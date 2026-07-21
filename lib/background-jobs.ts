@@ -134,8 +134,29 @@ export async function failBackgroundJob(jobId: string | null | undefined, error:
   });
 }
 
-export function backgroundJobToProgress(job: Awaited<ReturnType<typeof findLatestBackgroundJob>>): BackgroundJobProgress | null {
+export function backgroundJobToProgress(
+  job: Awaited<ReturnType<typeof findLatestBackgroundJob>>,
+  now = Date.now(),
+): BackgroundJobProgress | null {
   if (!job) return null;
+  const expired =
+    (job.status === "PENDING" || job.status === "RUNNING") &&
+    job.leaseExpiresAt !== null &&
+    job.leaseExpiresAt.getTime() <= now;
+
+  if (expired) {
+    return {
+      phase: "error",
+      progress: 100,
+      message: "Background job stopped before completion. Please retry.",
+      total: job.total ?? 0,
+      current: job.current ?? 0,
+      updatedAt: job.updatedAt.getTime(),
+      jobId: job.id,
+      status: job.status,
+    };
+  }
+
   return {
     phase: statusToPhase(job.status),
     progress: clampProgress(job.progress),
