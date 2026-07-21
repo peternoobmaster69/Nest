@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 export async function requireSession() {
   const session = await getDatabaseReadyServerSession();
   if (!session?.user) {
-    redirect("/signin");
+    redirect("/login");
   }
   return session;
 }

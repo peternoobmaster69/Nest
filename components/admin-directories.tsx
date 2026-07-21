@@ -55,7 +55,7 @@ export function AdminDirectories({
           {users.length ? (
             <div className="admin-table-wrap">
               <table className="admin-table admin-directory-table admin-responsive-table">
-                <thead><tr><th>User</th><th>Joined</th><th>Workspace access</th><th>Ask Nest</th><th>Sessions</th></tr></thead>
+                <thead><tr><th>User</th><th>Joined</th><th>Last signed in</th><th>Workspace access</th><th>Ask Nest</th></tr></thead>
                 <tbody>
                   {users.map((user) => (
                     <tr key={user.id}>
@@ -65,6 +65,11 @@ export function AdminDirectories({
                         <details className="admin-inline-details"><summary>ID</summary><code title={user.id}>{user.id}</code></details>
                       </td>
                       <td data-label="Joined"><time dateTime={user.createdAt.toISOString()}>{DATE_FORMAT.format(user.createdAt)}</time></td>
+                      <td data-label="Last signed in">
+                        {user.lastSignedInAt
+                          ? <time dateTime={user.lastSignedInAt.toISOString()}>{DATE_FORMAT.format(user.lastSignedInAt)}</time>
+                          : <span>Never</span>}
+                      </td>
                       <td data-label="Workspace access">
                         {user.memberships.length ? (
                           <div className="admin-memberships">
@@ -79,7 +84,6 @@ export function AdminDirectories({
                         ) : <span>No workspace access</span>}
                       </td>
                       <td data-label="Ask Nest"><strong>{user.counts.askNestTurns.toLocaleString()} turns</strong><span>{user.counts.askNestMemories.toLocaleString()} memories</span></td>
-                      <td data-label="Sessions">{user.counts.sessions.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

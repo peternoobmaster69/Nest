@@ -6,7 +6,7 @@ export default async function InvitationPage({ params }: { params: Promise<{ tok
   const { token } = await params;
   const path = `/invitations/${encodeURIComponent(token)}`;
   const session = await getDatabaseReadyServerSession();
-  if (!session?.user?.id) redirect(`/signin?callbackUrl=${encodeURIComponent(path)}`);
+  if (!session?.user?.id) redirect(`/login?callbackUrl=${encodeURIComponent(path)}`);
 
   return (
     <main style={{ maxWidth: 620, margin: "48px auto", padding: "0 16px" }}>

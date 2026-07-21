@@ -239,6 +239,7 @@ export async function getAdminOverview() {
         name: true,
         email: true,
         createdAt: true,
+        lastSignedInAt: true,
         activeWorkspaceId: true,
         memberships: {
           orderBy: { createdAt: "asc" },
@@ -252,7 +253,6 @@ export async function getAdminOverview() {
           select: {
             askNestTurns: true,
             askNestMemories: true,
-            sessions: true,
           },
         },
       },
@@ -417,6 +417,7 @@ export async function getAdminOverview() {
       name: user.name,
       email: user.email,
       createdAt: user.createdAt,
+      lastSignedInAt: user.lastSignedInAt,
       activeWorkspaceId: user.activeWorkspaceId,
       memberships: user.memberships.map((membership) => ({
         workspaceId: membership.workspace.id,

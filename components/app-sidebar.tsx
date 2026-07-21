@@ -377,7 +377,7 @@ export function AppSidebar({
         ) : null}
 
         {/* Mobile-only logout button */}
-        <button className="sb-item sb-logout-mobile" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/signin" }))}>
+        <button className="sb-item sb-logout-mobile" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/" }))}>
           <LogOut className="sb-ic" size={18} aria-hidden="true" />Log Out
         </button>
       </div>
@@ -450,7 +450,7 @@ export function AppSidebar({
                 })
               )}
               <div className="sb-user-menu-divider" />
-              <button className="sb-user-menu-item" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/signin" }))}>
+              <button className="sb-user-menu-item" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/" }))}>
                 Log Out
               </button>
             </div>

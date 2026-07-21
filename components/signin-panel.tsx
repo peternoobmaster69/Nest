@@ -5,11 +5,12 @@ import { startAuthentication } from "@simplewebauthn/browser";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { KeyRound } from "lucide-react";
+import { Apple, KeyRound } from "lucide-react";
 import {
   DATABASE_UNAVAILABLE_CODE,
   DATABASE_UNAVAILABLE_MESSAGE,
 } from "@/lib/database-errors";
+import { rememberPostSignInDestination } from "@/lib/session-takeover-client";
 
 type ProviderMap = Record<
   string,
@@ -20,19 +21,22 @@ type ProviderMap = Record<
   }
 >;
 
-const providerIcons: Record<string, string> = {
-  google: "G",
-  apple: "🍎",
-  facebook: "f",
-  github: "⚡",
-};
+function ProviderMark({ providerId }: { providerId: string }) {
+  if (providerId === "apple") return <Apple size={19} aria-hidden="true" />;
+  if (providerId === "github") return <span aria-hidden="true">GH</span>;
+  if (providerId === "facebook") return <span aria-hidden="true">f</span>;
+  if (providerId === "google") return <span aria-hidden="true">G</span>;
+  return <KeyRound size={18} aria-hidden="true" />;
+}
 
 export function SignInPanel({
   serviceMessage,
   callbackUrl = "/",
+  embedded = false,
 }: {
   serviceMessage?: string | null;
   callbackUrl?: string;
+  embedded?: boolean;
 }) {
   const [providers, setProviders] = useState<ProviderMap>({});
   const [loading, setLoading] = useState(true);
@@ -91,6 +95,7 @@ export function SignInPanel({
       });
       const verified = await verifyResponse.json();
       if (!verifyResponse.ok || !verified.loginToken) throw new Error(verified.error || "Passkey sign-in failed.");
+      rememberPostSignInDestination(callbackUrl);
       const result = await signIn("passkey", { loginToken: verified.loginToken, redirect: false, callbackUrl });
       if (result?.error) throw new Error("Passkey sign-in failed.");
       window.location.assign(result?.url || "/");
@@ -100,11 +105,15 @@ export function SignInPanel({
     }
   };
 
-  return (
-    <main className="signin-shell">
-      <div className="signin-gradient" />
-
-      <section className="signin-card">
+  const panel = (
+    <section className={`signin-card${embedded ? " signin-card-embedded" : ""}`}>
+      {embedded ? (
+        <div className="signin-embedded-heading">
+          <span>Workspace</span>
+          <h2 className="signin-title">Choose a secure way to continue.</h2>
+        </div>
+      ) : (
+        <>
         <div className="signin-logo-wrap">
           <div className="signin-logo-ring">
             <Image src="/icon.svg" alt="Nest" width={40} height={40} className="signin-logo" />
@@ -115,59 +124,76 @@ export function SignInPanel({
         <p className="signin-subtitle">
           Your personal finance companion
         </p>
+        </>
+      )}
 
-        <div className="signin-divider" />
+      <div className={`signin-divider${embedded ? " signin-divider-labelled" : ""}`}>
+        {embedded ? <span>Continue securely</span> : null}
+      </div>
 
-        <div className="signin-providers">
-          {loading && (
-            <div className="signin-loading">
-              <div className="signin-spinner" />
-              <span>Loading...</span>
-            </div>
-          )}
+      <div className="signin-providers">
+        {loading && (
+          <div className="signin-loading">
+            <div className="signin-spinner" />
+            <span>Loading sign-in options…</span>
+          </div>
+        )}
 
-          {!loading && errorMessage && (
-            <p className="signin-error">
-              {errorMessage}
-            </p>
-          )}
+        {!loading && errorMessage && (
+          <p className="signin-error">
+            {errorMessage}
+          </p>
+        )}
 
-          {!loading && !errorMessage && !providerList.length && !passkeySupported && (
-            <p className="signin-error">
-              No auth providers configured.
-            </p>
-          )}
+        {!loading && !errorMessage && !providerList.length && !passkeySupported && (
+          <p className="signin-error">
+            No auth providers configured.
+          </p>
+        )}
 
-          {!loading && !isBlockingError && passkeySupported ? (
-            <button className="signin-provider-btn" type="button" onClick={signInWithPasskey} disabled={passkeyLoading}>
-              <span className="signin-provider-icon"><KeyRound size={20} aria-hidden="true" /></span>
-              <span className="signin-provider-text">{passkeyLoading ? "Checking passkey…" : "Continue with a passkey"}</span>
-            </button>
-          ) : null}
+        {!loading && !isBlockingError && passkeySupported ? (
+          <button className="signin-provider-btn is-passkey" type="button" onClick={signInWithPasskey} disabled={passkeyLoading}>
+            <span className="signin-provider-icon"><KeyRound size={19} aria-hidden="true" /></span>
+            <span className="signin-provider-text">{passkeyLoading ? "Checking passkey…" : "Continue with a passkey"}</span>
+          </button>
+        ) : null}
 
-          {!isBlockingError && providerList.map((provider) => (
-            <button
-              key={provider.id}
-              className="signin-provider-btn"
-              onClick={() => signIn(provider.id, { callbackUrl })}
-            >
-              <span className="signin-provider-icon">
-                {providerIcons[provider.id] || "🔐"}
-              </span>
-              <span className="signin-provider-text">
-                Continue with {provider.name}
-              </span>
-            </button>
-          ))}
-        </div>
+        {!isBlockingError && providerList.map((provider) => (
+          <button
+            key={provider.id}
+            className="signin-provider-btn is-oauth"
+            type="button"
+            data-provider={provider.id}
+            onClick={() => {
+              rememberPostSignInDestination(callbackUrl);
+              void signIn(provider.id, { callbackUrl });
+            }}
+          >
+            <span className="signin-provider-icon">
+              <ProviderMark providerId={provider.id} />
+            </span>
+            <span className="signin-provider-text">
+              Continue with {provider.name}
+            </span>
+          </button>
+        ))}
+      </div>
 
-        <p className="signin-footer">
-          By continuing, you agree to our{" "}
-          <Link href="/terms-of-service" target="_blank" rel="noopener noreferrer">Terms of Service</Link>
-          {" "}and{" "}
-          <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer">Privacy Policy</Link>
-        </p>
-      </section>
+      <p className="signin-footer">
+        By continuing, you agree to our{" "}
+        <Link href="/terms-of-service" target="_blank" rel="noopener noreferrer">Terms of Service</Link>
+        {" "}and{" "}
+        <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer">Privacy Policy</Link>
+      </p>
+    </section>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <main className="signin-shell">
+      <div className="signin-gradient" />
+      {panel}
     </main>
   );
 }

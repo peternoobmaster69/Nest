@@ -56,6 +56,10 @@ test("admin overview lists users and workspace details", async () => {
   assert.match(directories, /workspaces\.map/);
   assert.match(directories, /aria-expanded=/);
   assert.match(directories, />Workspace access</);
+  assert.match(directories, />Last signed in</);
+  assert.match(directories, /user\.lastSignedInAt/);
+  assert.doesNotMatch(directories, />Sessions</);
+  assert.match(overview, /lastSignedInAt: true/);
   assert.match(directories, />Transactions</);
 });
 

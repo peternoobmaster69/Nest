@@ -135,11 +135,24 @@ test("invites use hashed one-time tokens with expiry, explicit response, and rev
 test("sessions and public links are revocable and audited", async () => {
   const auth = await read("lib/auth.ts");
   const sessions = await read("app/api/auth/sessions/route.ts");
+  const takeover = await read("app/api/auth/session-takeover/route.ts");
+  const schema = await read("prisma/schema.prisma");
   const links = await read("app/api/public-links/net-worth/route.ts");
   const context = await read("app/api/context/route.ts");
   assert.match(auth, /storedUser\.sessionVersion !== token\.sessionVersion/);
+  assert.match(auth, /token\.takeoverRequired = !claimed/);
+  assert.match(auth, /storedUser\.activeSessionId !== token\.sessionId/);
+  assert.match(auth, /!token\.takeoverRequired/);
+  assert.match(auth, /async signOut\(\{ token \}\)/);
   assert.match(sessions, /sessionVersion: \{ increment: 1 \}/);
+  assert.match(sessions, /activeSessionId: null/);
   assert.match(sessions, /action: "SESSIONS_REVOKED"/);
+  assert.match(takeover, /getToken\(\{ req: request \}\)/);
+  assert.match(takeover, /assertSameOriginRequest\(request\)/);
+  assert.match(takeover, /token\.takeoverRequired/);
+  assert.match(takeover, /action: "SESSION_REPLACED"/);
+  assert.match(schema, /activeSessionId\s+String\?/);
+  assert.match(schema, /lastSignedInAt\s+DateTime\?/);
   assert.match(links, /PUBLIC_LINK_CREATED/);
   assert.match(links, /PUBLIC_LINK_ROTATED/);
   assert.match(links, /PUBLIC_LINK_REVOKED/);

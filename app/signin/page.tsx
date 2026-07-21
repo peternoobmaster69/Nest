@@ -3,23 +3,7 @@ import { DATABASE_UNAVAILABLE_MESSAGE, isDatabaseUnavailableError } from "@/lib/
 import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { redirect } from "next/navigation";
 import { normalizeInternalAppPath } from "@/lib/workspace-entry";
-
-function getSignInErrorMessage(error: string | undefined) {
-  if (!error) return null;
-
-  switch (error) {
-    case "Callback":
-      return "Sign-in could not be completed. Please try again.";
-    case "OAuthCallback":
-    case "OAuthSignin":
-    case "OAuthCreateAccount":
-      return "The provider sign-in flow failed. Please try again.";
-    case "AccessDenied":
-      return "Access was denied for this sign-in attempt.";
-    default:
-      return "Sign-in could not be completed. Please try again.";
-  }
-}
+import { getSignInErrorMessage } from "@/lib/signin-error";
 
 export default async function SignInPage({
   searchParams,

@@ -3,8 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async redirects() {
     return [
-      { source: "/login", destination: "/signin", permanent: true },
-      { source: "/register", destination: "/signin", permanent: true },
+      { source: "/login", destination: "/?login=1", permanent: false },
+      { source: "/signin", destination: "/?login=1", permanent: false },
+      { source: "/register", destination: "/?login=1", permanent: false },
       { source: "/accounts/:path*", destination: "/settings", permanent: true },
     ];
   },

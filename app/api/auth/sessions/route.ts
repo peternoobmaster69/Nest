@@ -12,7 +12,11 @@ export async function DELETE() {
     await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
-        data: { sessionVersion: { increment: 1 } },
+        data: {
+          sessionVersion: { increment: 1 },
+          activeSessionId: null,
+          activeSessionExpiresAt: null,
+        },
       }),
       ...(memberships.length
         ? [

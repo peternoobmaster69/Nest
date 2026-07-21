@@ -108,6 +108,14 @@ test("dashboard and transactions share the bank selector presentation", async ()
   assert.match(transactionsSkeleton, /return <BankSelectorSkeleton \/>/);
   assert.match(styles, /@media \(max-width: 767px\) \{\s*\.tx-bank-action-btn \{/);
   assert.doesNotMatch(styles, /\.txn-page \.tx-bank-action-btn/);
+  assert.match(
+    styles,
+    /\.dashboard-overview-bank-actions \.tx-bank-action-btn\s*\{[^}]*width:\s*32px[^}]*height:\s*32px[^}]*min-inline-size:\s*32px[^}]*min-block-size:\s*32px/s,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.dashboard-overview-bank-actions \.tx-bank-action-btn\s*\{[^}]*(?:width|height):\s*44px/s,
+  );
 });
 
 test("dashboard uses one responsive overview and a clear content hierarchy", async () => {
@@ -120,6 +128,9 @@ test("dashboard uses one responsive overview and a clear content hierarchy", asy
   assert.match(component, />Allocated</);
   assert.match(component, />Unallocated</);
   assert.match(component, />Net worth</);
+  assert.match(component, /freeAmount === 0 \? " has-zero-unallocated"/);
+  assert.match(component, /dashboard-overview-metric dashboard-overview-metric-unallocated/);
+  assert.match(styles, /\.dashboard-overview-metrics\.has-zero-unallocated \.dashboard-overview-metric-unallocated\s*\{\s*display:\s*none/);
   assert.match(component, /const DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT = 10;/);
   assert.match(component, /filteredBudgets\.slice\(0, DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT\)/);
   assert.match(component, /className="card cash-flow-card dashboard-cash-flow-panel"/);

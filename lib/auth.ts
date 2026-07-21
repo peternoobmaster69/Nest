@@ -1,13 +1,78 @@
+import { randomUUID } from "node:crypto";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { NextAuthOptions } from "next-auth";
 import NextAuth from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import AppleProvider from "next-auth/providers/apple";
 import FacebookProvider from "next-auth/providers/facebook";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { consumePasskeyLoginTicket } from "@/lib/passkeys";
+import {
+  ACTIVE_SESSION_RENEWAL_WINDOW_MS,
+  AUTH_SESSION_MAX_AGE_SECONDS,
+  getActiveSessionExpiry,
+} from "@/lib/session-policy";
 import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
+
+async function claimSessionIfAvailable({
+  userId,
+  sessionId,
+  sessionVersion,
+  now,
+}: {
+  userId: string;
+  sessionId: string;
+  sessionVersion: number;
+  now: Date;
+}) {
+  const claimed = await prisma.user.updateMany({
+    where: {
+      id: userId,
+      sessionVersion,
+      OR: [
+        { activeSessionId: null },
+        { activeSessionExpiresAt: null },
+        { activeSessionExpiresAt: { lte: now } },
+      ],
+    },
+    data: {
+      activeSessionId: sessionId,
+      activeSessionExpiresAt: getActiveSessionExpiry(now),
+      lastSignedInAt: now,
+    },
+  });
+  return claimed.count === 1;
+}
+
+async function initializeSessionToken(token: JWT, userId: string) {
+  const now = new Date();
+  const storedUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      sessionVersion: true,
+    },
+  });
+
+  token.id = userId;
+  token.sessionId = randomUUID();
+  token.authenticatedAt ??= Math.floor(now.getTime() / 1000);
+  token.sessionVersion = storedUser?.sessionVersion ?? 0;
+  token.revoked = !storedUser;
+  token.takeoverRequired = false;
+
+  if (!storedUser) return token;
+
+  const claimed = await claimSessionIfAvailable({
+    userId,
+    sessionId: token.sessionId,
+    sessionVersion: storedUser.sessionVersion,
+    now,
+  });
+  token.takeoverRequired = !claimed;
+  return token;
+}
 
 const providers: NextAuthOptions["providers"] = [
   CredentialsProvider({
@@ -55,7 +120,7 @@ if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: AUTH_SESSION_MAX_AGE_SECONDS },
   providers,
   callbacks: {
     async signIn({ account, profile }) {
@@ -69,25 +134,64 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user }) {
       if (user?.id) {
-        token.id = user.id;
         token.authenticatedAt = Math.floor(Date.now() / 1000);
-        const storedUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { sessionVersion: true },
-        });
-        token.sessionVersion = storedUser?.sessionVersion ?? 0;
+        return initializeSessionToken(token, user.id);
+      }
+
+      if (!token.id) return token;
+      if (!token.sessionId) return initializeSessionToken(token, token.id);
+
+      const now = new Date();
+      const storedUser = await prisma.user.findUnique({
+        where: { id: token.id },
+        select: {
+          sessionVersion: true,
+          activeSessionId: true,
+          activeSessionExpiresAt: true,
+        },
+      });
+      if (!storedUser || storedUser.sessionVersion !== token.sessionVersion) {
+        token.revoked = true;
+        token.takeoverRequired = false;
+        return token;
+      }
+
+      if (token.takeoverRequired) {
+        if (storedUser.activeSessionId === token.sessionId) {
+          token.takeoverRequired = false;
+        } else if (
+          !storedUser.activeSessionId ||
+          !storedUser.activeSessionExpiresAt ||
+          storedUser.activeSessionExpiresAt <= now
+        ) {
+          const claimed = await claimSessionIfAvailable({
+            userId: token.id,
+            sessionId: token.sessionId,
+            sessionVersion: storedUser.sessionVersion,
+            now,
+          });
+          token.takeoverRequired = !claimed;
+        }
         token.revoked = false;
-      } else if (token.id) {
-        const storedUser = await prisma.user.findUnique({
-          where: { id: token.id },
-          select: { sessionVersion: true },
+        return token;
+      }
+
+      token.revoked = storedUser.activeSessionId !== token.sessionId;
+      if (
+        !token.revoked &&
+        (!storedUser.activeSessionExpiresAt ||
+          storedUser.activeSessionExpiresAt.getTime() - now.getTime() <= ACTIVE_SESSION_RENEWAL_WINDOW_MS)
+      ) {
+        await prisma.user.updateMany({
+          where: { id: token.id, activeSessionId: token.sessionId },
+          data: { activeSessionExpiresAt: getActiveSessionExpiry(now) },
         });
-        token.revoked = !storedUser || storedUser.sessionVersion !== token.sessionVersion;
       }
       return token;
     },
     async session({ session, token, user }) {
-      if (session.user && !token.revoked) {
+      session.takeoverRequired = Boolean(token.takeoverRequired && !token.revoked);
+      if (session.user && !token.revoked && !token.takeoverRequired) {
         session.user.id = token.id || token.sub || user?.id || "";
         session.user.authenticatedAt = token.authenticatedAt ?? 0;
       } else {
@@ -140,9 +244,16 @@ export const authOptions: NextAuthOptions = {
         name: user.name,
       });
     },
+    async signOut({ token }) {
+      if (!token.id || !token.sessionId) return;
+      await prisma.user.updateMany({
+        where: { id: token.id, activeSessionId: token.sessionId },
+        data: { activeSessionId: null, activeSessionExpiresAt: null },
+      });
+    },
   },
   pages: {
-    signIn: "/signin",
+    signIn: "/login",
   },
 };
 

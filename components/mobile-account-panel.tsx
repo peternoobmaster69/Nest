@@ -241,7 +241,7 @@ export function MobileAccountPanel({
           })}
         </div>
 
-        <button className="mobile-account-action mobile-account-logout" type="button" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/signin" }))}>
+        <button className="mobile-account-action mobile-account-logout" type="button" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/" }))}>
           <LogOut size={19} aria-hidden="true" />
           <span><strong>Log out</strong><small>Sign out of Nest on this device</small></span>
         </button>

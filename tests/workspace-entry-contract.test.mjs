@@ -47,9 +47,22 @@ test("workspace-scoped notifications and emails route to the exact card statemen
 test("sign-in preserves the workspace entry callback", async () => {
   const page = await source("app/signin/page.tsx");
   const panel = await source("components/signin-panel.tsx");
+  const home = await source("app/page.tsx");
+  const config = await source("next.config.ts");
+  const auth = await source("lib/auth.ts");
+  const sidebar = await source("components/app-sidebar.tsx");
+  const mobileAccount = await source("components/mobile-account-panel.tsx");
 
   assert.match(page, /normalizeInternalAppPath\(params\.callbackUrl\)/);
   assert.match(page, /redirect\(callbackUrl\)/);
   assert.match(panel, /signIn\("passkey", \{ loginToken: verified\.loginToken, redirect: false, callbackUrl \}\)/);
   assert.match(panel, /signIn\(provider\.id, \{ callbackUrl \}\)/);
+  assert.match(home, /LandingSignInDialog[\s\S]*?callbackUrl=\{callbackUrl\}/);
+  assert.match(home, /takeoverRequired=\{session\?\.takeoverRequired\}/);
+  assert.match(home, /href="\/login"/);
+  assert.match(config, /source: "\/login", destination: "\/\?login=1", permanent: false/);
+  assert.match(auth, /signIn: "\/login"/);
+  assert.doesNotMatch(sidebar, /signOut\(\{ callbackUrl: "\/signin" \}\)/);
+  assert.match(sidebar, /signOut\(\{ callbackUrl: "\/" \}\)/);
+  assert.match(mobileAccount, /signOut\(\{ callbackUrl: "\/" \}\)/);
 });

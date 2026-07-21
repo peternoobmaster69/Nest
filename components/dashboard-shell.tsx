@@ -1515,12 +1515,12 @@ export function DashboardShell({
                 </div>
               </div>
 
-              <div className="dashboard-overview-metrics">
+              <div className={`dashboard-overview-metrics${freeAmount === 0 ? " has-zero-unallocated" : ""}`}>
                 <article className="dashboard-overview-metric">
                   <span className="dashboard-overview-metric-icon"><LayoutGrid size={17} aria-hidden="true" /></span>
                   <div><span>Allocated</span><strong>{formatCents(totalBudgeted)}</strong><small>Across sub-accounts</small></div>
                 </article>
-                <article className="dashboard-overview-metric">
+                <article className="dashboard-overview-metric dashboard-overview-metric-unallocated">
                   <span className="dashboard-overview-metric-icon"><Wallet size={17} aria-hidden="true" /></span>
                   <div><span>Unallocated</span><strong>{formatCents(freeAmount)}</strong><small>Available to assign</small></div>
                 </article>

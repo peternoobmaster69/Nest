@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     return setActiveWorkspaceCookie(response, workspaceId);
   } catch (error) {
     if (error instanceof ApiAuthError && error.status === 401) {
-      const signInUrl = new URL("/signin", requestUrl.origin);
+      const signInUrl = new URL("/login", requestUrl.origin);
       signInUrl.searchParams.set("callbackUrl", `${requestUrl.pathname}${requestUrl.search}`);
       return NextResponse.redirect(signInUrl);
     }

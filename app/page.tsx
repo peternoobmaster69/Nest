@@ -1,5 +1,8 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { LandingSignInDialog } from "@/components/landing-signin-dialog";
 import { getDatabaseReadyServerSession } from "@/lib/server-session";
+import { getSignInErrorMessage } from "@/lib/signin-error";
+import { normalizeInternalAppPath } from "@/lib/workspace-entry";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -22,11 +25,26 @@ import {
   WalletCards,
 } from "lucide-react";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<{ login?: string; error?: string; callbackUrl?: string }>;
+}) {
+  const params = (await searchParams) ?? {};
+  const showSignIn = params.login === "1" || Boolean(params.error);
+  const callbackUrl = normalizeInternalAppPath(params.callbackUrl);
+  const signInErrorMessage = getSignInErrorMessage(params.error);
   const session = await getDatabaseReadyServerSession();
   if (!session?.user) {
     return (
       <main className="lp">
+        {showSignIn || session?.takeoverRequired ? (
+          <LandingSignInDialog
+            callbackUrl={callbackUrl}
+            serviceMessage={signInErrorMessage}
+            takeoverRequired={session?.takeoverRequired}
+          />
+        ) : null}
         <header className="lp-nav">
           <Link href="/" className="lp-brand" aria-label="Nest home">
             <Image src="/icon.svg" alt="" width={30} height={30} priority />
@@ -41,7 +59,7 @@ export default async function Home() {
             <a href="#money-flows">Money flows</a>
             <a href="#monthly-rhythm">Monthly rhythm</a>
           </nav>
-          <Link href="/signin" className="lp-nav-signin">
+          <Link href="/login" className="lp-nav-signin">
             Sign in <ArrowRight size={15} aria-hidden="true" />
           </Link>
         </header>
@@ -161,7 +179,7 @@ export default async function Home() {
               </div>
               <div className="lp-use-card-footer">
                 <small>No SLA. The service may be paused when cloud spending reaches its ceiling.</small>
-                <Link href="/signin" className="lp-btn-primary">
+                <Link href="/login" className="lp-btn-primary">
                   Use hosted Nest <ArrowRight size={15} aria-hidden="true" />
                 </Link>
               </div>
@@ -347,7 +365,7 @@ export default async function Home() {
             <h2>One home for the money you have, owe, expect, and invest.</h2>
             <p>Start with one bank account and a few meaningful sub-accounts. Nest helps the rest of the picture come into focus.</p>
           </div>
-          <Link href="/signin" className="lp-btn-primary">
+          <Link href="/login" className="lp-btn-primary">
             Continue to sign in <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </section>
@@ -360,7 +378,7 @@ export default async function Home() {
           <div>
             <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer">Privacy</Link>
             <Link href="/terms-of-service" target="_blank" rel="noopener noreferrer">Terms</Link>
-            <Link href="/signin">Sign in</Link>
+            <Link href="/login">Sign in</Link>
           </div>
         </footer>
       </main>

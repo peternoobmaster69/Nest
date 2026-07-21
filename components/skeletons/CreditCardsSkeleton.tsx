@@ -13,23 +13,24 @@ Do not skeletonize: page header title, Add Card button, toast/modal chrome.
 */
 export function CreditCardsSkeleton() {
   return (
-    <div className="cc-grid">
+    <>
       {Array.from({ length: 3 }).map((_, index) => (
         <div className="cc-card-wrapper" key={index}>
-          <div className="cc-card-front" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
+          <div className="cc-card-front cc-card-skeleton">
             <div className="cc-card-header">
               <div className="cc-bank-logo">
-                <Skeleton width={100} height={36} borderRadius="4px" />
+                <Skeleton width={70} height={24} borderRadius="6px" />
               </div>
             </div>
-            <Skeleton width="72%" height={24} borderRadius="5px" />
+            <Skeleton width={42} height={30} borderRadius="7px" />
+            <Skeleton width="72%" height={21} borderRadius="5px" />
             <div className="cc-card-footer">
-              <Skeleton width="48%" height={17} borderRadius="4px" />
-              <Skeleton width={48} height={16} borderRadius="4px" />
+              <Skeleton width="46%" height={16} borderRadius="5px" />
+              <Skeleton width={44} height={16} borderRadius="5px" />
             </div>
           </div>
         </div>
       ))}
-    </div>
+    </>
   );
 }

@@ -11,7 +11,17 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
-import { Plus } from "lucide-react";
+import {
+  BellRing,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  Nfc,
+  Pencil,
+  Plus,
+  RotateCcw,
+  WalletCards,
+} from "lucide-react";
 
 type AppContext = {
   workspaceId: string | null;
@@ -43,31 +53,31 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-// Bank color schemes for card backgrounds
+// Rich, low-glare issuer materials inspired by native wallet cards.
 const BANK_GRADIENTS: Record<string, string> = {
-  "DBS Bank": "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)",
-  "OCBC Bank": "linear-gradient(135deg, #ef4444 0%, #991b1b 100%)",
-  "United Overseas Bank": "linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)",
-  "Citibank Singapore": "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
-  "HSBC": "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)",
-  "Standard Chartered": "linear-gradient(135deg, #0d9488 0%, #115e59 100%)",
-  "Maybank": "linear-gradient(135deg, #fbbf24 0%, #d97706 100%)",
-  "Bank of China": "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)",
-  "ICBC": "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)",
-  "American Express": "linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)",
-  "CIMB Bank": "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+  "DBS Bank": "radial-gradient(circle at 82% 5%, rgba(255,255,255,.24), transparent 34%), linear-gradient(145deg, #d91e3b 0%, #9c0f2a 54%, #520b1b 100%)",
+  "OCBC Bank": "radial-gradient(circle at 12% 0%, rgba(255,255,255,.22), transparent 33%), linear-gradient(145deg, #ec2438 0%, #af1025 58%, #650718 100%)",
+  "United Overseas Bank": "radial-gradient(circle at 80% 0%, rgba(111,203,255,.35), transparent 36%), linear-gradient(145deg, #075ea8 0%, #123c84 58%, #0a1d52 100%)",
+  "Citibank Singapore": "radial-gradient(circle at 86% 4%, rgba(93,190,255,.32), transparent 35%), linear-gradient(145deg, #1174c3 0%, #174a94 56%, #10255b 100%)",
+  "HSBC": "radial-gradient(circle at 8% 5%, rgba(255,255,255,.2), transparent 32%), linear-gradient(145deg, #d81f36 0%, #9f1125 55%, #4b0a15 100%)",
+  "Standard Chartered": "radial-gradient(circle at 83% 6%, rgba(96,255,220,.25), transparent 34%), linear-gradient(145deg, #098c82 0%, #08706d 48%, #073d50 100%)",
+  "Maybank": "radial-gradient(circle at 82% 0%, rgba(255,226,111,.3), transparent 34%), linear-gradient(145deg, #b87900 0%, #7b4d00 54%, #332307 100%)",
+  "Bank of China": "radial-gradient(circle at 82% 0%, rgba(255,255,255,.2), transparent 34%), linear-gradient(145deg, #bd1830 0%, #850e24 55%, #460815 100%)",
+  "ICBC": "radial-gradient(circle at 80% 0%, rgba(255,255,255,.2), transparent 34%), linear-gradient(145deg, #d32237 0%, #981226 55%, #520815 100%)",
+  "American Express": "radial-gradient(circle at 84% 3%, rgba(116,222,255,.32), transparent 36%), linear-gradient(145deg, #1389a9 0%, #0a607f 52%, #073653 100%)",
+  "CIMB Bank": "radial-gradient(circle at 82% 0%, rgba(255,255,255,.2), transparent 34%), linear-gradient(145deg, #d22235 0%, #941125 56%, #4f0715 100%)",
 };
 
-const DEFAULT_GRADIENT = "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)";
+const DEFAULT_GRADIENT = "radial-gradient(circle at 82% 3%, rgba(167,139,250,.38), transparent 35%), linear-gradient(145deg, #4f46a8 0%, #343277 52%, #1f214e 100%)";
 
 const CARD_THEMES: CardTheme[] = [
   { key: "bank-default", label: "Bank Auto", background: "" },
-  { key: "emerald-wave", label: "Emerald Wave", background: "linear-gradient(135deg, #0f766e 0%, #0ea5a4 45%, #34d399 100%)" },
-  { key: "sunset-arc", label: "Sunset Arc", background: "radial-gradient(circle at 15% 20%, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 35%), linear-gradient(135deg, #fb7185 0%, #f97316 55%, #facc15 100%)" },
-  { key: "ocean-stripe", label: "Ocean Stripe", background: "repeating-linear-gradient(135deg, rgba(255,255,255,0.12) 0 8px, rgba(255,255,255,0.02) 8px 16px), linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%)" },
-  { key: "midnight-grid", label: "Midnight Grid", background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%), linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)" },
-  { key: "violet-glow", label: "Violet Glow", background: "radial-gradient(circle at 75% 15%, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 35%), linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #ec4899 100%)" },
-  { key: "carbon-metal", label: "Carbon Metal", background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0 6px, rgba(255,255,255,0.02) 6px 12px), linear-gradient(135deg, #111827 0%, #374151 100%)" },
+  { key: "emerald-wave", label: "Emerald Wave", background: "radial-gradient(circle at 82% 3%, rgba(110,231,183,.3), transparent 36%), linear-gradient(145deg, #0d7b68 0%, #126159 50%, #123c43 100%)" },
+  { key: "sunset-arc", label: "Sunset Arc", background: "radial-gradient(circle at 14% 8%, rgba(255,230,188,.35), transparent 34%), linear-gradient(145deg, #d85262 0%, #b74650 44%, #7e3548 100%)" },
+  { key: "ocean-stripe", label: "Ocean Stripe", background: "repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 7px, transparent 7px 18px), linear-gradient(145deg, #1769ba 0%, #164b8c 55%, #122b5f 100%)" },
+  { key: "midnight-grid", label: "Midnight Grid", background: "linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(145deg, #202939 0%, #111827 58%, #080c14 100%)" },
+  { key: "violet-glow", label: "Violet Glow", background: "radial-gradient(circle at 78% 4%, rgba(216,180,254,.38), transparent 35%), linear-gradient(145deg, #7650b6 0%, #563787 52%, #342451 100%)" },
+  { key: "carbon-metal", label: "Carbon Metal", background: "repeating-linear-gradient(125deg, rgba(255,255,255,.055) 0 2px, transparent 2px 8px), linear-gradient(145deg, #3a414b 0%, #242a32 50%, #101318 100%)" },
 ];
 
 function getCardGradient(bankName: string | null, themeKey?: string | null): string {
@@ -150,12 +160,25 @@ export function CreditCardsPage() {
     return list;
   }, [cards.data]);
 
-  // Set first card as selected by default when cards load
+  // Keep wallet selection valid as cards load, change, or are removed.
   useEffect(() => {
-    if (sortedCards.length > 0 && !selectedCardId) {
+    if (sortedCards.length === 0) {
+      if (selectedCardId) setSelectedCardId(null);
+      return;
+    }
+    if (!selectedCardId || !sortedCards.some((card) => card.id === selectedCardId)) {
       setSelectedCardId(sortedCards[0].id);
     }
   }, [sortedCards, selectedCardId]);
+
+  const displayedCards = useMemo(() => {
+    if (!isMobileView || isStackExpanded || sortedCards.length <= 1 || !selectedCardId) {
+      return sortedCards;
+    }
+    const selectedCard = sortedCards.find((card) => card.id === selectedCardId);
+    if (!selectedCard) return sortedCards;
+    return [selectedCard, ...sortedCards.filter((card) => card.id !== selectedCardId)];
+  }, [isMobileView, isStackExpanded, selectedCardId, sortedCards]);
 
   const createCard = useMutation({
     mutationFn: () =>
@@ -282,9 +305,16 @@ export function CreditCardsPage() {
 
   return (
     <div className="cc-container">
-      {/* Header with Add Button */}
       <div className="cc-header">
-        <h2 className="cc-title">Your Cards</h2>
+        <div className="cc-heading-copy">
+          <div className="cc-title-row">
+            {!cards.isLoading && !cards.isError ? (
+              <span className="cc-title" aria-label={`${sortedCards.length} cards`}>
+                {sortedCards.length} Cards
+              </span>
+            ) : null}
+          </div>
+        </div>
         <button className="btn btn-primary cc-add-btn mobile-primary-create" onClick={openModal} aria-label="Add card" title="Add card">
           <Plus size={18} aria-hidden="true" />
           <span className="mobile-primary-create-label">Add Card</span>
@@ -305,7 +335,7 @@ export function CreditCardsPage() {
           </div>
         )}
 
-        {!cards.isLoading && !cards.isError && sortedCards.map((card, index) => {
+        {!cards.isLoading && !cards.isError && displayedCards.map((card, index) => {
           const isFlipped = flippedCardId === card.id;
           const gradient = getCardGradient(card.bankName, card.themeKey);
           const bankInitials = getBankInitials(card.bankName);
@@ -320,92 +350,134 @@ export function CreditCardsPage() {
             <div
               key={card.id}
               onClick={() => handleCardTap(card.id, isCollapsed)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleCardTap(card.id, isCollapsed);
+                }
+              }}
               className={`cc-card-wrapper ${isFlipped ? "flipped" : ""}${useWalletView ? " cc-wallet-view" : ""}${isCollapsed ? " cc-card-collapsed" : ""}${isSelected ? " cc-card-selected" : ""}`}
-              style={{ zIndex: isSelected ? 100 : sortedCards.length - index }}
+              style={{ zIndex: isSelected ? 100 : displayedCards.length - index }}
+              role="button"
+              tabIndex={0}
+              aria-expanded={isFlipped}
+              aria-label={`${isCollapsed ? "Select" : isFlipped ? "Hide details for" : "Show details for"} ${card.cardName}, ending in ${card.last4Digit}`}
             >
-              {/* Front of Card */}
               <div className="cc-card-front" style={{ background: gradient }}>
+                <span className="cc-card-glow" aria-hidden="true" />
                 <div className="cc-card-header">
-                  <div className="cc-bank-logo">
-                    {(() => {
-                      const bank = getSingaporeBankByName(card.bankName);
-                      const logo = getBankLogoUrl(bank);
-                      return logo && !failedLogos[card.id] ? (
-                        <Image
-                          src={logo}
-                          alt={bank?.name || "Bank"}
-                          width={88}
-                          height={32}
-                          sizes="(max-width: 480px) 72px, 88px"
-                          className="cc-bank-img"
-                          loading="lazy"
-                          onError={() => setFailedLogos((prev) => ({ ...prev, [card.id]: true }))}
-                        />
-                      ) : (
-                        <span className="cc-bank-fallback">{bankInitials}</span>
-                      );
-                    })()}
+                  <div className="cc-bank-identity">
+                    <div className="cc-bank-logo">
+                      {(() => {
+                        const bank = getSingaporeBankByName(card.bankName);
+                        const logo = getBankLogoUrl(bank);
+                        return logo && !failedLogos[card.id] ? (
+                          <Image
+                            src={logo}
+                            alt={bank?.name || "Bank"}
+                            width={88}
+                            height={32}
+                            sizes="(max-width: 480px) 72px, 88px"
+                            className="cc-bank-img"
+                            loading="lazy"
+                            onError={() => setFailedLogos((prev) => ({ ...prev, [card.id]: true }))}
+                          />
+                        ) : (
+                          <span className="cc-bank-fallback">{bankInitials}</span>
+                        );
+                      })()}
+                    </div>
+                    {isCollapsed ? (
+                      <span className="cc-collapsed-card-name">{card.cardName}</span>
+                    ) : (
+                      <span className="cc-bank-name">{card.bankName || "Credit card"}</span>
+                    )}
                   </div>
-                  {isCollapsed && <div className="cc-card-name">{card.cardName}</div>}
+                  <span className="cc-contactless" aria-hidden="true"><Nfc size={25} strokeWidth={1.8} /></span>
                 </div>
 
+                <div className="cc-card-chip" aria-hidden="true"><span /><span /><span /></div>
                 <div className="cc-card-number">{isCollapsed ? collapsedCardNumber : card.maskedNumber}</div>
 
                 <div className="cc-card-footer">
-                  <div className="cc-card-name">{card.cardName}</div>
-                  <div className="cc-card-expiry">
-                    {card.expiryMonth && card.expiryYear
-                      ? `${String(card.expiryMonth).padStart(2, "0")}/${String(card.expiryYear).slice(-2)}`
-                      : "••/••"}
+                  <div className="cc-card-name-block">
+                    <span className="cc-card-meta-label">Card</span>
+                    <div className="cc-card-name">{card.cardName}</div>
+                  </div>
+                  <div className="cc-card-expiry-block">
+                    <span className="cc-card-meta-label">Valid thru</span>
+                    <div className="cc-card-expiry">
+                      {card.expiryMonth && card.expiryYear
+                        ? `${String(card.expiryMonth).padStart(2, "0")}/${String(card.expiryYear).slice(-2)}`
+                        : "••/••"}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Back of Card */}
               <div className="cc-card-back">
+                <span className="cc-back-watermark" aria-hidden="true">{bankInitials}</span>
                 <div className="cc-back-header">
-                  <div className="cc-back-header-meta">
-                    <span className="cc-back-number mono">{card.maskedNumber}</span>
-                    <span className="cc-back-expiry mono">
-                      {card.expiryMonth && card.expiryYear
-                        ? `${String(card.expiryMonth).padStart(2, "0")}/${card.expiryYear}`
-                        : "—"}
-                    </span>
+                  <div className="cc-back-title-block">
+                    <span className="cc-back-kicker">{card.bankName || "Credit card"}</span>
+                    <span className="cc-back-card-name">{card.cardName}</span>
                   </div>
-                </div>
-
-                <div className="cc-details">
-                  <div className="cc-detail-column cc-detail-column-left">
-                    <span className="cc-detail-label">Statement Day</span>
-                    <span className="cc-detail-value cc-detail-value-icon" title="Statement day">
-                      <span aria-hidden="true" className="cc-detail-icon">🗓</span>
-                      <span>{card.statementDay}</span>
-                    </span>
-                  </div>
-                  <div className="cc-detail-column">
-                    <span className="cc-detail-label">Payment Due</span>
-                    <span className="cc-detail-value cc-detail-value-icon" title="Payment due day">
-                      <span aria-hidden="true" className="cc-detail-icon">⏰</span>
-                      <span>{card.paymentDueDay}</span>
-                    </span>
-                  </div>
-                  {card.notes && (
-                    <div className="cc-detail-row cc-detail-row-wide">
-                      <span className="cc-detail-value">{card.notes}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="cc-back-actions">
                   <button
-                    className="btn btn-ghost btn-xs"
+                    className="cc-edit-card-btn"
                     onClick={(event) => {
                       event.stopPropagation();
                       openEditModal(card);
                     }}
+                    aria-label={`Edit ${card.cardName}`}
+                    title="Edit card"
                   >
-                    Edit
+                    <Pencil size={15} aria-hidden="true" />
                   </button>
+                </div>
+
+                <div className="cc-back-magnetic-stripe" aria-hidden="true"><span /></div>
+
+                <div className="cc-back-number-band">
+                  <span className="cc-back-number-group">
+                    <span className="cc-back-band-label">Card number</span>
+                    <span className="cc-back-number mono">{card.maskedNumber}</span>
+                  </span>
+                  <span className="cc-back-expiry-group">
+                    <span className="cc-back-band-label">Expires</span>
+                    <span className="cc-back-expiry mono">
+                      {card.expiryMonth && card.expiryYear
+                        ? `${String(card.expiryMonth).padStart(2, "0")}/${String(card.expiryYear).slice(-2)}`
+                        : "••/••"}
+                    </span>
+                  </span>
+                </div>
+
+                <div className="cc-details">
+                  <div className="cc-detail-column cc-detail-column-left">
+                    <span className="cc-detail-icon" aria-hidden="true"><CalendarDays size={16} /></span>
+                    <span className="cc-detail-copy">
+                      <span className="cc-detail-label">Statement</span>
+                      <span className="cc-detail-value">Day {card.statementDay}</span>
+                    </span>
+                  </div>
+                  <div className="cc-detail-column">
+                    <span className="cc-detail-icon" aria-hidden="true"><BellRing size={16} /></span>
+                    <span className="cc-detail-copy">
+                      <span className="cc-detail-label">Payment due</span>
+                      <span className="cc-detail-value">Day {card.paymentDueDay}</span>
+                    </span>
+                  </div>
+                  {card.notes && (
+                    <div className="cc-detail-row cc-detail-row-wide">
+                      <span className="cc-detail-label">Notes</span>
+                      <span className="cc-detail-value cc-detail-note">{card.notes}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="cc-back-hint" aria-hidden="true">
+                  <RotateCcw size={12} /> Tap to return
                 </div>
               </div>
             </div>
@@ -417,9 +489,10 @@ export function CreditCardsPage() {
           <button
             className="cc-show-all-btn"
             onClick={() => setIsStackExpanded(!isStackExpanded)}
+            aria-expanded={isStackExpanded}
           >
-            <span className="cc-show-all-icon">{isStackExpanded ? "▲" : "▼"}</span>
-            <span>{isStackExpanded ? "Show Wallet" : "Show All Cards"}</span>
+            {isStackExpanded ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
+            <span>{isStackExpanded ? "Stack cards" : `Browse all ${sortedCards.length} cards`}</span>
           </button>
         )}
 
@@ -452,14 +525,15 @@ export function CreditCardsPage() {
             <form className="cc-modal-form" onSubmit={onSubmit}>
               <div className="cc-modal-scroll">
                 {/* Card Preview */}
-                <div
+              <div
                 className="cc-preview"
                 style={{ background: getCardGradient(bankName, themeKey) }}
               >
                 <div className="cc-preview-header">
                   <span className="cc-preview-bank">{getBankInitials(bankName)}</span>
-                  <span>📟</span>
+                  <Nfc size={22} strokeWidth={1.8} aria-hidden="true" />
                 </div>
+                <div className="cc-preview-chip" aria-hidden="true"><span /><span /><span /></div>
                 <div className="cc-preview-number">
                   {cardLast4 ? `•••• •••• •••• ${cardLast4}` : "•••• •••• •••• ••••"}
                 </div>

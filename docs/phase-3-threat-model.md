@@ -10,7 +10,7 @@ Nest handles authenticated sessions, tenant-scoped finance data, card metadata, 
 
 | Asset or flow | Primary threats | Controls |
 | --- | --- | --- |
-| Authentication and passkeys | account takeover, replay, enumeration | NextAuth sessions, verified provider claims, unused provider API tokens cleared on link, one-time WebAuthn challenges, replay counters, recent-auth gates, distributed limits |
+| Authentication and passkeys | account takeover, replay, enumeration | NextAuth sessions, one active server-tracked session ID per user, explicit confirmation before session replacement, verified provider claims, unused provider API tokens cleared on link, one-time WebAuthn challenges, replay counters, recent-auth gates, distributed limits |
 | Workspaces and finance records | IDOR, cross-tenant writes, role escalation | membership lookup on every scoped request, OWNER/EDITOR/VIEWER ordering, source-contract tests, audit records |
 | Credit cards | PAN/CVV compromise | only name/bank, last four, and expiry retained; legacy PAN/cardholder columns purged and dropped; card reveal disabled |
 | Gmail OAuth | CSRF, code interception/replay, token theft | hashed expiring one-time state bound to user/workspace, S256 PKCE, AES-256-GCM token envelopes with record/workspace/field AAD and key versions, recent owner auth, revocation and deletion on disconnect |
@@ -30,6 +30,7 @@ The Phase 3 migration intentionally deactivates existing Gmail integrations and 
 ## Residual risk and operational checks
 
 - A compromised application runtime can access credentials while actively using them; restrict production environment access and rotate Google grants after any runtime compromise.
+- A copied JWT cookie remains indistinguishable from the original device until logout, account-wide revocation, expiry, or a confirmed new sign-in rotates the active session ID. Single-session enforcement limits concurrent independently issued sessions; it does not provide device attestation.
 - CSP permits inline styles because the current UI uses React style attributes. Scripts remain nonce-restricted. Remove inline style usage before tightening `style-src` further.
 - Google revocation is best effort. Local credentials are cleared even if Google is temporarily unavailable; users can also revoke Nest in Google Account settings.
 - Distributed limits depend on Azure SQL. The database-wake path retries auto-resume; prolonged database unavailability fails closed for protected operations.
