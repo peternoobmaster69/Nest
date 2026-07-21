@@ -1,7 +1,6 @@
 import { SignInPanel } from "@/components/signin-panel";
-import { authOptions } from "@/lib/auth";
 import { DATABASE_UNAVAILABLE_MESSAGE, isDatabaseUnavailableError } from "@/lib/database-errors";
-import { getServerSession } from "next-auth";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { redirect } from "next/navigation";
 import { normalizeInternalAppPath } from "@/lib/workspace-entry";
 
@@ -32,7 +31,7 @@ export default async function SignInPage({
   const callbackUrl = normalizeInternalAppPath(params.callbackUrl);
 
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getDatabaseReadyServerSession();
     if (session?.user) {
       redirect(callbackUrl);
     }

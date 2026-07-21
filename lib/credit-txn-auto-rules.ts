@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-export { CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS } from "@/lib/credit-txn-auto-rules-config";
 
 const SubjectFilterSchema = z.string().trim().min(1).max(120);
 

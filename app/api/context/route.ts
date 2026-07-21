@@ -1,6 +1,5 @@
 import { getActiveWorkspaceCookie, setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
 import {
   DATABASE_UNAVAILABLE_CODE,
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -13,7 +12,7 @@ import {
   requireWorkspaceAccess,
   requireWorkspaceRole,
 } from "@/lib/workspace-auth";
-import { getServerSession } from "next-auth";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminEmail } from "@/lib/admin-auth";
@@ -73,7 +72,7 @@ function parseSidebarMoneyPages(value: string | null | undefined) {
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getDatabaseReadyServerSession();
     const email = session?.user?.email?.toLowerCase();
     const isAdmin = isAdminEmail(email);
     const userId = await requireSessionUserId();

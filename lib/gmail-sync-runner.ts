@@ -1,18 +1,22 @@
 import { ingestCreditAlert } from "@/lib/credit-alert-ingest";
-import { buildGmailAlertQuery, getGmailSyncWindowLabel, isGmailSyncDue } from "@/lib/gmail-alert-query";
-import { ensureActiveGmailAccessToken, fetchGmailMessage, listGmailMessageIds } from "@/lib/gmail";
+import { buildGmailAlertQuery, isGmailSyncDue } from "@/lib/gmail-alert-query";
 import {
-  clearGmailSyncProgressLater,
-  getGmailSyncProgressKey,
-  setGmailSyncProgress,
-  type GmailSyncProgressState,
-} from "@/lib/gmail-sync-progress";
+  ensureActiveGmailAccessToken,
+  fetchGmailMessage,
+  getGmailProfile,
+  GmailProviderError,
+  listGmailHistoryPage,
+  listGmailMessagePage,
+} from "@/lib/gmail";
 import {
-  completeBackgroundJob,
-  createBackgroundJob,
-  failBackgroundJob,
-  findActiveBackgroundJob,
-  updateBackgroundJobProgress,
+  BackgroundJobError,
+  claimBackgroundJob,
+  completeClaimedBackgroundJob,
+  continueBackgroundJob,
+  enqueueBackgroundJob,
+  failClaimedBackgroundJob,
+  heartbeatBackgroundJob,
+  throwIfBackgroundJobCancelled,
 } from "@/lib/background-jobs";
 import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
 import { prisma } from "@/lib/prisma";
@@ -22,274 +26,264 @@ type GmailIntegrationRecord = {
   workspaceId: string;
   userId: string;
   lastSyncedAt: Date | null;
+  lastHistoryId?: string | null;
 };
 
-type GmailSyncResult = GmailSyncSummary & {
-  jobId?: string;
+type GmailCheckpoint = GmailSyncSummary & {
+  version: 1;
+  mode: "query" | "history";
+  pageToken: string | null;
+  startHistoryId: string | null;
+  highWaterHistoryId: string | null;
 };
 
-const activeSyncs = new Set<string>();
+const DEFAULT_MESSAGES_PER_SLICE = 50;
+const DEFAULT_SLICES_PER_INVOCATION = 4;
 export const GMAIL_SYNC_JOB_TYPE = "GMAIL_SYNC";
+
+function boundedInteger(value: string | undefined, fallback: number, max: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, max) : fallback;
+}
+
+function messagesPerSlice() {
+  return boundedInteger(process.env.GMAIL_SYNC_MESSAGES_PER_SLICE, DEFAULT_MESSAGES_PER_SLICE, 100);
+}
+
+function slicesPerInvocation() {
+  return boundedInteger(process.env.GMAIL_SYNC_SLICES_PER_INVOCATION, DEFAULT_SLICES_PER_INVOCATION, 10);
+}
+
+function parseCheckpoint(value: string | null, integration: GmailIntegrationRecord): GmailCheckpoint {
+  if (value) {
+    try {
+      const parsed = JSON.parse(value) as GmailCheckpoint;
+      if (parsed.version === 1 && (parsed.mode === "query" || parsed.mode === "history")) return parsed;
+    } catch {
+      // Start from the integration's durable cursor when an old checkpoint is unreadable.
+    }
+  }
+  return {
+    version: 1,
+    mode: integration.lastHistoryId ? "history" : "query",
+    pageToken: null,
+    startHistoryId: integration.lastHistoryId ?? null,
+    highWaterHistoryId: null,
+    scannedMessages: 0,
+    processed: 0,
+    duplicates: 0,
+    failed: 0,
+  };
+}
 
 export function getGmailSyncJobKey(integrationId: string) {
   return `gmail:${integrationId}`;
 }
 
-export function isGmailSyncRunning(integrationId: string) {
-  return activeSyncs.has(integrationId);
+export async function queueGmailSyncForIntegration(integration: GmailIntegrationRecord) {
+  return enqueueBackgroundJob({
+    type: GMAIL_SYNC_JOB_TYPE,
+    key: getGmailSyncJobKey(integration.id),
+    workspaceId: integration.workspaceId,
+    userId: integration.userId,
+    message: "Gmail sync queued.",
+    payload: { integrationId: integration.id },
+    maxAttempts: 5,
+  });
 }
 
-export async function runGmailSyncForIntegration(
-  integration: GmailIntegrationRecord,
-  origin?: string,
-  jobId?: string,
-): Promise<GmailSyncResult> {
-  if (activeSyncs.has(integration.id)) {
-    throw new Error("Gmail sync is already running.");
-  }
-
-  if (!jobId) {
-    const activeJob = await findActiveBackgroundJob(GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey(integration.id));
-    if (activeJob) {
-      return {
-        scannedMessages: 0,
-        processed: 0,
-        duplicates: 0,
-        failed: 0,
-        skipped: true,
-        reason: "Gmail sync is already running.",
-        jobId: activeJob.id,
-      };
-    }
-  }
-
-  activeSyncs.add(integration.id);
-  const progressKey = getGmailSyncProgressKey(integration.workspaceId, integration.userId);
-  let persistedJobId = jobId;
-  let lastPersistedProgressAt = 0;
-
-  if (!persistedJobId) {
-    const job = await createBackgroundJob({
-      type: GMAIL_SYNC_JOB_TYPE,
-      key: getGmailSyncJobKey(integration.id),
-      workspaceId: integration.workspaceId,
-      userId: integration.userId,
-      message: "Connecting to Gmail...",
-    });
-    persistedJobId = job.id;
-  }
-
-  const publishProgress = async (
-    next: Partial<GmailSyncProgressState> & Pick<GmailSyncProgressState, "phase">,
-    persist = false,
-  ) => {
-    setGmailSyncProgress(progressKey, next);
-    const now = Date.now();
-    if (persist || now - lastPersistedProgressAt >= 2000) {
-      lastPersistedProgressAt = now;
-      await updateBackgroundJobProgress(persistedJobId, {
-        progress: next.progress,
-        message: next.message,
-        total: next.total,
-        current: next.current,
-      });
-    }
-  };
-
+async function loadIntegrationFromJob(payloadJson: string | null) {
+  let integrationId = "";
   try {
-    const freshIntegration = await prisma.gmailIntegration.findUnique({
-      where: { id: integration.id },
-      select: {
-        id: true,
-        workspaceId: true,
-        userId: true,
-        lastSyncedAt: true,
-      },
-    });
+    const payload = JSON.parse(payloadJson ?? "{}") as { integrationId?: unknown };
+    if (typeof payload.integrationId === "string") integrationId = payload.integrationId;
+  } catch {}
+  if (!integrationId) throw new BackgroundJobError("INVALID_JOB_PAYLOAD", "The Gmail sync job payload is invalid.");
 
-    if (!freshIntegration) {
-      throw new Error("Gmail integration not found.");
-    }
-
-    if (!isGmailSyncDue(freshIntegration.lastSyncedAt)) {
-      const reason = `Gmail sync skipped. Last synced at ${freshIntegration.lastSyncedAt?.toLocaleString("en-SG", {
-        timeZone: "Asia/Singapore",
-      })}.`;
-      await publishProgress({
-        phase: "complete",
-        progress: 100,
-        message: reason,
-        total: 0,
-        current: 0,
-      }, true);
-      await completeBackgroundJob(persistedJobId, {
-        message: reason,
-        result: { scannedMessages: 0, processed: 0, duplicates: 0, failed: 0, skipped: true },
-        skipped: true,
-      });
-      clearGmailSyncProgressLater(progressKey);
-      return {
-        scannedMessages: 0,
-        processed: 0,
-        duplicates: 0,
-        failed: 0,
-        skipped: true,
-        reason,
-        jobId: persistedJobId,
-      };
-    }
-
-    await publishProgress({
-      phase: "reading",
-      progress: 0,
-      message: "Connecting to Gmail...",
-      total: 0,
-      current: 0,
-    }, true);
-
-    const accessToken = await ensureActiveGmailAccessToken(freshIntegration.id, origin);
-    const gmailQuery = buildGmailAlertQuery(freshIntegration.lastSyncedAt);
-    const windowLabel = getGmailSyncWindowLabel(freshIntegration.lastSyncedAt);
-    const ids = await listGmailMessageIds(accessToken, gmailQuery);
-
-    await publishProgress({
-      phase: "reading",
-      progress: ids.length ? 5 : 30,
-      message: ids.length ? `Reading email contents from ${windowLabel}...` : `No matching emails found for ${windowLabel}.`,
-      total: ids.length,
-      current: 0,
-    }, true);
-
-    const messages: Array<{ id: string; subject: string; body: string }> = [];
-    for (const [index, msg] of ids.entries()) {
-      const full = await fetchGmailMessage(accessToken, msg.id);
-      messages.push({ id: msg.id, subject: full.subject, body: full.body });
-      const ratio = (index + 1) / ids.length;
-      await publishProgress({
-        phase: "reading",
-        progress: 5 + ratio * 25,
-        message: `Reading emails ${index + 1}/${ids.length}`,
-        total: ids.length,
-        current: index + 1,
-      });
-    }
-
-    let processed = 0;
-    let duplicates = 0;
-    let failed = 0;
-
-    if (messages.length > 0) {
-      await publishProgress({
-        phase: "writing",
-        progress: 30,
-        message: "Writing transactions to database...",
-        total: messages.length,
-        current: 0,
-      }, true);
-    }
-
-    for (const [index, msg] of messages.entries()) {
-      try {
-        const result = await ingestCreditAlert({
-          workspaceId: integration.workspaceId,
-          rawBody: msg.body,
-          rawSubject: msg.subject,
-          source: "GMAIL",
-        });
-        if ("duplicate" in result && result.duplicate) {
-          duplicates += 1;
-        } else if ("parseStatus" in result && result.parseStatus === "PROCESSED") {
-          processed += 1;
-        } else if ("parseStatus" in result && result.parseStatus === "DUPLICATE") {
-          duplicates += 1;
-        } else {
-          console.warn("Gmail sync alert failed", {
-            messageId: msg.id,
-            subject: msg.subject,
-            result,
-          });
-          failed += 1;
-        }
-      } catch (messageError) {
-        console.error("Gmail sync message processing error:", msg.id, messageError);
-        failed += 1;
-      }
-
-      if (messages.length > 0) {
-        const ratio = (index + 1) / messages.length;
-        await publishProgress({
-          phase: "writing",
-          progress: 30 + ratio * 70,
-          message: `Writing to database ${index + 1}/${messages.length}`,
-          total: messages.length,
-          current: index + 1,
-        });
-      }
-    }
-
-    await prisma.gmailIntegration.update({
-      where: { id: freshIntegration.id },
-      data: { lastSyncedAt: new Date() },
-    });
-
-    const completedMessage = formatGmailSyncSummary({
-      scannedMessages: ids.length,
-      processed,
-      duplicates,
-      failed,
-    });
-    await publishProgress({
-      phase: "complete",
-      progress: 100,
-      message: completedMessage,
-      total: ids.length,
-      current: ids.length,
-    }, true);
-    await completeBackgroundJob(persistedJobId, {
-      message: completedMessage,
-      result: { scannedMessages: ids.length, processed, duplicates, failed },
-    });
-    clearGmailSyncProgressLater(progressKey);
-
-    return {
-      scannedMessages: ids.length,
-      processed,
-      duplicates,
-      failed,
-      jobId: persistedJobId,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    await publishProgress({
-      phase: "error",
-      progress: 100,
-      message,
-    }, true);
-    await failBackgroundJob(persistedJobId, error);
-    clearGmailSyncProgressLater(progressKey);
-    throw error;
-  } finally {
-    activeSyncs.delete(integration.id);
-  }
-}
-
-export async function runScheduledGmailSyncs() {
-  const integrations = await prisma.gmailIntegration.findMany({
-    where: { isActive: true },
+  const integration = await prisma.gmailIntegration.findUnique({
+    where: { id: integrationId },
     select: {
       id: true,
       workspaceId: true,
       userId: true,
       lastSyncedAt: true,
+      lastHistoryId: true,
+      isActive: true,
     },
   });
-
-  for (const integration of integrations) {
-    if (isGmailSyncRunning(integration.id)) continue;
-    try {
-      await runGmailSyncForIntegration(integration);
-    } catch (error) {
-      console.error("Scheduled Gmail sync failed:", integration.id, error);
-    }
+  if (!integration || !integration.isActive) {
+    throw new BackgroundJobError("GMAIL_INTEGRATION_INACTIVE", "The Gmail integration is no longer active.");
   }
+  return integration;
+}
+
+export async function processGmailSyncJob(jobId: string, origin?: string) {
+  const claimed = await claimBackgroundJob({ jobId, type: GMAIL_SYNC_JOB_TYPE, leaseMs: 5 * 60_000 });
+  if (!claimed) return null;
+  const { job, leaseToken } = claimed;
+
+  try {
+    const integration = await loadIntegrationFromJob(job.payloadJson);
+    const checkpoint = parseCheckpoint(job.checkpointJson, integration);
+    await heartbeatBackgroundJob(job.id, leaseToken, {
+      progress: Math.min(90, 5 + checkpoint.scannedMessages),
+      message: checkpoint.mode === "history" ? "Reading new Gmail history..." : "Scanning a bounded Gmail page...",
+      current: checkpoint.scannedMessages,
+      checkpoint,
+    });
+
+    const accessToken = await ensureActiveGmailAccessToken(integration.id, origin);
+    if (!checkpoint.highWaterHistoryId) {
+      checkpoint.highWaterHistoryId = (await getGmailProfile(accessToken)).historyId;
+    }
+
+    let messages: Array<{ id: string }> = [];
+    let nextPageToken: string | null = null;
+    if (checkpoint.mode === "history" && checkpoint.startHistoryId) {
+      try {
+        const page = await listGmailHistoryPage({
+          accessToken,
+          startHistoryId: checkpoint.startHistoryId,
+          pageToken: checkpoint.pageToken,
+          maxResults: messagesPerSlice(),
+        });
+        messages = page.messages;
+        nextPageToken = page.nextPageToken;
+        checkpoint.highWaterHistoryId = page.historyId ?? checkpoint.highWaterHistoryId;
+      } catch (error) {
+        if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_HISTORY_EXPIRED") throw error;
+        checkpoint.mode = "query";
+        checkpoint.pageToken = null;
+        checkpoint.startHistoryId = null;
+        const page = await listGmailMessagePage({
+          accessToken,
+          q: buildGmailAlertQuery(integration.lastSyncedAt),
+          maxResults: messagesPerSlice(),
+        });
+        messages = page.messages;
+        nextPageToken = page.nextPageToken;
+      }
+    } else {
+      const page = await listGmailMessagePage({
+        accessToken,
+        q: buildGmailAlertQuery(integration.lastSyncedAt),
+        pageToken: checkpoint.pageToken,
+        maxResults: messagesPerSlice(),
+      });
+      messages = page.messages;
+      nextPageToken = page.nextPageToken;
+    }
+
+    for (const message of messages) {
+      await throwIfBackgroundJobCancelled(job.id, leaseToken);
+      let result;
+      try {
+        const full = await fetchGmailMessage(accessToken, message.id);
+        result = await ingestCreditAlert({
+          workspaceId: integration.workspaceId,
+          rawBody: full.body,
+          rawSubject: full.subject,
+          source: "GMAIL",
+          sourceMessageId: message.id,
+        });
+      } catch (error) {
+        if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_MESSAGE_GONE") throw error;
+        checkpoint.failed += 1;
+        checkpoint.scannedMessages += 1;
+        continue;
+      }
+      checkpoint.scannedMessages += 1;
+      if ("duplicate" in result && result.duplicate) checkpoint.duplicates += 1;
+      else if ("parseStatus" in result && result.parseStatus === "PROCESSED") checkpoint.processed += 1;
+      else if ("parseStatus" in result && result.parseStatus === "DUPLICATE") checkpoint.duplicates += 1;
+      else checkpoint.failed += 1;
+
+      await heartbeatBackgroundJob(job.id, leaseToken, {
+        progress: Math.min(90, 10 + checkpoint.scannedMessages),
+        message: `Processed ${checkpoint.scannedMessages} Gmail message${checkpoint.scannedMessages === 1 ? "" : "s"}.`,
+        current: checkpoint.scannedMessages,
+        total: Math.max(checkpoint.scannedMessages, (job.total ?? 0)),
+        checkpoint,
+      });
+    }
+
+    checkpoint.pageToken = nextPageToken;
+    if (nextPageToken) {
+      await continueBackgroundJob(job.id, leaseToken, {
+        checkpoint,
+        message: `Gmail page complete; ${checkpoint.scannedMessages} messages processed so far.`,
+        progress: Math.min(90, 10 + checkpoint.scannedMessages),
+        current: checkpoint.scannedMessages,
+      });
+      return { completed: false, jobId: job.id, summary: checkpoint };
+    }
+
+    await prisma.gmailIntegration.update({
+      where: { id: integration.id },
+      data: {
+        lastSyncedAt: new Date(),
+        lastHistoryId: checkpoint.highWaterHistoryId,
+      },
+    });
+    const message = formatGmailSyncSummary(checkpoint);
+    await completeClaimedBackgroundJob(job.id, leaseToken, { message, result: checkpoint });
+    return { completed: true, jobId: job.id, summary: checkpoint };
+  } catch (error) {
+    if (error instanceof BackgroundJobError && ["JOB_CANCELLED", "LEASE_LOST"].includes(error.code)) return null;
+    await failClaimedBackgroundJob(job.id, leaseToken, error);
+    return null;
+  }
+}
+
+export async function processGmailSyncQueue(params: { jobId?: string; origin?: string; maxSlices?: number } = {}) {
+  const maximum = Math.max(1, Math.min(10, params.maxSlices ?? slicesPerInvocation()));
+  let processedSlices = 0;
+  const requestedJobId = params.jobId;
+
+  while (processedSlices < maximum) {
+    let jobId = requestedJobId;
+    if (!jobId) {
+      const next = await prisma.backgroundJob.findFirst({
+        where: { type: GMAIL_SYNC_JOB_TYPE, status: "PENDING", availableAt: { lte: new Date() } },
+        orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
+        select: { id: true },
+      });
+      if (!next) break;
+      jobId = next.id;
+    }
+    const result = await processGmailSyncJob(jobId, params.origin);
+    processedSlices += 1;
+    if (requestedJobId && result?.completed) break;
+    if (requestedJobId && !result) break;
+  }
+  return { processedSlices };
+}
+
+// Compatibility entry point for callers that expect to request and immediately work one bounded slice.
+export async function runGmailSyncForIntegration(integration: GmailIntegrationRecord, origin?: string) {
+  const queued = await queueGmailSyncForIntegration(integration);
+  if (queued.created) await processGmailSyncQueue({ jobId: queued.job.id, origin, maxSlices: 1 });
+  const latest = await prisma.backgroundJob.findUnique({ where: { id: queued.job.id } });
+  let summary: GmailSyncSummary = { scannedMessages: 0, processed: 0, duplicates: 0, failed: 0 };
+  try {
+    summary = JSON.parse(latest?.resultJson ?? latest?.checkpointJson ?? "{}") as GmailSyncSummary;
+  } catch {}
+  return { ...summary, jobId: queued.job.id, queued: latest?.status === "PENDING" };
+}
+
+export async function runScheduledGmailSyncs() {
+  const integrations = await prisma.gmailIntegration.findMany({
+    where: { isActive: true },
+    select: { id: true, workspaceId: true, userId: true, lastSyncedAt: true, lastHistoryId: true },
+  });
+  let queued = 0;
+  let suppressed = 0;
+  for (const integration of integrations) {
+    if (!isGmailSyncDue(integration.lastSyncedAt)) continue;
+    const result = await queueGmailSyncForIntegration(integration);
+    if (result.created) queued += 1;
+    else suppressed += 1;
+  }
+  const processed = await processGmailSyncQueue();
+  return { queued, suppressed, ...processed };
 }

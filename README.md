@@ -137,18 +137,19 @@ AZURE_SEARCH_QUERY_KEY="***"
 
 ## Credit Card Payment Reminders
 
-Credit card payment reminder emails are sent by calling:
+Credit card payment reminders are run by the single canonical Vercel cron route:
 
 ```bash
-POST /api/credit-card-payment-reminders
+GET /api/cron/credit-card-payment-reminders
+Authorization: Bearer ${CRON_SECRET}
 ```
 
-Schedule this endpoint to run once per day. It sends reminders for outstanding credit card statement balances 5 days, 3 days, and 1 day before the due date, on the due date, and every overdue day. Reminders stop once the statement balance is no longer outstanding.
+`vercel.json` schedules this route once per day. It sends reminders for outstanding credit card statement balances 5 days, 3 days, and 1 day before the due date, on the due date, and every overdue day. Reminders stop once the statement balance is no longer outstanding. The route uses database-backed leases and daily idempotency keys, so retries and overlapping invocations do not duplicate email, push, or in-app notifications.
 
 Required environment variables:
 
 ```env
-CREDIT_CARD_REMINDER_SECRET="***"
+CRON_SECRET="a-random-secret-of-at-least-32-characters"
 AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING="***"
 AZURE_EMAIL_SENDER="billing@example.com"
 ```
@@ -157,22 +158,33 @@ Optional environment variables:
 
 ```env
 CREDIT_CARD_REMINDER_CURRENCY="SGD"
-APP_URL="https://your-app.example.com"
+PAYMENT_REMINDER_MAX_DELIVERIES_PER_RUN="100"
 ```
 
-Authenticate scheduler requests with either:
+Authenticate scheduler requests with:
 
 ```http
-Authorization: Bearer ${CREDIT_CARD_REMINDER_SECRET}
-```
-
-or:
-
-```http
-x-cron-secret: ${CREDIT_CARD_REMINDER_SECRET}
+Authorization: Bearer ${CRON_SECRET}
 ```
 
 Use `?dryRun=1` to count pending reminders without sending email.
+
+## Reliable Background Jobs
+
+Gmail sync, per-workspace credit-card auto-accounting, and reminder delivery use SQL-backed jobs. Active scopes and delivery idempotency keys are protected by filtered unique indexes; workers claim jobs with expiring lease tokens and checkpoint resumable work. Retryable failures use bounded exponential backoff and eventually move to `DEAD_LETTER`. Administrators can inspect queue age, attempts, sanitized failures, and retry/cancel eligible jobs from `/admin`.
+
+Gmail reads at most a configured number of messages per leased slice and persists Gmail history cursors. Manual requests await one bounded slice; remaining pages stay queued for `/api/cron/gmail-sync` or another manual invocation.
+
+```env
+GMAIL_SYNC_MESSAGES_PER_SLICE="50"
+GMAIL_SYNC_SLICES_PER_INVOCATION="4"
+```
+
+Deploy the additive Phase 5 schema before deploying code that uses the new queue fields:
+
+```bash
+npm run prisma:migrate:deploy
+```
 
 ## Legacy Mapping Notes
 
@@ -202,7 +214,17 @@ NextAuth providers are conditionally enabled when env values exist:
 - `APPLE_CLIENT_ID` / `APPLE_CLIENT_SECRET`
 - `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET`
 
-`allowDangerousEmailAccountLinking` is enabled for provider-based account merge by verified email.
+OAuth accounts are linked only through an authenticated, explicit action after verified provider claims.
+
+Gmail access and refresh tokens are stored as versioned AES-256-GCM envelopes. Configure a 32-byte base64 key before enabling the Gmail integration:
+
+```env
+INTEGRATION_ENCRYPTION_KEY="..."
+INTEGRATION_ENCRYPTION_KEY_VERSION="v1"
+INTEGRATION_ENCRYPTION_PREVIOUS_KEYS="{}"
+```
+
+The Phase 3 security migration clears legacy plaintext Gmail grants, so existing users reconnect once after deployment. It also removes legacy full-card fields; Nest retains only card name/bank, last four digits, and expiry. See [the Phase 3 threat model](docs/phase-3-threat-model.md) for rotation and deployment guidance.
 
 ### Passkeys and Web Push
 

@@ -3,15 +3,26 @@ import { deriveStatementCycle } from "@/lib/credit-card-statement-cycle";
 import { getSingaporeBankByName } from "@/lib/singapore-banks";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
+
+function hashKey(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 export async function ingestCreditAlert(params: {
   workspaceId: string;
   rawBody: string;
   rawSubject?: string;
   source?: string;
+  sourceMessageId?: string;
 }) {
-  const { workspaceId, rawBody, rawSubject, source = "EMAIL" } = params;
+  const { workspaceId, rawBody, rawSubject, source = "EMAIL", sourceMessageId } = params;
   const parsedAlert = parseCreditAlert(rawBody, rawSubject);
+  const contentHash = hashKey(rawBody);
+  const sourceMessageKey = hashKey(`${workspaceId}\0${source}\0${sourceMessageId ?? contentHash}`);
+  const transactionKey = parsedAlert.transactionRef
+    ? hashKey(`${workspaceId}\0${parsedAlert.transactionRef}`)
+    : null;
   const normalizedBank = getSingaporeBankByName(parsedAlert.bankName)?.name ?? parsedAlert.bankName;
   const signedAmountCents =
     parsedAlert.amountCents === undefined
@@ -20,32 +31,39 @@ export async function ingestCreditAlert(params: {
         ? -Math.abs(parsedAlert.amountCents)
         : parsedAlert.amountCents;
 
-  if (parsedAlert.transactionRef) {
-    const existing = await prisma.cardAlertStaging.findFirst({
-      where: { workspaceId, transactionRef: parsedAlert.transactionRef },
+  let staging = await prisma.cardAlertStaging.findFirst({
+      where: {
+        workspaceId,
+        OR: [
+          ...(sourceMessageKey ? [{ sourceMessageKey }] : []),
+          ...(parsedAlert.transactionRef ? [{ transactionRef: parsedAlert.transactionRef }] : []),
+        ],
+      },
       select: { id: true, parseStatus: true, creditTransactionId: true },
     });
-    if (existing) {
+  if (staging && ["PROCESSED", "DUPLICATE", "FAILED"].includes(staging.parseStatus)) {
       return {
-        id: existing.id,
-        parseStatus: existing.parseStatus,
-        creditTransactionId: existing.creditTransactionId,
+        id: staging.id,
+        parseStatus: staging.parseStatus,
+        creditTransactionId: staging.creditTransactionId,
         duplicate: true,
       };
-    }
   }
 
   const requiredMissing =
     !parsedAlert.cardLast4 || !parsedAlert.merchant || !parsedAlert.amountCents || !parsedAlert.transactionDate;
 
-  let staging;
-  try {
-    staging = await prisma.cardAlertStaging.create({
+  if (!staging) {
+    try {
+      staging = await prisma.cardAlertStaging.create({
       data: {
         workspaceId,
         source,
-        rawSubject,
-        rawBody,
+        rawSubject: rawSubject ? "[redacted after parsing]" : null,
+        rawBody: `[redacted after parsing; sha256:${contentHash}]`,
+        sourceMessageKey,
+        transactionKey,
+        contentHash,
         bankName: normalizedBank,
         transactionRef: parsedAlert.transactionRef,
         currency: parsedAlert.currency,
@@ -56,32 +74,52 @@ export async function ingestCreditAlert(params: {
         parseStatus: requiredMissing ? "FAILED" : "PARSED",
         failureReason: requiredMissing ? "Unable to parse required fields from alert." : null,
       },
-    });
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const duplicateStaging =
-        (parsedAlert.transactionRef
-          ? await prisma.cardAlertStaging.findFirst({
-              where: { workspaceId, transactionRef: parsedAlert.transactionRef },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const duplicateStaging = await prisma.cardAlertStaging.findFirst({
+              where: {
+                workspaceId,
+                OR: [
+                  ...(sourceMessageKey ? [{ sourceMessageKey }] : []),
+                  ...(parsedAlert.transactionRef ? [{ transactionRef: parsedAlert.transactionRef }] : []),
+                ],
+              },
               select: { id: true, parseStatus: true, creditTransactionId: true },
-            })
-          : null) ??
-        null;
+            });
 
-      if (duplicateStaging) {
-        return {
-          id: duplicateStaging.id,
-          parseStatus: duplicateStaging.parseStatus,
-          creditTransactionId: duplicateStaging.creditTransactionId,
-          duplicate: true,
-        };
+        if (duplicateStaging && ["PROCESSED", "DUPLICATE", "FAILED"].includes(duplicateStaging.parseStatus)) {
+          return { ...duplicateStaging, duplicate: true };
+        }
+        staging = duplicateStaging;
       }
+      if (!staging) throw error;
     }
-    throw error;
   }
 
   if (requiredMissing) {
     return staging;
+  }
+
+  const processingStartedAt = new Date();
+  const claim = await prisma.cardAlertStaging.updateMany({
+    where: {
+      id: staging.id,
+      OR: [
+        { parseStatus: { in: ["PENDING", "PARSED"] } },
+        { parseStatus: "PROCESSING", processingStartedAt: { lte: new Date(Date.now() - 2 * 60_000) } },
+      ],
+    },
+    data: { parseStatus: "PROCESSING", processingStartedAt },
+  });
+  if (claim.count !== 1) {
+    const error = new Error("Credit alert staging is already being processed.") as Error & {
+      code: string; retryable: boolean; safeMessage: string;
+    };
+    error.code = "ALERT_STAGING_BUSY";
+    error.retryable = true;
+    error.safeMessage = "Credit alert staging is busy. The job will retry.";
+    throw error;
   }
 
   const card =
@@ -113,6 +151,7 @@ export async function ingestCreditAlert(params: {
       data: {
         parseStatus: "FAILED",
         failureReason: `No active card found for last4 ${parsedAlert.cardLast4}.`,
+        processingStartedAt: null,
         processedAt: new Date(),
       },
     });
@@ -136,6 +175,7 @@ export async function ingestCreditAlert(params: {
         parseStatus: "DUPLICATE",
         creditCardId: card.id,
         creditTransactionId: existingTx.id,
+        processingStartedAt: null,
         processedAt: new Date(),
       },
     });
@@ -168,6 +208,7 @@ export async function ingestCreditAlert(params: {
       parseStatus: "PROCESSED",
       creditCardId: card.id,
       creditTransactionId: createdTx.id,
+      processingStartedAt: null,
       processedAt: new Date(),
     },
   });

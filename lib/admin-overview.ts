@@ -115,6 +115,62 @@ async function getDatabaseStorage() {
   }
 }
 
+async function getBackgroundJobOverview(now: Date) {
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const [statusGroups, recent, completed, oldestQueued] = await Promise.all([
+    prisma.backgroundJob.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+      _sum: { retryCount: true, duplicateCount: true },
+    }),
+    prisma.backgroundJob.findMany({
+      take: 50,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, type: true, key: true, status: true, workspaceId: true, userId: true,
+        progress: true, current: true, total: true, message: true, errorCode: true,
+        attempts: true, retryCount: true, duplicateCount: true, availableAt: true,
+        leaseExpiresAt: true, startedAt: true, finishedAt: true, createdAt: true, updatedAt: true,
+      },
+    }),
+    prisma.backgroundJob.findMany({
+      where: { finishedAt: { gte: sevenDaysAgo }, startedAt: { not: null } },
+      select: { status: true, startedAt: true, finishedAt: true },
+      take: 1000,
+      orderBy: { finishedAt: "desc" },
+    }),
+    prisma.backgroundJob.findFirst({
+      where: { status: "PENDING" },
+      orderBy: { createdAt: "asc" },
+      select: { createdAt: true },
+    }),
+  ]);
+  const counts = new Map(statusGroups.map((group) => [group.status, group._count._all]));
+  const durations = completed.flatMap((job) =>
+    job.startedAt && job.finishedAt ? [job.finishedAt.getTime() - job.startedAt.getTime()] : [],
+  );
+
+  return {
+    metrics: {
+      queued: counts.get("PENDING") ?? 0,
+      running: counts.get("RUNNING") ?? 0,
+      succeeded: counts.get("SUCCEEDED") ?? 0,
+      failed: (counts.get("FAILED") ?? 0) + (counts.get("DEAD_LETTER") ?? 0),
+      deadLetters: counts.get("DEAD_LETTER") ?? 0,
+      retries: statusGroups.reduce((sum, group) => sum + (group._sum.retryCount ?? 0), 0),
+      duplicateSuppressions: statusGroups.reduce((sum, group) => sum + (group._sum.duplicateCount ?? 0), 0),
+      queueAgeMs: oldestQueued ? Math.max(0, now.getTime() - oldestQueued.createdAt.getTime()) : 0,
+      averageDurationMs: durations.length
+        ? Math.round(durations.reduce((sum, duration) => sum + duration, 0) / durations.length)
+        : 0,
+      successRate: completed.length
+        ? completed.filter((job) => ["SUCCEEDED", "SKIPPED"].includes(job.status)).length / completed.length
+        : 1,
+    },
+    recent,
+  };
+}
+
 export async function getAdminOverview() {
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -292,6 +348,7 @@ export async function getAdminOverview() {
   const archivedTurnsByWorkspace = new Map(
     archivedUsageByWorkspace.map((entry) => [entry.workspaceId, entry._sum.turnCount ?? 0]),
   );
+  const backgroundJobs = await getBackgroundJobOverview(now);
 
   return {
     generatedAt: now,
@@ -304,6 +361,7 @@ export async function getAdminOverview() {
       inactiveMemoryCount,
     },
     databaseStorage,
+    backgroundJobs,
     tokenUsage: {
       allTime: allTimeTokenUsage,
       last7Days: recentTokenUsage,

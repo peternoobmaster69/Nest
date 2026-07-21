@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { DM_Mono, DM_Sans } from "next/font/google";
+import { headers } from "next/headers";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
@@ -31,35 +33,34 @@ export const viewport: Viewport = {
   themeColor: "#f5f2ed",
 };
 
-const themeScript = `
-(() => {
-  try {
-    const storageKey = "nest-theme";
-    const savedTheme = window.localStorage.getItem(storageKey);
-    const theme = savedTheme === "light" || savedTheme === "dark"
-      ? savedTheme
-      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    document.documentElement.setAttribute("data-theme", theme);
-  } catch {
-    document.documentElement.setAttribute("data-theme", "light");
-  }
-})();
-`;
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
+  display: "swap",
+});
 
-export default function RootLayout({
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-dm-mono",
+  display: "swap",
+});
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${dmMono.variable}`}>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
+        {/* This must run before paint; use the native element so nonce hiding does not confuse hydration. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script
+          src="/theme-init.js"
+          nonce={nonce}
+          suppressHydrationWarning
         />
       </head>
       <body className="antialiased">

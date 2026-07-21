@@ -65,10 +65,23 @@ export function assertProductionConfig(env: EnvMap = process.env) {
     );
   }
 
-  const encryptionKey = required(env, "CARD_ENCRYPTION_KEY");
+  const encryptionKey = (
+    env.INTEGRATION_ENCRYPTION_KEY || env.CARD_ENCRYPTION_KEY
+  )?.trim();
+  if (!encryptionKey) {
+    throw new Error(
+      "Production configuration error: INTEGRATION_ENCRYPTION_KEY is required.",
+    );
+  }
   if (!/^[A-Za-z0-9+/]{43}=$/.test(encryptionKey) || Buffer.from(encryptionKey, "base64").length !== 32) {
     throw new Error(
-      "Production configuration error: CARD_ENCRYPTION_KEY must be exactly 32 bytes encoded as base64.",
+      "Production configuration error: INTEGRATION_ENCRYPTION_KEY must be exactly 32 bytes encoded as base64.",
+    );
+  }
+  const encryptionKeyVersion = env.INTEGRATION_ENCRYPTION_KEY_VERSION?.trim() || "v1";
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(encryptionKeyVersion)) {
+    throw new Error(
+      "Production configuration error: INTEGRATION_ENCRYPTION_KEY_VERSION is invalid.",
     );
   }
 

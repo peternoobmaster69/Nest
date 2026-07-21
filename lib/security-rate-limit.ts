@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { ensureDatabaseReady } from "@/lib/database-readiness";
 import { prisma } from "@/lib/prisma";
 
 type RateLimitOptions = {
@@ -30,6 +31,7 @@ function requestAddress(request: Request) {
 }
 
 export async function enforceDistributedRateLimit(request: Request, options: RateLimitOptions) {
+  await ensureDatabaseReady();
   const rawKey = `${options.scope}:${requestAddress(request)}:${options.identifier ?? ""}`;
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
   const now = new Date();

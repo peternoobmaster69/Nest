@@ -22,11 +22,11 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
   let subscriptions;
   try {
     subscriptions = await prisma.pushSubscription.findMany({ where: { userId } });
-  } catch (error) {
-    console.error("Unable to load push subscriptions", error);
-    return { sent: 0, configured: true };
+  } catch {
+    throw new Error("Unable to load push subscriptions.");
   }
   let sent = 0;
+  let failed = 0;
 
   await Promise.all(subscriptions.map(async (subscription) => {
     try {
@@ -40,10 +40,11 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
       if (statusCode === 404 || statusCode === 410) {
         await prisma.pushSubscription.delete({ where: { id: subscription.id } }).catch(() => undefined);
       } else {
-        console.error("Web push delivery failed", error);
+        failed += 1;
+        console.warn("Web push delivery failed", { statusCode: statusCode ?? "unknown" });
       }
     }
   }));
 
-  return { sent, configured: true };
+  return { sent, failed, attempted: subscriptions.length, configured: true };
 }

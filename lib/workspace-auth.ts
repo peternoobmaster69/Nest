@@ -1,7 +1,6 @@
-import { authOptions } from "@/lib/auth";
 import { getActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import {
   hasMinimumWorkspaceRole,
   normalizeWorkspaceRole,
@@ -26,7 +25,7 @@ export class ApiAuthError extends Error {
 }
 
 export async function requireSessionUserId() {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   const userId = session?.user?.id;
   if (!userId) {
     throw new ApiAuthError(401, "Unauthorized");
@@ -35,7 +34,7 @@ export async function requireSessionUserId() {
 }
 
 export async function requireRecentAuthentication(maxAgeSeconds = 10 * 60) {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   const userId = session?.user?.id;
   const authenticatedAt = session?.user?.authenticatedAt;
   if (!userId) throw new ApiAuthError(401, "Unauthorized");

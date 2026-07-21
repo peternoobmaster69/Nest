@@ -148,18 +148,18 @@ Exit criteria:
 
 ### Phase 3 — Data protection and application security foundation
 
-Target: 1–2 weeks. Owner: security/platform. Status: Not started.
+Target: 1–2 weeks. Owner: security/platform. Status: Complete (2026-07-21).
 
-- [ ] Retain only card brand/name/last four/expiry unless a written business requirement justifies more. Never store CVV.
-- [ ] If PAN storage remains, use a dedicated vault/tokenization provider or envelope encryption with Azure Key Vault, key versioning, rotation, AAD binding to workspace/record/field, owner-only access, re-authentication, audit, and `no-store`.
-- [ ] Encrypt Gmail refresh/access tokens and other long-lived credentials at application level; rotate and revoke them on disconnect.
-- [ ] Replace Gmail state with an expiring, one-time, server-stored nonce bound to user/workspace and add PKCE.
-- [ ] Add a shared server-only route wrapper for authentication, role checks, Zod parsing, content type, body limit, origin policy, request ID, safe error mapping, and cache policy.
-- [ ] Add distributed rate limits for auth, passkey options/verification, public share, Gmail connect/sync, imports, reminders, and all expensive mutations.
-- [ ] Configure CSP, HSTS, `frame-ancestors 'none'`, `X-Content-Type-Options`, referrer and permissions policies; use `next/font` and a CSP-safe theme bootstrap.
-- [ ] Set `Cache-Control: no-store` for sessions, context, notifications, integrations, secrets, and mutation responses. Add `Vary` where private cache is intentionally retained.
-- [ ] Validate production database encryption and reject `trustServerCertificate=true` outside local development.
-- [ ] Add automated secret scanning, dependency review, SAST, and security-header tests to CI.
+- [x] Retain only card brand/name/last four/expiry unless a written business requirement justifies more. Never store CVV.
+- [x] If PAN storage remains, use a dedicated vault/tokenization provider or envelope encryption with Azure Key Vault, key versioning, rotation, AAD binding to workspace/record/field, owner-only access, re-authentication, audit, and `no-store`. PAN storage was removed instead.
+- [x] Encrypt Gmail refresh/access tokens and other long-lived credentials at application level; rotate and revoke them on disconnect.
+- [x] Replace Gmail state with an expiring, one-time, server-stored nonce bound to user/workspace and add PKCE.
+- [x] Add a shared server-only route wrapper for authentication, role checks, Zod parsing, content type, body limit, origin policy, request ID, safe error mapping, and cache policy.
+- [x] Add distributed rate limits for auth, passkey options/verification, public share, Gmail connect/sync, imports, reminders, and all expensive mutations.
+- [x] Configure CSP, HSTS, `frame-ancestors 'none'`, `X-Content-Type-Options`, referrer and permissions policies; use `next/font` and a CSP-safe theme bootstrap.
+- [x] Set `Cache-Control: no-store` for sessions, context, notifications, integrations, secrets, and mutation responses. Add `Vary` where private cache is intentionally retained.
+- [x] Validate production database encryption and reject `trustServerCertificate=true` outside local development.
+- [x] Add automated secret scanning, dependency review, SAST, and security-header tests to CI.
 
 Exit criteria:
 
@@ -190,16 +190,16 @@ Exit criteria:
 
 ### Phase 5 — Reliable background jobs and integrations
 
-Target: 1 week. Owner: backend/platform. Status: Not started.
+Target: 1 week. Owner: backend/platform. Status: Implemented; migration pending deployment.
 
-- [ ] Remove unused in-process `setInterval` schedulers; Vercel/serverless instances are not durable schedulers.
-- [ ] Replace query-then-create job exclusion with an atomic lease or a durable queue supporting uniqueness, visibility timeouts, retry/backoff, and dead-letter state.
-- [ ] Never start un-awaited work after returning an API response. Queue Gmail sync and process it in a durable worker/cron invocation.
-- [ ] Scope every job by workspace/integration, propagate idempotency keys, and use atomic checkpoints for resumable imports/sync.
-- [ ] Cap Gmail pages/messages per run, record history cursors, redact raw content, and distinguish retryable from permanent provider errors.
-- [ ] Add delivery deduplication and rate limits for email/push reminders; report partial failure without leaking recipient/provider details.
-- [ ] Consolidate the three reminder entry points and align README, Vercel cron configuration, and environment names.
-- [ ] Add job dashboards/metrics for queue age, duration, success, retry, duplicate suppression, and dead letters.
+- [x] Remove unused in-process `setInterval` schedulers; Vercel/serverless instances are not durable schedulers.
+- [x] Replace query-then-create job exclusion with an atomic lease or a durable queue supporting uniqueness, visibility timeouts, retry/backoff, and dead-letter state.
+- [x] Never start un-awaited work after returning an API response. Queue Gmail sync and process it in a durable worker/cron invocation.
+- [x] Scope every job by workspace/integration, propagate idempotency keys, and use atomic checkpoints for resumable imports/sync.
+- [x] Cap Gmail pages/messages per run, record history cursors, redact raw content, and distinguish retryable from permanent provider errors.
+- [x] Add delivery deduplication and rate limits for email/push reminders; report partial failure without leaking recipient/provider details.
+- [x] Consolidate the three reminder entry points and align README, Vercel cron configuration, and environment names.
+- [x] Add job dashboards/metrics for queue age, duration, success, retry, duplicate suppression, and dead letters.
 
 Exit criteria:
 

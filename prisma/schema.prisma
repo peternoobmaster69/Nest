@@ -10,36 +10,36 @@ datasource db {
 }
 
 model User {
-  id              String            @id @default(cuid())
-  email           String?           @unique
-  emailVerified   DateTime?
-  name            String?
-  image           String?
-  activeWorkspaceId String?
-  sessionVersion  Int               @default(0)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  accounts        Account[]
-  sessions        Session[]
-  memberships     WorkspaceMember[]
-  budgets         BudgetEnvelope[]  @relation("BudgetCreatedBy")
-  receivablesFrom Receivable[]      @relation("ReceivableFrom")
-  receivablesTo   Receivable[]      @relation("ReceivableTo")
-  notes           Note[]
-  gmailIntegrations GmailIntegration[]
-  inAppNotifications InAppNotification[]
-  sentWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteSender")
-  receivedWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteReceiver")
-  workspaceAuditLogs WorkspaceAuditLog[]
-  budgetSources   BudgetSource[]
-  monthlyBudgetSources MonthlyBudgetSource[]
+  id                       String                    @id @default(cuid())
+  email                    String?                   @unique
+  emailVerified            DateTime?
+  name                     String?
+  image                    String?
+  activeWorkspaceId        String?
+  sessionVersion           Int                       @default(0)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  accounts                 Account[]
+  sessions                 Session[]
+  memberships              WorkspaceMember[]
+  budgets                  BudgetEnvelope[]          @relation("BudgetCreatedBy")
+  receivablesFrom          Receivable[]              @relation("ReceivableFrom")
+  receivablesTo            Receivable[]              @relation("ReceivableTo")
+  notes                    Note[]
+  gmailIntegrations        GmailIntegration[]
+  inAppNotifications       InAppNotification[]
+  sentWorkspaceInvites     WorkspaceInvite[]         @relation("WorkspaceInviteSender")
+  receivedWorkspaceInvites WorkspaceInvite[]         @relation("WorkspaceInviteReceiver")
+  workspaceAuditLogs       WorkspaceAuditLog[]
+  budgetSources            BudgetSource[]
+  monthlyBudgetSources     MonthlyBudgetSource[]
   monthlyBudgetPlanSources MonthlyBudgetPlanSource[]
-  passkeys        PasskeyCredential[]
-  webAuthnChallenges WebAuthnChallenge[]
-  pushSubscriptions PushSubscription[]
-  askNestTurns    AskNestTurn[]
-  askNestMemories AskNestMemory[]
-  askNestUsageDaily AskNestUsageDaily[]
+  passkeys                 PasskeyCredential[]
+  webAuthnChallenges       WebAuthnChallenge[]
+  pushSubscriptions        PushSubscription[]
+  askNestTurns             AskNestTurn[]
+  askNestMemories          AskNestMemory[]
+  askNestUsageDaily        AskNestUsageDaily[]
 }
 
 model Account {
@@ -79,55 +79,55 @@ model VerificationToken {
 }
 
 model Workspace {
-  id              String             @id @default(cuid())
-  name            String
-  baseCurrency    String             @default("SGD")
+  id                         String                  @id @default(cuid())
+  name                       String
+  baseCurrency               String                  @default("SGD")
   receivableDefaultAccountId String?
   receivableDefaultBudgetId  String?
-  isShared        Boolean            @default(false)
-  sidebarMoneyPages String?          // Stores visibility settings for Money section pages in sidebar (JSON string)
-  creditCardAutoRules String?        @db.NVarChar(Max) // Stores ordered credit card auto-accounting rules (JSON string)
-  publicNetWorthEnabled Boolean      @default(false)
-  publicNetWorthToken   String?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  receivableDefaultAccount FinancialAccount? @relation("WorkspaceReceivableDefaultAccount", fields: [receivableDefaultAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  receivableDefaultBudget BudgetEnvelope? @relation("WorkspaceReceivableDefaultBudget", fields: [receivableDefaultBudgetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  members         WorkspaceMember[]
-  months          Month[]
-  accountTypes    AccountType[]
-  financials      FinancialAccount[]
-  budgetEnvelopes BudgetEnvelope[]
-  transactions    Transaction[]
-  creditCards     CreditCardAccount[]
-  receivables     Receivable[]
-  noteLists       NoteList[]
-  notes           Note[]
-  salaryEntries        SalaryEntry[]
-  usdAccounts          UsdAccountEntry[]
-  usdInvestments       UsdInvestmentEntry[]
-  milePrograms         MileProgram[]
-  mileRedemptions      MileRedemption[]
-  frequentFlyerAccounts FrequentFlyerAccount[]
-  hotelRewardAccounts HotelRewardAccount[]
-  creditCardRewards    CreditCardReward[]
-  pointConversions     PointConversion[]
-  creditCardTransactions CreditCardTransaction[]
-  cardAlertStagings    CardAlertStaging[]
-  gmailIntegrations    GmailIntegration[]
-  investmentAccounts   InvestmentAccount[]
-  invites             WorkspaceInvite[]
-  auditLogs           WorkspaceAuditLog[]
-  budgetItems         BudgetItem[]
-  budgetSources       BudgetSource[]
-  monthlyBudgetSources MonthlyBudgetSource[]
-  monthlyBudgets      MonthlyBudget[]
-  monthlyBudgetPlans  MonthlyBudgetPlan[]
-  inAppNotifications InAppNotification[]
-  transactionGroups  TransactionGroup[]
-  askNestTurns       AskNestTurn[]
-  askNestMemories    AskNestMemory[]
-  askNestUsageDaily  AskNestUsageDaily[]
+  isShared                   Boolean                 @default(false)
+  sidebarMoneyPages          String? // Stores visibility settings for Money section pages in sidebar (JSON string)
+  creditCardAutoRules        String?                 @db.NVarChar(Max) // Stores ordered credit card auto-accounting rules (JSON string)
+  publicNetWorthEnabled      Boolean                 @default(false)
+  publicNetWorthToken        String?
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+  receivableDefaultAccount   FinancialAccount?       @relation("WorkspaceReceivableDefaultAccount", fields: [receivableDefaultAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  receivableDefaultBudget    BudgetEnvelope?         @relation("WorkspaceReceivableDefaultBudget", fields: [receivableDefaultBudgetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  members                    WorkspaceMember[]
+  months                     Month[]
+  accountTypes               AccountType[]
+  financials                 FinancialAccount[]
+  budgetEnvelopes            BudgetEnvelope[]
+  transactions               Transaction[]
+  creditCards                CreditCardAccount[]
+  receivables                Receivable[]
+  noteLists                  NoteList[]
+  notes                      Note[]
+  salaryEntries              SalaryEntry[]
+  usdAccounts                UsdAccountEntry[]
+  usdInvestments             UsdInvestmentEntry[]
+  milePrograms               MileProgram[]
+  mileRedemptions            MileRedemption[]
+  frequentFlyerAccounts      FrequentFlyerAccount[]
+  hotelRewardAccounts        HotelRewardAccount[]
+  creditCardRewards          CreditCardReward[]
+  pointConversions           PointConversion[]
+  creditCardTransactions     CreditCardTransaction[]
+  cardAlertStagings          CardAlertStaging[]
+  gmailIntegrations          GmailIntegration[]
+  investmentAccounts         InvestmentAccount[]
+  invites                    WorkspaceInvite[]
+  auditLogs                  WorkspaceAuditLog[]
+  budgetItems                BudgetItem[]
+  budgetSources              BudgetSource[]
+  monthlyBudgetSources       MonthlyBudgetSource[]
+  monthlyBudgets             MonthlyBudget[]
+  monthlyBudgetPlans         MonthlyBudgetPlan[]
+  inAppNotifications         InAppNotification[]
+  transactionGroups          TransactionGroup[]
+  askNestTurns               AskNestTurn[]
+  askNestMemories            AskNestMemory[]
+  askNestUsageDaily          AskNestUsageDaily[]
 
   @@index([publicNetWorthToken])
 }
@@ -168,18 +168,18 @@ model WorkspaceAuditLog {
 }
 
 model InvestmentAccount {
-  id                String            @id @default(cuid())
-  workspaceId       String
-  displayName       String?
-  institutionName   String
-  productName       String
-  inceptionDate     DateTime
-  divestedDate      DateTime?
-  isLiquid          Boolean           @default(false)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  entries           InvestmentEntry[]
+  id              String            @id @default(cuid())
+  workspaceId     String
+  displayName     String?
+  institutionName String
+  productName     String
+  inceptionDate   DateTime
+  divestedDate    DateTime?
+  isLiquid        Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  entries         InvestmentEntry[]
 
   @@index([workspaceId, createdAt])
 }
@@ -212,35 +212,36 @@ model WorkspaceMember {
 }
 
 model SecurityRateLimit {
-  keyHash         String   @id @db.VarChar(64)
-  count           Int      @default(0)
+  keyHash         String    @id @db.VarChar(64)
+  count           Int       @default(0)
   windowStartedAt DateTime
   blockedUntil    DateTime?
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime  @updatedAt
 
   @@index([updatedAt])
 }
 
 model IntegrationOAuthState {
-  tokenHash   String   @id @db.VarChar(64)
-  userId      String
-  workspaceId String
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
+  tokenHash    String   @id @db.VarChar(64)
+  userId       String
+  workspaceId  String
+  pkceVerifier String   @db.NVarChar(Max)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
 
   @@index([expiresAt])
 }
 
 model Month {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   workspaceId String
   label       String
   year        Int
   month       Int
   sortOrder   Int
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   receivables Receivable[]
 
   @@unique([workspaceId, year, month])
@@ -248,125 +249,125 @@ model Month {
 }
 
 model AccountType {
-  id          String    @id @default(cuid())
+  id          String             @id @default(cuid())
   workspaceId String
   label       String
-  sortOrder   Int       @default(0)
-  isActive    Boolean   @default(true)
+  sortOrder   Int                @default(0)
+  isActive    Boolean            @default(true)
   color       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   accounts    FinancialAccount[]
 
   @@unique([workspaceId, label])
 }
 
 model FinancialAccount {
-  id            String       @id @default(cuid())
-  workspaceId   String
-  accountTypeId String?
-  name          String
-  bankName      String?
-  kind          String
-  description   String?
-  startingCents Int          @default(0)
-  isFromFamily  Boolean      @default(false)
-  isActive      Boolean      @default(true)
-  isSynced      Boolean      @default(false)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  accountType   AccountType? @relation(fields: [accountTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  receivableDefaultForWorkspaces Workspace[] @relation("WorkspaceReceivableDefaultAccount")
-  transactions  Transaction[]
-  budgets       BudgetEnvelope[]
-  receivables   Receivable[]
+  id                             String           @id @default(cuid())
+  workspaceId                    String
+  accountTypeId                  String?
+  name                           String
+  bankName                       String?
+  kind                           String
+  description                    String?
+  startingCents                  Int              @default(0)
+  isFromFamily                   Boolean          @default(false)
+  isActive                       Boolean          @default(true)
+  isSynced                       Boolean          @default(false)
+  createdAt                      DateTime         @default(now())
+  updatedAt                      DateTime         @updatedAt
+  workspace                      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  accountType                    AccountType?     @relation(fields: [accountTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  receivableDefaultForWorkspaces Workspace[]      @relation("WorkspaceReceivableDefaultAccount")
+  transactions                   Transaction[]
+  budgets                        BudgetEnvelope[]
+  receivables                    Receivable[]
 
   @@index([workspaceId, kind])
 }
 
 model BudgetEnvelope {
-  id             String            @id @default(cuid())
-  workspaceId    String
-  accountId      String
-  name           String
-  icon           String?
-  targetCents    Int               @default(0)
-  availableCents Int               @default(0)
-  isActive       Boolean           @default(true)
-  createdById    String
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account        FinancialAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  createdBy      User              @relation("BudgetCreatedBy", fields: [createdById], references: [id], onDelete: NoAction)
-  receivableDefaultForWorkspaces Workspace[] @relation("WorkspaceReceivableDefaultBudget")
-  incomingBudgetItems BudgetItem[]
+  id                             String                  @id @default(cuid())
+  workspaceId                    String
+  accountId                      String
+  name                           String
+  icon                           String?
+  targetCents                    Int                     @default(0)
+  availableCents                 Int                     @default(0)
+  isActive                       Boolean                 @default(true)
+  createdById                    String
+  createdAt                      DateTime                @default(now())
+  updatedAt                      DateTime                @updatedAt
+  workspace                      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account                        FinancialAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdBy                      User                    @relation("BudgetCreatedBy", fields: [createdById], references: [id], onDelete: NoAction)
+  receivableDefaultForWorkspaces Workspace[]             @relation("WorkspaceReceivableDefaultBudget")
+  incomingBudgetItems            BudgetItem[]
   incomingMonthlyBudgetPlanItems MonthlyBudgetPlanItem[]
-  expenseTypes   ExpenseType[]
-  transactions   Transaction[]
-  transactionGroups TransactionGroup[]
-  receivables    Receivable[]
+  expenseTypes                   ExpenseType[]
+  transactions                   Transaction[]
+  transactionGroups              TransactionGroup[]
+  receivables                    Receivable[]
 
   @@index([workspaceId, accountId])
 }
 
 // Budget Items for funding sub-accounts
 model BudgetItem {
-  id                     String         @id @default(cuid())
-  workspaceId            String
-  title                  String
-  amountCents            Int            @default(0)
-  isMonthly              Boolean        @default(true)
+  id                      String                  @id @default(cuid())
+  workspaceId             String
+  title                   String
+  amountCents             Int                     @default(0)
+  isMonthly               Boolean                 @default(true)
   destinationSubAccountId String?
-  sortOrder              Int            @default(0)
-  isActive               Boolean        @default(true)
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
-  workspace              Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  destinationSubAccount    BudgetEnvelope? @relation(fields: [destinationSubAccountId], references: [id], onDelete: SetNull)
-  monthlyBudgets         MonthlyBudget[]
-  monthlyBudgetPlanItems MonthlyBudgetPlanItem[]
+  sortOrder               Int                     @default(0)
+  isActive                Boolean                 @default(true)
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  workspace               Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  destinationSubAccount   BudgetEnvelope?         @relation(fields: [destinationSubAccountId], references: [id], onDelete: SetNull)
+  monthlyBudgets          MonthlyBudget[]
+  monthlyBudgetPlanItems  MonthlyBudgetPlanItem[]
 
   @@index([workspaceId])
 }
 
 // Budget Sources (funding sources)
 model BudgetSource {
-  id          String          @id @default(cuid())
-  workspaceId String
-  title       String
-  ownerId     String          // Links to User (workspace member) who owns this source
-  amountCents Int             @default(0)
-  isActive    Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  monthlyBudgets MonthlyBudget[]
-  monthlyBudgetSources MonthlyBudgetSource[]
+  id                       String                    @id @default(cuid())
+  workspaceId              String
+  title                    String
+  ownerId                  String // Links to User (workspace member) who owns this source
+  amountCents              Int                       @default(0)
+  isActive                 Boolean                   @default(true)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  workspace                Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner                    User                      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  monthlyBudgets           MonthlyBudget[]
+  monthlyBudgetSources     MonthlyBudgetSource[]
   monthlyBudgetPlanSources MonthlyBudgetPlanSource[]
 
   @@index([workspaceId])
 }
 
 model MonthlyBudgetSource {
-  id            String       @id @default(cuid())
-  workspaceId   String
+  id             String       @id @default(cuid())
+  workspaceId    String
   budgetSourceId String
-  year          Int
-  month         Int
-  title         String
-  ownerId       String
-  amountCents   Int          @default(0)
-  isDraft       Boolean      @default(true)
-  confirmedAt   DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  budgetSource  BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
-  owner         User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  year           Int
+  month          Int
+  title          String
+  ownerId        String
+  amountCents    Int          @default(0)
+  isDraft        Boolean      @default(true)
+  confirmedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  budgetSource   BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
+  owner          User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, year, month, budgetSourceId])
   @@index([workspaceId, year, month])
@@ -374,24 +375,24 @@ model MonthlyBudgetSource {
 
 // Monthly generated budget entries
 model MonthlyBudget {
-  id             String       @id @default(cuid())
-  workspaceId    String
-  budgetItemId   String
-  budgetSourceId String
-  year           Int
-  month          Int          // 1-12
-  budgetItemTitle String?
-  budgetSourceTitle String?
+  id                      String       @id @default(cuid())
+  workspaceId             String
+  budgetItemId            String
+  budgetSourceId          String
+  year                    Int
+  month                   Int // 1-12
+  budgetItemTitle         String?
+  budgetSourceTitle       String?
   destinationSubAccountId String?
-  allocatedCents Int          @default(0)
-  isDraft        Boolean      @default(true)  // true until user confirms
-  confirmedAt    DateTime?    // set when user confirms
-  appliedAt      DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  budgetItem     BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
-  budgetSource   BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
+  allocatedCents          Int          @default(0)
+  isDraft                 Boolean      @default(true) // true until user confirms
+  confirmedAt             DateTime? // set when user confirms
+  appliedAt               DateTime?
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  workspace               Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  budgetItem              BudgetItem   @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+  budgetSource            BudgetSource @relation(fields: [budgetSourceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, year, month, budgetItemId, budgetSourceId])
   @@index([workspaceId, year, month])
@@ -415,18 +416,18 @@ model MonthlyBudgetPlan {
 }
 
 model MonthlyBudgetPlanSource {
-  id               String             @id @default(cuid())
+  id               String            @id @default(cuid())
   planId           String
   templateSourceId String?
   title            String
   ownerId          String
-  amountCents      Int                @default(0)
-  sortOrder        Int                @default(0)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  plan             MonthlyBudgetPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
-  templateSource   BudgetSource?      @relation(fields: [templateSourceId], references: [id], onDelete: SetNull)
-  owner            User               @relation(fields: [ownerId], references: [id], onDelete: NoAction)
+  amountCents      Int               @default(0)
+  sortOrder        Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  plan             MonthlyBudgetPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  templateSource   BudgetSource?     @relation(fields: [templateSourceId], references: [id], onDelete: SetNull)
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: NoAction)
 
   @@index([planId, sortOrder])
   @@index([templateSourceId])
@@ -434,19 +435,19 @@ model MonthlyBudgetPlanSource {
 }
 
 model MonthlyBudgetPlanItem {
-  id                      String             @id @default(cuid())
+  id                      String            @id @default(cuid())
   planId                  String
   templateItemId          String?
   title                   String
-  amountCents             Int                @default(0)
+  amountCents             Int               @default(0)
   destinationSubAccountId String?
-  sortOrder               Int                @default(0)
-  appliedCents            Int                @default(0)
-  createdAt               DateTime           @default(now())
-  updatedAt               DateTime           @updatedAt
-  plan                    MonthlyBudgetPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
-  templateItem            BudgetItem?        @relation(fields: [templateItemId], references: [id], onDelete: SetNull)
-  destinationSubAccount   BudgetEnvelope?    @relation(fields: [destinationSubAccountId], references: [id], onDelete: SetNull)
+  sortOrder               Int               @default(0)
+  appliedCents            Int               @default(0)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  plan                    MonthlyBudgetPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  templateItem            BudgetItem?       @relation(fields: [templateItemId], references: [id], onDelete: SetNull)
+  destinationSubAccount   BudgetEnvelope?   @relation(fields: [destinationSubAccountId], references: [id], onDelete: SetNull)
 
   @@index([planId, sortOrder])
   @@index([templateItemId])
@@ -466,42 +467,42 @@ model ExpenseType {
 }
 
 model Transaction {
-  id              String               @id @default(cuid())
-  workspaceId     String
-  accountId       String
-  budgetId        String?
-  groupId         String?
-  kind            String
-  direction       String
-  date            DateTime
-  amountCents     Int
-  subject         String
-  details         String?
-  notes           String?              @db.NVarChar(Max)
-  isSynced        Boolean              @default(false)
-  isFromFamily    Boolean              @default(false)
-  externalRef     String?
-  postingGroupId  String?
+  id                      String                 @id @default(cuid())
+  workspaceId             String
+  accountId               String
+  budgetId                String?
+  groupId                 String?
+  kind                    String
+  direction               String
+  date                    DateTime
+  amountCents             Int
+  subject                 String
+  details                 String?
+  notes                   String?                @db.NVarChar(Max)
+  isSynced                Boolean                @default(false)
+  isFromFamily            Boolean                @default(false)
+  externalRef             String?
+  postingGroupId          String?
   creditCardTransactionId String?
-  receivableId    String?
-  reversalOfId    String?
-  voidedAt        DateTime?
-  voidedByUserId  String?
-  voidReason      String?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account         FinancialAccount     @relation(fields: [accountId], references: [id], onDelete: NoAction)
-  budget          BudgetEnvelope?      @relation(fields: [budgetId], references: [id], onDelete: SetNull)
-  group           TransactionGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  expense         Expense?
-  creditCardLinks CreditCardTxnLink[]
-  postingGroup    PostingGroup?       @relation(fields: [postingGroupId], references: [id], onDelete: NoAction)
-  creditCardTransaction CreditCardTransaction? @relation(fields: [creditCardTransactionId], references: [id], onDelete: SetNull)
-  receivable      Receivable?         @relation(fields: [receivableId], references: [id], onDelete: SetNull)
-  reversalOf      Transaction?        @relation("TransactionReversal", fields: [reversalOfId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  reversals       Transaction[]       @relation("TransactionReversal")
-  migrationMap    LegacyRecordLink?
+  receivableId            String?
+  reversalOfId            String?
+  voidedAt                DateTime?
+  voidedByUserId          String?
+  voidReason              String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  workspace               Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account                 FinancialAccount       @relation(fields: [accountId], references: [id], onDelete: NoAction)
+  budget                  BudgetEnvelope?        @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  group                   TransactionGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  expense                 Expense?
+  creditCardLinks         CreditCardTxnLink[]
+  postingGroup            PostingGroup?          @relation(fields: [postingGroupId], references: [id], onDelete: NoAction)
+  creditCardTransaction   CreditCardTransaction? @relation(fields: [creditCardTransactionId], references: [id], onDelete: SetNull)
+  receivable              Receivable?            @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  reversalOf              Transaction?           @relation("TransactionReversal", fields: [reversalOfId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversals               Transaction[]          @relation("TransactionReversal")
+  migrationMap            LegacyRecordLink?
 
   @@index([workspaceId, date])
   @@index([accountId, date])
@@ -518,26 +519,26 @@ model Transaction {
 }
 
 model AskNestTurn {
-  id          String    @id @default(cuid())
-  workspaceId String
-  userId      String
-  question    String    @db.NVarChar(Max)
-  answerJson  String    @db.NVarChar(Max)
-  pagePath    String
+  id               String          @id @default(cuid())
+  workspaceId      String
+  userId           String
+  question         String          @db.NVarChar(Max)
+  answerJson       String          @db.NVarChar(Max)
+  pagePath         String
   inputTokens Int?
   outputTokens Int?
   totalTokens Int?
-  diagnosticsJson String?   @db.NVarChar(Max)
-  toolCallCount Int         @default(0)
-  emptyResultCount Int      @default(0)
-  durationMs Int?
+  diagnosticsJson  String?         @db.NVarChar(Max)
+  toolCallCount    Int             @default(0)
+  emptyResultCount Int             @default(0)
+  durationMs       Int?
   feedbackRating String?
-  feedbackReason String?
-  feedbackAt DateTime?
-  createdAt   DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  memories    AskNestMemory[]
+  feedbackReason   String?
+  feedbackAt       DateTime?
+  createdAt        DateTime        @default(now())
+  workspace        Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memories         AskNestMemory[]
 
   @@index([workspaceId, userId, createdAt])
   @@index([createdAt, totalTokens])
@@ -545,23 +546,23 @@ model AskNestTurn {
 }
 
 model AskNestMemory {
-  id              String      @id @default(cuid())
+  id              String       @id @default(cuid())
   workspaceId     String
   userId          String
-  ownerHash       String      @db.VarChar(64)
-  keyHash         String      @db.VarChar(64)
+  ownerHash       String       @db.VarChar(64)
+  keyHash         String       @db.VarChar(64)
   kind            String
   key             String
-  content         String      @db.NVarChar(1000)
+  content         String       @db.NVarChar(1000)
   sourceTurnId    String?
-  confidence      Float       @default(1)
-  status          String      @default("ACTIVE")
+  confidence      Float        @default(1)
+  status          String       @default("ACTIVE")
   lastConfirmedAt DateTime?
   expiresAt       DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  workspace       Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   sourceTurn      AskNestTurn? @relation(fields: [sourceTurnId], references: [id], onDelete: SetNull)
 
   @@unique([ownerHash, keyHash])
@@ -570,25 +571,25 @@ model AskNestMemory {
 }
 
 model AskNestUsageDaily {
-  id                String    @id @default(cuid())
-  day               String    @db.VarChar(10)
-  workspaceId       String
-  userId            String
-  turnCount         Int       @default(0)
-  trackedTurnCount  Int       @default(0)
-  inputTokens       Int       @default(0)
-  outputTokens      Int       @default(0)
-  totalTokens       Int       @default(0)
-  toolCallCount     Int       @default(0)
-  emptyResultCount  Int       @default(0)
-  totalDurationMs   Int       @default(0)
-  feedbackCount     Int       @default(0)
-  helpfulCount      Int       @default(0)
-  notHelpfulCount   Int       @default(0)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  day              String    @db.VarChar(10)
+  workspaceId      String
+  userId           String
+  turnCount        Int       @default(0)
+  trackedTurnCount Int       @default(0)
+  inputTokens      Int       @default(0)
+  outputTokens     Int       @default(0)
+  totalTokens      Int       @default(0)
+  toolCallCount    Int       @default(0)
+  emptyResultCount Int       @default(0)
+  totalDurationMs  Int       @default(0)
+  feedbackCount    Int       @default(0)
+  helpfulCount     Int       @default(0)
+  notHelpfulCount  Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([day, workspaceId, userId])
   @@index([day])
@@ -597,22 +598,22 @@ model AskNestUsageDaily {
 }
 
 model PostingGroup {
-  id              String        @id @default(cuid())
-  workspaceId     String
-  operation       String
-  sourceType      String?
-  sourceId        String?
-  actorUserId     String?
-  idempotencyKey  String
-  status          String        @default("POSTED")
-  reversalOfId    String?
-  reason          String?
-  createdAt       DateTime      @default(now())
-  reversedAt      DateTime?
-  transactions    Transaction[]
-  receivables     Receivable[]
-  reversalOf      PostingGroup? @relation("PostingGroupReversal", fields: [reversalOfId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  reversals       PostingGroup[] @relation("PostingGroupReversal")
+  id             String         @id @default(cuid())
+  workspaceId    String
+  operation      String
+  sourceType     String?
+  sourceId       String?
+  actorUserId    String?
+  idempotencyKey String
+  status         String         @default("POSTED")
+  reversalOfId   String?
+  reason         String?
+  createdAt      DateTime       @default(now())
+  reversedAt     DateTime?
+  transactions   Transaction[]
+  receivables    Receivable[]
+  reversalOf     PostingGroup?  @relation("PostingGroupReversal", fields: [reversalOfId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversals      PostingGroup[] @relation("PostingGroupReversal")
 
   @@unique([workspaceId, operation, idempotencyKey])
   @@index([workspaceId, sourceType, sourceId])
@@ -620,90 +621,86 @@ model PostingGroup {
 }
 
 model IdempotencyRecord {
-  id              String   @id @default(cuid())
-  workspaceId     String
-  operation       String
-  idempotencyKey  String
-  requestHash     String
-  status          String   @default("IN_PROGRESS")
-  postingGroupId  String?
-  resultJson      String?  @db.NVarChar(Max)
-  createdAt       DateTime @default(now())
-  completedAt     DateTime?
+  id             String    @id @default(cuid())
+  workspaceId    String
+  operation      String
+  idempotencyKey String
+  requestHash    String
+  status         String    @default("IN_PROGRESS")
+  postingGroupId String?
+  resultJson     String?   @db.NVarChar(Max)
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
 
   @@unique([workspaceId, operation, idempotencyKey])
   @@index([workspaceId, createdAt])
 }
 
 model TransactionGroup {
-  id           String          @id @default(cuid())
+  id           String         @id @default(cuid())
   workspaceId  String
   budgetId     String
   name         String
   icon         String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  budget       BudgetEnvelope  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  budget       BudgetEnvelope @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
   @@index([workspaceId, budgetId, updatedAt])
 }
 
 model Expense {
-  id             String      @id @default(cuid())
-  transactionId  String      @unique
-  expenseTypeId  String
-  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  expenseType    ExpenseType @relation(fields: [expenseTypeId], references: [id], onDelete: NoAction)
+  id            String      @id @default(cuid())
+  transactionId String      @unique
+  expenseTypeId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  expenseType   ExpenseType @relation(fields: [expenseTypeId], references: [id], onDelete: NoAction)
 }
 
 model CreditCardAccount {
-  id                     String                  @id @default(cuid())
-  workspaceId            String
-  cardName               String
-  bankName               String?
-  themeKey               String?
-  last4Digit             String
-  expiryMonth            Int?
-  expiryYear             Int?
-  statementDay           Int
-  paymentDueDay          Int
-  bonusLimitCents        Int?
-  bonusStatementCents    Int?
-  notes                  String?
-  isFullySynced          Boolean                 @default(false)
-  fullySyncedDate        DateTime?
-  isActive               Boolean                 @default(true)
-  encryptedCardNumber    Bytes?
-  encryptedHolderName    Bytes?
-  encryptionIv           Bytes?
-  encryptionTag          Bytes?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  transactions           CreditCardTxnLink[]
-  reward                 CreditCardReward?
-  ccTransactions         CreditCardTransaction[]
-  alertStagings          CardAlertStaging[]
+  id                  String                  @id @default(cuid())
+  workspaceId         String
+  cardName            String
+  bankName            String?
+  themeKey            String?
+  last4Digit          String
+  expiryMonth         Int?
+  expiryYear          Int?
+  statementDay        Int
+  paymentDueDay       Int
+  bonusLimitCents     Int?
+  bonusStatementCents Int?
+  notes               String?
+  isFullySynced       Boolean                 @default(false)
+  fullySyncedDate     DateTime?
+  isActive            Boolean                 @default(true)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  workspace           Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions        CreditCardTxnLink[]
+  reward              CreditCardReward?
+  ccTransactions      CreditCardTransaction[]
+  alertStagings       CardAlertStaging[]
 
   @@unique([workspaceId, cardName])
   @@index([workspaceId, isActive])
 }
 
 model CreditCardTxnLink {
-  id               String             @id @default(cuid())
-  creditCardId     String
-  transactionId    String
+  id                      String                 @id @default(cuid())
+  creditCardId            String
+  transactionId           String
   creditCardTransactionId String?
-  cardNameSnapshot String?
-  cardNoEnding     String?
-  txDate           DateTime
-  isProcessed      Boolean            @default(false)
-  interfacedAt     DateTime?
-  creditCard       CreditCardAccount  @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  transaction      Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  creditCardTransaction CreditCardTransaction? @relation(fields: [creditCardTransactionId], references: [id], onDelete: SetNull)
+  cardNameSnapshot        String?
+  cardNoEnding            String?
+  txDate                  DateTime
+  isProcessed             Boolean                @default(false)
+  interfacedAt            DateTime?
+  creditCard              CreditCardAccount      @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  transaction             Transaction            @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  creditCardTransaction   CreditCardTransaction? @relation(fields: [creditCardTransactionId], references: [id], onDelete: SetNull)
 
   @@unique([creditCardId, transactionId])
   @@index([txDate])
@@ -711,36 +708,36 @@ model CreditCardTxnLink {
 }
 
 model Receivable {
-  id               String           @id @default(cuid())
-  workspaceId      String
-  accountId        String?
-  budgetId         String?
-  statementMonthId String?
-  title            String
-  amountCents      Int
-  date             DateTime
-  transactionDate  DateTime?
-  isMom            Boolean          @default(false)
-  isFamily         Boolean          @default(false)
-  status           String           @default("OPEN")
-  remarkTogether   String?
-  notes            String?          @db.NVarChar(Max)
-  fromUserId       String?
-  toUserId         String?
-  sourceWorkspaceId String?
-  sourceAccountId   String?
-  sourceBudgetId    String?
-  postingGroupId    String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  budget           BudgetEnvelope?  @relation(fields: [budgetId], references: [id], onDelete: SetNull)
-  statementMonth   Month?           @relation(fields: [statementMonthId], references: [id], onDelete: SetNull)
+  id                 String            @id @default(cuid())
+  workspaceId        String
+  accountId          String?
+  budgetId           String?
+  statementMonthId   String?
+  title              String
+  amountCents        Int
+  date               DateTime
+  transactionDate    DateTime?
+  isMom              Boolean           @default(false)
+  isFamily           Boolean           @default(false)
+  status             String            @default("OPEN")
+  remarkTogether     String?
+  notes              String?           @db.NVarChar(Max)
+  fromUserId         String?
+  toUserId           String?
+  sourceWorkspaceId  String?
+  sourceAccountId    String?
+  sourceBudgetId     String?
+  postingGroupId     String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account            FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  budget             BudgetEnvelope?   @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  statementMonth     Month?            @relation(fields: [statementMonthId], references: [id], onDelete: SetNull)
   ledgerTransactions Transaction[]
-  postingGroup     PostingGroup?     @relation(fields: [postingGroupId], references: [id], onDelete: NoAction)
-  fromUser         User?            @relation("ReceivableFrom", fields: [fromUserId], references: [id], onDelete: NoAction)
-  toUser           User?            @relation("ReceivableTo", fields: [toUserId], references: [id], onDelete: NoAction)
+  postingGroup       PostingGroup?     @relation(fields: [postingGroupId], references: [id], onDelete: NoAction)
+  fromUser           User?             @relation("ReceivableFrom", fields: [fromUserId], references: [id], onDelete: NoAction)
+  toUser             User?             @relation("ReceivableTo", fields: [toUserId], references: [id], onDelete: NoAction)
 
   @@index([workspaceId, status])
   @@index([sourceWorkspaceId, sourceBudgetId, status])
@@ -757,25 +754,25 @@ model SalaryEntry {
 }
 
 model UsdAccountEntry {
-  id            String    @id @default(cuid())
-  workspaceId   String
-  date          DateTime
-  amountCents   Int
-  isHide        Boolean   @default(false)
-  description   String?
-  exchangeRate  Decimal   @db.Decimal(10, 4)
-  createdAt     DateTime  @default(now())
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  workspaceId  String
+  date         DateTime
+  amountCents  Int
+  isHide       Boolean   @default(false)
+  description  String?
+  exchangeRate Decimal   @db.Decimal(10, 4)
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model UsdInvestmentEntry {
-  id            String    @id @default(cuid())
-  workspaceId   String
-  date          DateTime
-  amountCents   Int
+  id             String    @id @default(cuid())
+  workspaceId    String
+  date           DateTime
+  amountCents    Int
   principalCents Int
-  createdAt     DateTime  @default(now())
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now())
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model NoteList {
@@ -790,23 +787,23 @@ model NoteList {
 }
 
 model Note {
-  id           String    @id @default(cuid())
-  workspaceId  String
-  noteListId   String?
-  createdById  String?
-  title        String
-  content      String
-  isDeleted    Boolean   @default(false)
-  isList       Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  modifiedAt   DateTime  @updatedAt
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  noteList     NoteList? @relation(fields: [noteListId], references: [id], onDelete: SetNull)
-  createdBy    User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  id          String    @id @default(cuid())
+  workspaceId String
+  noteListId  String?
+  createdById String?
+  title       String
+  content     String
+  isDeleted   Boolean   @default(false)
+  isList      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  modifiedAt  DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  noteList    NoteList? @relation(fields: [noteListId], references: [id], onDelete: SetNull)
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
 }
 
 model MileProgram {
-  id                String           @id @default(cuid())
+  id                String                 @id @default(cuid())
   workspaceId       String
   frequentFlyerId   String?
   date              DateTime
@@ -815,25 +812,25 @@ model MileProgram {
   expiryDate        DateTime?
   title             String?
   firstRedeemedDate DateTime?
-  createdAt         DateTime         @default(now())
-  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  frequentFlyer     FrequentFlyerAccount? @relation("FrequentFlyerMilePrograms", fields: [frequentFlyerId], references: [id], onDelete: SetNull)
+  createdAt         DateTime               @default(now())
+  workspace         Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  frequentFlyer     FrequentFlyerAccount?  @relation("FrequentFlyerMilePrograms", fields: [frequentFlyerId], references: [id], onDelete: SetNull)
   redemptionDetails MileRedemptionDetail[]
 
   @@index([workspaceId, frequentFlyerId, date])
 }
 
 model MileRedemption {
-  id                String                @id @default(cuid())
-  workspaceId       String
-  frequentFlyerId   String?
-  redemptionTitle   String
+  id                 String                 @id @default(cuid())
+  workspaceId        String
+  frequentFlyerId    String?
+  redemptionTitle    String
   totalMilesRedeemed Int
-  dateTime          DateTime
-  createdAt         DateTime              @default(now())
-  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  frequentFlyer     FrequentFlyerAccount? @relation("FrequentFlyerMileRedemptions", fields: [frequentFlyerId], references: [id], onDelete: SetNull)
-  details           MileRedemptionDetail[]
+  dateTime           DateTime
+  createdAt          DateTime               @default(now())
+  workspace          Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  frequentFlyer      FrequentFlyerAccount?  @relation("FrequentFlyerMileRedemptions", fields: [frequentFlyerId], references: [id], onDelete: SetNull)
+  details            MileRedemptionDetail[]
 
   @@index([workspaceId, frequentFlyerId, dateTime])
 }
@@ -850,16 +847,16 @@ model MileRedemptionDetail {
 }
 
 model LegacyRecordLink {
-  id             String       @id @default(cuid())
-  system         String       @default("LEGACY_NEST_V1")
-  sourceTable    String
-  sourceId       String
-  targetModel    String
-  targetId       String
-  migratedAt     DateTime     @default(now())
-  checksum       String?
-  transactionId  String?      @unique
-  transaction    Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  id            String       @id @default(cuid())
+  system        String       @default("LEGACY_NEST_V1")
+  sourceTable   String
+  sourceId      String
+  targetModel   String
+  targetId      String
+  migratedAt    DateTime     @default(now())
+  checksum      String?
+  transactionId String?      @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
   @@unique([system, sourceTable, sourceId])
   @@index([targetModel, targetId])
@@ -867,77 +864,77 @@ model LegacyRecordLink {
 
 // Rewards & Loyalty Program Models
 model FrequentFlyerAccount {
-  id              String   @id @default(cuid())
-  workspaceId     String
-  programName     String
-  airlineName     String
-  accountNumber   String?
-  currentMiles    Int      @default(0)
-  targetMiles     Int?
-  expiryWarning   Int?     @default(6) // months before expiry to warn
-  mileNeverExpire     Boolean  @default(false)
-  validityPeriodYears Int      @default(3)
-  notes           String?
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  conversions     PointConversion[]
-  milePrograms    MileProgram[]   @relation("FrequentFlyerMilePrograms")
-  mileRedemptions MileRedemption[] @relation("FrequentFlyerMileRedemptions")
+  id                  String            @id @default(cuid())
+  workspaceId         String
+  programName         String
+  airlineName         String
+  accountNumber       String?
+  currentMiles        Int               @default(0)
+  targetMiles         Int?
+  expiryWarning       Int?              @default(6) // months before expiry to warn
+  mileNeverExpire     Boolean           @default(false)
+  validityPeriodYears Int               @default(3)
+  notes               String?
+  isActive            Boolean           @default(true)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  workspace           Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversions         PointConversion[]
+  milePrograms        MileProgram[]     @relation("FrequentFlyerMilePrograms")
+  mileRedemptions     MileRedemption[]  @relation("FrequentFlyerMileRedemptions")
 
   @@unique([workspaceId, programName])
   @@index([workspaceId, isActive])
 }
 
 model HotelRewardAccount {
-  id              String   @id @default(cuid())
-  workspaceId     String
-  programName     String
-  hotelBrand      String
-  accountNumber   String?
-  currentPoints   Int      @default(0)
-  targetPoints    Int?
-  centsPerPoint   Float    @default(0)
-  notes           String?
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  workspaceId   String
+  programName   String
+  hotelBrand    String
+  accountNumber String?
+  currentPoints Int       @default(0)
+  targetPoints  Int?
+  centsPerPoint Float     @default(0)
+  notes         String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, programName])
   @@index([workspaceId, isActive])
 }
 
 model CreditCardReward {
-  id                String   @id @default(cuid())
-  workspaceId       String
-  creditCardId      String
-  currentPoints     Int      @default(0)
-  pointsValueCents  Int?     // estimated cash value in cents
-  lastUpdated       DateTime @default(now())
-  createdAt         DateTime @default(now())
-  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  creditCard        CreditCardAccount @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  conversions       PointConversion[]
+  id               String            @id @default(cuid())
+  workspaceId      String
+  creditCardId     String
+  currentPoints    Int               @default(0)
+  pointsValueCents Int? // estimated cash value in cents
+  lastUpdated      DateTime          @default(now())
+  createdAt        DateTime          @default(now())
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creditCard       CreditCardAccount @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  conversions      PointConversion[]
 
   @@unique([creditCardId])
   @@index([workspaceId])
 }
 
 model PointConversion {
-  id                    String               @id @default(cuid())
-  workspaceId           String
-  creditCardRewardId    String?
-  frequentFlyerId       String?
-  fromPoints            Int
-  toMiles               Int
-  conversionRate        Float                // miles per point (e.g., 0.625 for 5:8 ratio)
-  description           String?
-  createdAt             DateTime             @default(now())
-  workspace             Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  creditCardReward      CreditCardReward?    @relation(fields: [creditCardRewardId], references: [id], onDelete: SetNull)
-  frequentFlyer         FrequentFlyerAccount? @relation(fields: [frequentFlyerId], references: [id], onDelete: SetNull)
+  id                 String                @id @default(cuid())
+  workspaceId        String
+  creditCardRewardId String?
+  frequentFlyerId    String?
+  fromPoints         Int
+  toMiles            Int
+  conversionRate     Float // miles per point (e.g., 0.625 for 5:8 ratio)
+  description        String?
+  createdAt          DateTime              @default(now())
+  workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creditCardReward   CreditCardReward?     @relation(fields: [creditCardRewardId], references: [id], onDelete: SetNull)
+  frequentFlyer      FrequentFlyerAccount? @relation(fields: [frequentFlyerId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([creditCardRewardId])
@@ -945,27 +942,27 @@ model PointConversion {
 }
 
 model CreditCardTransaction {
-  id                String            @id @default(cuid())
-  workspaceId       String
-  creditCardId      String
-  transactionDate   DateTime          // Date of the transaction
-  paymentDueDate    DateTime?         // When payment is due
-  statementMonth    Int               // Month of statement (1-12)
-  statementYear     Int               // Year of statement
-  amountCents       Int               // Transaction amount
-  subject           String            // Transaction description/subject
-  isInstallment     Boolean           @default(false)
-  installmentNo     Int?              // Current installment number
-  totalInstallments Int?              // Total number of installments
-  isAllocated       Boolean           @default(false) // Whether allocated to budget
-  budgetId          String?           // Linked budget if allocated
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  creditCard        CreditCardAccount @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  alertStagings     CardAlertStaging[]
+  id                 String              @id @default(cuid())
+  workspaceId        String
+  creditCardId       String
+  transactionDate    DateTime // Date of the transaction
+  paymentDueDate     DateTime? // When payment is due
+  statementMonth     Int // Month of statement (1-12)
+  statementYear      Int // Year of statement
+  amountCents        Int // Transaction amount
+  subject            String // Transaction description/subject
+  isInstallment      Boolean             @default(false)
+  installmentNo      Int? // Current installment number
+  totalInstallments  Int? // Total number of installments
+  isAllocated        Boolean             @default(false) // Whether allocated to budget
+  budgetId           String? // Linked budget if allocated
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creditCard         CreditCardAccount   @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  alertStagings      CardAlertStaging[]
   ledgerTransactions Transaction[]
-  ledgerLinks       CreditCardTxnLink[]
+  ledgerLinks        CreditCardTxnLink[]
 
   @@index([workspaceId])
   @@index([creditCardId])
@@ -986,12 +983,16 @@ model CardAlertStaging {
   transactionRef      String?
   rawSubject          String?
   rawBody             String                 @db.NVarChar(Max)
+  sourceMessageKey    String?                @db.VarChar(64)
+  transactionKey      String?                @db.VarChar(64)
+  contentHash         String?                @db.VarChar(64)
   currency            String?
   amountCents         Int?
   transactionDate     DateTime?
   merchant            String?
   cardLast4           String?
   parseStatus         String                 @default("PENDING")
+  processingStartedAt DateTime?
   failureReason       String?
   creditCardId        String?
   creditTransactionId String?
@@ -1004,53 +1005,71 @@ model CardAlertStaging {
   @@index([workspaceId, parseStatus])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, transactionRef])
+  @@index([sourceMessageKey])
+  @@index([transactionKey])
   @@index([creditTransactionId])
 }
 
 model GmailIntegration {
-  id             String    @id @default(cuid())
-  workspaceId    String
-  userId         String
-  email          String
-  accessToken    String?   @db.NVarChar(Max)
-  refreshToken   String?   @db.NVarChar(Max)
-  tokenType      String?
-  scope          String?   @db.NVarChar(Max)
-  expiryDate     DateTime?
-  isActive       Boolean   @default(true)
-  lastSyncedAt   DateTime?
-  lastHistoryId  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  workspaceId   String
+  userId        String
+  email         String
+  accessToken   String?   @db.NVarChar(Max)
+  refreshToken  String?   @db.NVarChar(Max)
+  tokenType     String?
+  scope         String?   @db.NVarChar(Max)
+  expiryDate    DateTime?
+  isActive      Boolean   @default(true)
+  lastSyncedAt  DateTime?
+  lastHistoryId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, email])
   @@index([workspaceId, isActive])
 }
 
 model BackgroundJob {
-  id             String    @id @default(cuid())
-  type           String
-  key            String?
-  status         String    @default("PENDING")
-  workspaceId    String?
-  userId         String?
-  progress       Int       @default(0)
-  total          Int?
-  current        Int?
-  message        String?
-  resultJson     String?   @db.NVarChar(Max)
-  error          String?   @db.NVarChar(Max)
-  lockedAt       DateTime?
-  leaseExpiresAt DateTime?
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  type              String
+  key               String?
+  activeScopeKey    String?   @db.VarChar(64)
+  idempotencyKey    String?   @db.VarChar(64)
+  status            String    @default("PENDING")
+  workspaceId       String?
+  userId            String?
+  progress          Int       @default(0)
+  total             Int?
+  current           Int?
+  message           String?
+  payloadJson       String?   @db.NVarChar(Max)
+  checkpointJson    String?   @db.NVarChar(Max)
+  resultJson        String?   @db.NVarChar(Max)
+  errorCode         String?
+  error             String?   @db.NVarChar(Max)
+  attempts          Int       @default(0)
+  retryCount        Int       @default(0)
+  maxAttempts       Int       @default(5)
+  duplicateCount    Int       @default(0)
+  availableAt       DateTime  @default(now())
+  leaseToken        String?
+  lockedAt          DateTime?
+  leaseExpiresAt    DateTime?
+  cancelRequestedAt DateTime?
+  deadLetteredAt    DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([type, status, createdAt])
   @@index([key, status])
+  @@index([activeScopeKey])
+  @@index([idempotencyKey])
+  @@index([status, availableAt])
   @@index([leaseExpiresAt])
 }
 
@@ -1080,26 +1099,26 @@ model SerpApiNewsCache {
 
 model SerpApiQuota {
   provider      String   @id @db.NVarChar(100)
-  windowKey    String   @db.NVarChar(32)
-  requestCount Int      @default(0)
+  windowKey     String   @db.NVarChar(32)
+  requestCount  Int      @default(0)
   nextAllowedAt DateTime
   updatedAt     DateTime @updatedAt
 }
 
 model InAppNotification {
-  id           String    @id @default(cuid())
+  id           String     @id @default(cuid())
   userId       String
   workspaceId  String?
   type         String
   dedupeKey    String
   title        String
-  message      String    @db.NVarChar(Max)
+  message      String     @db.NVarChar(Max)
   href         String?
-  metadataJson String?   @db.NVarChar(Max)
+  metadataJson String?    @db.NVarChar(Max)
   readAt       DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, dedupeKey])
@@ -1108,30 +1127,30 @@ model InAppNotification {
 }
 
 model PasskeyCredential {
-  id             String   @id @default(cuid())
-  userId         String
-  credentialId   String   @unique
-  publicKey       Bytes
-  counter         BigInt   @default(0)
-  transports     String?
-  deviceType     String
-  backedUp        Boolean  @default(false)
-  name            String?
-  createdAt       DateTime @default(now())
-  lastUsedAt      DateTime?
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  userId       String
+  credentialId String    @unique
+  publicKey    Bytes
+  counter      BigInt    @default(0)
+  transports   String?
+  deviceType   String
+  backedUp     Boolean   @default(false)
+  name         String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
 
 model WebAuthnChallenge {
-  id          String   @id @default(cuid())
-  userId      String?
-  purpose     String
-  challenge   String   @unique
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String?
+  purpose   String
+  challenge String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, purpose, expiresAt])
   @@index([purpose, expiresAt])

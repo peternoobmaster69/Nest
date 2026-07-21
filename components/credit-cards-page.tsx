@@ -101,7 +101,7 @@ export function CreditCardsPage() {
   // Form state
   const [cardName, setCardName] = useState("");
   const [bankName, setBankName] = useState(SINGAPORE_BANKS[0].name);
-  const [cardNumber, setCardNumber] = useState("");
+  const [cardLast4, setCardLast4] = useState("");
   const [themeKey, setThemeKey] = useState<string>("bank-default");
   const [plainColor, setPlainColor] = useState("#1f4ba5");
   const [expiryMonth, setExpiryMonth] = useState("");
@@ -166,7 +166,7 @@ export function CreditCardsPage() {
           workspaceId,
           cardName,
           bankName,
-          cardNumber: cardNumber || undefined,
+          last4Digit: cardLast4,
           themeKey,
           expiryMonth: expiryMonth ? Number(expiryMonth) : undefined,
           expiryYear: expiryYear ? Number(expiryYear) : undefined,
@@ -189,7 +189,7 @@ export function CreditCardsPage() {
         body: JSON.stringify({
           cardName,
           bankName,
-          cardNumber: cardNumber || undefined,
+          last4Digit: cardLast4,
           themeKey: themeKey || null,
           expiryMonth: expiryMonth ? Number(expiryMonth) : null,
           expiryYear: expiryYear ? Number(expiryYear) : null,
@@ -212,7 +212,7 @@ export function CreditCardsPage() {
   const resetForm = () => {
     setCardName("");
     setBankName(SINGAPORE_BANKS[0].name);
-    setCardNumber("");
+    setCardLast4("");
     setThemeKey("bank-default");
     setPlainColor("#1f4ba5");
     setExpiryMonth("");
@@ -232,7 +232,7 @@ export function CreditCardsPage() {
     setEditingCardId(card.id);
     setCardName(card.cardName);
     setBankName(card.bankName || SINGAPORE_BANKS[0].name);
-    setCardNumber("");
+    setCardLast4(card.last4Digit);
     setThemeKey(card.themeKey || "bank-default");
     setPlainColor(card.themeKey?.startsWith("custom:") ? card.themeKey.replace("custom:", "") : "#1f4ba5");
     setExpiryMonth(card.expiryMonth ? String(card.expiryMonth) : "");
@@ -461,7 +461,7 @@ export function CreditCardsPage() {
                   <span>📟</span>
                 </div>
                 <div className="cc-preview-number">
-                  {cardNumber ? `•••• •••• •••• ${cardNumber.slice(-4) || "••••"}` : "•••• •••• •••• ••••"}
+                  {cardLast4 ? `•••• •••• •••• ${cardLast4}` : "•••• •••• •••• ••••"}
                 </div>
                 <div className="cc-preview-footer">
                   <span>{cardName || "Card Name"}</span>
@@ -497,16 +497,20 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group cc-span-2">
-                  <label className="label">Card Number</label>
+                  <label className="label">Last 4 digits</label>
                   <input
                     className="input"
-                    placeholder="1234 5678 9012 3456"
-                    value={cardNumber}
+                    placeholder="3456"
+                    value={cardLast4}
                     onChange={(e) => {
-                      const normalized = e.target.value.replace(/\D/g, "").slice(0, 16);
-                      setCardNumber(normalized);
+                      const normalized = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setCardLast4(normalized);
                     }}
-                    maxLength={16}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={4}
+                    pattern="\d{4}"
+                    required
                   />
                 </div>
 

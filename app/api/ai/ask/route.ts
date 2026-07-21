@@ -14,6 +14,7 @@ import { consumeAskNestRateLimit } from "@/lib/ai/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { saveAskNestMemories } from "@/lib/ai/memory";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,6 +69,13 @@ function errorResponse(error: string, code: string, status: number, headers?: Re
 export async function POST(request: Request) {
   try {
     const { userId, workspaceId } = await requireWorkspaceAccess();
+    await enforceDistributedRateLimit(request, {
+      scope: "ask-nest",
+      identifier: `${workspaceId}:${userId}`,
+      limit: 20,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
     const body = await request.json().catch(() => null);
     const parsed = AskNestRequestSchema.safeParse(body);
     if (!parsed.success) {
@@ -135,6 +143,8 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(answer, { headers: PRIVATE_HEADERS });
   } catch (error) {
+    const limited = rateLimitResponse(error);
+    if (limited) return limited;
     if (error instanceof ApiAuthError) {
       return errorResponse(error.message, "AI_UNAUTHORIZED", error.status);
     }

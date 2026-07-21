@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { reviewCreditCardTransactions } from "@/lib/ai/smart-review";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,13 @@ const PRIVATE_HEADERS = {
 export async function POST(request: Request) {
   try {
     const { userId, workspaceId } = await requireWorkspaceAccess();
+    await enforceDistributedRateLimit(request, {
+      scope: "ai-smart-review",
+      identifier: `${workspaceId}:${userId}`,
+      limit: 10,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
     const parsed = SmartReviewRequestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return NextResponse.json(
@@ -30,6 +38,8 @@ export async function POST(request: Request) {
     const result = await reviewCreditCardTransactions({ workspaceId, userId, transactionIds });
     return NextResponse.json(result, { headers: PRIVATE_HEADERS });
   } catch (error) {
+    const limited = rateLimitResponse(error);
+    if (limited) return limited;
     if (error instanceof ApiAuthError) {
       return NextResponse.json(
         { error: error.message },

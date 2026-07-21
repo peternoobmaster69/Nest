@@ -1,117 +1,79 @@
-import { isGmailSyncRunning, runGmailSyncForIntegration } from "@/lib/gmail-sync-runner";
-import { GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey } from "@/lib/gmail-sync-runner";
+import { backgroundJobToProgress, findLatestBackgroundJob } from "@/lib/background-jobs";
 import {
-  backgroundJobToProgress,
-  findActiveBackgroundJob,
-  findLatestBackgroundJob,
-} from "@/lib/background-jobs";
-import {
-  clearGmailSyncProgressLater,
-  getGmailSyncProgress,
-  getGmailSyncProgressKey,
-  setGmailSyncProgress,
-} from "@/lib/gmail-sync-progress";
+  GMAIL_SYNC_JOB_TYPE,
+  getGmailSyncJobKey,
+  processGmailSyncQueue,
+  queueGmailSyncForIntegration,
+} from "@/lib/gmail-sync-runner";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { runSecureApiRoute } from "@/lib/api-security";
+import { enforceDistributedRateLimit } from "@/lib/security-rate-limit";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300;
 
-export async function GET() {
-  try {
-    const { workspaceId, userId } = await requireWorkspaceAccess(null, "OWNER");
-    const key = getGmailSyncProgressKey(workspaceId, userId);
-    const memoryProgress = getGmailSyncProgress(key);
-    if (memoryProgress.phase !== "idle") {
-      return NextResponse.json(memoryProgress);
-    }
+async function findIntegration(workspaceId: string, userId: string) {
+  return prisma.gmailIntegration.findFirst({
+    where: { workspaceId, userId, isActive: true },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, workspaceId: true, userId: true, lastSyncedAt: true, lastHistoryId: true },
+  });
+}
 
-    const integration = await prisma.gmailIntegration.findFirst({
-      where: { workspaceId, userId, isActive: true },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true },
-    });
+export async function GET(request: Request) {
+  return runSecureApiRoute(request, {
+    auth: { minimumRole: "OWNER" },
+    errorMessage: "Failed to fetch Gmail sync progress",
+  }, async ({ auth }) => {
+    const integration = await findIntegration(auth!.workspaceId, auth!.userId);
     if (!integration) {
-      return NextResponse.json(memoryProgress);
+      return NextResponse.json({ phase: "idle", progress: 0, message: "", total: 0, current: 0, updatedAt: Date.now() });
     }
-
     const persisted = backgroundJobToProgress(
       await findLatestBackgroundJob(GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey(integration.id)),
     );
-    return NextResponse.json(persisted ?? memoryProgress);
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to fetch Gmail sync progress", message }, { status: 500 });
-  }
+    return NextResponse.json(persisted ?? { phase: "idle", progress: 0, message: "", total: 0, current: 0, updatedAt: Date.now() });
+  });
 }
 
 export async function POST(request: Request) {
-  let progressKey = "";
-  try {
-    const { workspaceId, userId } = await requireWorkspaceAccess(null, "OWNER");
-    progressKey = getGmailSyncProgressKey(workspaceId, userId);
-    const integration = await prisma.gmailIntegration.findFirst({
-      where: { workspaceId, userId, isActive: true },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        workspaceId: true,
-        userId: true,
-        lastSyncedAt: true,
-      },
+  return runSecureApiRoute(request, {
+    mutation: true,
+    auth: { minimumRole: "OWNER" },
+    errorMessage: "Failed to sync Gmail",
+  }, async ({ auth }) => {
+    const { workspaceId, userId } = auth!;
+    await enforceDistributedRateLimit(request, {
+      scope: "gmail-sync",
+      identifier: `${workspaceId}:${userId}`,
+      limit: 4,
+      windowMs: 5 * 60_000,
+      blockMs: 5 * 60_000,
     });
+    const integration = await findIntegration(workspaceId, userId);
+    if (!integration) return NextResponse.json({ error: "Gmail is not connected." }, { status: 400 });
 
-    if (!integration) {
-      return NextResponse.json({ error: "Gmail is not connected." }, { status: 400 });
-    }
-
-    if (isGmailSyncRunning(integration.id)) {
-      setGmailSyncProgress(progressKey, {
-        phase: "reading",
-        progress: 0,
-        message: "Gmail sync is already running...",
-        total: 0,
-        current: 0,
+    const queued = await queueGmailSyncForIntegration(integration);
+    if (queued.job.status === "PENDING") {
+      // Work is awaited and bounded. If this invocation is interrupted, the durable lease is recovered by cron.
+      await processGmailSyncQueue({
+        jobId: queued.job.id,
+        origin: new URL(request.url).origin,
+        maxSlices: 1,
       });
-      return NextResponse.json({ error: "Gmail sync is already running." }, { status: 409 });
     }
 
-    const activeJob = await findActiveBackgroundJob(GMAIL_SYNC_JOB_TYPE, getGmailSyncJobKey(integration.id));
-    if (activeJob) {
-      return NextResponse.json(
-        {
-          ok: true,
-          queued: false,
-          jobId: activeJob.id,
-          message: activeJob.message ?? "Gmail sync is already running.",
-        },
-        { status: 202 },
-      );
+    const job = await prisma.backgroundJob.findUnique({ where: { id: queued.job.id } });
+    if (job?.status === "SUCCEEDED" || job?.status === "SKIPPED") {
+      let summary = {};
+      try { summary = JSON.parse(job.resultJson ?? "{}"); } catch {}
+      return NextResponse.json({ ok: true, jobId: job.id, ...summary });
     }
-
-    const result = await runGmailSyncForIntegration(integration, new URL(request.url).origin);
-
     return NextResponse.json({
       ok: true,
-      ...result,
-    });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    console.error("Gmail sync error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (progressKey) {
-      setGmailSyncProgress(progressKey, {
-        phase: "error",
-        progress: 100,
-        message,
-      });
-      clearGmailSyncProgressLater(progressKey);
-    }
-    return NextResponse.json({ error: "Failed to sync Gmail", message }, { status: 500 });
-  }
+      queued: job?.status === "PENDING",
+      jobId: queued.job.id,
+      message: job?.message ?? "Gmail sync queued.",
+    }, { status: 202 });
+  });
 }

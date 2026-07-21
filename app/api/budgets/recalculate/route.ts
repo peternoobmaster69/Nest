@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
 
 const RecalculateSchema = z.object({
   workspaceId: z.string().min(1),
@@ -21,7 +22,14 @@ export async function POST(request: Request) {
 
     const { workspaceId, budgetId, accountId } = parsed.data;
 
-    await requireWorkspaceAccess(workspaceId, "EDITOR");
+    const { userId } = await requireWorkspaceAccess(workspaceId, "EDITOR");
+    await enforceDistributedRateLimit(request, {
+      scope: "budget-recalculate",
+      identifier: `${workspaceId}:${userId}`,
+      limit: 5,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
 
     // Build where clause
     const where: { workspaceId: string; isActive: boolean; id?: string; accountId?: string } = {
@@ -75,7 +83,8 @@ export async function POST(request: Request) {
       budgets: results,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to recalculate budgets", message }, { status: 500 });
+    const limited = rateLimitResponse(error);
+    if (limited) return limited;
+    return NextResponse.json({ error: "Failed to recalculate budgets" }, { status: 500 });
   }
 }

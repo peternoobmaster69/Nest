@@ -1,8 +1,7 @@
 "use client";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS } from "@/lib/credit-txn-auto-rules-config";
-import { GMAIL_SYNC_INTERVAL_MS } from "@/lib/gmail-alert-query";
+import { CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL } from "@/lib/credit-txn-auto-rules-config";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
@@ -99,7 +98,7 @@ type AutoRule =
     };
 
 type GmailSyncProgress = {
-  phase: "idle" | "reading" | "writing" | "complete" | "error";
+  phase: "idle" | "queued" | "reading" | "writing" | "complete" | "error" | "cancelled";
   progress: number;
   message: string;
   total: number;
@@ -426,14 +425,14 @@ export function SettingsPage() {
         const message = data.message ?? (data.queued ? "Gmail sync queued." : "Gmail sync is running.");
         setGmailMessage(message);
         setGmailSyncProgress((current) => ({
-          phase: "reading",
+          phase: data.queued ? "queued" : "reading",
           progress: current?.progress ?? 0,
           message,
           total: current?.total ?? 0,
           current: current?.current ?? 0,
           updatedAt: Date.now(),
         }));
-        setIsGmailSyncPolling(true);
+        setIsGmailSyncPolling(!data.queued);
         return;
       }
 
@@ -499,7 +498,7 @@ export function SettingsPage() {
         const progress = await fetchJson<GmailSyncProgress>("/api/gmail/sync");
         if (!cancelled) {
           setGmailSyncProgress(progress);
-          if (progress.phase === "complete" || progress.phase === "error") {
+          if (progress.phase === "complete" || progress.phase === "error" || progress.phase === "cancelled" || progress.phase === "queued") {
             setGmailMessage(progress.message);
             setIsGmailSyncPolling(false);
             if (progress.phase === "complete") {
@@ -515,24 +514,13 @@ export function SettingsPage() {
     void poll();
     const interval = window.setInterval(() => {
       void poll();
-    }, 250);
+    }, 1000);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
   }, [isGmailSyncPolling, queryClient]);
-
-  useEffect(() => {
-    if (!gmailStatus.data?.connected || syncGmail.isPending || isGmailSyncPolling) return;
-
-    const interval = window.setInterval(() => {
-      if (document.visibilityState !== "visible" || syncGmail.isPending || isGmailSyncPolling) return;
-      syncGmail.mutate();
-    }, GMAIL_SYNC_INTERVAL_MS);
-
-    return () => window.clearInterval(interval);
-  }, [gmailStatus.data?.connected, isGmailSyncPolling, syncGmail]);
 
   const disconnectGmail = useMutation({
     mutationFn: () =>
@@ -664,7 +652,7 @@ export function SettingsPage() {
       }
       setAutoRuleMessage(
         payload.message ||
-          `Rules saved. Auto-accounting runs every ${Math.round(CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS / 60000)} minutes.`,
+          `Rules saved. Auto-accounting runs through ${CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL}.`,
       );
       queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", workspaceId] });
     },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runAskNestRetention } from "@/lib/ai/ask-nest-retention";
 import { authorizeCronRequest } from "@/lib/cron-auth";
+import { ensureDatabaseReady } from "@/lib/database-readiness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    await ensureDatabaseReady();
     const result = await runAskNestRetention();
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

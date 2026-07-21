@@ -101,7 +101,7 @@ test("owner-only operations require owner role and recent authentication", async
   assert.match(await read("app/api/passkeys/route.ts"), /DELETE[\s\S]*requireRecentAuthentication/);
   for (const path of ["app/api/gmail/connect/route.ts", "app/api/gmail/disconnect/route.ts", "app/api/gmail/callback/route.ts"]) {
     const source = await read(path);
-    assert.match(source, /requireRecentAuthentication/);
+    assert.match(source, /requireRecentAuthentication|auth:\s*\{\s*minimumRole:\s*"OWNER",\s*recent:\s*true/);
     assert.match(source, /"OWNER"/);
   }
 });

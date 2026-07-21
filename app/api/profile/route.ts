@@ -1,6 +1,5 @@
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -9,7 +8,7 @@ const UpdateProfileSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

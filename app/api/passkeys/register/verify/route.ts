@@ -4,12 +4,22 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { claimWebAuthnChallenge, getWebAuthnConfig } from "@/lib/passkeys";
 import { ApiAuthError, requireRecentAuthentication } from "@/lib/workspace-auth";
+import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
 
 export async function POST(request: Request) {
   let userId: string;
   try {
     userId = await requireRecentAuthentication();
+    await enforceDistributedRateLimit(request, {
+      scope: "passkey-register-verify",
+      identifier: userId,
+      limit: 10,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
   } catch (error) {
+    const limited = rateLimitResponse(error);
+    if (limited) return limited;
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }

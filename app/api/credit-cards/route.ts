@@ -1,5 +1,5 @@
-import { encryptText } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -9,17 +9,13 @@ const CreateCreditCardSchema = z.object({
   cardName: z.string().min(1).max(120),
   bankName: z.string().max(120).optional(),
   themeKey: z.string().max(60).optional(),
-  cardNumber: z.string().regex(/^\d{16}$/).optional(),
+  last4Digit: z.string().regex(/^\d{4}$/),
   expiryMonth: z.number().int().min(1).max(12).optional(),
   expiryYear: z.number().int().min(2000).max(2100).optional(),
   statementDay: z.number().int().min(1).max(31),
   paymentDueDay: z.number().int().min(1).max(31),
   notes: z.string().max(500).optional(),
 }).strict();
-
-function normalizeCardNumber(value: string) {
-  return value.replace(/\D/g, "");
-}
 
 function maskedFromLast4(last4: string) {
   return `•••• •••• •••• ${last4}`;
@@ -54,7 +50,6 @@ export async function GET(request: Request) {
           notes: true,
           bonusLimitCents: true,
           bonusStatementCents: true,
-          encryptedCardNumber: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -77,7 +72,6 @@ export async function GET(request: Request) {
           notes: true,
           bonusLimitCents: true,
           bonusStatementCents: true,
-          encryptedCardNumber: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -87,11 +81,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       cards.map((card) => {
-        const { encryptedCardNumber, ...safeCard } = card;
         return {
-          ...safeCard,
+          ...card,
           maskedNumber: maskedFromLast4(card.last4Digit),
-          hasCardNumber: Boolean(encryptedCardNumber),
         };
       }),
     );
@@ -105,32 +97,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  try {
-    const parsed = CreateCreditCardSchema.safeParse(await request.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to create credit card" }, async () => {
+   try {
+    const parsed = { data: await parseJsonBody(request, CreateCreditCardSchema, 16 * 1024) };
 
     await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-
-    const normalizedCardNumber = parsed.data.cardNumber ? normalizeCardNumber(parsed.data.cardNumber) : "";
-    const last4Digit = normalizedCardNumber ? normalizedCardNumber.slice(-4) : "0000";
-
-    let encryptedCardNumber: Buffer | null = null;
-    let encryptionIv: Buffer | null = null;
-    let encryptionTag: Buffer | null = null;
-
-    if (normalizedCardNumber) {
-      try {
-        const encrypted = encryptText(normalizedCardNumber);
-        encryptedCardNumber = encrypted.encrypted;
-        encryptionIv = encrypted.iv;
-        encryptionTag = encrypted.tag;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        throw new Error(`Card number encryption failed: ${message}`);
-      }
-    }
 
     let created;
     try {
@@ -140,15 +111,12 @@ export async function POST(request: Request) {
           cardName: parsed.data.cardName.trim(),
           bankName: parsed.data.bankName?.trim() || null,
           themeKey: parsed.data.themeKey?.trim() || null,
-          last4Digit,
+          last4Digit: parsed.data.last4Digit,
           expiryMonth: parsed.data.expiryMonth ?? null,
           expiryYear: parsed.data.expiryYear ?? null,
           statementDay: parsed.data.statementDay,
           paymentDueDay: parsed.data.paymentDueDay,
           notes: parsed.data.notes?.trim() || null,
-          encryptedCardNumber,
-          encryptionIv,
-          encryptionTag,
           isActive: true,
         },
         select: {
@@ -164,7 +132,6 @@ export async function POST(request: Request) {
           notes: true,
           bonusLimitCents: true,
           bonusStatementCents: true,
-          encryptedCardNumber: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -177,15 +144,12 @@ export async function POST(request: Request) {
           workspaceId: parsed.data.workspaceId,
           cardName: parsed.data.cardName.trim(),
           bankName: parsed.data.bankName?.trim() || null,
-          last4Digit,
+          last4Digit: parsed.data.last4Digit,
           expiryMonth: parsed.data.expiryMonth ?? null,
           expiryYear: parsed.data.expiryYear ?? null,
           statementDay: parsed.data.statementDay,
           paymentDueDay: parsed.data.paymentDueDay,
           notes: parsed.data.notes?.trim() || null,
-          encryptedCardNumber,
-          encryptionIv,
-          encryptionTag,
           isActive: true,
         },
         select: {
@@ -200,7 +164,6 @@ export async function POST(request: Request) {
           notes: true,
           bonusLimitCents: true,
           bonusStatementCents: true,
-          encryptedCardNumber: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -208,15 +171,10 @@ export async function POST(request: Request) {
       created = { ...fallback, themeKey: null };
     }
 
-    const {
-      encryptedCardNumber: encryptedCardNumberBlob,
-      ...safeCreated
-    } = created;
     return NextResponse.json(
       {
-        ...safeCreated,
+        ...created,
         maskedNumber: maskedFromLast4(created.last4Digit),
-        hasCardNumber: Boolean(encryptedCardNumberBlob),
       },
       { status: 201 },
     );
@@ -224,7 +182,7 @@ export async function POST(request: Request) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Failed to create credit card", error);
-    return NextResponse.json({ error: "Failed to create credit card" }, { status: 500 });
-  }
+    throw error;
+   }
+  });
 }

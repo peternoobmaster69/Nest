@@ -10,11 +10,22 @@ import {
   shouldSendPaymentReminder,
   startOfUtcDay,
 } from "@/lib/credit-card-payment-reminder-schedule";
-import { completeBackgroundJob, createBackgroundJob, failBackgroundJob } from "@/lib/background-jobs";
+import {
+  BackgroundJobError,
+  claimBackgroundJob,
+  completeClaimedBackgroundJob,
+  enqueueBackgroundJob,
+  failClaimedBackgroundJob,
+} from "@/lib/background-jobs";
 import { syncCreditCardDueNotificationsForAllUsers } from "@/lib/in-app-notifications";
 import { buildAbsoluteWorkspaceEntryUrl, buildCreditCardStatementPath } from "@/lib/workspace-entry";
 
 const DELIVERY_JOB_TYPE = "CREDIT_CARD_PAYMENT_REMINDER_EMAIL";
+
+function maxDeliveriesPerRun() {
+  const parsed = Number(process.env.PAYMENT_REMINDER_MAX_DELIVERIES_PER_RUN);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 500) : 100;
+}
 
 type ReminderRow = {
   workspaceId: string;
@@ -30,12 +41,14 @@ type ReminderRow = {
 
 type ReminderRecipient = {
   workspaceId: string;
+  userId: string;
   email: string;
   name: string | null;
 };
 
 type ReminderEmail = {
   workspaceId: string;
+  userId: string;
   to: string;
   subject: string;
   text: string;
@@ -49,7 +62,7 @@ type ReminderResult = {
   emailCount: number;
   sentCount: number;
   skippedCount: number;
-  errors: Array<{ to: string; message: string }>;
+  errors: Array<{ code: string; count: number }>;
 };
 
 function toNumber(value: number | bigint | null | undefined) {
@@ -143,6 +156,7 @@ async function findRecipients(workspaceIds: string[]) {
       workspaceId: true,
       user: {
         select: {
+          id: true,
           email: true,
           name: true,
         },
@@ -154,6 +168,7 @@ async function findRecipients(workspaceIds: string[]) {
     if (!member.user.email) return [];
     return [{
       workspaceId: member.workspaceId,
+      userId: member.user.id,
       email: member.user.email,
       name: member.user.name,
     }];
@@ -279,35 +294,79 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
     </div>
   `;
 
-  return { workspaceId: recipient.workspaceId, to: recipient.email, subject, text, html };
+  return { workspaceId: recipient.workspaceId, userId: recipient.userId, to: recipient.email, subject, text, html };
 }
 
-async function sendReminderEmail(email: ReminderEmail) {
+async function sendReminderEmail(email: ReminderEmail, operationId: string) {
   const connectionString = process.env.AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING;
   const senderAddress = process.env.AZURE_EMAIL_SENDER;
 
   if (!connectionString || !senderAddress) {
-    throw new Error("AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING and AZURE_EMAIL_SENDER must be configured");
+    throw new BackgroundJobError("EMAIL_NOT_CONFIGURED", "Reminder email is not configured.");
   }
 
   const client = new EmailClient(connectionString);
-  const poller = await client.beginSend({
-    senderAddress,
-    recipients: {
-      to: [{ address: email.to }],
-    },
-    content: {
-      subject: email.subject,
-      html: email.html,
-      plainText: email.text,
-    },
-  });
-  const response = await poller.pollUntilDone();
+  let response;
+  try {
+    const poller = await client.beginSend({
+      senderAddress,
+      recipients: {
+        to: [{ address: email.to }],
+      },
+      content: {
+        subject: email.subject,
+        html: email.html,
+        plainText: email.text,
+      },
+    }, { operationId });
+    response = await poller.pollUntilDone();
+  } catch {
+    throw new BackgroundJobError(
+      "EMAIL_PROVIDER_UNAVAILABLE",
+      "The email provider is temporarily unavailable.",
+      true,
+    );
+  }
 
   if (response.status !== KnownEmailSendStatus.Succeeded) {
-    const detail = response.error?.message || response.error?.code || response.status;
-    throw new Error(`Azure Communication Email failed: ${detail}`);
+    throw new BackgroundJobError(
+      "EMAIL_PROVIDER_REJECTED",
+      "The email provider did not accept the reminder.",
+      false,
+    );
   }
+}
+
+async function rebuildReminderEmail(job: {
+  workspaceId: string | null;
+  userId: string | null;
+  payloadJson: string | null;
+}) {
+  if (!job.workspaceId || !job.userId) return null;
+  let reminderDate: Date;
+  try {
+    const payload = JSON.parse(job.payloadJson ?? "{}") as { reminderDate?: unknown };
+    reminderDate = startOfUtcDay(new Date(String(payload.reminderDate ?? "")));
+    if (!Number.isFinite(reminderDate.getTime())) return null;
+  } catch {
+    return null;
+  }
+  const [rows, membership] = await Promise.all([
+    findDueCreditCardPayments(reminderDate),
+    prisma.workspaceMember.findFirst({
+      where: { workspaceId: job.workspaceId, userId: job.userId, user: { email: { not: null } } },
+      select: { workspaceId: true, user: { select: { id: true, email: true, name: true } } },
+    }),
+  ]);
+  if (!membership?.user.email) return null;
+  const workspaceRows = rows.filter((row) => row.workspaceId === job.workspaceId);
+  if (!workspaceRows.length) return null;
+  return buildReminderEmail({
+    workspaceId: membership.workspaceId,
+    userId: membership.user.id,
+    email: membership.user.email,
+    name: membership.user.name,
+  }, workspaceRows, reminderDate);
 }
 
 function getDeliveryKey(email: ReminderEmail, today: Date) {
@@ -315,24 +374,36 @@ function getDeliveryKey(email: ReminderEmail, today: Date) {
   return `${getReminderDateKey(today)}:${email.workspaceId}:${recipientHash}`;
 }
 
-async function wasAlreadySentOrIsSending(key: string) {
-  const now = new Date();
-  const existing = await prisma.backgroundJob.findFirst({
-    where: {
-      type: DELIVERY_JOB_TYPE,
-      key,
-      OR: [
-        { status: "SUCCEEDED" },
-        {
-          status: { in: ["PENDING", "RUNNING"] },
-          OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { gt: now } }],
-        },
-      ],
-    },
-    select: { id: true },
-  });
+function deliveryOperationId(key: string) {
+  const hex = createHash("sha256").update(key).digest("hex").slice(0, 32).split("");
+  hex[12] = "4";
+  hex[16] = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  const value = hex.join("");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
 
-  return Boolean(existing);
+export async function processReminderEmailDeliveryJob(jobId: string, preparedEmail?: ReminderEmail) {
+  const claimed = await claimBackgroundJob({ jobId, leaseMs: 5 * 60_000 });
+  if (!claimed) return { status: "skipped" as const };
+  try {
+    const email = preparedEmail ?? await rebuildReminderEmail(claimed.job);
+    if (!email || !claimed.job.key) {
+      await completeClaimedBackgroundJob(claimed.job.id, claimed.leaseToken, {
+        message: "Reminder no longer applies; delivery skipped.",
+        skipped: true,
+      });
+      return { status: "skipped" as const };
+    }
+    await sendReminderEmail(email, deliveryOperationId(claimed.job.key));
+    await completeClaimedBackgroundJob(claimed.job.id, claimed.leaseToken, {
+      message: "Credit card payment reminder sent.",
+      result: { provider: "AZURE_COMMUNICATION_EMAIL" },
+    });
+    return { status: "sent" as const };
+  } catch (error) {
+    const failed = await failClaimedBackgroundJob(claimed.job.id, claimed.leaseToken, error).catch(() => null);
+    return { status: "failed" as const, code: failed?.failure.code ?? "EMAIL_DELIVERY_FAILED" };
+  }
 }
 
 export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): Promise<ReminderResult> {
@@ -382,41 +453,44 @@ export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): P
     };
   }
 
-  const errors: ReminderResult["errors"] = [];
+  const errorCounts = new Map<string, number>();
   let sentCount = 0;
   let skippedCount = 0;
+  let attemptedCount = 0;
 
   for (const email of emails) {
     const deliveryKey = getDeliveryKey(email, today);
-    if (await wasAlreadySentOrIsSending(deliveryKey)) {
+    const queued = await enqueueBackgroundJob({
+      type: DELIVERY_JOB_TYPE,
+      key: deliveryKey,
+      idempotencyKey: deliveryKey,
+      workspaceId: email.workspaceId,
+      userId: email.userId,
+      message: "Credit card payment reminder queued.",
+      payload: { reminderDate: today.toISOString() },
+      maxAttempts: 4,
+    });
+    if (["SUCCEEDED", "SKIPPED", "RUNNING"].includes(queued.job.status)) {
+      skippedCount += 1;
+      continue;
+    }
+    if (attemptedCount >= maxDeliveriesPerRun()) {
       skippedCount += 1;
       continue;
     }
 
-    let jobId: string | null = null;
-    try {
-      const job = await createBackgroundJob({
-        type: DELIVERY_JOB_TYPE,
-        key: deliveryKey,
-        workspaceId: email.workspaceId,
-        message: "Sending credit card payment reminder.",
-        leaseMs: 5 * 60 * 1000,
-      });
-      jobId = job.id;
-      await sendReminderEmail(email);
-      await completeBackgroundJob(jobId, {
-        message: "Credit card payment reminder sent.",
-        result: { provider: "AZURE_COMMUNICATION_EMAIL" },
-      });
+    attemptedCount += 1;
+    const delivery = await processReminderEmailDeliveryJob(queued.job.id, email);
+    if (delivery.status === "sent") {
       sentCount += 1;
-    } catch (error) {
-      await failBackgroundJob(jobId, error).catch(() => null);
-      errors.push({
-        to: email.to,
-        message: error instanceof Error ? error.message : "Unknown email error",
-      });
+    } else if (delivery.status === "failed") {
+      errorCounts.set(delivery.code, (errorCounts.get(delivery.code) ?? 0) + 1);
+    } else {
+      skippedCount += 1;
     }
   }
+
+  const errors = [...errorCounts].map(([code, count]) => ({ code, count }));
 
   return {
     ok: errors.length === 0,
@@ -427,4 +501,8 @@ export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): P
     skippedCount,
     errors,
   };
+}
+
+export async function runCreditCardPaymentReminderJob({ dryRun = false } = {}) {
+  return sendCreditCardPaymentReminders({ dryRun });
 }

@@ -1,5 +1,5 @@
-import { encryptText } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { ApiAuthError, requireSessionUserId, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -8,7 +8,7 @@ const UpdateCreditCardSchema = z.object({
   cardName: z.string().min(1).max(120).optional(),
   bankName: z.string().max(120).nullable().optional(),
   themeKey: z.string().max(60).nullable().optional(),
-  cardNumber: z.string().regex(/^\d{16}$/).optional(),
+  last4Digit: z.string().regex(/^\d{4}$/).optional(),
   expiryMonth: z.number().int().min(1).max(12).nullable().optional(),
   expiryYear: z.number().int().min(2000).max(2100).nullable().optional(),
   statementDay: z.number().int().min(1).max(31).optional(),
@@ -16,10 +16,6 @@ const UpdateCreditCardSchema = z.object({
   notes: z.string().max(500).nullable().optional(),
   isActive: z.boolean().optional(),
 }).strict();
-
-function normalizeCardNumber(value: string) {
-  return value.replace(/\D/g, "");
-}
 
 function maskedFromLast4(last4: string) {
   return `•••• •••• •••• ${last4}`;
@@ -67,12 +63,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update credit card" }, async () => {
+   try {
     const { id } = await params;
-    const parsed = UpdateCreditCardSchema.safeParse(await request.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
+    const parsed = { data: await parseJsonBody(request, UpdateCreditCardSchema, 16 * 1024) };
 
     const existing = await prisma.creditCardAccount.findUnique({
       where: { id },
@@ -95,9 +89,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       notes?: string | null;
       isActive?: boolean;
       last4Digit?: string;
-      encryptedCardNumber?: Buffer | null;
-      encryptionIv?: Buffer | null;
-      encryptionTag?: Buffer | null;
     } = {};
 
     if (parsed.data.cardName !== undefined) data.cardName = parsed.data.cardName.trim();
@@ -109,20 +100,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (parsed.data.expiryYear !== undefined) data.expiryYear = parsed.data.expiryYear;
     if (parsed.data.notes !== undefined) data.notes = parsed.data.notes ? parsed.data.notes.trim() : null;
     if (parsed.data.isActive !== undefined) data.isActive = parsed.data.isActive;
-
-    if (parsed.data.cardNumber) {
-      const normalized = normalizeCardNumber(parsed.data.cardNumber);
-      data.last4Digit = normalized.slice(-4);
-      try {
-        const encrypted = encryptText(normalized);
-        data.encryptedCardNumber = encrypted.encrypted;
-        data.encryptionIv = encrypted.iv;
-        data.encryptionTag = encrypted.tag;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        throw new Error(`Card number encryption failed: ${message}`);
-      }
-    }
+    if (parsed.data.last4Digit !== undefined) data.last4Digit = parsed.data.last4Digit;
 
     let updated;
     try {
@@ -142,7 +120,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           notes: true,
           bonusLimitCents: true,
           bonusStatementCents: true,
-          encryptedCardNumber: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -166,7 +143,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           notes: true,
           bonusLimitCents: true,
           bonusStatementCents: true,
-          encryptedCardNumber: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -174,19 +150,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updated = { ...fallback, themeKey: null };
     }
 
-    const { encryptedCardNumber, ...safeUpdated } = updated;
     return NextResponse.json({
-      ...safeUpdated,
+      ...updated,
       maskedNumber: maskedFromLast4(updated.last4Digit),
-      hasCardNumber: Boolean(encryptedCardNumber),
     });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Failed to update credit card", error);
-    return NextResponse.json({ error: "Failed to update credit card" }, { status: 500 });
-  }
+    throw error;
+   }
+  });
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {

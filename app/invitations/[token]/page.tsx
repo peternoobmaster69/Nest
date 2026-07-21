@@ -1,12 +1,11 @@
-import { authOptions } from "@/lib/auth";
-import { getServerSession } from "next-auth";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { redirect } from "next/navigation";
 import { InvitationResponse } from "./response";
 
 export default async function InvitationPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const path = `/invitations/${encodeURIComponent(token)}`;
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) redirect(`/signin?callbackUrl=${encodeURIComponent(path)}`);
 
   return (

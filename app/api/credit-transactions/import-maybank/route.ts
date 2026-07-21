@@ -2,6 +2,8 @@ import { deriveStatementCycle } from "@/lib/credit-card-statement-cycle";
 import { parseMaybankCsv, normalizeTransactionSubject, shouldSkipMaybankRow } from "@/lib/maybank-csv";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
+import { enforceDistributedRateLimit } from "@/lib/security-rate-limit";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -11,13 +13,17 @@ const ImportMaybankSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  try {
-    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
-    const parsed = ImportMaybankSchema.safeParse(await request.json());
-
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
-    }
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to import Maybank CSV" }, async () => {
+   try {
+    const { workspaceId, userId } = await requireWorkspaceAccess(null, "EDITOR");
+    await enforceDistributedRateLimit(request, {
+      scope: "maybank-csv-import",
+      identifier: `${workspaceId}:${userId}`,
+      limit: 6,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
+    const parsed = { data: await parseJsonBody(request, ImportMaybankSchema, 3 * 1024 * 1024) };
 
     const { creditCardId, csvContent } = parsed.data;
 
@@ -127,7 +133,7 @@ export async function POST(request: Request) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to import Maybank CSV", message }, { status: 500 });
-  }
+    throw error;
+   }
+  });
 }

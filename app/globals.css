@@ -27,7 +27,9 @@
   /* Typography */
   --font-display: "DM Sans", sans-serif;
   --font-body: "DM Sans", sans-serif;
-  --font-mono: "DM Mono", monospace;
+  --font-display: var(--font-dm-sans), "DM Sans", sans-serif;
+  --font-body: var(--font-dm-sans), "DM Sans", sans-serif;
+  --font-mono: var(--font-dm-mono), monospace;
   --skeleton-base: #E8E8E8;
   --skeleton-shimmer: #F5F5F5;
 
@@ -8025,7 +8027,13 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .admin-stat-alert > strong, .admin-stat-alert > svg { color: var(--danger); }
 .admin-directory-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .admin-ai-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.admin-system-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-system-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.admin-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
 .admin-stat-button { width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .admin-stat-button:hover { border-color: var(--border-strong); background: var(--bg-elevated); }
 .admin-stat-button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 2px; }

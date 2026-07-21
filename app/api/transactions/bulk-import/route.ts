@@ -2,6 +2,8 @@ import { applyBudgetAvailableDelta, getBudgetAvailableDeltaCents } from "@/lib/b
 import { executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
+import { enforceDistributedRateLimit } from "@/lib/security-rate-limit";
 import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -111,17 +113,20 @@ async function getExistingDuplicateKeys(
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const parsed = BulkImportSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to import transactions" }, async () => {
+   try {
+    const parsed = { data: await parseJsonBody(request, BulkImportSchema, 2 * 1024 * 1024) };
 
     const { workspaceId, accountId, budgetId, kind, transactions, chunkIndex, chunkSize, recalculate } = parsed.data;
 
     const { userId } = await requireWorkspaceAccess(workspaceId, "EDITOR");
+    await enforceDistributedRateLimit(request, {
+      scope: "transaction-bulk-import",
+      identifier: `${workspaceId}:${userId}`,
+      limit: 10,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
 
     // Validate account belongs to workspace
     const account = await prisma.financialAccount.findFirst({
@@ -261,7 +266,7 @@ export async function POST(request: Request) {
     } catch (error) {
       if (error instanceof PostingConflictError) throw error;
       result.failed += nonDuplicates.length;
-      result.errors.push(`Transaction creation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      result.errors.push("Transaction creation failed. Retry this import chunk.");
     }
 
     return NextResponse.json({
@@ -280,7 +285,7 @@ export async function POST(request: Request) {
     if (error instanceof PostingConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to import transactions", message }, { status: 500 });
-  }
+    throw error;
+   }
+  });
 }

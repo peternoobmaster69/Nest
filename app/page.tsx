@@ -1,6 +1,5 @@
 import { DashboardShell } from "@/components/dashboard-shell";
-import { authOptions } from "@/lib/auth";
-import { getServerSession } from "next-auth";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -24,7 +23,7 @@ import {
 } from "lucide-react";
 
 export default async function Home() {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user) {
     return (
       <main className="lp">

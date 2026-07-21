@@ -2,23 +2,19 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
 import { createLedgerTransaction, createPostingGroupRecord } from "@/lib/posting-service";
 import {
-  completeBackgroundJob,
-  createBackgroundJob,
-  failBackgroundJob,
-  findActiveBackgroundJob,
-  updateBackgroundJobProgress,
+  claimBackgroundJob,
+  completeClaimedBackgroundJob,
+  enqueueBackgroundJob,
+  failClaimedBackgroundJob,
+  heartbeatBackgroundJob,
+  throwIfBackgroundJobCancelled,
 } from "@/lib/background-jobs";
 import {
   CreditTxnAutoRule,
-  CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS,
   findFirstMatchingCreditTxnRule,
   parseCreditTxnAutoRules,
 } from "@/lib/credit-txn-auto-rules";
 import { prisma } from "@/lib/prisma";
-
-declare global {
-  var __nestCreditTxnAutoAccountRunning: boolean | undefined;
-}
 
 type RunnerSummary = {
   scanned: number;
@@ -284,32 +280,49 @@ export async function runCreditTxnAutoAccounting(
   db: PrismaClient = prisma,
   options: RunnerOptions = {},
 ): Promise<RunnerSummary> {
-  const { jobId, workspaceId } = options;
-  const jobKey = workspaceId ? `workspace:${workspaceId}` : CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY;
-  if (globalThis.__nestCreditTxnAutoAccountRunning) {
-    return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId, alreadyRunning: true };
+  let workspaceId = options.workspaceId;
+  const retryJob = options.jobId ? await db.backgroundJob.findUnique({ where: { id: options.jobId } }) : null;
+  if (retryJob) {
+    if (retryJob.type !== CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE || !retryJob.workspaceId) {
+      throw new Error("Invalid auto-accounting job.");
+    }
+    workspaceId = retryJob.workspaceId;
+  }
+  if (!workspaceId) {
+    const workspaces = await db.workspace.findMany({
+      where: { creditCardAutoRules: { not: null } },
+      select: { id: true },
+    });
+    const combined: RunnerSummary = { scanned: 0, matched: 0, accounted: 0, skipped: 0 };
+    for (const workspace of workspaces) {
+      const result = await runCreditTxnAutoAccounting(db, { workspaceId: workspace.id });
+      combined.scanned += result.scanned;
+      combined.matched += result.matched;
+      combined.accounted += result.accounted;
+      combined.skipped += result.skipped;
+    }
+    return combined;
   }
 
-  let persistedJobId = jobId;
-  if (!persistedJobId) {
-    const activeJob = await findActiveBackgroundJob(CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE, jobKey);
-    if (activeJob) {
-      return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId: activeJob.id, alreadyRunning: true };
-    }
-
-    const job = await createBackgroundJob({
+  const jobKey = workspaceId ? `workspace:${workspaceId}` : CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY;
+  const queued = retryJob ? { job: retryJob, created: true } : await enqueueBackgroundJob({
       type: CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE,
       key: jobKey,
       workspaceId,
-      message: "Credit transaction auto-accounting started.",
+      message: "Credit transaction auto-accounting queued.",
+      maxAttempts: 4,
     });
-    persistedJobId = job.id;
+  if (!queued.created && !options.jobId) {
+    return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId: queued.job.id, alreadyRunning: true };
   }
-
-  globalThis.__nestCreditTxnAutoAccountRunning = true;
+  const claimed = await claimBackgroundJob({ jobId: queued.job.id, leaseMs: 10 * 60_000 });
+  if (!claimed) {
+    return { scanned: 0, matched: 0, accounted: 0, skipped: 0, jobId: queued.job.id, alreadyRunning: true };
+  }
+  const persistedJobId = claimed.job.id;
 
   try {
-    await updateBackgroundJobProgress(persistedJobId, {
+    await heartbeatBackgroundJob(persistedJobId, claimed.leaseToken, {
       progress: 5,
       message: "Loading workspaces with auto-accounting rules...",
     });
@@ -349,6 +362,7 @@ export async function runCreditTxnAutoAccounting(
       });
 
       for (const creditTransaction of creditTransactions) {
+        await throwIfBackgroundJobCancelled(persistedJobId, claimed.leaseToken);
         summary.scanned += 1;
         const rule = findFirstMatchingCreditTxnRule(creditTransaction.subject, rules);
         if (!rule) continue;
@@ -360,7 +374,7 @@ export async function runCreditTxnAutoAccounting(
       }
 
       processedWorkspaces += 1;
-      await updateBackgroundJobProgress(persistedJobId, {
+      await heartbeatBackgroundJob(persistedJobId, claimed.leaseToken, {
         progress: 5 + (processedWorkspaces / Math.max(workspaces.length, 1)) * 90,
         message: `Processed ${processedWorkspaces}/${workspaces.length} workspaces.`,
         total: workspaces.length,
@@ -369,19 +383,14 @@ export async function runCreditTxnAutoAccounting(
     }
 
     const result = { ...summary, jobId: persistedJobId };
-    await completeBackgroundJob(persistedJobId, {
+    await completeClaimedBackgroundJob(persistedJobId, claimed.leaseToken, {
       message: `Auto-accounting complete: ${summary.accounted} accounted, ${summary.skipped} skipped.`,
       result,
     });
     return result;
   } catch (error) {
-    await failBackgroundJob(persistedJobId, error);
+    await failClaimedBackgroundJob(persistedJobId, claimed.leaseToken, error);
     throw error;
-  } finally {
-    globalThis.__nestCreditTxnAutoAccountRunning = false;
   }
 }
 
-export function getCreditTxnAutoAccountIntervalMs() {
-  return CREDIT_TXN_AUTO_ACCOUNT_INTERVAL_MS;
-}

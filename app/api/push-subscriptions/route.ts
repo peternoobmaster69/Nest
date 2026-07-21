@@ -1,8 +1,7 @@
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { getPushConfiguration } from "@/lib/web-push";
 
 const SubscriptionSchema = z.object({
@@ -12,7 +11,7 @@ const SubscriptionSchema = z.object({
 });
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const config = getPushConfiguration();
   const count = await prisma.pushSubscription.count({ where: { userId: session.user.id } });
@@ -20,7 +19,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = SubscriptionSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid push subscription" }, { status: 400 });
@@ -45,7 +44,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { endpoint } = await request.json().catch(() => ({}));
   if (typeof endpoint === "string" && endpoint) {

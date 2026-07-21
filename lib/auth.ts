@@ -98,6 +98,19 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async linkAccount({ user, account }) {
+      await prisma.account.updateMany({
+        where: {
+          provider: account.provider,
+          providerAccountId: account.providerAccountId,
+          userId: user.id,
+        },
+        data: {
+          access_token: null,
+          refresh_token: null,
+          id_token: null,
+          session_state: null,
+        },
+      });
       const memberships = await prisma.workspaceMember.findMany({
         where: { userId: user.id },
         select: { workspaceId: true },

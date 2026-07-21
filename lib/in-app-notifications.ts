@@ -10,10 +10,18 @@ import {
   startOfUtcDay,
 } from "@/lib/credit-card-payment-reminder-schedule";
 import { sendPushToUser } from "@/lib/web-push";
+import {
+  BackgroundJobError,
+  claimBackgroundJob,
+  completeClaimedBackgroundJob,
+  enqueueBackgroundJob,
+  failClaimedBackgroundJob,
+} from "@/lib/background-jobs";
 import { buildCreditCardStatementPath, buildWorkspaceEntryHref } from "@/lib/workspace-entry";
 
 const CREDIT_CARD_DUE_TYPE = "CREDIT_CARD_DUE";
 const WORKSPACE_INVITATION_TYPE = "WORKSPACE_INVITATION";
+const REMINDER_PUSH_JOB_TYPE = "CREDIT_CARD_PAYMENT_REMINDER_PUSH";
 
 type DueCardRow = {
   workspaceId: string;
@@ -102,7 +110,73 @@ function getDedupeKey(row: DueCardRow) {
   return `credit-card-due:${row.workspaceId}:${row.cardId}:${row.statementYear}:${row.statementMonth}`;
 }
 
-async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCardRow[], today: Date, deliverPush = false) {
+type PreparedPush = { title: string; message: string; href: string; tag: string };
+type DeliveryBudget = { used: number; limit: number };
+
+function maxDeliveriesPerRun() {
+  const parsed = Number(process.env.PAYMENT_REMINDER_MAX_DELIVERIES_PER_RUN);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 500) : 100;
+}
+
+export async function processReminderPushDeliveryJob(jobId: string, prepared?: PreparedPush) {
+  const claimed = await claimBackgroundJob({ jobId, leaseMs: 2 * 60_000 });
+  if (!claimed) return { status: "skipped" as const };
+  try {
+    let payload = prepared;
+    if (!payload && claimed.job.userId) {
+      let dedupeKey = "";
+      try {
+        const stored = JSON.parse(claimed.job.payloadJson ?? "{}") as { dedupeKey?: unknown };
+        if (typeof stored.dedupeKey === "string") dedupeKey = stored.dedupeKey;
+      } catch {}
+      const notification = dedupeKey ? await prisma.inAppNotification.findFirst({
+        where: { userId: claimed.job.userId, dedupeKey },
+        select: { title: true, message: true, href: true, dedupeKey: true },
+      }) : null;
+      if (notification) {
+        payload = {
+          title: notification.title,
+          message: notification.message,
+          href: notification.href ?? "/credit-transactions",
+          tag: notification.dedupeKey,
+        };
+      }
+    }
+    if (!payload || !claimed.job.userId) {
+      await completeClaimedBackgroundJob(claimed.job.id, claimed.leaseToken, {
+        message: "Push reminder no longer applies; delivery skipped.",
+        skipped: true,
+      });
+      return { status: "skipped" as const };
+    }
+    const delivery = await sendPushToUser(claimed.job.userId, payload);
+    if (("failed" in delivery ? (delivery.failed ?? 0) : 0) > 0) {
+      throw new BackgroundJobError(
+        "PUSH_PROVIDER_UNAVAILABLE",
+        "Some push notifications could not be delivered.",
+        true,
+      );
+    }
+    await completeClaimedBackgroundJob(claimed.job.id, claimed.leaseToken, {
+      message: delivery.configured ? "Payment reminder push sent." : "Push is not configured; delivery skipped.",
+      result: { sent: delivery.sent, configured: delivery.configured },
+      skipped: !delivery.configured,
+    });
+    return { status: delivery.configured ? "sent" as const : "skipped" as const };
+  } catch (error) {
+    await failClaimedBackgroundJob(claimed.job.id, claimed.leaseToken, error);
+    return { status: "failed" as const };
+  }
+}
+
+async function syncRowsForUser(
+  userId: string,
+  workspaceId: string,
+  rows: DueCardRow[],
+  today: Date,
+  deliverPush = false,
+  deliveryBudget?: DeliveryBudget,
+) {
   const activeKeys: string[] = [];
 
   for (const row of rows) {
@@ -151,12 +225,27 @@ async function syncRowsForUser(userId: string, workspaceId: string, rows: DueCar
     `);
 
     if (deliverPush && copy.shouldRealert) {
-      await sendPushToUser(userId, {
-        title: copy.title,
-        message,
-        href,
-        tag: dedupeKey,
+      const deliveryKey = `${startOfUtcDay(today).toISOString()}:${userId}:${dedupeKey}`;
+      const queued = await enqueueBackgroundJob({
+        type: REMINDER_PUSH_JOB_TYPE,
+        key: deliveryKey,
+        idempotencyKey: deliveryKey,
+        workspaceId,
+        userId,
+        message: "Payment reminder push queued.",
+        payload: { dedupeKey },
+        maxAttempts: 4,
       });
+      if (!["SUCCEEDED", "SKIPPED", "RUNNING"].includes(queued.job.status)) {
+        if (deliveryBudget && deliveryBudget.used >= deliveryBudget.limit) continue;
+        if (deliveryBudget) deliveryBudget.used += 1;
+        await processReminderPushDeliveryJob(queued.job.id, {
+          title: copy.title,
+          message,
+          href,
+          tag: dedupeKey,
+        });
+      }
     }
   }
 
@@ -189,6 +278,7 @@ export async function syncCreditCardDueNotificationsForAllUsers() {
     prisma.workspaceMember.findMany({ select: { userId: true, workspaceId: true } }),
   ]);
   const rowsByWorkspace = new Map<string, DueCardRow[]>();
+  const deliveryBudget: DeliveryBudget = { used: 0, limit: maxDeliveriesPerRun() };
 
   for (const row of rows) {
     const workspaceRows = rowsByWorkspace.get(row.workspaceId) ?? [];
@@ -197,7 +287,14 @@ export async function syncCreditCardDueNotificationsForAllUsers() {
   }
 
   for (const member of members) {
-    await syncRowsForUser(member.userId, member.workspaceId, rowsByWorkspace.get(member.workspaceId) ?? [], today, true);
+    await syncRowsForUser(
+      member.userId,
+      member.workspaceId,
+      rowsByWorkspace.get(member.workspaceId) ?? [],
+      today,
+      true,
+      deliveryBudget,
+    );
   }
 }
 

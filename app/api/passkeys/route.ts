@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { ApiAuthError, requireRecentAuthentication } from "@/lib/workspace-auth";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const passkeys = await prisma.passkeyCredential.findMany({
     where: { userId: session.user.id },
@@ -16,7 +15,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => ({})) as { id?: string; name?: string };
   const name = body.name?.trim().replace(/\s+/g, " ");

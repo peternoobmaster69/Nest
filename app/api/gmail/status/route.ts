@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceRole } from "@/lib/workspace-auth";
+import { runSecureApiRoute } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 
-export async function GET() {
-  try {
-    const { workspaceId, userId } = await requireWorkspaceRole(null, "OWNER");
+export async function GET(request: Request) {
+  return runSecureApiRoute(request, {
+    auth: { minimumRole: "OWNER" },
+    errorMessage: "Failed to load Gmail status",
+  }, async ({ auth }) => {
+    const { workspaceId, userId } = auth!;
     const integration = await prisma.gmailIntegration.findFirst({
       where: { workspaceId, userId, isActive: true },
       orderBy: { updatedAt: "desc" },
@@ -17,12 +20,6 @@ export async function GET() {
       },
     });
     return NextResponse.json({ connected: Boolean(integration), integration });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to load Gmail status", message }, { status: 500 });
-  }
+  });
 }
 

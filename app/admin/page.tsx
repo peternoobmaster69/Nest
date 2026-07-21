@@ -1,8 +1,9 @@
-import { Bot, Brain, ChevronDown, Gauge, HardDrive, KeyRound, Sigma, ThumbsUp } from "lucide-react";
+import { Bot, Brain, ChevronDown, Gauge, HardDrive, KeyRound, ListRestart, Sigma, ThumbsUp } from "lucide-react";
 import { AdminDirectories } from "@/components/admin-directories";
 import { PageFrame } from "@/components/page-frame";
 import { requireAdminPage } from "@/lib/admin-auth";
 import { getAdminOverview } from "@/lib/admin-overview";
+import { cancelJobAction, retryJobAction } from "@/app/admin/job-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,12 @@ function formatStorage(megabytes: number) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+}
+
+function formatDuration(milliseconds: number) {
+  if (milliseconds < 1000) return `${milliseconds} ms`;
+  if (milliseconds < 60_000) return `${Math.round(milliseconds / 1000)} sec`;
+  return `${Math.round(milliseconds / 60_000)} min`;
 }
 
 export default async function AdminPage() {
@@ -150,7 +157,48 @@ export default async function AdminPage() {
           <section className="admin-stats admin-system-stats" aria-label="System health">
             <article className={`admin-stat${missingCoreConfigurationCount ? " admin-stat-alert" : ""}`}><KeyRound aria-hidden="true" /><span>Configuration</span><strong>{missingCoreConfigurationCount ? `${missingCoreConfigurationCount} missing` : "Ready"}</strong></article>
             <article className="admin-stat"><HardDrive aria-hidden="true" /><span>Database</span><strong>{overview.databaseStorage ? formatStorage(overview.databaseStorage.totalAllocatedMb) : "—"}</strong>{overview.databaseStorage ? <small>{formatStorage(overview.databaseStorage.dataUsedMb)} used</small> : null}</article>
+            <article className={`admin-stat${overview.backgroundJobs.metrics.deadLetters ? " admin-stat-alert" : ""}`}><ListRestart aria-hidden="true" /><span>Background jobs</span><strong>{overview.backgroundJobs.metrics.queued} queued</strong><small>{overview.backgroundJobs.metrics.deadLetters} dead letters</small></article>
           </section>
+
+          <details className="card admin-panel admin-disclosure">
+            <summary>
+              <span className="admin-disclosure-heading"><ListRestart size={19} aria-hidden="true" /><strong>Background jobs</strong></span>
+              <ChevronDown className="admin-disclosure-chevron" size={19} aria-hidden="true" />
+            </summary>
+            <div className="admin-disclosure-body">
+              <div className="admin-token-breakdown">
+                <div><span>Queue age</span><strong>{formatDuration(overview.backgroundJobs.metrics.queueAgeMs)}</strong></div>
+                <div><span>Average duration</span><strong>{formatDuration(overview.backgroundJobs.metrics.averageDurationMs)}</strong></div>
+                <div><span>Success / 7d</span><strong>{formatPercent(overview.backgroundJobs.metrics.successRate)}</strong></div>
+                <div><span>Retries</span><strong>{overview.backgroundJobs.metrics.retries.toLocaleString()}</strong></div>
+                <div><span>Duplicates suppressed</span><strong>{overview.backgroundJobs.metrics.duplicateSuppressions.toLocaleString()}</strong></div>
+                <div><span>Dead letters</span><strong>{overview.backgroundJobs.metrics.deadLetters.toLocaleString()}</strong></div>
+              </div>
+              {overview.backgroundJobs.recent.length ? (
+                <div className="admin-table-wrap">
+                  <table className="admin-table admin-responsive-table">
+                    <thead><tr><th>Job</th><th>Scope</th><th>Status</th><th>Progress</th><th>Attempts</th><th>Updated</th><th>Actions</th></tr></thead>
+                    <tbody>{overview.backgroundJobs.recent.map((job) => (
+                      <tr key={job.id}>
+                        <td data-label="Job"><strong>{job.type.replaceAll("_", " ")}</strong><span>{job.id}</span></td>
+                        <td data-label="Scope"><strong>{job.workspaceId ?? "System"}</strong><span>{job.userId ? `Actor ${job.userId}` : job.key ?? "No actor"}</span></td>
+                        <td data-label="Status"><strong>{job.status.replaceAll("_", " ")}</strong><span>{job.errorCode ?? job.message ?? "—"}</span></td>
+                        <td data-label="Progress">{job.progress}%<span>{job.current ?? 0} / {job.total ?? 0}</span></td>
+                        <td data-label="Attempts">{job.attempts}<span>{job.retryCount} retries · {job.duplicateCount} suppressed</span></td>
+                        <td data-label="Updated"><time dateTime={job.updatedAt.toISOString()}>{DATE_FORMAT.format(job.updatedAt)}</time></td>
+                        <td data-label="Actions">
+                          <div className="admin-job-actions">
+                            {["FAILED", "DEAD_LETTER", "CANCELLED"].includes(job.status) ? <form action={retryJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="btn btn-ghost btn-xs" type="submit">Retry</button></form> : null}
+                            {["PENDING", "RUNNING"].includes(job.status) ? <form action={cancelJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="btn btn-ghost btn-xs" type="submit">Cancel</button></form> : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              ) : <p className="admin-empty">No background jobs have run yet.</p>}
+            </div>
+          </details>
 
           <details className="card admin-panel admin-disclosure">
             <summary>

@@ -9,6 +9,7 @@ import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
 
 const ownerSelect = { id: true, name: true, email: true } as const;
 const destinationSelect = { id: true, name: true } as const;
@@ -146,6 +147,8 @@ function validationError(error: z.ZodError) {
 }
 
 function handleError(error: unknown, fallback: string) {
+  const limited = rateLimitResponse(error);
+  if (limited) return limited;
   if (error instanceof ApiAuthError || error instanceof BudgetPlanRequestError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
@@ -162,8 +165,7 @@ function handleError(error: unknown, fallback: string) {
     }
   }
 
-  const message = error instanceof Error ? error.message : "Unknown error";
-  return NextResponse.json({ error: fallback, message }, { status: 500 });
+  return NextResponse.json({ error: fallback }, { status: 500 });
 }
 
 async function requireWorkspaceMember(
@@ -299,6 +301,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await enforceDistributedRateLimit(request, {
+      scope: "budget-plan-post",
+      limit: 30,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
     const body = await request.json();
     const action = typeof body?.action === "string" ? body.action : "";
 
@@ -724,6 +732,12 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    await enforceDistributedRateLimit(request, {
+      scope: "budget-plan-patch",
+      limit: 30,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
     const body = await request.json();
     const action = typeof body?.action === "string" ? body.action : "";
 
@@ -844,6 +858,12 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    await enforceDistributedRateLimit(request, {
+      scope: "budget-plan-delete",
+      limit: 30,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
     const { searchParams } = new URL(request.url);
     const parsed = DeleteSchema.safeParse({
       workspaceId: searchParams.get("workspaceId"),
