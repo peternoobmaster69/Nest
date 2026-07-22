@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ArrowRight, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { useWorkspaceId } from "@/components/workspace-provider";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 function initials(name: string) {
   return name
@@ -24,6 +26,7 @@ export function ProfilePage({
   userEmail?: string;
   userImage?: string | null;
 }) {
+  const workspaceId = useWorkspaceId();
   const router = useRouter();
   const [displayName, setDisplayName] = useState(userName);
   const [savedName, setSavedName] = useState(userName);
@@ -122,7 +125,7 @@ export function ProfilePage({
           <h2 id="profile-security-heading">Sign-in &amp; security</h2>
           <p>Review passkeys, linked sign-in providers, recent sessions, and app access.</p>
         </div>
-        <Link className="btn btn-ghost" href="/settings?tab=settings">
+        <Link className="btn btn-ghost" href={workspaceId ? buildWorkspacePath(workspaceId, "/settings?tab=settings") : "/settings?tab=settings"}>
           Manage security <ArrowRight size={16} aria-hidden="true" />
         </Link>
       </section>

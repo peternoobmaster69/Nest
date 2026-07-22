@@ -1,5 +1,9 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
@@ -49,7 +53,7 @@ type CardTheme = {
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json();
 }
@@ -103,6 +107,7 @@ function getBankInitials(bankName: string | null): string {
 }
 
 export function CreditCardsPage() {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -142,8 +147,9 @@ export function CreditCardsPage() {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("add");
     const query = nextParams.toString();
-    router.replace(`/credit-cards${query ? `?${query}` : ""}`, { scroll: false });
-  }, [router, searchParams]);
+    const destination = `/credit-cards${query ? `?${query}` : ""}`;
+    router.replace(routeWorkspaceId ? buildWorkspacePath(routeWorkspaceId, destination) : destination, { scroll: false });
+  }, [routeWorkspaceId, router, searchParams]);
   const [isStackExpanded, setIsStackExpanded] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [selectedCardId, setSelectedCardId] = useSessionState<string | null>("nest:view:credit-cards:selected", null);
@@ -158,7 +164,7 @@ export function CreditCardsPage() {
   }, []);
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId;

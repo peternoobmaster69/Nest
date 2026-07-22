@@ -17,7 +17,7 @@ export async function GET() {
       prisma.loginSession.findMany({
         where: { userId },
         orderBy: { signedInAt: "desc" },
-        take: 20,
+        take: 5,
         select: {
           sessionId: true,
           provider: true,

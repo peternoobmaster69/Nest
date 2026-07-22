@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
@@ -130,7 +133,7 @@ async function fetchRewards(): Promise<{
   conversions: PointConversion[];
   cardsWithoutRewards: AvailableCard[];
 }> {
-  const res = await fetch("/api/rewards");
+  const res = await workspaceFetch("/api/rewards");
   if (!res.ok) throw new Error("Failed to fetch rewards");
   return res.json();
 }
@@ -184,6 +187,7 @@ export function RewardsPage({
   initialConversions: PointConversion[];
   availableCards: AvailableCard[];
 }) {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"credit-cards" | "frequent-flyers" | "hotel-rewards" | "conversions">("credit-cards");
 
@@ -253,9 +257,9 @@ export function RewardsPage({
   const [hotelFormNotes, setHotelFormNotes] = useState("");
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: async () => {
-      const res = await fetch("/api/context");
+      const res = await workspaceFetch("/api/context");
       if (!res.ok) throw new Error("Failed to fetch context");
       return res.json() as Promise<AppContext>;
     },
@@ -267,7 +271,7 @@ export function RewardsPage({
   };
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["rewards"],
+    queryKey: ["rewards", routeWorkspaceId],
     queryFn: fetchRewards,
     initialData: {
       creditCards: initialCreditCards,
@@ -279,12 +283,12 @@ export function RewardsPage({
   });
 
   const historyQuery = useQuery({
-    queryKey: ["rewards", "frequent-flyer-history", openHistoryFFId],
+    queryKey: ["rewards", routeWorkspaceId, "frequent-flyer-history", openHistoryFFId],
     queryFn: async (): Promise<FrequentFlyerHistoryResponse> => {
       if (!openHistoryFFId) {
         throw new Error("Frequent flyer is required");
       }
-      const res = await fetch(`/api/rewards/frequent-flyer/history?frequentFlyerId=${openHistoryFFId}`);
+      const res = await workspaceFetch(`/api/rewards/frequent-flyer/history?frequentFlyerId=${openHistoryFFId}`);
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(payload?.error || "Failed to load history");
@@ -323,7 +327,7 @@ export function RewardsPage({
       conversionToMiles: number;
       conversionDescription?: string;
     }) =>
-      fetch("/api/rewards/credit-card", {
+      workspaceFetch("/api/rewards/credit-card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -336,7 +340,7 @@ export function RewardsPage({
 
   const updateCardReward = useMutation({
     mutationFn: (payload: { id: string; currentPoints: number; pointsValueCents?: number }) =>
-      fetch("/api/rewards/credit-card", {
+      workspaceFetch("/api/rewards/credit-card", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -360,7 +364,7 @@ export function RewardsPage({
       validityPeriodYears: number;
       notes?: string;
     }) =>
-      fetch("/api/rewards/frequent-flyer", {
+      workspaceFetch("/api/rewards/frequent-flyer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -384,7 +388,7 @@ export function RewardsPage({
       validityPeriodYears: number;
       notes?: string;
     }) =>
-      fetch("/api/rewards/frequent-flyer", {
+      workspaceFetch("/api/rewards/frequent-flyer", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -405,7 +409,7 @@ export function RewardsPage({
       centsPerPoint: number;
       notes?: string;
     }) =>
-      fetch("/api/rewards/hotel-rewards", {
+      workspaceFetch("/api/rewards/hotel-rewards", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -427,7 +431,7 @@ export function RewardsPage({
       centsPerPoint: number;
       notes?: string;
     }) =>
-      fetch("/api/rewards/hotel-rewards", {
+      workspaceFetch("/api/rewards/hotel-rewards", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -446,7 +450,7 @@ export function RewardsPage({
       toMiles: number;
       description?: string;
     }) =>
-      fetch("/api/rewards/conversion", {
+      workspaceFetch("/api/rewards/conversion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -458,28 +462,28 @@ export function RewardsPage({
   });
 
   const deleteCardReward = useMutation({
-    mutationFn: (id: string) => fetch(`/api/rewards/credit-card?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => workspaceFetch(`/api/rewards/credit-card?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
   });
 
   const deleteFrequentFlyer = useMutation({
-    mutationFn: (id: string) => fetch(`/api/rewards/frequent-flyer?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => workspaceFetch(`/api/rewards/frequent-flyer?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
   });
 
   const deleteHotelReward = useMutation({
-    mutationFn: (id: string) => fetch(`/api/rewards/hotel-rewards?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => workspaceFetch(`/api/rewards/hotel-rewards?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
   });
 
   const deleteConversion = useMutation({
-    mutationFn: (id: string) => fetch(`/api/rewards/conversion?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => workspaceFetch(`/api/rewards/conversion?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
   });
 
   const updateConversion = useMutation({
     mutationFn: (payload: { id: string; fromPoints: number; toMiles: number; description?: string }) =>
-      fetch("/api/rewards/conversion", {
+      workspaceFetch("/api/rewards/conversion", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -497,7 +501,7 @@ export function RewardsPage({
     queryClient.invalidateQueries({ queryKey: ["rewards"] });
     if (openHistoryFFId) {
       queryClient.invalidateQueries({
-        queryKey: ["rewards", "frequent-flyer-history", openHistoryFFId],
+        queryKey: ["rewards", routeWorkspaceId, "frequent-flyer-history", openHistoryFFId],
       });
     }
   };
@@ -510,7 +514,7 @@ export function RewardsPage({
       title?: string;
       expiryDate?: string;
     }) => {
-      const res = await fetch("/api/rewards/frequent-flyer/history", {
+      const res = await workspaceFetch("/api/rewards/frequent-flyer/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -545,7 +549,7 @@ export function RewardsPage({
       title?: string;
       expiryDate?: string;
     }) => {
-      const res = await fetch("/api/rewards/frequent-flyer/history", {
+      const res = await workspaceFetch("/api/rewards/frequent-flyer/history", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -576,7 +580,7 @@ export function RewardsPage({
       redemptionTitle: string;
       milesToRedeem: number;
     }) => {
-      const res = await fetch("/api/rewards/frequent-flyer/history", {
+      const res = await workspaceFetch("/api/rewards/frequent-flyer/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

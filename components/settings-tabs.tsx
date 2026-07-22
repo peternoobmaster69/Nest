@@ -3,25 +3,42 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, type ReactNode, useEffect } from "react";
-import { Settings, UsersRound } from "lucide-react";
+import { Bot, HardDrive, Settings, UsersRound } from "lucide-react";
 import { SETTINGS_TAB_COOKIE, type SettingsTab } from "@/lib/settings-tabs";
+import { useWorkspaceId } from "@/components/workspace-provider";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 const tabs: Array<{
   id: SettingsTab;
   label: string;
+  mobileLabel: string;
   icon: typeof Settings;
 }> = [
   {
     id: "settings",
-    label: "Settings",
+    label: "General",
+    mobileLabel: "General",
     icon: Settings,
   },
   {
+    id: "automation",
+    label: "Automation",
+    mobileLabel: "Automation",
+    icon: Bot,
+  },
+  {
     id: "workspaces",
-    label: "Workspaces",
+    label: "Workspace",
+    mobileLabel: "Workspace",
     icon: UsersRound,
+  },
+  {
+    id: "data",
+    label: "Data",
+    mobileLabel: "Data",
+    icon: HardDrive,
   },
 ];
 
@@ -38,6 +55,11 @@ export function SettingsTabs({
   children: ReactNode;
 }) {
   const router = useRouter();
+  const workspaceId = useWorkspaceId();
+  const settingsHref = (tab: SettingsTab) =>
+    workspaceId
+      ? buildWorkspacePath(workspaceId, `/settings?tab=${tab}`)
+      : `/settings?tab=${tab}`;
 
   useEffect(() => {
     rememberTab(activeTab);
@@ -55,7 +77,7 @@ export function SettingsTabs({
     const nextTab = tabs[nextIndex].id;
     rememberTab(nextTab);
     document.getElementById(`settings-tab-${nextTab}`)?.focus();
-    router.push(`/settings?tab=${nextTab}`);
+    router.push(settingsHref(nextTab));
   };
 
   return (
@@ -69,7 +91,7 @@ export function SettingsTabs({
               key={tab.id}
               id={`settings-tab-${tab.id}`}
               className={`settings-tab${isActive ? " is-active" : ""}`}
-              href={`/settings?tab=${tab.id}`}
+              href={settingsHref(tab.id)}
               role="tab"
               aria-selected={isActive}
               aria-controls={`settings-panel-${tab.id}`}
@@ -78,7 +100,8 @@ export function SettingsTabs({
               onKeyDown={(event) => moveTabFocus(event, tabs.indexOf(tab))}
             >
               <Icon size={18} aria-hidden="true" />
-              <span>{tab.label}</span>
+              <span className="settings-tab-label">{tab.label}</span>
+              <span className="settings-tab-mobile-label">{tab.mobileLabel}</span>
             </Link>
           );
         })}

@@ -1,6 +1,8 @@
 import { getActiveWorkspaceCookie } from "@/lib/active-workspace";
+import { WORKSPACE_ID_HEADER } from "@/lib/workspace-request";
 import { prisma } from "@/lib/prisma";
 import { getDatabaseReadyServerSession } from "@/lib/server-session";
+import { headers } from "next/headers";
 import {
   hasMinimumWorkspaceRole,
   normalizeWorkspaceRole,
@@ -49,12 +51,14 @@ export async function requireWorkspaceAccess(
   minimumRole: WorkspaceRole = "VIEWER",
 ) {
   const userId = await requireSessionUserId();
+  const requestWorkspaceId = (await headers()).get(WORKSPACE_ID_HEADER)?.trim() || null;
+  const effectiveWorkspaceId = requestedWorkspaceId || requestWorkspaceId;
 
-  if (requestedWorkspaceId) {
+  if (effectiveWorkspaceId) {
     const member = await prisma.workspaceMember.findUnique({
       where: {
         workspaceId_userId: {
-          workspaceId: requestedWorkspaceId,
+          workspaceId: effectiveWorkspaceId,
           userId,
         },
       },
@@ -69,7 +73,7 @@ export async function requireWorkspaceAccess(
     assertMinimumRole(role, minimumRole);
     return {
       userId,
-      workspaceId: requestedWorkspaceId,
+      workspaceId: effectiveWorkspaceId,
       role,
     };
   }

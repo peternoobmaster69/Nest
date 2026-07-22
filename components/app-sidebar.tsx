@@ -11,6 +11,9 @@ import { useTheme } from "./theme-provider";
 import { useConfirmDialog } from "./confirm-dialog";
 import { SidebarSkeleton } from "./ui-skeleton";
 import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 import {
   ChartNoAxesCombined,
   ChartPie,
@@ -80,10 +83,11 @@ export function AppSidebar({
   };
   contextLoading?: boolean;
 }) {
+  const routeWorkspaceId = useWorkspaceId();
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: async () => {
-      const res = await fetch("/api/context");
+      const res = await workspaceFetch("/api/context");
       if (!res.ok) throw new Error("Failed to load context");
       return res.json() as Promise<{
         workspaceId?: string | null;
@@ -103,7 +107,7 @@ export function AppSidebar({
   const receivablesSummary = useQuery({
     queryKey: ["receivables-summary", resolvedContext?.workspaceId],
     queryFn: async () => {
-      const res = await fetch(`/api/receivables/summary?workspaceId=${resolvedContext?.workspaceId}`);
+      const res = await workspaceFetch(`/api/receivables/summary?workspaceId=${resolvedContext?.workspaceId}`);
       if (!res.ok) throw new Error("Failed to load receivables summary");
       return res.json() as Promise<ReceivablesSummary>;
     },
@@ -139,12 +143,15 @@ export function AppSidebar({
   const queryClient = useQueryClient();
   const router = useRouter();
   const avatarAlt = userName || userEmail || "User";
+  const navigationWorkspaceId = resolvedContext?.workspaceId ?? routeWorkspaceId;
+  const workspaceHref = (path: string) =>
+    navigationWorkspaceId ? buildWorkspacePath(navigationWorkspaceId, path) : path;
 
   // Fetch all workspaces for switching
   const workspacesQuery = useQuery({
     queryKey: ["workspaces"],
     queryFn: async () => {
-      const res = await fetch("/api/workspaces");
+      const res = await workspaceFetch("/api/workspaces");
       if (!res.ok) throw new Error("Failed to load workspaces");
       return res.json() as Promise<Workspace[]>;
     },
@@ -208,14 +215,14 @@ export function AppSidebar({
     setIsTransitioning(true);
     setProfileMenuOpen(false);
     try {
-      const res = await fetch("/api/workspaces/switch", {
+      const res = await workspaceFetch("/api/workspaces/switch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId }),
       });
       if (!res.ok) throw new Error("Failed to switch workspace");
 
-      queryClient.setQueryData(["app-context"], (existing: {
+      queryClient.setQueryData(["app-context", workspaceId], (existing: {
         workspaceId?: string | null;
         workspaceName?: string | null;
       } | undefined) =>
@@ -243,7 +250,7 @@ export function AppSidebar({
       void queryClient.invalidateQueries({ queryKey: ["collaborators"] });
       void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
 
-      router.push("/");
+      router.push(buildWorkspacePath(workspaceId));
       setTimeout(() => {
         setIsTransitioning(false);
         setSwitchingWorkspaceId(null);
@@ -259,7 +266,7 @@ export function AppSidebar({
       {isOpen && <div className="sidebar-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsOpen(false))} />}
       <aside ref={sidebarRef} className={`sidebar${isOpen ? " open" : ""}`} aria-label="Primary navigation">
         <div className="sb-logo-row">
-          <Link href="/" className="sb-logo" onClick={handleNavClick}>
+          <Link href={workspaceHref("/")} className="sb-logo" onClick={handleNavClick}>
             <Image src="/icon.svg" alt="" width={30} height={30} className="brand-logo-sm" />
             <span>Nest</span>
           </Link>
@@ -282,52 +289,52 @@ export function AppSidebar({
           <>
       <div className="sb-scroll">
         <div className="sb-sec">Overview</div>
-        <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href="/" onClick={handleNavClick} aria-current={currentPath === "/" ? "page" : undefined}>
+        <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href={workspaceHref("/")} onClick={handleNavClick} aria-current={currentPath === "/" ? "page" : undefined}>
           <Home className="sb-ic" size={18} aria-hidden="true" />Dashboard
         </Link>
 
         <div className="sb-sec">Money</div>
         {sidebarMoneyPages.transactions !== false && (
-          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href="/transactions" onClick={handleNavClick} aria-current={currentPath === "/transactions" ? "page" : undefined}>
+          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href={workspaceHref("/transactions")} onClick={handleNavClick} aria-current={currentPath === "/transactions" ? "page" : undefined}>
             <ReceiptText className="sb-ic" size={18} aria-hidden="true" />Transactions
           </Link>
         )}
         {showCreditCards && (
-          <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href="/credit-cards" onClick={handleNavClick} aria-current={currentPath === "/credit-cards" ? "page" : undefined}>
+          <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href={workspaceHref("/credit-cards")} onClick={handleNavClick} aria-current={currentPath === "/credit-cards" ? "page" : undefined}>
             <CreditCard className="sb-ic" size={18} aria-hidden="true" />Credit Cards
           </Link>
         )}
         {showCreditTransactions && (
-          <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href="/credit-transactions" onClick={handleNavClick} aria-current={currentPath === "/credit-transactions" ? "page" : undefined}>
+          <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href={workspaceHref("/credit-transactions")} onClick={handleNavClick} aria-current={currentPath === "/credit-transactions" ? "page" : undefined}>
             <ListChecks className="sb-ic" size={18} aria-hidden="true" />Card Transactions
           </Link>
         )}
         {sidebarMoneyPages.receivables !== false && (
-          <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href="/receivables" onClick={handleNavClick}>
+          <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href={workspaceHref("/receivables")} onClick={handleNavClick}>
             <Undo2 className="sb-ic" size={18} aria-hidden="true" />Receivables
             {resolvedReceivablesCount ? <span className="sb-badge">{resolvedReceivablesCount}</span> : null}
           </Link>
         )}
         {sidebarMoneyPages.rewards !== false && (
-          <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href="/rewards" onClick={handleNavClick}>
+          <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href={workspaceHref("/rewards")} onClick={handleNavClick}>
             <Gift className="sb-ic" size={18} aria-hidden="true" />Rewards
           </Link>
         )}
         {sidebarMoneyPages.investments !== false && (
-          <Link className={`sb-item${currentPath === "/investments" ? " on" : ""}`} href="/investments" onClick={handleNavClick}>
+          <Link className={`sb-item${currentPath === "/investments" ? " on" : ""}`} href={workspaceHref("/investments")} onClick={handleNavClick}>
             <ChartNoAxesCombined className="sb-ic" size={18} aria-hidden="true" />Investments
           </Link>
         )}
-        <Link className={`sb-item${currentPath === "/budgets/plan" ? " on" : ""}`} href="/budgets/plan" onClick={handleNavClick}>
+        <Link className={`sb-item${currentPath === "/budgets/plan" ? " on" : ""}`} href={workspaceHref("/budgets/plan")} onClick={handleNavClick}>
           <ChartPie className="sb-ic" size={18} aria-hidden="true" />Budget Plan
         </Link>
 
         <div className="sb-sec">Workspace</div>
-        <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href="/settings" onClick={handleNavClick}>
+        <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href={workspaceHref("/settings")} onClick={handleNavClick}>
           <Settings className="sb-ic" size={18} aria-hidden="true" />Settings
         </Link>
         {resolvedContext?.isAdmin ? (
-          <Link className={`sb-item${currentPath === "/admin" ? " on" : ""}`} href="/admin" onClick={handleNavClick}>
+          <Link className={`sb-item${currentPath === "/admin" ? " on" : ""}`} href={workspaceHref("/admin")} onClick={handleNavClick}>
             <ShieldCheck className="sb-ic" size={18} aria-hidden="true" />Admin
           </Link>
         ) : null}
@@ -359,7 +366,7 @@ export function AppSidebar({
             <div className="sb-user-menu">
               <Link
                 className="sb-user-menu-item"
-                href="/profile"
+                href={workspaceHref("/profile")}
                 onClick={() => {
                   setProfileMenuOpen(false);
                   if (window.matchMedia("(max-width: 1280px)").matches) {

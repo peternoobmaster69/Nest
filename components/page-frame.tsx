@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useQuery } from "@tanstack/react-query";
 import { ReactNode } from "react";
 import { AppShell } from "./app-shell";
@@ -31,7 +34,7 @@ class ApiError extends Error {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
     throw new ApiError(
@@ -63,8 +66,9 @@ export function PageFrame({
   };
   children: ReactNode;
 }) {
+  const workspaceId = useWorkspaceId();
   const contextQuery = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", workspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const isContextLoading = contextQuery.isLoading && !contextQuery.data;

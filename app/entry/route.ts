@@ -1,6 +1,7 @@
 import { setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { normalizeInternalAppPath } from "@/lib/workspace-entry";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +11,13 @@ export async function GET(request: Request) {
   const workspaceId = requestUrl.searchParams.get("workspaceId")?.trim();
   const destination = normalizeInternalAppPath(requestUrl.searchParams.get("next"));
 
-  if (!workspaceId) {
-    return NextResponse.json({ error: "Workspace is required" }, { status: 400 });
-  }
-
   try {
-    await requireWorkspaceAccess(workspaceId);
-    const response = NextResponse.redirect(new URL(destination, requestUrl.origin));
-    return setActiveWorkspaceCookie(response, workspaceId);
+    const selectedWorkspaceId = workspaceId
+      ? (await requireWorkspaceAccess(workspaceId)).workspaceId
+      : (await requireWorkspaceAccess()).workspaceId;
+    const scopedDestination = buildWorkspacePath(selectedWorkspaceId, destination);
+    const response = NextResponse.redirect(new URL(scopedDestination, requestUrl.origin));
+    return setActiveWorkspaceCookie(response, selectedWorkspaceId);
   } catch (error) {
     if (error instanceof ApiAuthError && error.status === 401) {
       const signInUrl = new URL("/login", requestUrl.origin);

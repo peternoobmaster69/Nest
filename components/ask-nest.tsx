@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
+
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -206,9 +209,10 @@ function formatChartPeriodLabel(value: string, compact = false) {
   return compact ? `${month} ’${monthMatch[1]!.slice(2)}` : `${month} ${monthMatch[1]}`;
 }
 
-function AskNestVisualizationView({ visualization, onNavigate }: {
+function AskNestVisualizationView({ visualization, onNavigate, workspaceId }: {
   visualization: AskNestVisualization;
   onNavigate: () => void;
+  workspaceId?: string | null;
 }) {
   if (visualization.type === "trip_cards") {
     if (!visualization.items.length) return null;
@@ -217,7 +221,7 @@ function AskNestVisualizationView({ visualization, onNavigate }: {
         <h4>{visualization.title}</h4>
         <div className="ask-nest-trip-grid">
           {visualization.items.map((item) => (
-            <Link key={`${item.label}-${item.href}`} href={item.href} onClick={onNavigate}>
+            <Link key={`${item.label}-${item.href}`} href={workspaceId ? buildWorkspacePath(workspaceId, item.href) : item.href} onClick={onNavigate}>
               <span className="ask-nest-trip-flag" aria-hidden="true">{item.flag}</span>
               <span className="ask-nest-trip-copy">
                 <strong>{item.label}</strong>
@@ -300,11 +304,13 @@ export function AskNest({
   currentPath,
   pageTitle,
   workspaceName,
+  workspaceId,
   userName,
 }: {
   currentPath: string;
   pageTitle: string;
   workspaceName?: string | null;
+  workspaceId?: string | null;
   userName?: string | null;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -338,7 +344,7 @@ export function AskNest({
     historyLoadedRef.current = true;
     setHistoryLoading(true);
     setHistoryError("");
-    void fetch("/api/ai/history?limit=10", { cache: "no-store" })
+    void workspaceFetch("/api/ai/history?limit=10", { cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json().catch(() => null) as AskNestHistoryPage | { error?: string } | null;
         if (!response.ok || !payload || !("turns" in payload)) {
@@ -422,7 +428,7 @@ export function AskNest({
     setMemoryLoading(true);
     setMemoryError("");
     try {
-      const response = await fetch("/api/ai/memory", { cache: "no-store" });
+      const response = await workspaceFetch("/api/ai/memory", { cache: "no-store" });
       const payload = await response.json().catch(() => null) as { memories?: AskNestMemoryItem[]; error?: string } | null;
       if (!response.ok || !payload?.memories) throw new Error(payload?.error || "Could not load memory.");
       setMemories(payload.memories);
@@ -446,7 +452,7 @@ export function AskNest({
     setMemoryLoading(true);
     setMemoryError("");
     try {
-      const response = await fetch("/api/ai/memory", {
+      const response = await workspaceFetch("/api/ai/memory", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
@@ -467,7 +473,7 @@ export function AskNest({
     setMemoryLoading(true);
     setMemoryError("");
     try {
-      const response = await fetch(`/api/ai/memory?id=${encodeURIComponent(memory.id)}`, { method: "DELETE", cache: "no-store" });
+      const response = await workspaceFetch(`/api/ai/memory?id=${encodeURIComponent(memory.id)}`, { method: "DELETE", cache: "no-store" });
       if (!response.ok) throw new Error("Could not forget memory.");
       setMemories((current) => current.filter((item) => item.id !== memory.id));
       setMemoryDrafts((current) => {
@@ -487,7 +493,7 @@ export function AskNest({
     setMemoryLoading(true);
     setMemoryError("");
     try {
-      const response = await fetch("/api/ai/memory", { method: "DELETE", cache: "no-store" });
+      const response = await workspaceFetch("/api/ai/memory", { method: "DELETE", cache: "no-store" });
       if (!response.ok) throw new Error("Could not clear memory.");
       setMemories([]);
       setMemoryDrafts({});
@@ -505,7 +511,7 @@ export function AskNest({
     setHistoryLoading(true);
     setHistoryError("");
     try {
-      const response = await fetch(`/api/ai/history?limit=10&cursor=${encodeURIComponent(nextCursor)}`, { cache: "no-store" });
+      const response = await workspaceFetch(`/api/ai/history?limit=10&cursor=${encodeURIComponent(nextCursor)}`, { cache: "no-store" });
       const payload = await response.json().catch(() => null) as AskNestHistoryPage | { error?: string } | null;
       if (!response.ok || !payload || !("turns" in payload)) {
         throw new Error(payload && "error" in payload && payload.error ? payload.error : "Could not load older conversations.");
@@ -525,7 +531,7 @@ export function AskNest({
     setHistoryLoading(true);
     setHistoryError("");
     try {
-      const response = await fetch("/api/ai/history", { method: "DELETE", cache: "no-store" });
+      const response = await workspaceFetch("/api/ai/history", { method: "DELETE", cache: "no-store" });
       if (!response.ok) throw new Error("Could not clear conversation history.");
       setTurns([]);
       setNextCursor(null);
@@ -548,7 +554,7 @@ export function AskNest({
     abortRef.current = controller;
 
     try {
-      const response = await fetch("/api/ai/ask", {
+      const response = await workspaceFetch("/api/ai/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
@@ -634,7 +640,7 @@ export function AskNest({
       ? { ...item, feedbackPending: true, feedbackError: "" }
       : item));
     try {
-      const response = await fetch("/api/ai/feedback", {
+      const response = await workspaceFetch("/api/ai/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
@@ -830,7 +836,7 @@ export function AskNest({
                         </dl>
                       ) : null}
                       {turn.answer.visualization ? (
-                        <AskNestVisualizationView visualization={turn.answer.visualization} onNavigate={() => setOpen(false)} />
+                        <AskNestVisualizationView visualization={turn.answer.visualization} workspaceId={workspaceId} onNavigate={() => setOpen(false)} />
                       ) : null}
                       {turn.answer.evidence.length ? (
                         <div className="ask-nest-evidence">
@@ -841,7 +847,7 @@ export function AskNest({
                               <ArrowUpRight size={15} aria-hidden="true" />
                             </a>
                           ) : (
-                            <Link key={item.id} href={item.href} onClick={() => setOpen(false)}>
+                            <Link key={item.id} href={workspaceId ? buildWorkspacePath(workspaceId, item.href) : item.href} onClick={() => setOpen(false)}>
                               <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
                               <ArrowUpRight size={15} aria-hidden="true" />
                             </Link>

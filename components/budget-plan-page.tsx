@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPlanSkeleton";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
@@ -123,7 +126,7 @@ type SourceFields = {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await workspaceFetch(url, init);
   if (!response.ok) {
     let detail = `Request failed (${response.status})`;
     try {
@@ -206,6 +209,7 @@ function ErrorMessage({ error }: { error: Error | null | undefined }) {
 }
 
 export function BudgetPlanPage() {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const now = new Date();
   const [selectedYear, setSelectedYear] = useSessionState("nest:view:budget-plan:year", now.getFullYear());
@@ -225,7 +229,7 @@ export function BudgetPlanPage() {
   const [sourceOwnerId, setSourceOwnerId] = useState("");
 
   const contextQuery = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = contextQuery.data?.workspaceId ?? null;

@@ -25,7 +25,9 @@ export default async function SettingsRoute({
   return (
     <PageFrame title="Settings" current="/settings" userName={userName} userEmail={session.user?.email || undefined} userImage={session.user?.image || null}>
       <SettingsTabs activeTab={activeTab}>
-        {activeTab === "workspaces" ? <CollaboratorsPage /> : <SettingsPage />}
+        {activeTab === "workspaces" ? (
+          <CollaboratorsPage workspaceSettings={<SettingsPage section={activeTab} />} />
+        ) : <SettingsPage section={activeTab} />}
       </SettingsTabs>
     </PageFrame>
   );

@@ -1,4 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
+import { WORKSPACE_ID_HEADER, WORKSPACE_PATH_HEADER } from "@/lib/workspace-request";
+
+const LEGACY_WORKSPACE_PATHS = [
+  "/admin",
+  "/budgets",
+  "/collaborators",
+  "/credit-alerts",
+  "/credit-cards",
+  "/credit-transactions",
+  "/investments",
+  "/profile",
+  "/receivables",
+  "/rewards",
+  "/settings",
+  "/transactions",
+];
+
+function isLegacyWorkspacePath(pathname: string) {
+  return LEGACY_WORKSPACE_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
+function workspaceIdFromPath(pathname: string) {
+  const match = /^\/w\/([^/]+)(?:\/|$)/.exec(pathname);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
 
 function contentSecurityPolicy(nonce: string) {
   const development = process.env.NODE_ENV === "development";
@@ -52,6 +84,15 @@ export function proxy(request: NextRequest) {
   const method = request.method.toUpperCase();
   const unsafeMethod = !["GET", "HEAD", "OPTIONS"].includes(method);
 
+  if (!isApi && isLegacyWorkspacePath(request.nextUrl.pathname)) {
+    const entryUrl = request.nextUrl.clone();
+    const destination = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+    entryUrl.pathname = "/entry";
+    entryUrl.search = "";
+    entryUrl.searchParams.set("next", destination);
+    return applySecurityHeaders(NextResponse.redirect(entryUrl), csp, false);
+  }
+
   if (isApi && unsafeMethod) {
     const origin = request.headers.get("origin");
     const fetchSite = request.headers.get("sec-fetch-site");
@@ -65,6 +106,14 @@ export function proxy(request: NextRequest) {
   }
 
   const requestHeaders = new Headers(request.headers);
+  const workspaceId = workspaceIdFromPath(request.nextUrl.pathname);
+  if (workspaceId) {
+    requestHeaders.set(WORKSPACE_ID_HEADER, workspaceId);
+    requestHeaders.set(
+      WORKSPACE_PATH_HEADER,
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
+  }
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });

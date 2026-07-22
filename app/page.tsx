@@ -1,10 +1,10 @@
-import { DashboardShell } from "@/components/dashboard-shell";
 import { LandingSignInDialog } from "@/components/landing-signin-dialog";
 import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { getSignInErrorMessage } from "@/lib/signin-error";
 import { normalizeInternalAppPath } from "@/lib/workspace-entry";
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowRight,
   BarChart3,
@@ -384,12 +384,5 @@ export default async function Home({
       </main>
     );
   }
-
-  return (
-    <DashboardShell
-      userName={session.user.name || session.user.email || "Nest User"}
-      userEmail={session.user.email || ""}
-      userImage={session.user.image || null}
-    />
-  );
+  redirect("/entry");
 }

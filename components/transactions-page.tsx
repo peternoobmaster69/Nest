@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
@@ -262,7 +265,7 @@ function getContextualGroupDefaults(budget: Budget | undefined, transactions: Tr
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   const data = (await res.json().catch(() => null)) as
     | T
     | {
@@ -285,6 +288,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function TransactionsPage() {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const urlFilterKey = searchParams.toString();
@@ -373,7 +377,7 @@ export function TransactionsPage() {
   ];
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
 

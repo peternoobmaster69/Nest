@@ -6,6 +6,17 @@ import { runSecureApiRoute } from "@/lib/api-security";
 import { enforceDistributedRateLimit } from "@/lib/security-rate-limit";
 import { requireRecentAuthentication, requireWorkspaceRole } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
+
+function defaultSettingsRedirect(origin: string, status: string) {
+  const entryUrl = new URL("/entry", origin);
+  entryUrl.searchParams.set("next", `/settings?gmail=${status}`);
+  return entryUrl;
+}
+
+function workspaceSettingsRedirect(origin: string, workspaceId: string, status: string) {
+  return new URL(buildWorkspacePath(workspaceId, `/settings?gmail=${status}`), origin);
+}
 
 export async function GET(request: Request) {
   return runSecureApiRoute(request, { errorMessage: "Failed to complete Gmail connect" }, async () => {
@@ -23,20 +34,20 @@ export async function GET(request: Request) {
     });
 
     if (error) {
-      return NextResponse.redirect(`${origin}/settings?gmail=denied`);
+      return NextResponse.redirect(defaultSettingsRedirect(origin, "denied"));
     }
     if (!code || !state) {
-      return NextResponse.redirect(`${origin}/settings?gmail=invalid_callback`);
+      return NextResponse.redirect(defaultSettingsRedirect(origin, "invalid_callback"));
     }
 
     const oauthState = await consumeIntegrationOAuthState(state);
     if (!oauthState) {
-      return NextResponse.redirect(`${origin}/settings?gmail=invalid_state`);
+      return NextResponse.redirect(defaultSettingsRedirect(origin, "invalid_state"));
     }
     const recentUserId = await requireRecentAuthentication();
     const auth = await requireWorkspaceRole(oauthState.workspaceId, "OWNER");
     if (oauthState.userId !== auth.userId || recentUserId !== auth.userId) {
-      return NextResponse.redirect(`${origin}/settings?gmail=forbidden`);
+      return NextResponse.redirect(workspaceSettingsRedirect(origin, oauthState.workspaceId, "forbidden"));
     }
 
     const tokens = await exchangeCodeForTokens({
@@ -60,7 +71,7 @@ export async function GET(request: Request) {
     }
 
     if (!email) {
-      return NextResponse.redirect(`${origin}/settings?gmail=profile_unavailable`);
+      return NextResponse.redirect(workspaceSettingsRedirect(origin, auth.workspaceId, "profile_unavailable"));
     }
 
     const existing = await prisma.gmailIntegration.findFirst({
@@ -140,6 +151,6 @@ export async function GET(request: Request) {
       },
     });
 
-    return NextResponse.redirect(`${origin}/settings?gmail=connected`);
+    return NextResponse.redirect(workspaceSettingsRedirect(origin, auth.workspaceId, "connected"));
   });
 }

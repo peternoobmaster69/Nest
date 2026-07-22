@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
@@ -33,7 +36,7 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 import { useToast } from "@/components/toast-provider";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
-import { buildCreditCardStatementPath } from "@/lib/workspace-entry";
+import { buildCreditCardStatementPath, buildWorkspacePath } from "@/lib/workspace-entry";
 
 const ALL_BANKS_FILTER = "ALL";
 const RECENT_TRANSACTION_LIMIT = 5;
@@ -201,7 +204,7 @@ function getAmountToneClass(valueCents: number) {
 }
 
 async function getSummary(): Promise<DashboardSummary> {
-  const res = await fetch("/api/dashboard/summary", { cache: "no-cache" });
+  const res = await workspaceFetch("/api/dashboard/summary", { cache: "no-cache" });
   if (!res.ok) {
     throw new Error("Unable to load dashboard");
   }
@@ -209,7 +212,7 @@ async function getSummary(): Promise<DashboardSummary> {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     throw new Error(`Request failed (${res.status})`);
   }
@@ -695,6 +698,11 @@ export function DashboardShell({
   userEmail: string;
   userImage?: string | null;
 }) {
+  const routeWorkspaceId = useWorkspaceId();
+  const workspaceHref = useCallback(
+    (path: string) => routeWorkspaceId ? buildWorkspacePath(routeWorkspaceId, path) : path,
+    [routeWorkspaceId],
+  );
   const router = useRouter();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -729,7 +737,7 @@ export function DashboardShell({
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
 
   const contextQuery = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
 
@@ -1215,15 +1223,15 @@ export function DashboardShell({
       budgetId,
       accountId,
     });
-    router.push(`/transactions?${params.toString()}`);
-  }, [router]);
+    router.push(workspaceHref(`/transactions?${params.toString()}`));
+  }, [router, workspaceHref]);
   const goToCreditCardStatement = useCallback((card: CreditCardDueCard) => {
-    router.push(buildCreditCardStatementPath({
+    router.push(workspaceHref(buildCreditCardStatementPath({
       cardId: card.cardId,
       statementMonth: card.statementMonth,
       statementYear: card.statementYear,
-    }));
-  }, [router]);
+    })));
+  }, [router, workspaceHref]);
   const budgetNameById = useMemo(
     () => new Map((budgetsQuery.data ?? []).map((b) => [b.id, b.name])),
     [budgetsQuery.data],
@@ -1505,7 +1513,7 @@ export function DashboardShell({
                   <p>{filteredBudgets.length} sub-account{filteredBudgets.length === 1 ? "" : "s"} in this view</p>
                 </div>
                 <div className="dashboard-overview-actions">
-                  <Link href="/transactions" className="btn btn-primary btn-sm dashboard-overview-action">
+                  <Link href={workspaceHref("/transactions")} className="btn btn-primary btn-sm dashboard-overview-action">
                     <ReceiptText size={16} aria-hidden="true" /> Transactions <ArrowRight size={15} aria-hidden="true" />
                   </Link>
                   <button type="button" className="btn btn-ghost btn-sm dashboard-overview-action" onClick={() => setCreateBudgetOpen(true)}>
@@ -1550,7 +1558,7 @@ export function DashboardShell({
                     </button>
                   ))}
                   {filteredBudgets.length > DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT ? (
-                    <Link href="/transactions" className="dashboard-overview-account dashboard-overview-account-more">
+                    <Link href={workspaceHref("/transactions")} className="dashboard-overview-account dashboard-overview-account-more">
                       +{filteredBudgets.length - DASHBOARD_SUBACCOUNT_SHORTCUT_LIMIT} more
                     </Link>
                   ) : null}
@@ -1603,7 +1611,7 @@ export function DashboardShell({
                         </button>
                       ) : null}
                       <Link
-                        href={`/transactions?accountId=${discrepancy.id}`}
+                        href={workspaceHref(`/transactions?accountId=${discrepancy.id}`)}
                         className="btn btn-primary btn-xs tx-reconciliation-action"
                       >
                         Review <ArrowRight size={13} aria-hidden="true" />
@@ -1666,7 +1674,7 @@ export function DashboardShell({
                     <span className="dashboard-section-title-icon" aria-hidden="true"><ReceiptText size={16} /></span>
                     <span>Recent transactions</span>
                   </div>
-                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push("/transactions")}>
+                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push(workspaceHref("/transactions"))}>
                     <span>View all</span><ArrowRight size={14} aria-hidden="true" />
                   </button>
                 </div>
@@ -1695,7 +1703,7 @@ export function DashboardShell({
                     <span className="dashboard-section-title-icon" aria-hidden="true"><CreditCard size={16} /></span>
                     <span id="dashboard-payments-title">Payments due</span>
                   </div>
-                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push("/credit-transactions")}>
+                  <button className="btn btn-ghost btn-xs dashboard-section-action" onClick={() => router.push(workspaceHref("/credit-transactions"))}>
                     <span>View all</span><ArrowRight size={14} aria-hidden="true" />
                   </button>
                 </div>

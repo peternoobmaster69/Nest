@@ -1,17 +1,11 @@
 import { Bot, Brain, ChevronDown, Gauge, HardDrive, KeyRound, ListRestart, Sigma, ThumbsUp } from "lucide-react";
 import { AdminDirectories } from "@/components/admin-directories";
+import { AdminBackgroundJobsTable, AdminRecentActivityTable } from "@/components/admin-record-tables";
 import { PageFrame } from "@/components/page-frame";
 import { requireAdminPage } from "@/lib/admin-auth";
 import { getAdminOverview } from "@/lib/admin-overview";
-import { cancelJobAction, retryJobAction } from "@/app/admin/job-actions";
 
 export const dynamic = "force-dynamic";
-
-const DATE_FORMAT = new Intl.DateTimeFormat("en-SG", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Asia/Singapore",
-});
 
 function statusLabel(configured: boolean) {
   return configured ? "Configured" : "Missing";
@@ -126,26 +120,7 @@ export default async function AdminPage() {
                 <ChevronDown className="admin-disclosure-chevron" size={19} aria-hidden="true" />
               </summary>
               <div className="admin-disclosure-body">
-                {overview.recentTurns.length ? (
-                  <div className="admin-table-wrap">
-                    <table className="admin-table admin-responsive-table admin-activity-table">
-                      <thead><tr><th>Time</th><th>User / workspace</th><th>Question</th><th>Context</th><th>Tokens</th><th>Grounding</th><th>Feedback</th></tr></thead>
-                      <tbody>
-                        {overview.recentTurns.map((turn) => (
-                          <tr key={turn.id}>
-                            <td data-label="Time"><time dateTime={turn.createdAt.toISOString()}>{DATE_FORMAT.format(turn.createdAt)}</time></td>
-                            <td data-label="User / workspace"><strong>{turn.userLabel}</strong><span>{turn.workspaceName}</span></td>
-                            <td data-label="Question" className="admin-question" title={turn.question}>{turn.question}</td>
-                            <td data-label="Context"><code>{turn.pagePath}</code></td>
-                            <td data-label="Tokens">{turn.totalTokens === null ? <span>Untracked</span> : <><strong>{turn.totalTokens.toLocaleString()} total</strong><span>{turn.inputTokens?.toLocaleString() ?? 0} in · {turn.outputTokens?.toLocaleString() ?? 0} out</span></>}</td>
-                            <td data-label="Grounding"><strong>{turn.toolsUsed.length ? turn.toolsUsed.join(", ") : "No tool metadata"}</strong><span>{turn.toolCallCount} calls · {turn.emptyResultCount} empty · {turn.durationMs === null ? "latency untracked" : `${turn.durationMs.toLocaleString()} ms`}</span><span>{turn.evidenceCount} evidence · {turn.memoryUpdateCount} memory updates</span></td>
-                            <td data-label="Feedback"><strong>{turn.feedbackRating?.replaceAll("_", " ") ?? "Not rated"}</strong>{turn.feedbackReason ? <span>{turn.feedbackReason.replaceAll("_", " ")}</span> : null}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : <p className="admin-empty">No Ask Nest interactions have been stored yet.</p>}
+                <AdminRecentActivityTable turns={overview.recentTurns} />
               </div>
             </details>
           </div>
@@ -174,29 +149,7 @@ export default async function AdminPage() {
                 <div><span>Duplicates suppressed</span><strong>{overview.backgroundJobs.metrics.duplicateSuppressions.toLocaleString()}</strong></div>
                 <div><span>Dead letters</span><strong>{overview.backgroundJobs.metrics.deadLetters.toLocaleString()}</strong></div>
               </div>
-              {overview.backgroundJobs.recent.length ? (
-                <div className="admin-table-wrap">
-                  <table className="admin-table admin-responsive-table">
-                    <thead><tr><th>Job</th><th>Scope</th><th>Status</th><th>Progress</th><th>Attempts</th><th>Updated</th><th>Actions</th></tr></thead>
-                    <tbody>{overview.backgroundJobs.recent.map((job) => (
-                      <tr key={job.id}>
-                        <td data-label="Job"><strong>{job.type.replaceAll("_", " ")}</strong><span>{job.id}</span></td>
-                        <td data-label="Scope"><strong>{job.workspaceId ?? "System"}</strong><span>{job.userId ? `Actor ${job.userId}` : job.key ?? "No actor"}</span></td>
-                        <td data-label="Status"><strong>{job.status.replaceAll("_", " ")}</strong><span>{job.errorCode ?? job.message ?? "—"}</span></td>
-                        <td data-label="Progress">{job.progress}%<span>{job.current ?? 0} / {job.total ?? 0}</span></td>
-                        <td data-label="Attempts">{job.attempts}<span>{job.retryCount} retries · {job.duplicateCount} suppressed</span></td>
-                        <td data-label="Updated"><time dateTime={job.updatedAt.toISOString()}>{DATE_FORMAT.format(job.updatedAt)}</time></td>
-                        <td data-label="Actions">
-                          <div className="admin-job-actions">
-                            {["FAILED", "DEAD_LETTER", "CANCELLED"].includes(job.status) ? <form action={retryJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="btn btn-ghost btn-xs" type="submit">Retry</button></form> : null}
-                            {["PENDING", "RUNNING"].includes(job.status) ? <form action={cancelJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="btn btn-ghost btn-xs" type="submit">Cancel</button></form> : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              ) : <p className="admin-empty">No background jobs have run yet.</p>}
+              <AdminBackgroundJobsTable jobs={overview.backgroundJobs.recent} />
             </div>
           </details>
 

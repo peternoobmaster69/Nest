@@ -112,10 +112,11 @@ test("successful sign-ins persist bounded, user-visible session metadata", async
   assert.match(auth, /prisma\.loginSession\.create/);
   assert.match(auth, /provider: account\?\.provider \?\? null/);
   assert.match(sessionsRoute, /export async function GET/);
-  assert.match(sessionsRoute, /take: 20/);
+  assert.match(sessionsRoute, /orderBy: \{ signedInAt: "desc" \}[\s\S]*take: 5/);
   assert.match(sessionsRoute, /active: session\.sessionId === user\?\.activeSessionId/);
   assert.match(retention, /LOGIN_SESSION_RETENTION_DAYS/);
   assert.match(retention, /DELETE TOP \(\$\{size\}\) FROM \[dbo\]\.\[LoginSession\]/);
   assert.match(settings, /Recent sign-ins/);
+  assert.match(settings, /five most recent sign-ins/);
   assert.match(privacy, /IP address and[\s\S]*country code associated with account sign-ins/);
 });

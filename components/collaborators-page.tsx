@@ -1,10 +1,15 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { CollaboratorsAuditSkeleton, CollaboratorsInvitesSkeleton, CollaboratorsRowsSkeleton } from "@/components/skeletons/CollaboratorsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { useRouter } from "next/navigation";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 // Default visibility for Money section pages
 const DEFAULT_MONEY_PAGES = {
@@ -61,7 +66,7 @@ type CollaboratorData = {
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -73,7 +78,9 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function CollaboratorsPage() {
+export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: ReactNode }) {
+  const routeWorkspaceId = useWorkspaceId();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -85,7 +92,7 @@ export function CollaboratorsPage() {
   const [message, setMessage] = useState("");
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId ?? null;
@@ -146,7 +153,7 @@ export function CollaboratorsPage() {
       setSwitchingWorkspaceName(targetWorkspace?.name ?? "workspace");
       setMessage("");
     },
-    onSuccess: async () => {
+    onSuccess: async (_, targetWorkspaceId) => {
       await queryClient.invalidateQueries({ queryKey: ["app-context"] });
       await queryClient.invalidateQueries({ queryKey: ["collaborators"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
@@ -160,6 +167,7 @@ export function CollaboratorsPage() {
       await queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
       await queryClient.invalidateQueries({ queryKey: ["rewards"] });
       setMessage("Workspace switched.");
+      router.push(buildWorkspacePath(targetWorkspaceId, "/settings?tab=workspaces"));
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to switch workspace."),
     onSettled: () => setSwitchingWorkspaceName(null),
@@ -188,7 +196,7 @@ export function CollaboratorsPage() {
         }
       }
 
-      queryClient.setQueryData<AppContext>(["app-context"], (existing) => {
+      queryClient.setQueryData<AppContext>(["app-context", routeWorkspaceId], (existing) => {
         if (!existing) return existing;
         return {
           ...existing,
@@ -295,14 +303,9 @@ export function CollaboratorsPage() {
     <div className="workspace-settings-page">
       {isWorkspaceChanging ? (
         <section
-          className="card"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            background: "var(--surface-elevated)",
-            borderColor: "var(--brand-300)",
-          }}
+          className="card workspace-settings-status"
+          role="status"
+          aria-live="polite"
         >
           <div className="page-loading-spinner" style={{ width: "16px", height: "16px", borderWidth: "2px" }} />
           <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
@@ -311,19 +314,26 @@ export function CollaboratorsPage() {
           </span>
         </section>
       ) : null}
-      <section className="card">
-        <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700 }}>Workspace</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+
+      {message ? (
+        <div className="workspace-settings-message" role="status" aria-live="polite">
+          {message}
+        </div>
+      ) : null}
+
+      <section className="card workspace-picker-card">
+        <div className={`workspace-settings-card-content${isWorkspaceChanging ? " is-changing" : ""}`}>
+          <div className="settings-item-copy">
+            <div className="settings-section-title">Choose workspace</div>
+            <div className="settings-section-copy">All settings below apply to the selected workspace.</div>
+          </div>
+          <div className="workspace-picker-options" role="group" aria-label="Available workspaces">
             {(context.data?.workspaces ?? []).map((workspace) => (
               <button
                 key={workspace.id}
                 type="button"
-                className="btn btn-ghost btn-xs"
-                style={{
-                  borderColor: workspace.id === workspaceId ? "var(--brand-500)" : undefined,
-                  color: workspace.id === workspaceId ? "var(--brand-600)" : undefined,
-                }}
+                className={`btn btn-ghost btn-xs workspace-picker-option${workspace.id === workspaceId ? " is-current" : ""}`}
+                aria-pressed={workspace.id === workspaceId}
                 onClick={() => switchWorkspace.mutate(workspace.id)}
                 disabled={isWorkspaceChanging}
               >
@@ -332,77 +342,76 @@ export function CollaboratorsPage() {
             ))}
           </div>
 
-          <form onSubmit={onCreateWorkspace} style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <form className="workspace-create-form" onSubmit={onCreateWorkspace}>
             <input
               className="input"
+              aria-label="New workspace name"
               placeholder="New workspace name"
               value={newWorkspaceName}
               onChange={(e) => setNewWorkspaceName(e.target.value)}
-              style={{ maxWidth: "280px" }}
             />
             <button className="btn btn-primary btn-xs" type="submit" disabled={createWorkspace.isPending || isWorkspaceChanging}>
-              {createWorkspace.isPending ? "Creating..." : "+ Add Workspace"}
+              {createWorkspace.isPending ? "Creating..." : "Add workspace"}
             </button>
           </form>
         </div>
       </section>
 
-      {isOwner ? <section className="card">
-        <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700 }}>Workspace Info</div>
-          {updateWorkspace.isPending ? (
-            <div className="workspace-save-progress" aria-label="Saving workspace info">
-              <div className="workspace-save-progress-bar" />
+      <section className="card workspace-details-card">
+        <div className={`workspace-settings-card-content${isWorkspaceChanging ? " is-changing" : ""}`}>
+          <div className="settings-item-copy">
+            <div className="settings-section-title">Workspace details</div>
+            <div className="settings-section-copy">
+              {isOwner
+                ? "Update its name, access mode, and visible Money navigation."
+                : "Review this workspace and its members."}
             </div>
-          ) : null}
-          <form onSubmit={onUpdateWorkspace} style={{ display: "grid", gap: "8px", maxWidth: "380px" }}>
-            <input
-              className="input"
-              placeholder="Workspace name"
-              value={workspaceNameInput}
-              onChange={(e) => setWorkspaceNameInput(e.target.value)}
-            />
-            <select
-              className="input"
-              value={workspaceMode}
-              onChange={(e) => setWorkspaceMode(e.target.value === "SHARED" ? "SHARED" : "PRIVATE")}
-            >
-              <option value="PRIVATE">Private Workspace</option>
-              <option value="SHARED">Shared Workspace</option>
-            </select>
+          </div>
+          {isOwner ? <>
+            {updateWorkspace.isPending ? (
+              <div className="workspace-save-progress" aria-label="Saving workspace info">
+                <div className="workspace-save-progress-bar" />
+              </div>
+            ) : null}
+            <form className="workspace-details-form" onSubmit={onUpdateWorkspace}>
+            <label className="workspace-settings-field">
+              <span>Name</span>
+              <input
+                className="input"
+                placeholder="Workspace name"
+                value={workspaceNameInput}
+                onChange={(e) => setWorkspaceNameInput(e.target.value)}
+              />
+            </label>
+            <label className="workspace-settings-field">
+              <span>Access</span>
+              <select
+                className="input"
+                value={workspaceMode}
+                onChange={(e) => setWorkspaceMode(e.target.value === "SHARED" ? "SHARED" : "PRIVATE")}
+              >
+                <option value="PRIVATE">Private workspace</option>
+                <option value="SHARED">Shared workspace</option>
+              </select>
+            </label>
             <button
               className="btn btn-primary btn-xs"
               type="submit"
               disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
             >
-              {updateWorkspace.isPending ? "Saving..." : "Save Workspace Info"}
+              {updateWorkspace.isPending ? "Saving..." : "Save details"}
             </button>
-          </form>
+            </form>
 
-          {/* Sidebar Pages Configuration */}
-          <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border-subtle)" }}>
-            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "10px", color: "var(--text-secondary)" }}>
+            <div className="workspace-money-pages">
+            <div className="workspace-money-pages-title">
               Sidebar Navigation — Money Pages
             </div>
-            <div style={{ display: "grid", gap: "6px" }}>
+            <div className="workspace-money-page-grid">
               {MONEY_PAGE_CONFIG.map((page) => (
                 <label
                   key={page.key}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    transition: "background 150ms ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--bg-subtle)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                  }}
+                  className="workspace-money-page-option"
                 >
                   <input
                     type="checkbox"
@@ -421,33 +430,82 @@ export function CollaboratorsPage() {
                       });
                     }}
                     disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
-                    style={{ cursor: "pointer" }}
                   />
-                  <span style={{ fontSize: "14px", marginRight: "4px" }}>{page.icon}</span>
-                  <span style={{ fontSize: "13px", flex: 1 }}>{page.label}</span>
+                  <span className="workspace-money-page-icon" aria-hidden="true">{page.icon}</span>
+                  <span>{page.label}</span>
                 </label>
               ))}
             </div>
-            <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "8px" }}>
-              Choose which pages appear in the Money section of the sidebar. Changes are saved automatically when you click &ldquo;Save Workspace Info&rdquo;.
+            <div className="workspace-money-pages-help">
+              Changes save when you save Workspace details.
+            </div>
+            </div>
+          </> : null}
+
+          <div className="workspace-members-section">
+            <div className="settings-section-title">Members</div>
+            <div className="simple-list">
+              {isCollabLoading && (
+                <CollaboratorsRowsSkeleton />
+              )}
+
+              {isCollabError && (
+                <EmptyState
+                  icon="⚠️"
+                  title="Failed to load collaborators"
+                  action={<button className="btn btn-primary" onClick={() => refetchCollab()}>Retry</button>}
+                />
+              )}
+
+              {!isCollabLoading && !isCollabError && (collab.data?.members ?? []).map((member) => (
+                <div key={member.id} className="crud-row">
+                  <span>{member.user.name || member.user.email || member.user.id}</span>
+                  <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+                    {isOwner && member.role !== "OWNER" ? (
+                      <select
+                        className="input"
+                        value={member.role === "MEMBER" ? "EDITOR" : member.role}
+                        onChange={(event) => updateMemberRole.mutate({ memberId: member.id, role: event.target.value === "VIEWER" ? "VIEWER" : "EDITOR" })}
+                        disabled={updateMemberRole.isPending || isWorkspaceChanging}
+                      >
+                        <option value="EDITOR">Editor</option>
+                        <option value="VIEWER">Viewer</option>
+                      </select>
+                    ) : <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{member.role}</span>}
+                    {isOwner && member.role !== "OWNER" ? (
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => confirmRemoveMember(member.id)}
+                        disabled={removeMember.isPending || isWorkspaceChanging}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {!isCollabLoading && !isCollabError && !(collab.data?.members?.length) && (
+                <EmptyState icon="👥" title="No collaborators yet" description="Invite team members to collaborate on this workspace." />
+              )}
             </div>
           </div>
         </div>
-      </section> : null}
+      </section>
+
+      {workspaceSettings}
 
       {isOwner && isShared ? (
         <section className="card">
-          <div style={{ display: "grid", gap: "8px", opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
-            <div style={{ fontSize: "13px", fontWeight: 700 }}>Invite Collaborator</div>
-            <form onSubmit={onInvite} style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <div className={`workspace-settings-card-content${isWorkspaceChanging ? " is-changing" : ""}`}>
+            <div className="settings-section-title">Invite people</div>
+            <form className="workspace-invite-form" onSubmit={onInvite}>
               <input
                 className="input"
                 type="email"
                 placeholder="name@email.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                style={{ maxWidth: "300px" }}
-              />
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+            />
               <select className="input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value === "VIEWER" ? "VIEWER" : "EDITOR")}>
                 <option value="EDITOR">Editor</option>
                 <option value="VIEWER">Viewer</option>
@@ -467,57 +525,9 @@ export function CollaboratorsPage() {
         </section>
       ) : null}
 
-      <section className="card" style={{ opacity: isWorkspaceChanging ? 0.65 : 1, transition: "opacity 180ms ease" }}>
-        <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Collaborators</div>
-        <div className="simple-list">
-          {isCollabLoading && (
-            <CollaboratorsRowsSkeleton />
-          )}
-
-          {isCollabError && (
-            <EmptyState
-              icon="⚠️"
-              title="Failed to load collaborators"
-              action={<button className="btn btn-primary" onClick={() => refetchCollab()}>Retry</button>}
-            />
-          )}
-
-          {!isCollabLoading && !isCollabError && (collab.data?.members ?? []).map((member) => (
-            <div key={member.id} className="crud-row">
-              <span>{member.user.name || member.user.email || member.user.id}</span>
-              <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-                {isOwner && member.role !== "OWNER" ? (
-                  <select
-                    className="input"
-                    value={member.role === "MEMBER" ? "EDITOR" : member.role}
-                    onChange={(event) => updateMemberRole.mutate({ memberId: member.id, role: event.target.value === "VIEWER" ? "VIEWER" : "EDITOR" })}
-                    disabled={updateMemberRole.isPending || isWorkspaceChanging}
-                  >
-                    <option value="EDITOR">Editor</option>
-                    <option value="VIEWER">Viewer</option>
-                  </select>
-                ) : <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{member.role}</span>}
-                {isOwner && member.role !== "OWNER" ? (
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => confirmRemoveMember(member.id)}
-                    disabled={removeMember.isPending || isWorkspaceChanging}
-                  >
-                    Remove
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ))}
-          {!isCollabLoading && !isCollabError && !(collab.data?.members?.length) && (
-            <EmptyState icon="👥" title="No collaborators yet" description="Invite team members to collaborate on this workspace." />
-          )}
-        </div>
-      </section>
-
       {isOwner && isShared ? (
         <section className="card">
-          <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Pending Invites</div>
+          <div className="settings-section-title">Pending invites</div>
           <div className="simple-list">
             {isCollabLoading && <CollaboratorsInvitesSkeleton />}
             {!isCollabLoading && !isCollabError && (collab.data?.invites ?? []).map((invite) => (
@@ -542,7 +552,7 @@ export function CollaboratorsPage() {
 
       {isOwner && isShared ? (
         <section className="card">
-          <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "8px" }}>Audit Logs</div>
+          <div className="settings-section-title">Audit log</div>
           <div className="audit-timeline">
             {isCollabLoading && (
               <CollaboratorsAuditSkeleton />
@@ -562,12 +572,6 @@ export function CollaboratorsPage() {
               <EmptyState icon="📋" title="No audit logs yet" description="Activity in this workspace will be recorded here." />
             )}
           </div>
-        </section>
-      ) : null}
-
-      {message ? (
-        <section className="card" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-          {message}
         </section>
       ) : null}
     </div>

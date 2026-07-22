@@ -5498,8 +5498,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .lp {
+  width: 100%;
   min-height: 100dvh;
   padding: 18px 22px 38px;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--brand-500) 13%, transparent), transparent 28%),
     radial-gradient(circle at 96% 14%, color-mix(in srgb, var(--accent-500) 8%, transparent), transparent 26%),
@@ -8318,6 +8320,12 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .admin-table td span { display: block; margin-top: 3px; color: var(--text-tertiary); }
 .admin-table code { padding: 3px 6px; border-radius: 5px; background: var(--bg-subtle); color: var(--text-secondary); font-size: 11px; }
 .admin-question { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.admin-pagination-summary { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); }
+.admin-pagination-summary strong { color: var(--text-primary); font-weight: 650; }
+.admin-pagination-controls { display: flex; align-items: center; gap: 8px; }
+.admin-pagination-page { min-width: 88px; color: var(--text-secondary); font-size: var(--text-sm); text-align: center; }
+.admin-pagination .btn:disabled { cursor: default; opacity: .45; }
 .admin-inline-details { margin-top: 7px; }
 .admin-inline-details summary { width: fit-content; color: var(--text-tertiary); font-size: 11px; cursor: pointer; }
 .admin-inline-details[open] summary { margin-bottom: 5px; }
@@ -8422,6 +8430,9 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   .admin-disclosure-heading { gap: 10px; }
   .admin-disclosure-heading small { white-space: normal; }
   .admin-disclosure-body { padding: 12px; }
+  .admin-pagination { align-items: stretch; flex-direction: column; }
+  .admin-pagination-controls { justify-content: space-between; }
+  .admin-pagination-controls .btn { flex: 1; }
   .admin-token-breakdown, .admin-cost-breakdown { grid-template-columns: 1fr; }
   .admin-config-list > div, .admin-memory-list > div { align-items: flex-start; }
   .admin-config-list dt { max-width: 45%; }
@@ -8921,7 +8932,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     align-items: center;
   }
 
-  .signin-card {
+  .signin-card:not(.signin-card-embedded) {
     max-width: 100%;
     width: 100%;
     padding: 40px 28px;
@@ -8955,7 +8966,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     font-size: 15px;
   }
 
-  .signin-providers {
+  .signin-card:not(.signin-card-embedded) .signin-providers {
     margin-top: auto;
     margin-bottom: auto;
   }
@@ -8964,14 +8975,14 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     padding: 16px 18px;
   }
 
-  .signin-footer {
+  .signin-card:not(.signin-card-embedded) .signin-footer {
     margin-top: 24px;
   }
 }
 
 /* Small phones */
 @media (max-width: 360px) {
-  .signin-card {
+  .signin-card:not(.signin-card-embedded) {
     padding: 32px 24px;
   }
 
@@ -9408,6 +9419,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   flex: 0 0 auto;
 }
 
+.settings-tab-mobile-label {
+  display: none;
+}
+
 .settings-tab::after {
   content: "";
   position: absolute;
@@ -9456,6 +9471,138 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   min-width: 0;
 }
 
+.workspace-settings-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-color: var(--brand-300);
+  background: var(--bg-elevated);
+}
+
+.workspace-settings-message {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand-500) 28%, var(--border-subtle));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--brand-500) 6%, var(--bg-surface));
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.workspace-settings-card-content {
+  display: grid;
+  gap: 12px;
+  transition: opacity 180ms ease;
+}
+
+.workspace-settings-card-content.is-changing {
+  opacity: .65;
+}
+
+.workspace-picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspace-picker-option.is-current {
+  border-color: var(--brand-500);
+  background: color-mix(in srgb, var(--brand-500) 7%, transparent);
+  color: var(--brand-700);
+}
+
+[data-theme="dark"] .workspace-picker-option.is-current {
+  color: var(--brand-300);
+}
+
+.workspace-create-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) max-content;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-details-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .65fr) max-content;
+  align-items: end;
+  gap: 10px;
+}
+
+.workspace-settings-field {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.workspace-settings-field > span {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 650;
+}
+
+.workspace-money-pages {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.workspace-members-section {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.workspace-money-pages-title {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 650;
+}
+
+.workspace-money-page-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.workspace-money-page-option {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.workspace-money-page-option:hover {
+  background: var(--bg-subtle);
+}
+
+.workspace-money-page-option input {
+  cursor: pointer;
+}
+
+.workspace-money-page-icon {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.workspace-money-pages-help {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.workspace-invite-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(120px, 160px) max-content;
+  align-items: center;
+  gap: 8px;
+}
+
 @media (max-width: 600px) {
   .settings-hub {
     gap: var(--space-3);
@@ -9463,15 +9610,30 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
   .settings-tabs {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0;
     padding: 0;
   }
 
   .settings-tab {
-    min-height: 46px;
+    min-height: 58px;
     min-width: 0;
-    padding: 10px 8px 11px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 2px 9px;
+    font-size: 11px;
+  }
+
+  .settings-tab-label {
+    display: none;
+  }
+
+  .settings-tab-mobile-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .workspace-settings-page {
@@ -9513,6 +9675,13 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto;
   }
+
+  .workspace-create-form,
+  .workspace-details-form,
+  .workspace-invite-form,
+  .workspace-money-page-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .settings-card-block {
@@ -9537,7 +9706,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .settings-section-title {
   color: var(--text-primary);
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: var(--font-weight-semibold);
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -15687,6 +15856,125 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     color: var(--brand-700);
   }
 
+  .mobile-more-workspace-switcher {
+    flex: 0 0 auto;
+    width: 100%;
+    padding: 6px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+  }
+
+  .mobile-more-workspace-trigger {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .mobile-more-workspace-trigger > svg:first-child {
+    color: var(--brand-600);
+  }
+
+  .mobile-more-workspace-chevron {
+    color: var(--text-tertiary);
+    transition: transform var(--duration-fast) var(--ease-standard);
+  }
+
+  .mobile-more-workspace-trigger[aria-expanded="true"] .mobile-more-workspace-chevron {
+    transform: rotate(180deg);
+  }
+
+  .mobile-more-workspace-options {
+    max-height: min(32dvh, 220px);
+    margin-top: 2px;
+    padding: 2px 0 2px 28px;
+    display: grid;
+    gap: 2px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .mobile-more-workspace-option {
+    width: 100%;
+    min-height: 46px;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .mobile-more-workspace-option > span:last-child {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mobile-more-workspace-option strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  .mobile-more-workspace-option small {
+    flex: 0 0 auto;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .mobile-more-workspace-option:active,
+  .mobile-more-workspace-option.is-current {
+    background: var(--brand-50);
+    color: var(--brand-700);
+  }
+
+  .mobile-more-workspace-option:disabled {
+    opacity: 1;
+    cursor: default;
+  }
+
+  .mobile-more-workspace-option:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: -2px;
+  }
+
+  .mobile-more-workspace-mark {
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-default);
+    border-radius: 50%;
+    color: var(--brand-600);
+  }
+
+  .mobile-more-workspace-option.is-current .mobile-more-workspace-mark {
+    border-color: color-mix(in srgb, var(--brand-500) 55%, var(--border-default));
+    background: color-mix(in srgb, var(--brand-500) 10%, var(--bg-elevated));
+  }
+
+  .mobile-more-workspace-status {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
   .mobile-more-badge {
     min-width: 22px;
     height: 22px;
@@ -21755,7 +22043,14 @@ html[data-ask-nest-open="true"] {
   }
 
   .signin-card-embedded {
+    min-height: 0;
+    display: block;
     padding: 32px 28px calc(26px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .signin-card-embedded .signin-providers,
+  .signin-card-embedded .signin-footer {
+    margin-top: 0;
   }
 
   .signin-takeover-panel {

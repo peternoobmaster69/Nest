@@ -1,5 +1,9 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
+
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL } from "@/lib/credit-txn-auto-rules-config";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
@@ -32,6 +36,7 @@ import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { SettingsAppAccess } from "@/components/settings-app-access";
 import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
+import type { SettingsTab } from "@/lib/settings-tabs";
 
 type Context = {
   workspaceId: string | null;
@@ -157,7 +162,7 @@ function getGmailNotice(message: string, phase?: GmailSyncProgress["phase"]): Gm
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;
     try {
@@ -229,7 +234,8 @@ function createEmptyAutoRule(destination: { sourceBudgetId?: string; destination
   };
 }
 
-export function SettingsPage() {
+export function SettingsPage({ section }: { section: SettingsTab }) {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
@@ -282,7 +288,7 @@ export function SettingsPage() {
   }, []);
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<Context>("/api/context"),
   });
 
@@ -309,7 +315,7 @@ export function SettingsPage() {
   });
 
   const gmailStatus = useQuery({
-    queryKey: ["gmail-status"],
+    queryKey: ["gmail-status", workspaceId],
     queryFn: () => fetchJson<GmailStatus>("/api/gmail/status"),
     enabled: context.data?.role === "OWNER",
   });
@@ -583,7 +589,7 @@ export function SettingsPage() {
       });
     },
     onSuccess: (data) => {
-      queryClient.setQueryData<Context>(["app-context"], (current) =>
+      queryClient.setQueryData<Context>(["app-context", routeWorkspaceId], (current) =>
         current
           ? {
               ...current,
@@ -956,18 +962,21 @@ export function SettingsPage() {
 
   return (
     <div className="st-container">
-      <header className="settings-page-section-header">
-        <h2>Access &amp; connections</h2>
-        <p>Install Nest and manage secure sign-in, notifications, and connected services.</p>
-      </header>
-      <SettingsAppAccess />
-      {context.data?.role === "OWNER" ? <div className="card settings-card-block gmail-alerts-card">
+      {section === "settings" ? (
+        <>
+          <SettingsAppAccess />
+        </>
+      ) : null}
+
+      {section === "automation" ? (
+        <>
+          {context.data?.role === "OWNER" ? <div className="card settings-card-block gmail-alerts-card">
         <div className="gmail-alerts-header">
           <div className="gmail-alerts-copy">
             <div className="gmail-alerts-title-row">
               <div className="settings-section-title">Gmail Card Alerts</div>
               <a
-                href="/credit-alerts"
+                href={routeWorkspaceId ? buildWorkspacePath(routeWorkspaceId, "/credit-alerts") : "/credit-alerts"}
                 target="_blank"
                 rel="noreferrer"
                 className="settings-inline-link"
@@ -1031,13 +1040,13 @@ export function SettingsPage() {
             </div>
           </div>
         ) : null}
-      </div> : null}
+          </div> : null}
+        </>
+      ) : null}
 
-      <header className="settings-page-section-header">
-        <h2>Workspace preferences</h2>
-        <p>Choose shared defaults and control access to workspace data.</p>
-      </header>
-      {context.data?.role === "OWNER" ? <><div className="card settings-card-block">
+      {section === "workspaces" ? (
+        <>
+          {context.data?.role === "OWNER" ? <><div className="card settings-card-block">
         <div className="settings-row">
           <div>
             <div className="settings-section-title">Currency Display</div>
@@ -1191,13 +1200,13 @@ export function SettingsPage() {
           </select>
         </div>
         {receivableAccountMessage ? <div className="settings-message">{receivableAccountMessage}</div> : null}
-      </div>
+          </div>
+        </>
+      ) : null}
 
-      <header className="settings-page-section-header">
-        <h2>Automation</h2>
-        <p>Configure how card transactions are detected and accounted for.</p>
-      </header>
-      <div className="card settings-card-block">
+      {section === "automation" ? (
+        <>
+          <div className="card settings-card-block">
         <div className="settings-auto-header">
           <div className="settings-auto-copy">
             <div className="settings-section-title">Credit Card Auto Accounting</div>
@@ -1594,16 +1603,19 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
-      )}
+          )}
+        </>
+      ) : null}
 
-      {/* Data Import Section */}
-      <header className="settings-page-section-header">
-        <h2>Data tools</h2>
-        <p>Import historical transactions and recalculate account totals.</p>
-      </header>
-      <DataImportSection workspaceId={workspaceId} baseCurrency={baseCurrency} />
+      {section === "data" ? (
+        <>
+          <DataImportSection workspaceId={workspaceId} baseCurrency={baseCurrency} />
+        </>
+      ) : null}
 
-      <div className="st-header settings-accounts-header">
+      {section === "workspaces" ? (
+        <>
+          <div className="st-header settings-accounts-header">
         <div className="settings-accounts-heading">
           <h2>Bank accounts</h2>
           <p>Manage balances, account visibility, and reconciliation.</p>
@@ -1881,7 +1893,9 @@ export function SettingsPage() {
             </form>
           </div>
         </div>
-      )}
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

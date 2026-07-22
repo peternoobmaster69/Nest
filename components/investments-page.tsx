@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
@@ -51,7 +54,7 @@ type InvestmentChartPoint = {
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     try {
       const payload = await res.json();
@@ -112,6 +115,7 @@ function buildAreaPath(points: Array<{ x: number; y: number }>, baselineY: numbe
 }
 
 export function InvestmentsPage() {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const chartWrapRef = useRef<HTMLDivElement>(null);
   const tooltip = useChartCursorTooltip<InvestmentChartPoint>(chartWrapRef);
@@ -141,7 +145,7 @@ export function InvestmentsPage() {
   const [entryCurrentValue, setEntryCurrentValue] = useState("0");
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId;

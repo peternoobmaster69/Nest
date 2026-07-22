@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, Check, CreditCard, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { workspaceFetch } from "@/lib/workspace-client";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 type NotificationItem = {
   id: string;
@@ -22,13 +24,13 @@ type NotificationResponse = {
 };
 
 async function fetchNotifications() {
-  const response = await fetch("/api/notifications", { cache: "no-store" });
+  const response = await workspaceFetch("/api/notifications", { cache: "no-store" });
   if (!response.ok) throw new Error("Unable to load notifications");
   return response.json() as Promise<NotificationResponse>;
 }
 
 async function updateNotifications(payload: { notificationId: string } | { markAllRead: true }) {
-  const response = await fetch("/api/notifications", {
+  const response = await workspaceFetch("/api/notifications", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -170,7 +172,7 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
                 return notification.href ? (
                   <Link
                     key={notification.id}
-                    href={notification.href}
+                    href={workspaceId ? buildWorkspacePath(workspaceId, notification.href) : notification.href}
                     prefetch={false}
                     className={`notification-item${notification.readAt ? "" : " unread"}`}
                     onClick={onOpen}

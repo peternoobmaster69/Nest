@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -11,17 +14,18 @@ type AppContext = {
 };
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await workspaceFetch(url);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json();
 }
 
 export function CollaborationBanner() {
+  const routeWorkspaceId = useWorkspaceId();
   const [isDismissed, setIsDismissed] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
 

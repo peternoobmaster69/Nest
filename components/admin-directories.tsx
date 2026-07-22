@@ -2,6 +2,7 @@
 
 import { Building2, ChevronDown, Users } from "lucide-react";
 import { useState } from "react";
+import { AdminPagination, useAdminPagination } from "@/components/admin-pagination";
 import type { getAdminOverview } from "@/lib/admin-overview";
 
 type AdminOverview = Awaited<ReturnType<typeof getAdminOverview>>;
@@ -30,6 +31,10 @@ export function AdminDirectories({
   workspaces: AdminOverview["workspaces"];
 }) {
   const [openDirectory, setOpenDirectory] = useState<Directory | null>(null);
+  const userPagination = useAdminPagination(users.length);
+  const workspacePagination = useAdminPagination(workspaces.length);
+  const visibleUsers = users.slice(userPagination.startIndex, userPagination.endIndex);
+  const visibleWorkspaces = workspaces.slice(workspacePagination.startIndex, workspacePagination.endIndex);
 
   const toggleDirectory = (directory: Directory) => {
     setOpenDirectory((current) => current === directory ? null : directory);
@@ -62,57 +67,65 @@ export function AdminDirectories({
         <section id="admin-users" className="card admin-panel admin-directory">
           <div className="admin-panel-heading"><h2>Users</h2></div>
           {users.length ? (
-            <div className="admin-table-wrap admin-directory-table-wrap">
-              <table className="admin-table admin-directory-table admin-users-table">
-                <colgroup>
-                  <col className="admin-user-column" />
-                  <col className="admin-joined-column" />
-                  <col className="admin-signin-column" />
-                  <col className="admin-access-column" />
-                  <col className="admin-ask-column" />
-                </colgroup>
-                <thead><tr><th>User</th><th>Joined</th><th>Last signed in</th><th>Workspace access</th><th>Ask Nest</th></tr></thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id}>
-                      <td data-label="User">
-                        <strong>{user.name || "Unnamed user"}</strong>
-                        <span>{user.email || "No email"}</span>
-                        <details className="admin-inline-details"><summary>ID</summary><code title={user.id}>{user.id}</code></details>
-                      </td>
-                      <td data-label="Joined"><time dateTime={user.createdAt.toISOString()}>{DATE_FORMAT.format(user.createdAt)}</time></td>
-                      <td data-label="Last signed in">
-                        {user.lastSignedInAt
-                          ? <time dateTime={user.lastSignedInAt.toISOString()}>{DATE_FORMAT.format(user.lastSignedInAt)}</time>
-                          : <span>Never</span>}
-                        {user.latestLoginSession ? (
-                          <span
-                            className="admin-login-location"
-                            title={loginLocation(user.latestLoginSession.countryCode, user.latestLoginSession.ipAddress)}
-                          >
-                            {loginLocation(user.latestLoginSession.countryCode, user.latestLoginSession.ipAddress)}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td data-label="Workspace access">
-                        {user.memberships.length ? (
-                          <div className="admin-memberships">
-                            {user.memberships.map((membership) => (
-                              <div key={membership.workspaceId}>
-                                <strong>{membership.workspaceName}</strong>
-                                <span className="admin-role-badge">{membership.role}</span>
-                                {user.activeWorkspaceId === membership.workspaceId ? <span className="admin-active-badge">Active</span> : null}
-                              </div>
-                            ))}
-                          </div>
-                        ) : <span>No workspace access</span>}
-                      </td>
-                      <td data-label="Ask Nest"><strong>{user.counts.askNestTurns.toLocaleString()} turns</strong><span>{user.counts.askNestMemories.toLocaleString()} memories</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="admin-table-wrap admin-directory-table-wrap">
+                <table className="admin-table admin-directory-table admin-users-table">
+                  <colgroup>
+                    <col className="admin-user-column" />
+                    <col className="admin-joined-column" />
+                    <col className="admin-signin-column" />
+                    <col className="admin-access-column" />
+                    <col className="admin-ask-column" />
+                  </colgroup>
+                  <thead><tr><th>User</th><th>Joined</th><th>Last signed in</th><th>Workspace access</th><th>Ask Nest</th></tr></thead>
+                  <tbody>
+                    {visibleUsers.map((user) => (
+                      <tr key={user.id}>
+                        <td data-label="User">
+                          <strong>{user.name || "Unnamed user"}</strong>
+                          <span>{user.email || "No email"}</span>
+                          <details className="admin-inline-details"><summary>ID</summary><code title={user.id}>{user.id}</code></details>
+                        </td>
+                        <td data-label="Joined"><time dateTime={user.createdAt.toISOString()}>{DATE_FORMAT.format(user.createdAt)}</time></td>
+                        <td data-label="Last signed in">
+                          {user.lastSignedInAt
+                            ? <time dateTime={user.lastSignedInAt.toISOString()}>{DATE_FORMAT.format(user.lastSignedInAt)}</time>
+                            : <span>Never</span>}
+                          {user.latestLoginSession ? (
+                            <span
+                              className="admin-login-location"
+                              title={loginLocation(user.latestLoginSession.countryCode, user.latestLoginSession.ipAddress)}
+                            >
+                              {loginLocation(user.latestLoginSession.countryCode, user.latestLoginSession.ipAddress)}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td data-label="Workspace access">
+                          {user.memberships.length ? (
+                            <div className="admin-memberships">
+                              {user.memberships.map((membership) => (
+                                <div key={membership.workspaceId}>
+                                  <strong>{membership.workspaceName}</strong>
+                                  <span className="admin-role-badge">{membership.role}</span>
+                                  {user.activeWorkspaceId === membership.workspaceId ? <span className="admin-active-badge">Active</span> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : <span>No workspace access</span>}
+                        </td>
+                        <td data-label="Ask Nest"><strong>{user.counts.askNestTurns.toLocaleString()} turns</strong><span>{user.counts.askNestMemories.toLocaleString()} memories</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <AdminPagination
+                label="Users"
+                totalItems={users.length}
+                page={userPagination.page}
+                onPageChange={userPagination.setPage}
+              />
+            </>
           ) : <p className="admin-empty">No registered users.</p>}
         </section>
       ) : null}
@@ -121,9 +134,10 @@ export function AdminDirectories({
         <section id="admin-workspaces" className="card admin-panel admin-directory">
           <div className="admin-panel-heading"><h2>Workspaces</h2></div>
           {workspaces.length ? (
-            <div className="admin-workspace-list">
-              {workspaces.map((workspace) => (
-                <article className="admin-workspace" key={workspace.id}>
+            <>
+              <div className="admin-workspace-list">
+                {visibleWorkspaces.map((workspace) => (
+                  <article className="admin-workspace" key={workspace.id}>
                   <div className="admin-workspace-head">
                     <div><h3>{workspace.name}</h3></div>
                     <div className="admin-workspace-tags"><span>{workspace.baseCurrency}</span><span>{workspace.isShared ? "Shared" : "Private"}</span></div>
@@ -160,9 +174,16 @@ export function AdminDirectories({
                       </div>
                     </div>
                   </details>
-                </article>
-              ))}
-            </div>
+                  </article>
+                ))}
+              </div>
+              <AdminPagination
+                label="Workspaces"
+                totalItems={workspaces.length}
+                page={workspacePagination.page}
+                onPageChange={workspacePagination.setPage}
+              />
+            </>
           ) : <p className="admin-empty">No workspaces.</p>}
         </section>
       ) : null}

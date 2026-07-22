@@ -16,6 +16,7 @@ import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminEmail } from "@/lib/admin-auth";
+import { WORKSPACE_ID_HEADER } from "@/lib/workspace-request";
 
 const UpdateContextSchema = z.object({
   workspaceId: z.string().min(1).optional(),
@@ -70,7 +71,7 @@ function parseSidebarMoneyPages(value: string | null | undefined) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getDatabaseReadyServerSession();
     const email = session?.user?.email?.toLowerCase();
@@ -111,8 +112,12 @@ export async function GET() {
       orderBy: { createdAt: "asc" },
     });
 
+    const requestedWorkspaceId = request.headers.get(WORKSPACE_ID_HEADER)?.trim() || null;
+    if (requestedWorkspaceId) {
+      await requireWorkspaceAccess(requestedWorkspaceId);
+    }
     const cookieWorkspaceId = await getActiveWorkspaceCookie();
-    const activeWorkspaceId = cookieWorkspaceId || userLookup.activeWorkspaceId;
+    const activeWorkspaceId = requestedWorkspaceId || cookieWorkspaceId || userLookup.activeWorkspaceId;
     const workspaceSummaries = memberships.map((membership) => ({
       id: membership.workspace.id,
       name: membership.workspace.name,
@@ -202,7 +207,7 @@ export async function GET() {
       })),
       isAdmin,
     });
-    if (cookieWorkspaceId !== workspace.id) {
+    if (!requestedWorkspaceId && cookieWorkspaceId !== workspace.id) {
       return setActiveWorkspaceCookie(response, workspace.id);
     }
     return response;

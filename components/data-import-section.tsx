@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback } from "react";
 import { Upload, AlertCircle, CheckCircle, XCircle, Calculator } from "lucide-react";
@@ -74,7 +77,7 @@ type RecalculateResult = {
 const CHUNK_SIZE = 25; // Process 25 records at a time
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;
     try {
@@ -87,6 +90,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function DataImportSection({ workspaceId, baseCurrency }: DataImportSectionProps) {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const [jsonInput, setJsonInput] = useState("");
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
@@ -113,7 +117,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
   const [recalcResult, setRecalcResult] = useState<RecalculateResult | null>(null);
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<Context>("/api/context"),
   });
 

@@ -3,15 +3,20 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUp,
   ChartNoAxesCombined,
   ChartPie,
+  Check,
+  ChevronDown,
   CreditCard,
   Ellipsis,
   Gift,
   Home,
+  Layers3,
   ListChecks,
   LogOut,
   Menu,
@@ -30,8 +35,22 @@ import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useTheme } from "@/components/theme-provider";
 import { getMotionSafeScrollBehavior } from "@/lib/motion";
 import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
 
 const SCROLL_TO_TOP_MIN_OFFSET = 480;
+
+type WorkspaceOption = {
+  id: string;
+  name: string;
+  baseCurrency: string;
+  role: string;
+};
+
+type ReceivablesSummary = {
+  count: number;
+};
 
 const MOBILE_DATE_FORMATTER = new Intl.DateTimeFormat("en-SG", {
   day: "2-digit",
@@ -92,8 +111,12 @@ export function AppShell({
   topbarTitle?: ReactNode;
   children: ReactNode;
 }) {
+  const routeWorkspaceId = useWorkspaceId();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [workspaceChooserOpen, setWorkspaceChooserOpen] = useState(false);
+  const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null);
   const [mobileCurrentDate, setMobileCurrentDate] = useState<{ dateTime: string; label: string } | null>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const { confirm } = useConfirmDialog();
@@ -125,6 +148,29 @@ export function AppShell({
     "/profile",
     "/admin",
   ].some((path) => currentPath === path || currentPath.startsWith(`${path}/`));
+  const navigationWorkspaceId = contextData?.workspaceId ?? routeWorkspaceId;
+  const workspaceHref = (path: string) =>
+    navigationWorkspaceId ? buildWorkspacePath(navigationWorkspaceId, path) : path;
+  const workspacesQuery = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: async () => {
+      const response = await workspaceFetch("/api/workspaces");
+      if (!response.ok) throw new Error("Failed to load workspaces");
+      return response.json() as Promise<WorkspaceOption[]>;
+    },
+    enabled: mobileMoreOpen,
+    staleTime: 60_000,
+  });
+  const receivablesSummary = useQuery({
+    queryKey: ["receivables-summary", navigationWorkspaceId],
+    queryFn: async () => {
+      const response = await workspaceFetch(`/api/receivables/summary?workspaceId=${navigationWorkspaceId}`);
+      if (!response.ok) throw new Error("Failed to load receivables summary");
+      return response.json() as Promise<ReceivablesSummary>;
+    },
+    enabled: Boolean(navigationWorkspaceId),
+  });
+  const mobileReceivablesCount = badgeCounts?.receivables ?? receivablesSummary.data?.count ?? 0;
 
   useEffect(() => {
     const workspaceName = contextData?.workspaceName?.trim();
@@ -157,7 +203,9 @@ export function AppShell({
 
   useEffect(() => {
     setMobileMoreOpen(false);
-  }, [currentPath]);
+    setWorkspaceChooserOpen(false);
+    setSwitchingWorkspaceId(null);
+  }, [currentPath, routeWorkspaceId]);
 
   useEffect(() => {
     const scrollContainer = bodyScrollRef.current;
@@ -235,6 +283,7 @@ export function AppShell({
 
   const closeMobileNavigation = () => {
     setMobileMoreOpen(false);
+    setWorkspaceChooserOpen(false);
     setSidebarOpen(false);
   };
 
@@ -251,6 +300,15 @@ export function AppShell({
     if (!confirmed) return;
     await purgePrivateServiceWorkerCaches();
     await signOut({ callbackUrl: "/" });
+  };
+
+  const switchMobileWorkspace = (nextWorkspaceId: string) => {
+    if (!nextWorkspaceId || nextWorkspaceId === navigationWorkspaceId) return;
+    const currentDestination = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    setSwitchingWorkspaceId(nextWorkspaceId);
+    setWorkspaceChooserOpen(false);
+    setMobileMoreOpen(false);
+    router.push(buildWorkspacePath(nextWorkspaceId, currentDestination));
   };
 
   const scrollToTop = () => {
@@ -286,7 +344,7 @@ export function AppShell({
                 <nav className="tb-breadcrumb" aria-label="Breadcrumb">
                   <ol className="breadcrumb-list">
                     <li className="breadcrumb-item">
-                      <Link href="/" className="breadcrumb-link" aria-label="Dashboard">
+                      <Link href={workspaceHref("/")} className="breadcrumb-link" aria-label="Dashboard">
                         <Home size={16} strokeWidth={1.5} />
                       </Link>
                     </li>
@@ -302,9 +360,10 @@ export function AppShell({
               currentPath={currentPath}
               pageTitle={title}
               workspaceName={contextData?.workspaceName}
+              workspaceId={navigationWorkspaceId}
               userName={userName}
             />
-            <NotificationBell workspaceId={contextData?.workspaceId} />
+            <NotificationBell workspaceId={navigationWorkspaceId} />
           </div>
         </header>
         <div ref={bodyScrollRef} className="body">{children}</div>
@@ -337,40 +396,83 @@ export function AppShell({
             </div>
             <nav className="mobile-more-links" aria-label="More navigation">
               {showCreditTransactions ? (
-                <Link className={`mobile-more-link${currentPath === "/credit-cards" ? " is-active" : ""}`} href="/credit-cards" onClick={closeMobileNavigation}>
+                <Link className={`mobile-more-link${currentPath === "/credit-cards" ? " is-active" : ""}`} href={workspaceHref("/credit-cards")} onClick={closeMobileNavigation}>
                   <CreditCard size={20} aria-hidden="true" />
                   <span><strong>Credit Cards</strong><small>Manage cards and card details</small></span>
                 </Link>
               ) : null}
               {sidebarMoneyPages.receivables !== false ? (
-                <Link className={`mobile-more-link${currentPath === "/receivables" ? " is-active" : ""}`} href="/receivables" onClick={closeMobileNavigation}>
+                <Link className={`mobile-more-link${currentPath === "/receivables" ? " is-active" : ""}`} href={workspaceHref("/receivables")} onClick={closeMobileNavigation}>
                   <Undo2 size={20} aria-hidden="true" />
                   <span><strong>Receivables</strong><small>Track money owed to you</small></span>
-                  {badgeCounts?.receivables ? <span className="mobile-more-badge">{badgeCounts.receivables}</span> : null}
+                  {mobileReceivablesCount ? <span className="mobile-more-badge">{mobileReceivablesCount}</span> : null}
                 </Link>
               ) : null}
               {sidebarMoneyPages.rewards !== false ? (
-                <Link className={`mobile-more-link${currentPath === "/rewards" ? " is-active" : ""}`} href="/rewards" onClick={closeMobileNavigation}>
+                <Link className={`mobile-more-link${currentPath === "/rewards" ? " is-active" : ""}`} href={workspaceHref("/rewards")} onClick={closeMobileNavigation}>
                   <Gift size={20} aria-hidden="true" />
                   <span><strong>Rewards</strong><small>Cards, miles, and hotel points</small></span>
                 </Link>
               ) : null}
-              <Link className={`mobile-more-link${currentPath.startsWith("/budgets") ? " is-active" : ""}`} href="/budgets/plan" onClick={closeMobileNavigation}>
+              <Link className={`mobile-more-link${currentPath.startsWith("/budgets") ? " is-active" : ""}`} href={workspaceHref("/budgets/plan")} onClick={closeMobileNavigation}>
                 <ChartPie size={20} aria-hidden="true" />
                 <span><strong>Budget</strong><small>Plan monthly sources and spending</small></span>
-                {badgeCounts?.budgets ? <span className="mobile-more-badge">{badgeCounts.budgets}</span> : null}
               </Link>
-              <Link className={`mobile-more-link${currentPath === "/settings" ? " is-active" : ""}`} href="/settings" onClick={closeMobileNavigation}>
+              <Link className={`mobile-more-link${currentPath === "/settings" ? " is-active" : ""}`} href={workspaceHref("/settings")} onClick={closeMobileNavigation}>
                 <Settings size={20} aria-hidden="true" />
                 <span><strong>Settings</strong><small>Preferences and workspaces</small></span>
               </Link>
               {contextData?.isAdmin ? (
-                <Link className={`mobile-more-link${currentPath === "/admin" ? " is-active" : ""}`} href="/admin" onClick={closeMobileNavigation}>
+                <Link className={`mobile-more-link${currentPath === "/admin" ? " is-active" : ""}`} href={workspaceHref("/admin")} onClick={closeMobileNavigation}>
                   <ShieldCheck size={20} aria-hidden="true" />
                   <span><strong>Admin</strong><small>System and Ask Nest oversight</small></span>
                 </Link>
               ) : null}
             </nav>
+            <div className="mobile-more-workspace-switcher">
+              <button
+                className={`mobile-more-link mobile-more-workspace-trigger${workspaceChooserOpen ? " is-active" : ""}`}
+                type="button"
+                onClick={() => setWorkspaceChooserOpen((open) => !open)}
+                aria-expanded={workspaceChooserOpen}
+                aria-controls="mobile-more-workspace-options"
+              >
+                <Layers3 size={20} aria-hidden="true" />
+                <span>
+                  <strong>{mobileWorkspaceName || "Workspace"}</strong>
+                  <small>Switch workspace in this tab</small>
+                </span>
+                <ChevronDown className="mobile-more-workspace-chevron" size={17} aria-hidden="true" />
+              </button>
+              {workspaceChooserOpen ? (
+                <div id="mobile-more-workspace-options" className="mobile-more-workspace-options" role="listbox" aria-label="Workspaces">
+                  {workspacesQuery.isLoading ? (
+                    <div className="mobile-more-workspace-status"><span className="sb-workspace-spinner" /> Loading workspaces...</div>
+                  ) : workspacesQuery.isError ? (
+                    <div className="mobile-more-workspace-status">Workspaces could not be loaded.</div>
+                  ) : workspacesQuery.data?.map((workspace) => {
+                    const isCurrent = workspace.id === navigationWorkspaceId;
+                    const isSwitching = workspace.id === switchingWorkspaceId;
+                    return (
+                      <button
+                        className={`mobile-more-workspace-option${isCurrent ? " is-current" : ""}`}
+                        type="button"
+                        role="option"
+                        aria-selected={isCurrent}
+                        key={workspace.id}
+                        onClick={() => switchMobileWorkspace(workspace.id)}
+                        disabled={isCurrent || isSwitching}
+                      >
+                        <span className="mobile-more-workspace-mark">
+                          {isSwitching ? <span className="sb-workspace-spinner" /> : isCurrent ? <Check size={15} aria-hidden="true" /> : null}
+                        </span>
+                        <span><strong>{workspace.name}</strong><small>{workspace.baseCurrency}</small></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
             <button
               className="mobile-more-logout"
               type="button"
@@ -380,7 +482,7 @@ export function AppShell({
               <span><strong>Log out</strong><small>Sign out of Nest on this device</small></span>
             </button>
             <div className="mobile-more-account-row">
-              <Link className="mobile-more-account" href="/profile" onClick={closeMobileNavigation}>
+              <Link className="mobile-more-account" href={workspaceHref("/profile")} onClick={closeMobileNavigation}>
                 {userImage ? (
                   <Image src={userImage} alt={userName || userEmail || "User"} width={38} height={38} className="avatar avatar-image mobile-more-account-avatar" />
                 ) : (
@@ -403,24 +505,24 @@ export function AppShell({
       ) : null}
 
       <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
-        <Link className={`mobile-bottom-nav-item${currentPath === "/" ? " is-active" : ""}`} href="/" onClick={closeMobileNavigation} aria-current={currentPath === "/" ? "page" : undefined}>
+        <Link className={`mobile-bottom-nav-item${currentPath === "/" ? " is-active" : ""}`} href={workspaceHref("/")} onClick={closeMobileNavigation} aria-current={currentPath === "/" ? "page" : undefined}>
           <Home size={21} aria-hidden="true" />
           <span>Home</span>
         </Link>
         {showTransactions ? (
-          <Link className={`mobile-bottom-nav-item${currentPath === "/transactions" ? " is-active" : ""}`} href="/transactions" onClick={closeMobileNavigation} aria-current={currentPath === "/transactions" ? "page" : undefined}>
+          <Link className={`mobile-bottom-nav-item${currentPath === "/transactions" ? " is-active" : ""}`} href={workspaceHref("/transactions")} onClick={closeMobileNavigation} aria-current={currentPath === "/transactions" ? "page" : undefined}>
             <ReceiptText size={21} aria-hidden="true" />
             <span>Transactions</span>
           </Link>
         ) : null}
         {showCreditCards ? (
-          <Link className={`mobile-bottom-nav-item${cardsRouteActive ? " is-active" : ""}`} href={primaryCardsPath} onClick={closeMobileNavigation} aria-current={cardsRouteActive ? "page" : undefined}>
+          <Link className={`mobile-bottom-nav-item${cardsRouteActive ? " is-active" : ""}`} href={workspaceHref(primaryCardsPath)} onClick={closeMobileNavigation} aria-current={cardsRouteActive ? "page" : undefined}>
             {showCreditTransactions ? <ListChecks size={21} aria-hidden="true" /> : <CreditCard size={21} aria-hidden="true" />}
             <span>Cards</span>
           </Link>
         ) : null}
         {showInvestments ? (
-          <Link className={`mobile-bottom-nav-item${currentPath === "/investments" ? " is-active" : ""}`} href="/investments" onClick={closeMobileNavigation} aria-current={currentPath === "/investments" ? "page" : undefined}>
+          <Link className={`mobile-bottom-nav-item${currentPath === "/investments" ? " is-active" : ""}`} href={workspaceHref("/investments")} onClick={closeMobileNavigation} aria-current={currentPath === "/investments" ? "page" : undefined}>
             <ChartNoAxesCombined size={21} aria-hidden="true" />
             <span>Investments</span>
           </Link>

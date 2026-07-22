@@ -15,6 +15,21 @@ test("public landing page offers self-hosted and best-effort hosted paths", asyn
   assert.match(landing, /cloud spending reaches its ceiling/);
 });
 
+test("public landing page contains decorative overflow on narrow screens", async () => {
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(styles, /\.lp\s*\{[^}]*width:\s*100%[^}]*overflow-x:\s*clip/s);
+});
+
+test("mobile embedded sign-in keeps provider actions directly below its heading", async () => {
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(styles, /@media \(max-width: 480px\)[\s\S]*?\.signin-card:not\(\.signin-card-embedded\)\s*\{[\s\S]*?min-height: calc\(100dvh - 32px\)/);
+  assert.match(styles, /\.signin-card:not\(\.signin-card-embedded\) \.signin-providers\s*\{[\s\S]*?margin-top: auto/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.signin-card-embedded\s*\{[^}]*min-height:\s*0[^}]*display:\s*block/s);
+  assert.match(styles, /\.signin-card-embedded \.signin-providers,[\s\S]*?\.signin-card-embedded \.signin-footer\s*\{[^}]*margin-top:\s*0/s);
+});
+
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(entries.map(async (entry) => {
@@ -352,7 +367,7 @@ test("credit transactions guide cardless workspaces to add a card before opening
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
 
   assert.match(component, /if \(sortedCards\.length === 0\)[\s\S]*?title="Add a credit card first"/);
-  assert.match(component, /href="\/credit-cards\?add=1"[\s\S]*?Add a credit card/);
+  assert.match(component, /href=\{routeWorkspaceId \? buildWorkspacePath\(routeWorkspaceId, "\/credit-cards\?add=1"\) : "\/credit-cards\?add=1"\}[\s\S]*?Add a credit card/);
   assert.match(component, /Credit card transactions need a card to attach to/);
   assert.match(styles, /\.cct-card-prerequisite\s*\{[^}]*min-height:[^}]*place-items:\s*center/s);
 });
@@ -364,7 +379,7 @@ test("the card prerequisite deep link opens the add-card modal once", async () =
   assert.match(component, /searchParams\.get\("add"\) !== "1"/);
   assert.match(component, /setEditingCardId\(null\)[\s\S]*?setIsModalOpen\(true\)/);
   assert.match(component, /nextParams\.delete\("add"\)/);
-  assert.match(component, /router\.replace\(`[\s\S]*?scroll: false/);
+  assert.match(component, /router\.replace\(routeWorkspaceId \? buildWorkspacePath\(routeWorkspaceId, destination\) : destination,[\s\S]*?scroll: false/);
 });
 
 test("tablet and desktop card rails use stable explicit navigation", async () => {
@@ -394,15 +409,28 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(shell, />Home<|<span>Home<\/span>/);
   assert.match(shell, />Transactions<|<span>Transactions<\/span>/);
   assert.match(shell, />Cards<|<span>Cards<\/span>/);
-  assert.match(bottomNavigation, /href="\/investments"[\s\S]*?<span>Investments<\/span>/);
-  assert.doesNotMatch(bottomNavigation, /href="\/budgets\/plan"/);
-  assert.match(moreNavigation, /href="\/budgets\/plan"[\s\S]*?<strong>Budget<\/strong>/);
-  assert.doesNotMatch(moreNavigation, /href="\/profile"|<strong>Profile<\/strong>/);
-  assert.doesNotMatch(moreNavigation, /href="\/investments"/);
+  assert.match(bottomNavigation, /href=\{workspaceHref\("\/investments"\)\}[\s\S]*?<span>Investments<\/span>/);
+  assert.doesNotMatch(bottomNavigation, /workspaceHref\("\/budgets\/plan"\)/);
+  assert.match(moreNavigation, /href=\{workspaceHref\("\/budgets\/plan"\)\}[\s\S]*?<strong>Budget<\/strong>/);
+  assert.doesNotMatch(moreNavigation, /badgeCounts\?\.budgets/);
+  assert.doesNotMatch(moreNavigation, /workspaceHref\("\/profile"\)|<strong>Profile<\/strong>/);
+  assert.doesNotMatch(moreNavigation, /workspaceHref\("\/investments"\)/);
   assert.match(shell, /aria-haspopup="dialog"[\s\S]*?<span>More<\/span>/);
   assert.match(shell, /className="mobile-bottom-nav-workspace"[\s\S]*?Current workspace:/);
   assert.match(styles, /\.mobile-bottom-nav-workspace\s*\{[^}]*position:\s*absolute[^}]*height:\s*var\(--mobile-nav-safe-bottom\)/s);
-  assert.match(shell, /className="mobile-more-account" href="\/profile"[\s\S]*?userImage \?[\s\S]*?<Image src=\{userImage\}[\s\S]*?<small>View profile<\/small>/);
+  assert.match(shell, /queryKey:\s*\["workspaces"\][\s\S]*?enabled:\s*mobileMoreOpen/);
+  assert.match(shell, /queryKey:\s*\["receivables-summary", navigationWorkspaceId\][\s\S]*?\/api\/receivables\/summary\?workspaceId=\$\{navigationWorkspaceId\}/);
+  assert.match(moreNavigation, /mobileReceivablesCount \? <span className="mobile-more-badge">\{mobileReceivablesCount\}<\/span>/);
+  assert.match(shell, /className="mobile-more-workspace-switcher"[\s\S]*?mobile-more-link mobile-more-workspace-trigger/);
+  assert.match(shell, /aria-controls="mobile-more-workspace-options"[\s\S]*?id="mobile-more-workspace-options"[\s\S]*?role="listbox"/);
+  assert.match(shell, /className=\{`mobile-more-workspace-option[\s\S]*?role="option"[\s\S]*?aria-selected=\{isCurrent\}/);
+  assert.match(shell, /currentDestination[\s\S]*?buildWorkspacePath\(nextWorkspaceId, currentDestination\)/);
+  assert.ok(shell.indexOf('className="mobile-more-workspace-switcher"') < shell.indexOf('className="mobile-more-logout"'));
+  assert.match(styles, /\.mobile-more-workspace-trigger\s*\{[^}]*width:\s*100%[^}]*background:\s*transparent[^}]*font:\s*inherit/s);
+  assert.match(styles, /\.mobile-more-workspace-options\s*\{[^}]*max-height:\s*min\(32dvh, 220px\)[^}]*overflow-y:\s*auto/s);
+  assert.match(styles, /\.mobile-more-workspace-option\s*\{[^}]*min-height:\s*46px[^}]*border-radius:\s*var\(--r-md\)/s);
+  assert.doesNotMatch(shell, /mobile-more-workspace-select|mobile-more-workspace-copy/);
+  assert.match(shell, /className="mobile-more-account" href=\{workspaceHref\("\/profile"\)\}[\s\S]*?userImage \?[\s\S]*?<Image src=\{userImage\}[\s\S]*?<small>View profile<\/small>/);
   assert.match(shell, /className="mobile-more-theme-toggle"[\s\S]*?onClick=\{toggleTheme\}[\s\S]*?Switch to dark mode/);
   assert.match(shell, /className="mobile-more-logout"[\s\S]*?<strong>Log out<\/strong>/);
   assert.ok(shell.indexOf('className="mobile-more-logout"') < shell.indexOf('className="mobile-more-account-row"'));
@@ -435,8 +463,8 @@ test("profile details live on a dedicated authenticated page", async () => {
   assert.match(route, /<ProfilePage/);
   assert.match(profile, /fetch\("\/api\/profile"[\s\S]*?method:\s*"PATCH"/);
   assert.match(profile, /"Save profile"/);
-  assert.match(profile, /href="\/settings\?tab=settings"/);
-  assert.match(sidebar, /href="\/profile"[\s\S]*?View Profile/);
+  assert.match(profile, /buildWorkspacePath\(workspaceId, "\/settings\?tab=settings"\)/);
+  assert.match(sidebar, /href=\{workspaceHref\("\/profile"\)\}[\s\S]*?View Profile/);
   assert.doesNotMatch(sidebar, /account-profile-modal|profileModalOpen/);
   assert.match(styles, /\.card\.profile-page-card\s*\{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s);
   assert.match(styles, /@media\s*\(max-width:\s*700px\)[\s\S]*?\.profile-page-avatar\s*\{[^}]*width:\s*52px[^}]*height:\s*52px/s);
@@ -481,27 +509,33 @@ test("settings uses the shared typography and layout contract", async () => {
   assert.match(styles, /button,\s*\ninput,\s*\nselect,\s*\ntextarea\s*\{\s*\n\s*font:\s*inherit/);
   assert.doesNotMatch(layout, /Fraunces/);
   assert.match(styles, /\.st-container\s*\{[^}]*width:\s*min\(100%, 1080px\)[^}]*gap:\s*16px/s);
-  assert.match(settingsContract, /\.settings-section-title\s*\{[^}]*font-size:\s*var\(--text-xl\)/s);
+  assert.match(settingsContract, /\.settings-section-title\s*\{[^}]*font-size:\s*var\(--text-2xl\)/s);
   assert.match(settingsContract, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.settings-card-block \.btn\s*\{[^}]*width:\s*100%[^}]*min-height:\s*44px/s);
   assert.match(settingsContract, /\.settings-public-url-row\s*\{[^}]*grid-template-columns:\s*1fr/s);
 });
 
-test("settings keeps a compact continuous layout", async () => {
+test("settings groups related controls into focused tabs", async () => {
   const [settings, styles] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
     readFile(path.join(root, "app/globals.css"), "utf8"),
   ]);
 
-  assert.match(settings, /Access &amp; connections/);
-  assert.match(settings, /Workspace preferences/);
-  assert.match(settings, /Automation/);
-  assert.match(settings, /Data tools/);
+  assert.match(settings, /section === "settings"/);
+  assert.match(settings, /<SettingsAppAccess/);
+  assert.doesNotMatch(settings, /Install Nest and manage notifications, secure sign-in, and linked accounts/);
+  assert.match(settings, /section === "automation"/);
+  assert.match(settings, /Gmail Card Alerts/);
+  assert.match(settings, /section === "automation"[\s\S]*?Credit Card Auto Accounting/);
+  assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display/);
+  assert.match(settings, /section === "workspaces"[\s\S]*?Bank accounts/);
+  assert.match(settings, /section === "data"[\s\S]*?<DataImportSection/);
   assert.match(settings, /Bank accounts/);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-card-block \{\s*padding: 14px/s);
   assert.match(styles, /\.st-container \.st-grid[\s\S]*?gap: 10px/s);
+  assert.doesNotMatch(settings, /settings-page-section-header/);
 });
 
-test("settings and workspaces share cookie-backed tabs", async () => {
+test("settings sections share accessible cookie-backed tabs", async () => {
   const [route, tabs, legacyRoute, tabConfig, shell, sidebar, styles] = await Promise.all([
     readFile(path.join(root, "app/settings/page.tsx"), "utf8"),
     readFile(path.join(root, "components/settings-tabs.tsx"), "utf8"),
@@ -515,17 +549,48 @@ test("settings and workspaces share cookie-backed tabs", async () => {
   assert.match(route, /searchParams\?: Promise<\{ tab\?: string \}>/);
   assert.match(route, /cookies\(\)/);
   assert.match(route, /parseSettingsTab\(params\.tab\)[\s\S]*?cookieStore\.get\(SETTINGS_TAB_COOKIE\)/);
-  assert.match(route, /activeTab === "workspaces" \? <CollaboratorsPage \/> : <SettingsPage \/>/);
+  assert.match(route, /activeTab === "workspaces"[\s\S]*?<CollaboratorsPage workspaceSettings={<SettingsPage section={activeTab} \/>} \/>/);
   assert.match(tabs, /role="tablist"[\s\S]*?role="tab"[\s\S]*?role="tabpanel"/);
-  assert.match(tabs, /event\.key === "ArrowRight"[\s\S]*?event\.key === "ArrowLeft"[\s\S]*?router\.push\(`\/settings\?tab=\$\{nextTab\}`\)/);
+  assert.match(tabs, /id: "settings"[\s\S]*?label: "General"/);
+  assert.match(tabs, /mobileLabel: "General"[\s\S]*?mobileLabel: "Automation"[\s\S]*?mobileLabel: "Workspace"[\s\S]*?mobileLabel: "Data"/);
+  assert.match(tabs, /id: "automation"[\s\S]*?id: "workspaces"[\s\S]*?id: "data"/);
+  assert.match(tabs, /event\.key === "ArrowRight"[\s\S]*?event\.key === "ArrowLeft"[\s\S]*?router\.push\(settingsHref\(nextTab\)\)/);
   assert.match(tabs, /document\.cookie = `\$\{SETTINGS_TAB_COOKIE\}=\$\{tab\}; Path=\/; Max-Age=\$\{ONE_YEAR_SECONDS\}; SameSite=Lax/);
   assert.match(tabConfig, /SETTINGS_TAB_COOKIE = "nest-settings-tab"/);
+  assert.match(tabConfig, /"settings" \| "automation" \| "workspaces" \| "data"/);
   assert.match(legacyRoute, /await requireSession\(\)[\s\S]*?redirect\("\/settings\?tab=workspaces"\)/);
   assert.doesNotMatch(shell, /href="\/collaborators"/);
   assert.doesNotMatch(sidebar, /href="\/collaborators"/);
   assert.match(styles, /\.settings-tabs\s*\{[^}]*display:\s*flex[^}]*border-bottom:\s*1px solid var\(--border-subtle\)/s);
   assert.match(styles, /\.settings-tab\.is-active::after\s*\{[^}]*background:\s*var\(--brand-500\)/s);
-  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*?\.settings-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s);
+  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*?\.settings-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/s);
+  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*?\.settings-tab\s*\{[^}]*flex-direction:\s*column/s);
+});
+
+test("workspace settings flow from selection through configuration and access", async () => {
+  const [route, collaborators, settings, styles] = await Promise.all([
+    readFile(path.join(root, "app/settings/page.tsx"), "utf8"),
+    readFile(path.join(root, "components/collaborators-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+  const layout = collaborators.slice(collaborators.indexOf("return ("));
+
+  assert.match(route, /workspaceSettings={<SettingsPage section={activeTab} \/>}/);
+  assert.ok(layout.indexOf("Choose workspace") < layout.indexOf("Workspace details"));
+  assert.ok(layout.indexOf("Workspace details") < layout.indexOf("Members"));
+  assert.ok(layout.indexOf("Members") < layout.indexOf("{workspaceSettings}"));
+  assert.ok(layout.indexOf("{workspaceSettings}") < layout.indexOf("Invite people"));
+  assert.ok(layout.indexOf("Invite people") < layout.indexOf("Audit log"));
+  assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display[\s\S]*?Bank accounts/);
+  assert.doesNotMatch(settings, /settings-page-section-header/);
+  assert.doesNotMatch(collaborators, /workspace-settings-card-(?:heading|title)/);
+  assert.match(collaborators, /settings-section-title">Choose workspace/);
+  assert.match(collaborators, /settings-section-title">Workspace details/);
+  assert.match(collaborators, /settings-section-title">Members/);
+  assert.match(collaborators, /workspace-details-card[\s\S]*?workspace-members-section[\s\S]*?settings-section-title">Members/);
+  assert.match(styles, /\.workspace-details-form\s*\{[^}]*grid-template-columns:/s);
+  assert.match(styles, /\.workspace-money-page-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
 });
 
 test("Gmail sync uses one responsive status surface", async () => {

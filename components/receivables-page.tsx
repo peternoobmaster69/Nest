@@ -1,5 +1,8 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
@@ -117,7 +120,7 @@ function formatDisplayDate(value: string) {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     try {
       const payload = await res.json();
@@ -134,6 +137,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function ReceivablesPage() {
+  const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useSessionState<number>("nest:view:receivables:month", () => new Date().getMonth() + 1);
   const [sortBy, setSortBy] = useSessionState<"amount" | "title" | "receivableDate" | "transactionDate">("nest:view:receivables:sort", "receivableDate");
@@ -159,7 +163,7 @@ export function ReceivablesPage() {
   const [formDeductBudgetId, setFormDeductBudgetId] = useState("");
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId;

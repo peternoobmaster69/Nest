@@ -33,7 +33,8 @@ test("role ordering implements OWNER, EDITOR, and read-only VIEWER", () => {
 
 test("workspace authorization denies missing and underprivileged memberships", async () => {
   const source = await read("lib/workspace-auth.ts");
-  assert.match(source, /workspaceId_userId:\s*\{[\s\S]*workspaceId: requestedWorkspaceId,[\s\S]*userId/);
+  assert.match(source, /const effectiveWorkspaceId = requestedWorkspaceId \|\| requestWorkspaceId/);
+  assert.match(source, /workspaceId_userId:\s*\{[\s\S]*workspaceId: effectiveWorkspaceId,[\s\S]*userId/);
   assert.match(source, /if \(!member\) \{\s*throw new ApiAuthError\(403, "Forbidden"\)/);
   assert.match(source, /assertMinimumRole\(role, minimumRole\)/);
   assert.match(source, /requireWorkspaceRole\([\s\S]*minimumRole: WorkspaceRole/);

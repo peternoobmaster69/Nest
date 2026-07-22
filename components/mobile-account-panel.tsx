@@ -6,6 +6,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "@/components/theme-provider";
+import { workspaceFetch } from "@/lib/workspace-client";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 type Workspace = {
   id: string;
@@ -48,7 +50,7 @@ export function MobileAccountPanel({
   const workspaces = useQuery({
     queryKey: ["workspaces"],
     queryFn: async () => {
-      const response = await fetch("/api/workspaces");
+      const response = await workspaceFetch("/api/workspaces");
       if (!response.ok) throw new Error("Failed to load workspaces");
       return response.json() as Promise<Workspace[]>;
     },
@@ -60,7 +62,7 @@ export function MobileAccountPanel({
     setSwitchingWorkspaceId(nextWorkspaceId);
     setIsTransitioning(true);
     try {
-      const response = await fetch("/api/workspaces/switch", {
+      const response = await workspaceFetch("/api/workspaces/switch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId: nextWorkspaceId }),
@@ -91,7 +93,7 @@ export function MobileAccountPanel({
       void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
 
       onClose();
-      router.push("/");
+      router.push(buildWorkspacePath(nextWorkspaceId));
     } catch {
       setSwitchingWorkspaceId(null);
       setIsTransitioning(false);

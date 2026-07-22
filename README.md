@@ -68,6 +68,17 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Workspace routing
+
+Authenticated application pages use `/w/{workspaceId}/...` URLs. The URL is the
+canonical workspace context, so different browser tabs can remain in different
+workspaces. Client API requests copy that value into `X-Workspace-Id`, and every
+server request still verifies membership and the required workspace role.
+
+The `nest-active-workspace` cookie is retained only as the last-used default for
+bare or legacy application URLs. It must not be used as the primary scope for a
+request made from a workspace URL.
+
 ## Ask Nest
 
 Ask Nest is a read-only assistant for questions about the active workspace. It uses Azure OpenAI's v1 Responses API with local, workspace-scoped finance tools; the model never receives database credentials or mutation capabilities.

@@ -1,5 +1,6 @@
 export const DEFAULT_APP_DESTINATION = "/";
 export const WORKSPACE_ENTRY_PATH = "/entry";
+export const WORKSPACE_PATH_PREFIX = "/w";
 
 export function normalizeInternalAppPath(value: string | null | undefined) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
@@ -22,6 +23,32 @@ export function buildWorkspaceEntryHref(workspaceId: string, destination = DEFAU
     next: normalizeInternalAppPath(destination),
   });
   return `${WORKSPACE_ENTRY_PATH}?${params.toString()}`;
+}
+
+export function getWorkspaceIdFromPathname(pathname: string) {
+  const match = /^\/w\/([^/]+)(?:\/|$)/.exec(pathname);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+export function getWorkspaceRelativePath(pathname: string) {
+  const match = /^\/w\/[^/]+(\/.*)?$/.exec(pathname);
+  return match ? match[1] || "/" : pathname;
+}
+
+export function buildWorkspacePath(
+  workspaceId: string,
+  destination = DEFAULT_APP_DESTINATION,
+) {
+  const normalized = normalizeInternalAppPath(destination);
+  const parsed = new URL(normalized, "https://nest.invalid");
+  const relativePath = getWorkspaceRelativePath(parsed.pathname);
+  const suffix = relativePath === "/" ? "" : relativePath;
+  return `${WORKSPACE_PATH_PREFIX}/${encodeURIComponent(workspaceId.trim())}${suffix}${parsed.search}${parsed.hash}`;
 }
 
 export function buildCreditCardStatementPath({

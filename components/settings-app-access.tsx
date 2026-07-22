@@ -463,7 +463,7 @@ export function SettingsAppAccess() {
           <div className="settings-item-copy">
             <div className="settings-section-title">Recent sign-ins</div>
             <div className="settings-section-copy">
-              Review the country and IP address recorded when each session was created. History is normally kept for 90 days.
+              Review the country and IP address for your five most recent sign-ins.
             </div>
           </div>
         </div>

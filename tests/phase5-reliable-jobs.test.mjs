@@ -73,15 +73,17 @@ test("reminder delivery has atomic dedupe, provider idempotency, caps, and sanit
 });
 
 test("operators can inspect, retry, and cancel scoped jobs without exposing provider details", async () => {
-  const [overview, page, actions] = await Promise.all([
+  const [overview, page, tables, actions] = await Promise.all([
     source("lib/admin-overview.ts"),
     source("app/admin/page.tsx"),
+    source("components/admin-record-tables.tsx"),
     source("app/admin/job-actions.ts"),
   ]);
 
   assert.match(overview, /queueAgeMs|averageDurationMs|successRate|duplicateSuppressions|deadLetters/);
   assert.match(page, /Background jobs/);
-  assert.match(page, /retryJobAction|cancelJobAction/);
+  assert.match(page, /AdminBackgroundJobsTable/);
+  assert.match(tables, /retryJobAction|cancelJobAction/);
   assert.match(actions, /requireAdminPage/);
   assert.match(actions, /processGmailSyncQueue|processReminderEmailDeliveryJob|processReminderPushDeliveryJob/);
   assert.doesNotMatch(overview, /payloadJson: true|resultJson: true|error: true/);

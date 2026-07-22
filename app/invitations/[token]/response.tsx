@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 type Invite = {
   role: "EDITOR" | "VIEWER";
@@ -45,7 +46,7 @@ export function InvitationResponse({ token }: { token: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ workspaceId: data.workspaceId }),
         });
-        router.push("/");
+        router.push(buildWorkspacePath(data.workspaceId));
         router.refresh();
         return;
       }

@@ -6,14 +6,15 @@ import test from "node:test";
 const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
 
-test("workspace entry verifies access before switching and blocks external redirects", async () => {
+test("workspace entry verifies access before selecting a canonical scoped URL", async () => {
   const entry = await source("app/entry/route.ts");
   const links = await source("lib/workspace-entry.ts");
 
-  assert.match(entry, /await requireWorkspaceAccess\(workspaceId\)/);
-  assert.match(entry, /setActiveWorkspaceCookie\(response, workspaceId\)/);
+  assert.match(entry, /requireWorkspaceAccess\(workspaceId\)/);
+  assert.match(entry, /buildWorkspacePath\(selectedWorkspaceId, destination\)/);
+  assert.match(entry, /setActiveWorkspaceCookie\(response, selectedWorkspaceId\)/);
   assert.ok(
-    entry.indexOf("await requireWorkspaceAccess(workspaceId)") < entry.indexOf("setActiveWorkspaceCookie(response, workspaceId)"),
+    entry.indexOf("requireWorkspaceAccess(workspaceId)") < entry.indexOf("setActiveWorkspaceCookie(response, selectedWorkspaceId)"),
     "membership must be verified before the active workspace cookie changes",
   );
   assert.match(entry, /callbackUrl/);
@@ -36,7 +37,7 @@ test("workspace-scoped notifications and emails route to the exact card statemen
   assert.match(inAppNotifications, /buildCreditCardStatementPath\([\s\S]*?cardId: row\.cardId[\s\S]*?statementMonth: row\.statementMonth[\s\S]*?statementYear: row\.statementYear/);
   assert.match(inAppNotifications, /href,/);
   assert.match(invitations, /href: `\/invitations\/\$\{token\}`/);
-  assert.match(notificationBell, /href=\{notification\.href\}[\s\S]*?prefetch=\{false\}/);
+  assert.match(notificationBell, /href=\{workspaceId \? buildWorkspacePath\(workspaceId, notification\.href\) : notification\.href\}[\s\S]*?prefetch=\{false\}/);
   assert.match(creditTransactions, /searchParams\.get\("cardId"\)/);
   assert.match(creditTransactions, /searchParams\.get\("month"\)/);
   assert.match(creditTransactions, /searchParams\.get\("year"\)/);
@@ -65,4 +66,22 @@ test("sign-in preserves the workspace entry callback", async () => {
   assert.doesNotMatch(sidebar, /signOut\(\{ callbackUrl: "\/signin" \}\)/);
   assert.match(sidebar, /signOut\(\{ callbackUrl: "\/" \}\)/);
   assert.match(appShell, /signOut\(\{ callbackUrl: "\/" \}\)/);
+});
+
+test("workspace URLs are tab-scoped and API requests carry the URL workspace", async () => {
+  const routeLayout = await source("app/w/[workspaceId]/layout.tsx");
+  const routePage = await source("app/w/[workspaceId]/[[...path]]/page.tsx");
+  const client = await source("lib/workspace-client.ts");
+  const auth = await source("lib/workspace-auth.ts");
+  const context = await source("app/api/context/route.ts");
+  const proxy = await source("proxy.ts");
+
+  assert.match(routeLayout, /requireWorkspaceAccess\(workspaceId\)/);
+  assert.match(routeLayout, /WorkspaceProvider workspaceId=\{workspaceId\}/);
+  assert.match(routePage, /case "transactions"[\s\S]*?<TransactionsRoute/);
+  assert.match(client, /getWorkspaceIdFromPathname\(window\.location\.pathname\)/);
+  assert.match(client, /headers\.set\(WORKSPACE_ID_HEADER, workspaceId\)/);
+  assert.match(auth, /const effectiveWorkspaceId = requestedWorkspaceId \|\| requestWorkspaceId/);
+  assert.match(context, /requestedWorkspaceId \|\| cookieWorkspaceId \|\| userLookup\.activeWorkspaceId/);
+  assert.match(proxy, /requestHeaders\.set\(WORKSPACE_ID_HEADER, workspaceId\)/);
 });

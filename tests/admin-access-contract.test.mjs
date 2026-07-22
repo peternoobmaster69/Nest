@@ -39,10 +39,11 @@ test("admin overview reports secret presence without returning secret values", a
 });
 
 test("admin overview lists users and workspace details", async () => {
-  const [overview, page, directories, styles] = await Promise.all([
+  const [overview, page, directories, pagination, styles] = await Promise.all([
     read("lib/admin-overview.ts"),
     read("app/admin/page.tsx"),
     read("components/admin-directories.tsx"),
+    read("components/admin-pagination.tsx"),
     read("app/globals.css"),
   ]);
 
@@ -53,8 +54,13 @@ test("admin overview lists users and workspace details", async () => {
   assert.match(page, /<AdminDirectories users={overview\.users} workspaces={overview\.workspaces}/);
   assert.match(directories, /openDirectory === "users"/);
   assert.match(directories, /openDirectory === "workspaces"/);
-  assert.match(directories, /users\.map/);
-  assert.match(directories, /workspaces\.map/);
+  assert.match(directories, /visibleUsers\.map/);
+  assert.match(directories, /visibleWorkspaces\.map/);
+  assert.match(directories, /<AdminPagination/);
+  assert.match(pagination, /ADMIN_PAGE_SIZE = 10/);
+  assert.match(pagination, /totalItems <= pageSize/);
+  assert.match(pagination, /Previous/);
+  assert.match(pagination, /Next/);
   assert.match(directories, /aria-expanded=/);
   assert.match(directories, />Workspace access</);
   assert.match(directories, />Last signed in</);
@@ -71,9 +77,10 @@ test("admin overview lists users and workspace details", async () => {
 });
 
 test("admin page exposes aggregate and per-turn token usage", async () => {
-  const [overview, page] = await Promise.all([
+  const [overview, page, tables] = await Promise.all([
     read("lib/admin-overview.ts"),
     read("app/admin/page.tsx"),
+    read("components/admin-record-tables.tsx"),
   ]);
 
   assert.match(overview, /tokenUsage:/);
@@ -81,7 +88,24 @@ test("admin page exposes aggregate and per-turn token usage", async () => {
   assert.match(overview, /totalTokens: true/);
   assert.match(page, /Usage &amp; cost/);
   assert.match(page, /All-time input/);
-  assert.match(page, />Untracked</);
+  assert.match(tables, />Untracked</);
+});
+
+test("admin record tables paginate after ten items", async () => {
+  const [page, tables, pagination, styles] = await Promise.all([
+    read("app/admin/page.tsx"),
+    read("components/admin-record-tables.tsx"),
+    read("components/admin-pagination.tsx"),
+    read("app/globals.css"),
+  ]);
+
+  assert.match(page, /<AdminRecentActivityTable turns={overview\.recentTurns}/);
+  assert.match(page, /<AdminBackgroundJobsTable jobs={overview\.backgroundJobs\.recent}/);
+  assert.match(tables, /turns\.slice\(pagination\.startIndex, pagination\.endIndex\)/);
+  assert.match(tables, /jobs\.slice\(pagination\.startIndex, pagination\.endIndex\)/);
+  assert.match(pagination, /Showing <strong>{firstItem}–{lastItem}<\/strong>/);
+  assert.match(pagination, /aria-live="polite"/);
+  assert.match(styles, /\.admin-pagination \{/);
 });
 
 test("admin totals retain archived Ask Nest usage after raw history is purged", async () => {

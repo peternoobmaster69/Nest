@@ -1,5 +1,9 @@
 "use client";
 
+import { workspaceFetch } from "@/lib/workspace-client";
+import { useWorkspaceId } from "@/components/workspace-provider";
+import { buildWorkspacePath } from "@/lib/workspace-entry";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { MarkdownEditor } from "@/components/markdown-editor";
@@ -113,7 +117,7 @@ type PaymentDueMonthsResponse = {
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await workspaceFetch(url, init);
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -213,6 +217,7 @@ function scrollSelectedFilterIntoView(container: HTMLDivElement | null, selected
 }
 
 export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
+  const routeWorkspaceId = useWorkspaceId();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
@@ -413,7 +418,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   }, [selectedMonth]);
 
   const context = useQuery({
-    queryKey: ["app-context"],
+    queryKey: ["app-context", routeWorkspaceId],
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
@@ -1511,7 +1516,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             title="Add a credit card first"
             description="Credit card transactions need a card to attach to. Add your card details, then return here to record transactions and payment due dates."
             action={(
-              <Link className="btn btn-primary" href="/credit-cards?add=1">
+              <Link className="btn btn-primary" href={routeWorkspaceId ? buildWorkspacePath(routeWorkspaceId, "/credit-cards?add=1") : "/credit-cards?add=1"}>
                 <Plus size={18} aria-hidden="true" />
                 Add a credit card
               </Link>
