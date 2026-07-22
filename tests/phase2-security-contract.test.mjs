@@ -153,7 +153,8 @@ test("sessions and public links are revocable and audited", async () => {
   assert.match(sessionLimit, /assertSameOriginRequest\(request\)/);
   assert.match(sessionLimit, /status !== "PENDING"/);
   assert.match(sessionLimit, /action: "SESSION_REPLACED"/);
-  assert.match(sessionLimit, /sessionId: selectedSessionId[\s\S]*status: "ACTIVE"/);
+  assert.match(sessionLimit, /sessionId: \{ in: selectedSessionIds \}[\s\S]*status: "ACTIVE"/);
+  assert.match(sessionLimit, /revoked\.count !== selectedSessionIds\.length/);
   assert.match(schema, /model LoginSession[\s\S]*status\s+String[\s\S]*expiresAt\s+DateTime/);
   assert.match(schema, /legacyActiveSessionId[\s\S]*@map\("activeSessionId"\)/);
   assert.match(schema, /lastSignedInAt\s+DateTime\?/);

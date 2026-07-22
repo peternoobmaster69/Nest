@@ -17,6 +17,19 @@ test("receivable close postings preserve receivable title and notes", async () =
   assert.doesNotMatch(route, /Auto-accounted by rule|Receivable transfer out/);
 });
 
+test("cross-workspace receivable deductions use workspace-safe ledger references", async () => {
+  const route = await readFile(
+    path.join(root, "app/api/receivables/[id]/close/route.ts"),
+    "utf8",
+  );
+
+  assert.match(route, /createPostingGroupRecord/);
+  assert.match(route, /sourceAccount\.workspaceId === receivable\.workspaceId/);
+  assert.match(route, /operation: "RECEIVABLE_CLOSE_SOURCE"/);
+  assert.match(route, /createLedgerTransaction\(db, sourcePostingGroupId/);
+  assert.match(route, /receivableId: sourceIsInReceivableWorkspace \? receivable\.id : null/);
+});
+
 test("existing receivable close postings are backfilled from their receivable", async () => {
   const migration = await readFile(
     path.join(root, "prisma/migrations/sync_receivable_close_transaction_content/migration.sql"),

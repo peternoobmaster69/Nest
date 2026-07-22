@@ -82,6 +82,30 @@ test("workspace URLs are tab-scoped and API requests carry the URL workspace", a
   assert.match(client, /getWorkspaceIdFromPathname\(window\.location\.pathname\)/);
   assert.match(client, /headers\.set\(WORKSPACE_ID_HEADER, workspaceId\)/);
   assert.match(auth, /const effectiveWorkspaceId = requestedWorkspaceId \|\| requestWorkspaceId/);
-  assert.match(context, /requestedWorkspaceId \|\| cookieWorkspaceId \|\| userLookup\.activeWorkspaceId/);
+  assert.match(context, /requestedWorkspaceId \|\| userLookup\.activeWorkspaceId \|\| cookieWorkspaceId/);
   assert.match(proxy, /requestHeaders\.set\(WORKSPACE_ID_HEADER, workspaceId\)/);
+});
+
+test("explicit workspace switches persist across browser and PWA restarts", async () => {
+  const switchRoute = await source("app/api/workspaces/switch/route.ts");
+  const mobileShell = await source("components/app-shell.tsx");
+  const auth = await source("lib/workspace-auth.ts");
+
+  assert.match(switchRoute, /const userId = await requireSessionUserId\(\)/);
+  assert.match(switchRoute, /prisma\.user\.update\([\s\S]*?activeWorkspaceId: parsed\.data\.workspaceId/);
+  assert.ok(
+    switchRoute.indexOf("await requireWorkspaceAccess(parsed.data.workspaceId)") <
+      switchRoute.indexOf("await prisma.user.update"),
+    "membership must be verified before the server-side workspace fallback changes",
+  );
+  assert.match(switchRoute, /setActiveWorkspaceCookie\(response, parsed\.data\.workspaceId\)/);
+
+  assert.match(mobileShell, /const switchMobileWorkspace = async/);
+  assert.match(mobileShell, /workspaceFetch\("\/api\/workspaces\/switch"[\s\S]*?router\.push\(buildWorkspacePath/);
+  assert.match(mobileShell, /Use this workspace by default/);
+
+  assert.ok(
+    auth.indexOf("if (user.activeWorkspaceId)") < auth.indexOf("const cookieWorkspaceId"),
+    "fresh unscoped launches must prefer the cross-browser server-side workspace fallback",
+  );
 });

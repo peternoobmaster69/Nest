@@ -117,7 +117,7 @@ export async function GET(request: Request) {
       await requireWorkspaceAccess(requestedWorkspaceId);
     }
     const cookieWorkspaceId = await getActiveWorkspaceCookie();
-    const activeWorkspaceId = requestedWorkspaceId || cookieWorkspaceId || userLookup.activeWorkspaceId;
+    const activeWorkspaceId = requestedWorkspaceId || userLookup.activeWorkspaceId || cookieWorkspaceId;
     const workspaceSummaries = memberships.map((membership) => ({
       id: membership.workspace.id,
       name: membership.workspace.name,

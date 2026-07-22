@@ -302,13 +302,24 @@ export function AppShell({
     await signOut({ callbackUrl: "/" });
   };
 
-  const switchMobileWorkspace = (nextWorkspaceId: string) => {
+  const switchMobileWorkspace = async (nextWorkspaceId: string) => {
     if (!nextWorkspaceId || nextWorkspaceId === navigationWorkspaceId) return;
     const currentDestination = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     setSwitchingWorkspaceId(nextWorkspaceId);
-    setWorkspaceChooserOpen(false);
-    setMobileMoreOpen(false);
-    router.push(buildWorkspacePath(nextWorkspaceId, currentDestination));
+    try {
+      const response = await workspaceFetch("/api/workspaces/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: nextWorkspaceId }),
+      });
+      if (!response.ok) throw new Error("Failed to switch workspace");
+
+      setWorkspaceChooserOpen(false);
+      setMobileMoreOpen(false);
+      router.push(buildWorkspacePath(nextWorkspaceId, currentDestination));
+    } catch {
+      setSwitchingWorkspaceId(null);
+    }
   };
 
   const scrollToTop = () => {
@@ -440,7 +451,7 @@ export function AppShell({
                 <Layers3 size={20} aria-hidden="true" />
                 <span>
                   <strong>{mobileWorkspaceName || "Workspace"}</strong>
-                  <small>Switch workspace in this tab</small>
+                  <small>Use this workspace by default</small>
                 </span>
                 <ChevronDown className="mobile-more-workspace-chevron" size={17} aria-hidden="true" />
               </button>
@@ -460,7 +471,7 @@ export function AppShell({
                         role="option"
                         aria-selected={isCurrent}
                         key={workspace.id}
-                        onClick={() => switchMobileWorkspace(workspace.id)}
+                        onClick={() => void switchMobileWorkspace(workspace.id)}
                         disabled={isCurrent || isSwitching}
                       >
                         <span className="mobile-more-workspace-mark">

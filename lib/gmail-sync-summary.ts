@@ -2,6 +2,7 @@ export type GmailSyncSummary = {
   scannedMessages: number;
   processed: number;
   duplicates: number;
+  ignored: number;
   failed: number;
   skipped?: boolean;
   reason?: string;
@@ -22,14 +23,17 @@ export function formatGmailSyncSummary(data: GmailSyncSummary) {
   const duplicateDetail = data.duplicates > 0
     ? ` Skipped ${data.duplicates} ${pluralize(data.duplicates, "email")} already imported.`
     : "";
+  const ignoredDetail = data.ignored > 0
+    ? ` Ignored ${data.ignored} unrelated ${pluralize(data.ignored, "email")}.`
+    : "";
 
   if (data.failed > 0) {
-    return `Inbox sync completed with issues. Imported ${imported}.${duplicateDetail} ${data.failed} ${pluralize(data.failed, "email")} could not be processed.`;
+    return `Inbox sync completed with issues. Imported ${imported}.${duplicateDetail}${ignoredDetail} ${data.failed} card alert ${pluralize(data.failed, "email")} could not be processed.`;
   }
 
   if (data.processed === 0) {
-    return `Inbox is up to date.${duplicateDetail || " No new card alerts needed importing."}`;
+    return `Inbox is up to date.${duplicateDetail}${ignoredDetail}${duplicateDetail || ignoredDetail ? "" : " No new card alerts needed importing."}`;
   }
 
-  return `Inbox sync complete. Imported ${imported}.${duplicateDetail}`;
+  return `Inbox sync complete. Imported ${imported}.${duplicateDetail}${ignoredDetail}`;
 }

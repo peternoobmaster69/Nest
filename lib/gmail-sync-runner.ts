@@ -1,8 +1,9 @@
 import { ingestCreditAlert } from "@/lib/credit-alert-ingest";
-import { buildGmailAlertQuery, isGmailSyncDue } from "@/lib/gmail-alert-query";
+import { buildGmailAlertQuery, isGmailCreditAlertSubject, isGmailSyncDue } from "@/lib/gmail-alert-query";
 import {
   ensureActiveGmailAccessToken,
   fetchGmailMessage,
+  fetchGmailMessageMetadata,
   getGmailProfile,
   GmailProviderError,
   listGmailHistoryPage,
@@ -58,7 +59,12 @@ function parseCheckpoint(value: string | null, integration: GmailIntegrationReco
   if (value) {
     try {
       const parsed = JSON.parse(value) as GmailCheckpoint;
-      if (parsed.version === 1 && (parsed.mode === "query" || parsed.mode === "history")) return parsed;
+      if (parsed.version === 1 && (parsed.mode === "query" || parsed.mode === "history")) {
+        return {
+          ...parsed,
+          ignored: Number.isInteger(parsed.ignored) && parsed.ignored >= 0 ? parsed.ignored : 0,
+        };
+      }
     } catch {
       // Start from the integration's durable cursor when an old checkpoint is unreadable.
     }
@@ -72,6 +78,7 @@ function parseCheckpoint(value: string | null, integration: GmailIntegrationReco
     scannedMessages: 0,
     processed: 0,
     duplicates: 0,
+    ignored: 0,
     failed: 0,
   };
 }
@@ -176,8 +183,22 @@ export async function processGmailSyncJob(jobId: string, origin?: string) {
 
     for (const message of messages) {
       await throwIfBackgroundJobCancelled(job.id, leaseToken);
+      checkpoint.scannedMessages += 1;
       let result;
       try {
+        const metadata = await fetchGmailMessageMetadata(accessToken, message.id);
+        if (!isGmailCreditAlertSubject(metadata.subject)) {
+          checkpoint.ignored += 1;
+          await heartbeatBackgroundJob(job.id, leaseToken, {
+            progress: Math.min(90, 10 + checkpoint.scannedMessages),
+            message: `Reviewed ${checkpoint.scannedMessages} Gmail message${checkpoint.scannedMessages === 1 ? "" : "s"}.`,
+            current: checkpoint.scannedMessages,
+            total: Math.max(checkpoint.scannedMessages, (job.total ?? 0)),
+            checkpoint,
+          });
+          continue;
+        }
+
         const full = await fetchGmailMessage(accessToken, message.id);
         result = await ingestCreditAlert({
           workspaceId: integration.workspaceId,
@@ -189,10 +210,8 @@ export async function processGmailSyncJob(jobId: string, origin?: string) {
       } catch (error) {
         if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_MESSAGE_GONE") throw error;
         checkpoint.failed += 1;
-        checkpoint.scannedMessages += 1;
         continue;
       }
-      checkpoint.scannedMessages += 1;
       if ("duplicate" in result && result.duplicate) checkpoint.duplicates += 1;
       else if ("parseStatus" in result && result.parseStatus === "PROCESSED") checkpoint.processed += 1;
       else if ("parseStatus" in result && result.parseStatus === "DUPLICATE") checkpoint.duplicates += 1;
@@ -200,7 +219,7 @@ export async function processGmailSyncJob(jobId: string, origin?: string) {
 
       await heartbeatBackgroundJob(job.id, leaseToken, {
         progress: Math.min(90, 10 + checkpoint.scannedMessages),
-        message: `Processed ${checkpoint.scannedMessages} Gmail message${checkpoint.scannedMessages === 1 ? "" : "s"}.`,
+        message: `Reviewed ${checkpoint.scannedMessages} Gmail message${checkpoint.scannedMessages === 1 ? "" : "s"}.`,
         current: checkpoint.scannedMessages,
         total: Math.max(checkpoint.scannedMessages, (job.total ?? 0)),
         checkpoint,
@@ -264,7 +283,7 @@ export async function runGmailSyncForIntegration(integration: GmailIntegrationRe
   const queued = await queueGmailSyncForIntegration(integration);
   if (queued.created) await processGmailSyncQueue({ jobId: queued.job.id, origin, maxSlices: 1 });
   const latest = await prisma.backgroundJob.findUnique({ where: { id: queued.job.id } });
-  let summary: GmailSyncSummary = { scannedMessages: 0, processed: 0, duplicates: 0, failed: 0 };
+  let summary: GmailSyncSummary = { scannedMessages: 0, processed: 0, duplicates: 0, ignored: 0, failed: 0 };
   try {
     summary = JSON.parse(latest?.resultJson ?? latest?.checkpointJson ?? "{}") as GmailSyncSummary;
   } catch {}

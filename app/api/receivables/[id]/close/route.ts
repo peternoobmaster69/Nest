@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
-import { claimReceivable, createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
+import {
+  claimReceivable,
+  createLedgerTransaction,
+  createPostingGroupRecord,
+  executePosting,
+  getIdempotencyKey,
+  PostingConflictError,
+} from "@/lib/posting-service";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -172,6 +179,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
 
       let sourceTxId: string | null = null;
+      let sourcePostingGroupId: string | null = null;
       const shouldCreateSourceDeduction =
         sourceAccount &&
         sourceBudget &&
@@ -180,7 +188,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           sourceBudget.id !== targetBudget.id);
 
       if (shouldCreateSourceDeduction && sourceAccount && sourceBudget) {
-        const sourceTx = await createLedgerTransaction(db, postingGroupId, {
+        const sourceIsInReceivableWorkspace = sourceAccount.workspaceId === receivable.workspaceId;
+        sourcePostingGroupId = sourceIsInReceivableWorkspace
+          ? postingGroupId
+          : await createPostingGroupRecord(db, {
+              workspaceId: sourceAccount.workspaceId,
+              operation: "RECEIVABLE_CLOSE_SOURCE",
+              idempotencyKey,
+              actorUserId: userId,
+              sourceType: "RECEIVABLE",
+              sourceId: receivable.id,
+            });
+
+        const sourceTx = await createLedgerTransaction(db, sourcePostingGroupId, {
             workspaceId: sourceAccount.workspaceId,
             accountId: sourceAccount.id,
             kind: "TRANSFER",
@@ -192,7 +212,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             details: null,
             notes: transactionNotes,
             externalRef,
-            receivableId: receivable.id,
+            receivableId: sourceIsInReceivableWorkspace ? receivable.id : null,
             isSynced: false,
             isFromFamily: false,
         });
@@ -216,6 +236,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         receivable: updatedReceivable,
         incomeTransactionId: incomeTx.id,
         sourceTransactionId: sourceTxId,
+        sourcePostingGroupId,
       };
     });
 

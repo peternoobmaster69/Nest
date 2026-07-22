@@ -45,6 +45,38 @@ test("mobile embedded sign-in keeps provider actions directly below its heading"
   assert.match(styles, /\.signin-card-embedded \.signin-providers,[\s\S]*?\.signin-card-embedded \.signin-footer\s*\{[^}]*margin-top:\s*0/s);
 });
 
+test("session-limit sign-in keeps five active sessions in a compact centered dialog", async () => {
+  const [dialog, styles] = await Promise.all([
+    readFile(path.join(root, "components/landing-signin-dialog.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(dialog, /lp-signin-dialog\$\{sessionLimitRequired \? " is-session-limit" : ""\}/);
+  assert.match(dialog, /<aside className="lp-signin-story">/);
+  assert.match(dialog, /sessionLimitRequired \? "Account security"/);
+  assert.match(dialog, /sessionLimitRequired \? "Choose where to stay signed in\."/);
+  assert.match(dialog, /End at least one session to continue here\./);
+  assert.match(dialog, /`\$\{sessions\.length\} active sessions`/);
+  assert.match(dialog, /Choose sessions to end/);
+  assert.match(dialog, /type="checkbox"/);
+  assert.match(dialog, /sessionIds: selectedSessionIds/);
+  assert.match(dialog, /End all and continue/);
+  assert.match(dialog, /Select all/);
+  assert.match(dialog, /className="signin-session-toolbar"/);
+  assert.match(dialog, /<small>\{sessionSummary\(session\)\}<\/small>/);
+  assert.doesNotMatch(dialog, /Protect your account|Device limit/);
+
+  assert.match(styles, /\.signin-session-list\s*\{[^}]*max-height:\s*none[^}]*overflow:\s*visible/s);
+  assert.match(styles, /\.signin-session-toolbar\s*\{[^}]*display:\s*flex/s);
+  assert.doesNotMatch(styles, /\.signin-session-select-all\s*\{[^}]*position:\s*absolute/s);
+  assert.match(styles, /\.lp-signin-dialog\.is-session-limit\s*\{[^}]*max-height:\s*calc\(100dvh - 16px\)/s);
+  assert.match(styles, /\.lp-signin-dialog\.is-session-limit \.lp-signin-form\s*\{[^}]*overflow:\s*visible/s);
+  assert.match(styles, /\.lp-signin-dialog\.is-session-limit \.lp-signin-story h2\s*\{[^}]*max-width:\s*none[^}]*white-space:\s*nowrap/s);
+  assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.lp-signin-overlay\.is-session-limit\s*\{[^}]*align-items:\s*center/s);
+  assert.match(styles, /\.lp-signin-dialog\.is-session-limit \.lp-signin-story\s*\{[^}]*min-height:\s*102px/s);
+  assert.doesNotMatch(styles, /\.signin-session-list\s*\{[^}]*overflow-y:\s*auto/s);
+});
+
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(entries.map(async (entry) => {

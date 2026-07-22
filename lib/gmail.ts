@@ -391,6 +391,23 @@ export async function listGmailHistoryPage(params: {
   };
 }
 
+export async function fetchGmailMessageMetadata(accessToken: string, messageId: string) {
+  const query = new URLSearchParams({ format: "metadata" });
+  query.append("metadataHeaders", "Subject");
+  const response = await gmailFetch(
+    "message-get",
+    `${GMAIL_API_BASE}/users/me/messages/${encodeURIComponent(messageId)}?${query.toString()}`,
+    accessToken,
+  );
+  const data = (await response.json()) as {
+    payload?: { headers?: Array<{ name: string; value: string }> };
+    historyId?: string;
+  };
+  const headers = data.payload?.headers ?? [];
+  const subject = headers.find((header) => header.name.toLocaleLowerCase() === "subject")?.value ?? "";
+  return { subject, historyId: data.historyId ?? null };
+}
+
 export async function fetchGmailMessage(accessToken: string, messageId: string) {
   const res = await gmailFetch(
     "message-get",

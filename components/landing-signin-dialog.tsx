@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, LockKeyhole, MonitorSmartphone, ShieldCheck, X } from "lucide-react";
+import { Check, LockKeyhole, X } from "lucide-react";
 import { signOut } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -21,7 +21,7 @@ type ActiveSession = {
   lastSeenAt: string;
 };
 
-function sessionLocation(session: ActiveSession) {
+function sessionSummary(session: ActiveSession) {
   let country = session.countryCode ?? "Location unavailable";
   if (session.countryCode) {
     try {
@@ -30,15 +30,22 @@ function sessionLocation(session: ActiveSession) {
       country = session.countryCode;
     }
   }
-  return `${country} · ${session.ipAddress ?? "IP unavailable"}`;
+  const lastActive = new Date(session.lastSeenAt).toLocaleString("en-SG", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${country} · ${lastActive}`;
 }
 
 function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isApproving, setIsApproving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const firstSessionRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -49,7 +56,7 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
         if (!active) return;
         const activeSessions = result?.sessions ?? [];
         setSessions(activeSessions);
-        setSelectedSessionId("");
+        setSelectedSessionIds([]);
       })
       .catch((error) => {
         if (active) setErrorMessage(error instanceof Error ? error.message : "Unable to load active devices.");
@@ -63,6 +70,17 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
   }, []);
 
   const requiresSelection = sessions.length >= 5;
+  useEffect(() => {
+    if (!isLoading && requiresSelection) firstSessionRef.current?.focus();
+  }, [isLoading, requiresSelection]);
+
+  const allSessionsSelected = sessions.length > 0 && selectedSessionIds.length === sessions.length;
+  const toggleSession = (sessionId: string) => {
+    setSelectedSessionIds((current) => current.includes(sessionId)
+      ? current.filter((id) => id !== sessionId)
+      : [...current, sessionId]);
+  };
+
   const approveDevice = async () => {
     setIsApproving(true);
     setErrorMessage(null);
@@ -70,7 +88,7 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
       const response = await fetch("/api/auth/session-limit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectedSessionId ? { sessionId: selectedSessionId } : {}),
+        body: JSON.stringify(selectedSessionIds.length ? { sessionIds: selectedSessionIds } : {}),
       });
       const result = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) throw new Error(result?.error || "Unable to approve this device.");
@@ -83,41 +101,47 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
 
   return (
     <section className="signin-takeover-panel">
-      <span className="signin-takeover-icon"><MonitorSmartphone size={24} aria-hidden="true" /></span>
       <div className="signin-embedded-heading">
-        <span>Device limit</span>
-        <h1 className="signin-title">Five devices are already signed in</h1>
-        <p className="signin-subtitle">
-          Choose one device to sign out before continuing here.
-        </p>
-      </div>
-
-      <div className="signin-takeover-note">
-        <ShieldCheck size={18} aria-hidden="true" />
-        <p><strong>Your existing devices remain signed in.</strong><span>Nothing changes until you confirm.</span></p>
+        <h1 className="signin-title">
+          {isLoading ? "Checking active sessions" : requiresSelection ? `${sessions.length} active sessions` : "A session slot is available"}
+        </h1>
+        {!isLoading && !requiresSelection ? (
+          <p className="signin-subtitle">You can continue on this device.</p>
+        ) : null}
       </div>
 
       {isLoading ? <p className="signin-session-status">Loading active devices…</p> : null}
       {!isLoading && sessions.length ? (
         <fieldset className="signin-session-list">
-          <legend>{requiresSelection ? "Sign out this device" : "Active devices"}</legend>
-          {sessions.map((session) => (
+          <legend className="sr-only">{requiresSelection ? "Choose sessions to end" : "Active sessions"}</legend>
+          <div className="signin-session-toolbar">
+            <span aria-hidden="true">{requiresSelection ? "Choose sessions to end" : "Active sessions"}</span>
+            <button
+              type="button"
+              className="signin-session-select-all"
+              onClick={() => setSelectedSessionIds(allSessionsSelected ? [] : sessions.map((session) => session.sessionId))}
+              disabled={isApproving}
+            >
+              {allSessionsSelected ? "Clear all" : "Select all"}
+            </button>
+          </div>
+          {sessions.map((session, index) => (
             <label
-              className={`signin-session-option${selectedSessionId === session.sessionId ? " is-selected" : ""}`}
+              className={`signin-session-option${selectedSessionIds.includes(session.sessionId) ? " is-selected" : ""}`}
               key={session.sessionId}
             >
               <input
-                type="radio"
-                name="session-to-revoke"
+                ref={index === 0 ? firstSessionRef : undefined}
+                type="checkbox"
+                name="sessions-to-revoke"
                 value={session.sessionId}
-                checked={selectedSessionId === session.sessionId}
-                onChange={() => setSelectedSessionId(session.sessionId)}
-                disabled={!requiresSelection || isApproving}
+                checked={selectedSessionIds.includes(session.sessionId)}
+                onChange={() => toggleSession(session.sessionId)}
+                disabled={isApproving}
               />
               <span>
                 <strong>{session.deviceName}</strong>
-                <small>{sessionLocation(session)}</small>
-                <small>Last active {new Date(session.lastSeenAt).toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" })}</small>
+                <small>{sessionSummary(session)}</small>
               </span>
             </label>
           ))}
@@ -134,19 +158,22 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
           type="button"
           className="lp-btn-primary"
           onClick={() => void approveDevice()}
-          disabled={isLoading || isApproving || (requiresSelection && !selectedSessionId) || Boolean(errorMessage && !sessions.length)}
+          disabled={isLoading || isApproving || (requiresSelection && !selectedSessionIds.length) || Boolean(errorMessage && !sessions.length)}
         >
           {isApproving
             ? "Approving device…"
-            : requiresSelection
-              ? "Sign out selected device and continue"
+            : allSessionsSelected
+              ? "End all and continue"
+              : selectedSessionIds.length === 1
+                ? "End session and continue"
+                : selectedSessionIds.length > 1
+                  ? `End ${selectedSessionIds.length} and continue`
               : "Continue on this device"}
         </button>
         <button type="button" className="lp-btn-secondary" onClick={onCancel} disabled={isApproving}>
-          Cancel sign-in
+          Cancel
         </button>
       </div>
-      <p className="signin-takeover-help">Nest allows up to five active devices per account.</p>
     </section>
   );
 }
@@ -195,14 +222,14 @@ export function LandingSignInDialog({
 
   return (
     <div
-      className="lp-signin-overlay"
+      className={`lp-signin-overlay${sessionLimitRequired ? " is-session-limit" : ""}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
       }}
     >
       <div
         ref={dialogRef}
-        className="lp-signin-dialog"
+        className={`lp-signin-dialog${sessionLimitRequired ? " is-session-limit" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={sessionLimitRequired ? "Choose a device to sign out" : "Sign in to Nest"}
@@ -223,19 +250,18 @@ export function LandingSignInDialog({
 
           <div className="lp-signin-story-copy">
             <span className="lp-signin-story-eyebrow">
-              {sessionLimitRequired ? "Protect your account" : "Continue your financial journey"}
+              {sessionLimitRequired ? "Account security" : "Continue your financial journey"}
             </span>
             <h2>{sessionLimitRequired ? "Choose where to stay signed in." : "Organize your finances"}</h2>
             <p>
               {sessionLimitRequired
-                ? "Nest supports up to five active devices. Remove one you no longer need to approve this device."
+                ? "End at least one session to continue here."
                 : "Workspace for the cash you have, the money you owe, and everything you are building toward."}
             </p>
             {sessionLimitRequired ? (
               <ul>
-                <li><Check size={15} aria-hidden="true" /> Identify sessions by device, location, and IP address</li>
-                <li><Check size={15} aria-hidden="true" /> Only the device you choose will be signed out</li>
-                <li><Check size={15} aria-hidden="true" /> Cancelling keeps all five existing sessions active</li>
+                <li><Check size={15} aria-hidden="true" /> Only the sessions you choose will be signed out</li>
+                <li><Check size={15} aria-hidden="true" /> Cancelling keeps your existing sessions active</li>
               </ul>
             ) : (
               <ul>
@@ -249,7 +275,7 @@ export function LandingSignInDialog({
           <p className="lp-signin-security">
             <LockKeyhole size={15} aria-hidden="true" />
             {sessionLimitRequired
-              ? "This pending device cannot access your financial data."
+              ? "This pending device cannot access your financial data yet."
               : "OAuth and passkeys only. Nest does not store passwords."}
           </p>
         </aside>

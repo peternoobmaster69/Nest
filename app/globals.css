@@ -21651,6 +21651,10 @@ html[data-ask-nest-open="true"] {
   animation: lp-signin-backdrop-in 180ms ease both;
 }
 
+.lp-signin-overlay.is-session-limit {
+  padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+}
+
 .lp-signin-dialog {
   position: relative;
   display: grid;
@@ -21666,6 +21670,45 @@ html[data-ask-nest-open="true"] {
     0 10px 28px rgba(7, 20, 13, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
   animation: lp-signin-dialog-in 320ms cubic-bezier(0.2, 0.82, 0.24, 1) both;
+}
+
+.lp-signin-dialog.is-session-limit {
+  max-height: calc(100dvh - 16px);
+}
+
+.lp-signin-dialog.is-session-limit .lp-signin-story {
+  min-height: min(420px, calc(100dvh - 24px));
+  padding: 28px 30px 24px;
+}
+
+.lp-signin-dialog.is-session-limit .lp-signin-story-copy {
+  width: 100%;
+  padding-block: 26px 18px;
+}
+
+.lp-signin-dialog.is-session-limit .lp-signin-story h2 {
+  max-width: none;
+  font-size: clamp(16px, 2.3vw, 22px);
+  white-space: nowrap;
+}
+
+.lp-signin-dialog.is-session-limit .lp-signin-story-copy > p {
+  margin-top: 14px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.lp-signin-dialog.is-session-limit .lp-signin-story ul {
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.lp-signin-dialog.is-session-limit .lp-signin-security {
+  padding-top: 15px;
+}
+
+.lp-signin-dialog.is-session-limit .lp-signin-form {
+  overflow: visible;
 }
 
 .lp-signin-story {
@@ -22009,26 +22052,17 @@ html[data-ask-nest-open="true"] {
 
 .signin-takeover-panel {
   width: 100%;
-  padding: 54px 48px 40px;
-}
-
-.signin-takeover-icon {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 24px;
-  border: 1px solid color-mix(in srgb, var(--brand-500) 24%, var(--border-subtle));
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--brand-50) 70%, var(--bg-elevated));
-  color: var(--brand-600);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 22px 32px 18px;
 }
 
 .signin-takeover-panel .signin-title {
-  max-width: 13ch;
-  margin-bottom: 11px;
-  font-size: 30px;
+  max-width: none;
+  margin: 0 44px 0 0;
+  font-size: 24px;
   line-height: 1.06;
   text-align: left;
 }
@@ -22036,42 +22070,13 @@ html[data-ask-nest-open="true"] {
 .signin-takeover-panel .signin-subtitle {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.45;
   text-align: left;
 }
 
-.signin-takeover-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  margin-top: 26px;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--brand-500) 22%, var(--border-subtle));
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--brand-50) 44%, var(--bg-elevated));
-  color: var(--brand-700);
-}
-
-.signin-takeover-note > svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
-}
-
-.signin-takeover-note p {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.signin-takeover-note span {
-  color: var(--text-secondary);
-}
-
 .signin-session-status {
-  margin: 16px 0 0;
+  margin: 9px 0 0;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
@@ -22080,31 +22085,67 @@ html[data-ask-nest-open="true"] {
 .signin-session-list {
   min-width: 0;
   display: grid;
-  gap: 7px;
-  max-height: 278px;
-  margin: 18px 0 0;
-  padding: 0 4px 0 0;
+  gap: 3px;
+  max-height: none;
+  margin: 9px 0 0;
+  padding: 0;
   border: 0;
-  overflow-y: auto;
+  overflow: visible;
 }
 
-.signin-session-list legend {
-  margin-bottom: 8px;
+.signin-session-toolbar {
+  min-width: 0;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.signin-session-toolbar > span {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
+.signin-session-select-all {
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 0 5px;
+  border: 0;
+  background: transparent;
+  color: var(--brand-600);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.signin-session-select-all:hover {
+  text-decoration: underline;
+}
+
+.signin-session-select-all:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+
+.signin-session-select-all:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .signin-session-option {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  padding: 11px 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--bg-elevated);
   cursor: pointer;
   transition: border-color 150ms ease, background 150ms ease;
@@ -22117,14 +22158,14 @@ html[data-ask-nest-open="true"] {
 }
 
 .signin-session-option > input {
-  margin: 3px 0 0;
+  margin: 0;
   accent-color: var(--brand-600);
 }
 
 .signin-session-option > span {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .signin-session-option strong,
@@ -22134,13 +22175,13 @@ html[data-ask-nest-open="true"] {
 
 .signin-session-option strong {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .signin-session-option small {
   color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 9.5px;
+  line-height: 1.2;
 }
 
 .signin-takeover-panel .signin-error {
@@ -22151,9 +22192,9 @@ html[data-ask-nest-open="true"] {
 
 .signin-takeover-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 9px;
-  margin-top: 24px;
+  margin-top: 10px;
 }
 
 .signin-takeover-actions button {
@@ -22161,20 +22202,15 @@ html[data-ask-nest-open="true"] {
   min-width: 0;
   cursor: pointer;
   font-family: var(--font-body);
+  min-height: 42px;
+  padding-inline: 14px;
+  font-size: 13px;
 }
 
 .signin-takeover-actions button:disabled {
   cursor: wait;
   opacity: 0.64;
   transform: none;
-}
-
-.signin-takeover-help {
-  margin: 14px 0 0;
-  color: var(--text-disabled);
-  font-size: 10px;
-  line-height: 1.5;
-  text-align: center;
 }
 
 @keyframes lp-signin-backdrop-in {
@@ -22207,6 +22243,14 @@ html[data-ask-nest-open="true"] {
     border-radius: 25px;
   }
 
+  .lp-signin-overlay.is-session-limit {
+    place-items: center;
+  }
+
+  .lp-signin-dialog.is-session-limit {
+    width: 100%;
+  }
+
   .lp-signin-story {
     min-height: 190px;
     padding: 24px;
@@ -22225,6 +22269,36 @@ html[data-ask-nest-open="true"] {
   .lp-signin-story ul,
   .lp-signin-security {
     display: none;
+  }
+
+  .lp-signin-dialog.is-session-limit .lp-signin-story {
+    min-height: 104px;
+    padding: 12px 52px 11px 16px;
+  }
+
+  .lp-signin-dialog.is-session-limit .lp-signin-story-brand,
+  .lp-signin-dialog.is-session-limit .lp-signin-story-eyebrow,
+  .lp-signin-dialog.is-session-limit .lp-signin-story ul,
+  .lp-signin-dialog.is-session-limit .lp-signin-security {
+    display: none;
+  }
+
+  .lp-signin-dialog.is-session-limit .lp-signin-story-copy {
+    margin: auto 0;
+    padding: 0;
+  }
+
+  .lp-signin-dialog.is-session-limit .lp-signin-story-copy > p {
+    display: block;
+    max-width: 42ch;
+    margin: 5px 0 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 10.5px;
+    line-height: 1.3;
+  }
+
+  .lp-signin-dialog.is-session-limit .lp-signin-story h2 {
+    font-size: 21px;
   }
 
   .lp-signin-form {
@@ -22256,7 +22330,7 @@ html[data-ask-nest-open="true"] {
   }
 
   .signin-takeover-panel {
-    padding: 32px 28px calc(26px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 18px calc(13px + env(safe-area-inset-bottom, 0px));
   }
 
   .signin-card-embedded .signin-title {
@@ -22273,6 +22347,24 @@ html[data-ask-nest-open="true"] {
   .lp-signin-dialog {
     max-height: calc(100dvh - max(6px, env(safe-area-inset-top, 0px)));
     border-radius: 24px 24px 19px 19px;
+  }
+
+  .lp-signin-overlay.is-session-limit {
+    align-items: center;
+    padding: max(8px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .lp-signin-dialog.is-session-limit {
+    border-radius: 22px;
+  }
+
+  .lp-signin-dialog.is-session-limit .lp-signin-story {
+    min-height: 102px;
+    padding: 11px 48px 10px 14px;
+  }
+
+  .lp-signin-dialog.is-session-limit .lp-signin-story h2 {
+    font-size: clamp(15px, 4.5vw, 20px);
   }
 
   .lp-signin-story {
@@ -22308,25 +22400,28 @@ html[data-ask-nest-open="true"] {
   }
 
   .signin-takeover-panel {
-    padding: 27px 20px calc(22px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .signin-takeover-icon {
-    width: 42px;
-    height: 42px;
-    margin-bottom: 19px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
   .signin-takeover-panel .signin-title {
-    font-size: 26px;
+    margin-right: 40px;
+    font-size: 20px;
   }
 
-  .signin-takeover-actions {
-    grid-template-columns: 1fr;
+  .lp-signin-dialog.is-session-limit .signin-takeover-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .signin-session-list {
-    max-height: 242px;
+    max-height: none;
+  }
+
+  .signin-session-option {
+    padding: 4px 7px;
+  }
+
+  .signin-takeover-actions button {
+    min-height: 40px;
   }
 
   .signin-card-embedded .signin-divider-labelled {
@@ -22335,6 +22430,42 @@ html[data-ask-nest-open="true"] {
 
   .signin-card-embedded .signin-provider-btn {
     min-height: 52px;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 680px) {
+  .signin-takeover-panel {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .signin-takeover-panel .signin-title {
+    margin-bottom: 0;
+    font-size: 19px;
+  }
+
+  .signin-takeover-panel .signin-subtitle {
+    font-size: 12px;
+  }
+
+  .signin-session-list {
+    gap: 2px;
+    margin-top: 7px;
+  }
+
+  .signin-session-list legend {
+    margin-bottom: 4px;
+  }
+
+  .signin-session-option {
+    padding: 3px 7px;
+  }
+
+  .signin-takeover-actions {
+    margin-top: 7px;
+  }
+
+  .signin-takeover-actions button {
+    min-height: 38px;
   }
 }
 
