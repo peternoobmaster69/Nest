@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, Check, CreditCard, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { workspaceFetch } from "@/lib/workspace-client";
-import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 type NotificationItem = {
   id: string;
@@ -172,7 +171,7 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
                 return notification.href ? (
                   <Link
                     key={notification.id}
-                    href={workspaceId ? buildWorkspacePath(workspaceId, notification.href) : notification.href}
+                    href={notification.href}
                     prefetch={false}
                     className={`notification-item${notification.readAt ? "" : " unread"}`}
                     onClick={onOpen}

@@ -392,6 +392,18 @@ test("modal action bars remain outside independently scrolling content", async (
   assert.match(receivables, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body recv-modal-body">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
 });
 
+test("Create Receivable uses its compact responsive modal layout", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /cct-modal cct-receivable-modal/);
+  assert.match(component, /cct-form-grid cct-receivable-grid/);
+  assert.match(styles, /\.cct-receivable-grid\s*\{[^}]*gap:\s*10px 12px[^}]*padding:\s*14px 16px/s);
+  assert.match(styles, /@media \(min-width: 769px\)[\s\S]*?\.cct-receivable-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /@media \(min-width: 360px\) and \(max-width: 768px\)[\s\S]*?\.cct-receivable-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.cct-receivable-title\s*\{[^}]*grid-column:\s*span 4[\s\S]*?\.cct-receivable-amount\s*\{[^}]*grid-column:\s*span 2/);
+});
+
 test("credit transaction card selection uses a compact mobile-only dropdown", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");

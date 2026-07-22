@@ -54,6 +54,15 @@ test("Phase 4 preflight distinguishes repairable legacy aliases from blockers", 
   assert.doesNotMatch(preflight, /Transaction\][\s\S]{0,180}externalRef[\s\S]{0,180}HAVING COUNT/);
 });
 
+test("cross-workspace receivables keep source aliases out of local composite foreign keys", async () => {
+  const route = await read("app/api/credit-transactions/[id]/accounting/route.ts");
+  assert.match(route, /accountId: sourceAccount\?\.workspaceId === workspaceId \? sourceAccount\.id : null/);
+  assert.match(route, /budgetId: sourceAccount\?\.workspaceId === workspaceId \? sourceBudget\?\.id : null/);
+  assert.match(route, /sourceWorkspaceId: sourceAccount\?\.workspaceId/);
+  assert.match(route, /sourceAccountId: sourceAccount\?\.id/);
+  assert.match(route, /sourceBudgetId: sourceBudget\?\.id/);
+});
+
 test("the consolidated retention route covers security and operational records", async () => {
   const retention = await read("lib/data-retention.ts");
   const route = await read("app/api/cron/ask-nest-retention/route.ts");

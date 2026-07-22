@@ -18726,6 +18726,115 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   transform: scale(0.97);
 }
 
+/* Keep the Create Receivable workflow dense without changing other finance modals. */
+.cct-receivable-grid {
+  gap: 10px 12px;
+  padding: 14px 16px;
+}
+
+.cct-receivable-grid .cct-span-2 {
+  grid-column: 1 / -1;
+}
+
+.cct-receivable-grid .form-group {
+  gap: 2px;
+  min-width: 0;
+}
+
+.cct-receivable-grid .label {
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+.cct-receivable-grid .cct-cross-workspace-toggle {
+  flex-direction: row;
+  align-items: center;
+  min-height: 30px;
+}
+
+.cct-receivable-reference {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+}
+
+.cct-receivable-reference .cct-reference-input {
+  height: 34px;
+  min-height: 34px;
+  padding: 6px 10px;
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 769px) {
+  body .cct-modal.cct-receivable-modal[class] {
+    width: min(100%, 580px) !important;
+    max-width: 580px !important;
+  }
+
+  .cct-receivable-modal .cct-modal-header {
+    min-height: 54px;
+    padding: 10px 16px !important;
+  }
+
+  .cct-receivable-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cct-receivable-title {
+    grid-column: span 2;
+  }
+
+  .cct-receivable-form .cct-modal-actions {
+    padding: 10px 16px !important;
+  }
+}
+
+@media (min-width: 360px) and (max-width: 768px) {
+  .cct-receivable-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .cct-receivable-title {
+    grid-column: span 4;
+  }
+
+  .cct-receivable-amount {
+    grid-column: span 2;
+  }
+
+  .cct-receivable-date,
+  .cct-receivable-txn-date,
+  .cct-receivable-source-workspace,
+  .cct-receivable-source-account {
+    grid-column: span 3;
+  }
+
+  .cct-receivable-grid .cct-cross-workspace-toggle,
+  .cct-receivable-source-budget {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .cct-receivable-grid {
+    gap: 8px 10px;
+    padding: 10px 12px;
+  }
+
+  .cct-receivable-modal .cct-modal-header {
+    min-height: 52px;
+    padding: max(6px, env(safe-area-inset-top, 0px)) 12px 6px !important;
+  }
+
+  .cct-receivable-form .cct-modal-actions {
+    padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
 /* ============================================================
    INSTALLABILITY AND DEVICE INTEGRATION
    ============================================================ */

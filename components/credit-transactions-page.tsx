@@ -2568,36 +2568,36 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {isReceivableModalOpen && receivableTarget && (
         <div className="cct-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeReceivableModal)}>
-          <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="cct-modal cct-receivable-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Create Receivable</h3>
               <ModalCloseButton onClick={closeReceivableModal} label="Close Create Receivable" />
             </div>
             <form className="cct-modal-form cct-receivable-form" onSubmit={onSubmitReceivable}>
-              <div className="cct-form-grid">
-                <div className="form-group cct-span-2">
+              <div className="cct-form-grid cct-receivable-grid">
+                <div className="form-group cct-span-2 cct-receivable-reference">
                   <label className="label">Reference</label>
                   <div className="input cct-reference-input">
                     {receivableTarget.subject}
                   </div>
                 </div>
-                <div className="form-group cct-span-2">
+                <div className="form-group cct-receivable-title">
                   <label className="label">Title</label>
                   <input className="input" type="text" value={receivableTitle} onChange={(e) => setReceivableTitle(e.target.value)} required />
                 </div>
-                <div className="form-group">
-                  <label className="label">Receivable Date</label>
-                  <input className="input" type="date" value={receivableDate} onChange={(e) => setReceivableDate(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="label">Txn Date</label>
-                  <input className="input" type="date" value={receivableTxnDate} onChange={(e) => setReceivableTxnDate(e.target.value)} />
-                </div>
-                <div className="form-group">
+                <div className="form-group cct-receivable-amount">
                   <label className="label">Amount ($)</label>
                   <NumericCalculatorInput step="0.01" min="0.01" value={receivableAmount} onValueChange={setReceivableAmount} required />
                 </div>
-                <label className="form-group cct-span-2 cct-cross-workspace-toggle">
+                <div className="form-group cct-receivable-date">
+                  <label className="label">Receivable Date</label>
+                  <input className="input" type="date" value={receivableDate} onChange={(e) => setReceivableDate(e.target.value)} required />
+                </div>
+                <div className="form-group cct-receivable-txn-date">
+                  <label className="label">Txn Date</label>
+                  <input className="input" type="date" value={receivableTxnDate} onChange={(e) => setReceivableTxnDate(e.target.value)} />
+                </div>
+                <label className="form-group cct-cross-workspace-toggle">
                   <input
                     type="checkbox"
                     checked={useCrossWorkspaceReceivableSource}
@@ -2615,7 +2615,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </label>
                 {useCrossWorkspaceReceivableSource && (
                   <>
-                    <div className="form-group">
+                    <div className="form-group cct-receivable-source-workspace">
                       <label className="label">Deduction Workspace</label>
                       <select
                         className="input"
@@ -2635,7 +2635,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                         ))}
                       </select>
                     </div>
-                    <div className="form-group">
+                    <div className="form-group cct-receivable-source-account">
                       <label className="label">Bank Account</label>
                       <select
                         className="input"
@@ -2658,7 +2658,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                         ))}
                       </select>
                     </div>
-                    <div className="form-group cct-span-2">
+                    <div className="form-group cct-receivable-source-budget">
                       <label className="label">Sub Account</label>
                       <select
                         className="input"
