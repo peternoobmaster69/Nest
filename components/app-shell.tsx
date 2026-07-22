@@ -451,7 +451,7 @@ export function AppShell({
                 <Layers3 size={20} aria-hidden="true" />
                 <span>
                   <strong>{mobileWorkspaceName || "Workspace"}</strong>
-                  <small>Use this workspace by default</small>
+                  <small>Switch workspace in this tab</small>
                 </span>
                 <ChevronDown className="mobile-more-workspace-chevron" size={17} aria-hidden="true" />
               </button>

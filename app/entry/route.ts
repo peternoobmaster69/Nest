@@ -1,4 +1,3 @@
-import { setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { normalizeInternalAppPath } from "@/lib/workspace-entry";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
@@ -16,8 +15,7 @@ export async function GET(request: Request) {
       ? (await requireWorkspaceAccess(workspaceId)).workspaceId
       : (await requireWorkspaceAccess()).workspaceId;
     const scopedDestination = buildWorkspacePath(selectedWorkspaceId, destination);
-    const response = NextResponse.redirect(new URL(scopedDestination, requestUrl.origin));
-    return setActiveWorkspaceCookie(response, selectedWorkspaceId);
+    return NextResponse.redirect(new URL(scopedDestination, requestUrl.origin));
   } catch (error) {
     if (error instanceof ApiAuthError && error.status === 401) {
       const signInUrl = new URL("/login", requestUrl.origin);

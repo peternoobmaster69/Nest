@@ -4,10 +4,34 @@ type UserIdentity = {
   id: string;
   email?: string | null;
   name?: string | null;
-  activeWorkspaceId?: string | null;
 };
 
 export async function ensureUserWithDefaultWorkspace(user: UserIdentity) {
+  const storedUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { activeWorkspaceId: true },
+  });
+
+  const activeMembership = storedUser?.activeWorkspaceId
+    ? await prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: storedUser.activeWorkspaceId,
+            userId: user.id,
+          },
+        },
+        include: {
+          workspace: {
+            select: { id: true, name: true },
+          },
+        },
+      })
+    : null;
+
+  if (activeMembership) {
+    return activeMembership.workspace;
+  }
+
   const existingMembership = await prisma.workspaceMember.findFirst({
     where: { userId: user.id },
     orderBy: { createdAt: "asc" },
@@ -19,12 +43,10 @@ export async function ensureUserWithDefaultWorkspace(user: UserIdentity) {
   });
 
   if (existingMembership?.workspaceId) {
-    if (user.activeWorkspaceId !== existingMembership.workspaceId) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { activeWorkspaceId: existingMembership.workspaceId },
-      });
-    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { activeWorkspaceId: existingMembership.workspaceId },
+    });
     return existingMembership.workspace;
   }
 

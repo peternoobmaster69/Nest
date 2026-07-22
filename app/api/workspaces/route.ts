@@ -1,4 +1,3 @@
-import { setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireSessionUserId } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -71,8 +70,7 @@ export async function POST(request: Request) {
       },
     });
 
-    const response = NextResponse.json(workspace, { status: 201 });
-    return setActiveWorkspaceCookie(response, workspace.id);
+    return NextResponse.json(workspace, { status: 201 });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

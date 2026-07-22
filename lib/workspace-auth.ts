@@ -87,27 +87,6 @@ export async function requireWorkspaceAccess(
     throw new ApiAuthError(401, "Unauthorized");
   }
 
-  if (user.activeWorkspaceId) {
-    const activeMembership = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId: user.activeWorkspaceId,
-          userId,
-        },
-      },
-      select: { workspaceId: true, role: true },
-    });
-    if (activeMembership) {
-      const role = normalizeWorkspaceRole(activeMembership.role);
-      assertMinimumRole(role, minimumRole);
-      return {
-        userId,
-        workspaceId: activeMembership.workspaceId,
-        role,
-      };
-    }
-  }
-
   const cookieWorkspaceId = await getActiveWorkspaceCookie();
   if (cookieWorkspaceId) {
     const cookieMembership = await prisma.workspaceMember.findUnique({
@@ -125,6 +104,27 @@ export async function requireWorkspaceAccess(
       return {
         userId,
         workspaceId: cookieMembership.workspaceId,
+        role,
+      };
+    }
+  }
+
+  if (user.activeWorkspaceId) {
+    const activeMembership = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: user.activeWorkspaceId,
+          userId,
+        },
+      },
+      select: { workspaceId: true, role: true },
+    });
+    if (activeMembership) {
+      const role = normalizeWorkspaceRole(activeMembership.role);
+      assertMinimumRole(role, minimumRole);
+      return {
+        userId,
+        workspaceId: activeMembership.workspaceId,
         role,
       };
     }
