@@ -2,7 +2,7 @@ import type { DefaultSession } from "next-auth";
 
 declare module "next-auth" {
   interface Session {
-    takeoverRequired?: boolean;
+    sessionLimitRequired?: boolean;
     user?: DefaultSession["user"] & {
       id: string;
       authenticatedAt: number;
@@ -16,7 +16,7 @@ declare module "next-auth/jwt" {
     authenticatedAt?: number;
     sessionVersion?: number;
     sessionId?: string;
-    takeoverRequired?: boolean;
+    sessionLimitRequired?: boolean;
     revoked?: boolean;
   }
 }

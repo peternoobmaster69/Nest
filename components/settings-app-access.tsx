@@ -2,7 +2,7 @@
 
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
@@ -11,6 +11,8 @@ import {
   hasInstallPrompt,
   subscribeInstallPrompt,
 } from "@/lib/install-prompt";
+import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
+import { describeClientDevice } from "@/lib/session-device";
 
 type Passkey = {
   id: string;
@@ -32,10 +34,12 @@ type AuthProvider = { id: string; name: string; type: string };
 type LoginSession = {
   sessionId: string;
   provider: string | null;
+  deviceName: string;
   ipAddress: string | null;
   countryCode: string | null;
   signedInAt: string;
-  active: boolean;
+  lastSeenAt: string;
+  current: boolean;
 };
 
 type RegistrationOptions = Parameters<typeof startRegistration>[0]["optionsJSON"];
@@ -60,31 +64,12 @@ function isStandalone() {
 }
 
 function suggestedPasskeyName() {
-  const userAgent = navigator.userAgent;
-  const isIPad = /iPad/.test(userAgent) || (/Macintosh/.test(userAgent) && navigator.maxTouchPoints > 1);
-  const device = /iPhone/.test(userAgent)
-    ? "iPhone"
-    : isIPad
-      ? "iPad"
-      : /Android/.test(userAgent)
-        ? "Android device"
-        : /Windows/.test(userAgent)
-          ? "Windows PC"
-          : /Macintosh/.test(userAgent)
-            ? "Mac"
-            : /Linux/.test(userAgent)
-              ? "Linux device"
-              : "This device";
-  const browser = /Edg\//.test(userAgent)
-    ? "Edge"
-    : /Firefox\//.test(userAgent)
-      ? "Firefox"
-      : /Chrome\//.test(userAgent) || /CriOS\//.test(userAgent)
-        ? "Chrome"
-        : /Safari\//.test(userAgent)
-          ? "Safari"
-          : "Browser";
-  return `${device} · ${browser}`;
+  return describeClientDevice(
+    navigator.userAgent,
+    navigator.maxTouchPoints,
+    window.screen.width,
+    window.screen.height,
+  );
 }
 
 function passkeyMetadata(passkey: Passkey) {
@@ -112,11 +97,11 @@ function loginSessionDetails(session: LoginSession) {
       ? "Passkey"
       : `${session.provider.charAt(0).toUpperCase()}${session.provider.slice(1)}`
     : "Sign-in provider unavailable";
-  const signedInAt = new Date(session.signedInAt).toLocaleString("en-SG", {
+  const lastSeenAt = new Date(session.lastSeenAt).toLocaleString("en-SG", {
     dateStyle: "medium",
     timeStyle: "short",
   });
-  return `${provider} · Signed in ${signedInAt}`;
+  return `${provider} · Last active ${lastSeenAt}`;
 }
 
 export function SettingsAppAccess() {
@@ -134,7 +119,8 @@ export function SettingsAppAccess() {
       passkeys: "PublicKeyCredential" in window,
       push: "Notification" in window && "serviceWorker" in navigator && "PushManager" in window,
       standalone: isStandalone(),
-      ios: /iPad|iPhone|iPod/.test(navigator.userAgent),
+      ios: /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1),
     });
   }, []);
 
@@ -161,6 +147,26 @@ export function SettingsAppAccess() {
   const loginSessions = useQuery({
     queryKey: ["settings-login-sessions"],
     queryFn: () => jsonRequest<{ sessions: LoginSession[] }>("/api/auth/sessions"),
+  });
+
+  const revokeSession = useMutation({
+    mutationFn: async (session: LoginSession) => {
+      const result = await jsonRequest<{ revoked: boolean; current: boolean }>("/api/auth/sessions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.sessionId }),
+      });
+      return { ...result, session };
+    },
+    onSuccess: async ({ current, session }) => {
+      if (current) {
+        await signOut({ callbackUrl: "/" });
+        return;
+      }
+      setMessage(`${session.deviceName} was signed out.`);
+      await queryClient.invalidateQueries({ queryKey: ["settings-login-sessions"] });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "The device could not be signed out."),
   });
 
   const installApp = useMutation({
@@ -225,6 +231,7 @@ export function SettingsAppAccess() {
       setEditingPasskeyId(null);
       await queryClient.invalidateQueries({ queryKey: ["settings-passkeys"] });
     },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey could not be removed."),
   });
 
   const openPasskeyNameForm = () => {
@@ -461,28 +468,41 @@ export function SettingsAppAccess() {
       <div className="card settings-card-block">
         <div className="settings-row">
           <div className="settings-item-copy">
-            <div className="settings-section-title">Recent sign-ins</div>
+            <div className="settings-section-title">Active sessions</div>
             <div className="settings-section-copy">
-              Review the country and IP address for your five most recent sign-ins.
+              Stay signed in on up to five devices. Sign out any device you no longer use or recognize.
             </div>
           </div>
         </div>
-        {loginSessions.isLoading ? <div className="settings-muted-message settings-message-spaced">Loading sign-ins...</div> : null}
-        {loginSessions.isError ? <div className="settings-message settings-message-spaced">Sign-in history could not be loaded.</div> : null}
+        {loginSessions.isLoading ? <div className="settings-muted-message settings-message-spaced">Loading active sessions...</div> : null}
+        {loginSessions.isError ? <div className="settings-message settings-message-spaced">Active sessions could not be loaded.</div> : null}
         {loginSessions.data?.sessions.length ? (
           <div className="settings-passkey-list">
             {loginSessions.data.sessions.map((session) => (
               <div className="settings-passkey-item" key={session.sessionId}>
                 <div className="settings-passkey-copy">
-                  <strong>{loginSessionLocation(session)}</strong>
+                  <strong>{session.deviceName}</strong>
+                  <span>{loginSessionLocation(session)}</span>
                   <span>{loginSessionDetails(session)}</span>
                 </div>
-                {session.active ? <span className="settings-status-pill is-enabled">Current</span> : null}
+                <div className="settings-session-actions">
+                  {session.current ? <span className="settings-status-pill is-enabled">Current</span> : null}
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    type="button"
+                    onClick={() => revokeSession.mutate(session)}
+                    disabled={revokeSession.isPending}
+                  >
+                    {revokeSession.isPending && revokeSession.variables?.sessionId === session.sessionId
+                      ? "Signing out..."
+                      : "Sign out"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         ) : !loginSessions.isLoading && !loginSessions.isError ? (
-          <div className="settings-muted-message settings-message-spaced">No sign-in history has been recorded yet.</div>
+          <div className="settings-muted-message settings-message-spaced">No active sessions were found.</div>
         ) : null}
       </div>
 
@@ -521,7 +541,7 @@ export function SettingsAppAccess() {
         </div>
       </div>
 
-      {message ? <div className="settings-access-message" role="status">{message}</div> : null}
+      <ActionableAuthenticationMessage message={message} className="settings-access-message" />
     </>
   );
 }

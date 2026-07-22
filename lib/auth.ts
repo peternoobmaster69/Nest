@@ -10,42 +10,16 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { getAuthRequestMetadata } from "@/lib/auth-request-metadata";
 import { prisma } from "@/lib/prisma";
 import { consumePasskeyLoginTicket } from "@/lib/passkeys";
+import { describeSessionDevice } from "@/lib/session-device";
 import {
   ACTIVE_SESSION_RENEWAL_WINDOW_MS,
+  ACTIVE_SESSION_TOUCH_INTERVAL_MS,
   AUTH_SESSION_MAX_AGE_SECONDS,
   getActiveSessionExpiry,
+  getPendingSessionExpiry,
+  MAX_ACTIVE_SESSIONS,
 } from "@/lib/session-policy";
 import { ensureUserWithDefaultWorkspace } from "@/lib/workspace-bootstrap";
-
-async function claimSessionIfAvailable({
-  userId,
-  sessionId,
-  sessionVersion,
-  now,
-}: {
-  userId: string;
-  sessionId: string;
-  sessionVersion: number;
-  now: Date;
-}) {
-  const claimed = await prisma.user.updateMany({
-    where: {
-      id: userId,
-      sessionVersion,
-      OR: [
-        { activeSessionId: null },
-        { activeSessionExpiresAt: null },
-        { activeSessionExpiresAt: { lte: now } },
-      ],
-    },
-    data: {
-      activeSessionId: sessionId,
-      activeSessionExpiresAt: getActiveSessionExpiry(now),
-      lastSignedInAt: now,
-    },
-  });
-  return claimed.count === 1;
-}
 
 async function initializeSessionToken(
   token: JWT,
@@ -53,43 +27,60 @@ async function initializeSessionToken(
   login?: { provider: string | null },
 ) {
   const now = new Date();
-  const storedUser = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      sessionVersion: true,
-    },
-  });
-
+  const sessionId = randomUUID();
   token.id = userId;
-  token.sessionId = randomUUID();
+  token.sessionId = sessionId;
   token.authenticatedAt ??= Math.floor(now.getTime() / 1000);
-  token.sessionVersion = storedUser?.sessionVersion ?? 0;
-  token.revoked = !storedUser;
-  token.takeoverRequired = false;
+  token.revoked = false;
+  token.sessionLimitRequired = false;
 
-  if (!storedUser) return token;
+  const requestMetadata = getAuthRequestMetadata();
+  const result = await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw<Array<{ id: string }>>`
+      SELECT [id] FROM [dbo].[User] WITH (UPDLOCK, HOLDLOCK) WHERE [id] = ${userId}
+    `;
+    const storedUser = await transaction.user.findUnique({
+      where: { id: userId },
+      select: { sessionVersion: true },
+    });
+    if (!storedUser) return null;
 
-  if (login) {
-    const requestMetadata = getAuthRequestMetadata();
-    await prisma.loginSession.create({
-      data: {
-        sessionId: token.sessionId,
+    await transaction.loginSession.updateMany({
+      where: {
         userId,
-        provider: login.provider,
+        status: { in: ["ACTIVE", "PENDING"] },
+        expiresAt: { lte: now },
+      },
+      data: { status: "REVOKED", revokedAt: now },
+    });
+    const activeSessionCount = await transaction.loginSession.count({
+      where: { userId, status: "ACTIVE", expiresAt: { gt: now } },
+    });
+    const status = activeSessionCount < MAX_ACTIVE_SESSIONS ? "ACTIVE" : "PENDING";
+
+    await transaction.loginSession.create({
+      data: {
+        sessionId,
+        userId,
+        provider: login?.provider ?? null,
+        deviceName: describeSessionDevice(requestMetadata.userAgent),
         ipAddress: requestMetadata.ipAddress,
         countryCode: requestMetadata.countryCode,
+        status,
         signedInAt: now,
+        lastSeenAt: now,
+        expiresAt: status === "ACTIVE" ? getActiveSessionExpiry(now) : getPendingSessionExpiry(now),
       },
     });
-  }
-
-  const claimed = await claimSessionIfAvailable({
-    userId,
-    sessionId: token.sessionId,
-    sessionVersion: storedUser.sessionVersion,
-    now,
+    if (login) {
+      await transaction.user.update({ where: { id: userId }, data: { lastSignedInAt: now } });
+    }
+    return { sessionVersion: storedUser.sessionVersion, status };
   });
-  token.takeoverRequired = !claimed;
+
+  token.sessionVersion = result?.sessionVersion ?? 0;
+  token.revoked = !result;
+  token.sessionLimitRequired = result?.status === "PENDING";
   return token;
 }
 
@@ -161,56 +152,62 @@ export const authOptions: NextAuthOptions = {
       if (!token.sessionId) return initializeSessionToken(token, token.id);
 
       const now = new Date();
-      const storedUser = await prisma.user.findUnique({
-        where: { id: token.id },
-        select: {
-          sessionVersion: true,
-          activeSessionId: true,
-          activeSessionExpiresAt: true,
-        },
-      });
-      if (!storedUser || storedUser.sessionVersion !== token.sessionVersion) {
+      const [storedUser, storedSession] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: token.id },
+          select: { sessionVersion: true },
+        }),
+        prisma.loginSession.findUnique({
+          where: { sessionId: token.sessionId },
+          select: { userId: true, status: true, expiresAt: true, lastSeenAt: true },
+        }),
+      ]);
+      if (
+        !storedUser ||
+        storedUser.sessionVersion !== token.sessionVersion ||
+        !storedSession ||
+        storedSession.userId !== token.id
+      ) {
         token.revoked = true;
-        token.takeoverRequired = false;
+        token.sessionLimitRequired = false;
         return token;
       }
 
-      if (token.takeoverRequired) {
-        if (storedUser.activeSessionId === token.sessionId) {
-          token.takeoverRequired = false;
-        } else if (
-          !storedUser.activeSessionId ||
-          !storedUser.activeSessionExpiresAt ||
-          storedUser.activeSessionExpiresAt <= now
-        ) {
-          const claimed = await claimSessionIfAvailable({
-            userId: token.id,
-            sessionId: token.sessionId,
-            sessionVersion: storedUser.sessionVersion,
-            now,
+      if (storedSession.expiresAt <= now || storedSession.status === "REVOKED") {
+        token.revoked = true;
+        token.sessionLimitRequired = false;
+        if (storedSession.status !== "REVOKED") {
+          await prisma.loginSession.updateMany({
+            where: { sessionId: token.sessionId, status: storedSession.status },
+            data: { status: "REVOKED", revokedAt: now },
           });
-          token.takeoverRequired = !claimed;
         }
-        token.revoked = false;
         return token;
       }
 
-      token.revoked = storedUser.activeSessionId !== token.sessionId;
+      if (storedSession.status === "PENDING") {
+        token.revoked = false;
+        token.sessionLimitRequired = true;
+        return token;
+      }
+
+      token.revoked = storedSession.status !== "ACTIVE";
+      token.sessionLimitRequired = false;
       if (
         !token.revoked &&
-        (!storedUser.activeSessionExpiresAt ||
-          storedUser.activeSessionExpiresAt.getTime() - now.getTime() <= ACTIVE_SESSION_RENEWAL_WINDOW_MS)
+        (storedSession.expiresAt.getTime() - now.getTime() <= ACTIVE_SESSION_RENEWAL_WINDOW_MS ||
+          now.getTime() - storedSession.lastSeenAt.getTime() >= ACTIVE_SESSION_TOUCH_INTERVAL_MS)
       ) {
-        await prisma.user.updateMany({
-          where: { id: token.id, activeSessionId: token.sessionId },
-          data: { activeSessionExpiresAt: getActiveSessionExpiry(now) },
+        await prisma.loginSession.updateMany({
+          where: { sessionId: token.sessionId, userId: token.id, status: "ACTIVE" },
+          data: { lastSeenAt: now, expiresAt: getActiveSessionExpiry(now) },
         });
       }
       return token;
     },
     async session({ session, token, user }) {
-      session.takeoverRequired = Boolean(token.takeoverRequired && !token.revoked);
-      if (session.user && !token.revoked && !token.takeoverRequired) {
+      session.sessionLimitRequired = Boolean(token.sessionLimitRequired && !token.revoked);
+      if (session.user && !token.revoked && !token.sessionLimitRequired) {
         session.user.id = token.id || token.sub || user?.id || "";
         session.user.authenticatedAt = token.authenticatedAt ?? 0;
       } else {
@@ -265,9 +262,9 @@ export const authOptions: NextAuthOptions = {
     },
     async signOut({ token }) {
       if (!token.id || !token.sessionId) return;
-      await prisma.user.updateMany({
-        where: { id: token.id, activeSessionId: token.sessionId },
-        data: { activeSessionId: null, activeSessionExpiresAt: null },
+      await prisma.loginSession.updateMany({
+        where: { userId: token.id, sessionId: token.sessionId, status: { in: ["ACTIVE", "PENDING"] } },
+        data: { status: "REVOKED", revokedAt: new Date() },
       });
     },
   },

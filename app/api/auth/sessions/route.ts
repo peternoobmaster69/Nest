@@ -1,38 +1,39 @@
-import { NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
+import { ApiRequestError, assertSameOriginRequest } from "@/lib/api-security";
 import { prisma } from "@/lib/prisma";
+import { MAX_ACTIVE_SESSIONS } from "@/lib/session-policy";
 import {
   ApiAuthError,
   requireRecentAuthentication,
   requireSessionUserId,
 } from "@/lib/workspace-auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const userId = await requireSessionUserId();
-    const [user, sessions] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { activeSessionId: true },
-      }),
-      prisma.loginSession.findMany({
-        where: { userId },
-        orderBy: { signedInAt: "desc" },
-        take: 5,
-        select: {
-          sessionId: true,
-          provider: true,
-          ipAddress: true,
-          countryCode: true,
-          signedInAt: true,
-        },
-      }),
-    ]);
+    const token = await getToken({ req: request });
+    const sessions = await prisma.loginSession.findMany({
+      where: { userId, status: "ACTIVE", expiresAt: { gt: new Date() } },
+      orderBy: { lastSeenAt: "desc" },
+      take: MAX_ACTIVE_SESSIONS,
+      select: {
+        sessionId: true,
+        provider: true,
+        deviceName: true,
+        ipAddress: true,
+        countryCode: true,
+        signedInAt: true,
+        lastSeenAt: true,
+      },
+    });
     return NextResponse.json(
       {
         sessions: sessions.map((session) => ({
           ...session,
-          active: session.sessionId === user?.activeSessionId,
+          current: session.sessionId === token?.sessionId,
         })),
+        maxActiveSessions: MAX_ACTIVE_SESSIONS,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -41,45 +42,61 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error(error);
-    return NextResponse.json({ error: "Unable to load login sessions" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to load active sessions" }, { status: 500 });
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
-    const userId = await requireRecentAuthentication();
-    const memberships = await prisma.workspaceMember.findMany({
-      where: { userId },
-      select: { workspaceId: true },
-    });
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: {
-          sessionVersion: { increment: 1 },
-          activeSessionId: null,
-          activeSessionExpiresAt: null,
-        },
-      }),
-      ...(memberships.length
-        ? [
-            prisma.workspaceAuditLog.createMany({
-              data: memberships.map((membership) => ({
-                workspaceId: membership.workspaceId,
-                actorUserId: userId,
-                action: "SESSIONS_REVOKED",
-                details: "All account sessions revoked.",
-              })),
-            }),
-          ]
-        : []),
+    assertSameOriginRequest(request);
+    const [userId, token] = await Promise.all([
+      requireRecentAuthentication(),
+      getToken({ req: request }),
     ]);
-    return NextResponse.json({ revoked: true });
+    const body = await request.json().catch(() => ({})) as { sessionId?: unknown };
+    if (typeof body.sessionId !== "string" || !body.sessionId) {
+      return NextResponse.json({ error: "Session id is required" }, { status: 400 });
+    }
+    const sessionId = body.sessionId;
+
+    const now = new Date();
+    const revoked = await prisma.$transaction(async (transaction) => {
+      const result = await transaction.loginSession.updateMany({
+        where: {
+          userId,
+          sessionId,
+          status: "ACTIVE",
+          expiresAt: { gt: now },
+        },
+        data: { status: "REVOKED", revokedAt: now },
+      });
+      if (result.count !== 1) return false;
+
+      const memberships = await transaction.workspaceMember.findMany({
+        where: { userId },
+        select: { workspaceId: true },
+      });
+      if (memberships.length) {
+        await transaction.workspaceAuditLog.createMany({
+          data: memberships.map((membership) => ({
+            workspaceId: membership.workspaceId,
+            actorUserId: userId,
+            action: "SESSION_REVOKED",
+            details: "One active device session was signed out by the user.",
+          })),
+        });
+      }
+      return true;
+    });
+    if (!revoked) {
+      return NextResponse.json({ error: "That session is no longer active." }, { status: 404 });
+    }
+    return NextResponse.json({ revoked: true, current: sessionId === token?.sessionId });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
+    if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error(error);
-    return NextResponse.json({ error: "Unable to revoke sessions" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to revoke session" }, { status: 500 });
   }
 }

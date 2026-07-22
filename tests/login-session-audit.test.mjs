@@ -7,6 +7,7 @@ import {
   getTrustedRequestMetadata,
   withAuthRequestMetadata,
 } from "../lib/auth-request-metadata.ts";
+import { describeClientDevice, describeSessionDevice } from "../lib/session-device.ts";
 
 const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
@@ -17,12 +18,14 @@ test("Vercel login metadata uses platform IP and ISO country headers", () => {
       "x-vercel-forwarded-for": "203.0.113.9, 10.0.0.2",
       "x-vercel-ip-country": "sg",
       "cf-connecting-ip": "198.51.100.4",
+      "user-agent": "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
     },
   });
 
   assert.deepEqual(getTrustedRequestMetadata(request, { VERCEL: "1" }), {
     ipAddress: "203.0.113.9",
     countryCode: "SG",
+    userAgent: "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
   });
 });
 
@@ -38,6 +41,7 @@ test("untrusted forwarding headers are ignored", () => {
   assert.deepEqual(getTrustedRequestMetadata(request, {}), {
     ipAddress: null,
     countryCode: null,
+    userAgent: null,
   });
 });
 
@@ -54,7 +58,7 @@ test("trusted proxy metadata validates IPs and supports a configured country hea
       TRUST_PROXY_HEADERS: "true",
       TRUSTED_COUNTRY_HEADER: "x-nest-country",
     }),
-    { ipAddress: "2001:db8::1", countryCode: "NZ" },
+    { ipAddress: "2001:db8::1", countryCode: "NZ", userAgent: null },
   );
 
   assert.deepEqual(
@@ -64,7 +68,7 @@ test("trusted proxy metadata validates IPs and supports a configured country hea
       }),
       { TRUST_PROXY_HEADERS: "true" },
     ),
-    { ipAddress: null, countryCode: null },
+    { ipAddress: null, countryCode: null, userAgent: null },
   );
 });
 
@@ -83,6 +87,7 @@ test("auth metadata remains request-scoped across asynchronous callbacks", async
       assert.deepEqual(getAuthRequestMetadata(), {
         ipAddress: "198.51.100.20",
         countryCode: "AU",
+        userAgent: null,
       });
     });
   } finally {
@@ -91,11 +96,12 @@ test("auth metadata remains request-scoped across asynchronous callbacks", async
   }
 });
 
-test("successful sign-ins persist bounded, user-visible session metadata", async () => {
-  const [schema, migration, auth, authRoute, sessionsRoute, retention, settings, privacy] =
+test("successful sign-ins persist bounded, user-visible active-session metadata", async () => {
+  const [schema, migration, activeMigration, auth, authRoute, sessionsRoute, retention, settings, privacy] =
     await Promise.all([
       source("prisma/schema.prisma"),
       source("prisma/migrations/20260722000000_login_session_audit/migration.sql"),
+      source("prisma/migrations/20260722120000_multi_device_sessions/migration.sql"),
       source("lib/auth.ts"),
       source("app/api/auth/[...nextauth]/route.ts"),
       source("app/api/auth/sessions/route.ts"),
@@ -104,19 +110,46 @@ test("successful sign-ins persist bounded, user-visible session metadata", async
       source("app/privacy-policy/page.tsx"),
     ]);
 
-  assert.match(schema, /model LoginSession[\s\S]*ipAddress\s+String\?[\s\S]*countryCode\s+String\?/);
+  assert.match(schema, /model LoginSession[\s\S]*deviceName\s+String[\s\S]*ipAddress\s+String\?[\s\S]*status\s+String[\s\S]*lastSeenAt\s+DateTime[\s\S]*expiresAt\s+DateTime/);
   assert.match(schema, /@@index\(\[userId, signedInAt\]\)/);
+  assert.match(schema, /@@index\(\[userId, status, expiresAt\]\)/);
   assert.match(migration, /CREATE TABLE \[dbo\]\.\[LoginSession\]/);
   assert.match(migration, /FOREIGN KEY \(\[userId\]\).*ON DELETE CASCADE/);
+  assert.match(activeMigration, /CHECK \(\[status\] IN \(''ACTIVE'', ''PENDING'', ''REVOKED''\)\)/);
+  assert.match(activeMigration, /LoginSession_expiresAt_df[\s\S]*DATEADD\(DAY, 30, GETDATE\(\)\)/);
+  assert.doesNotMatch(activeMigration, /DROP COLUMN \[activeSessionId\]/);
   assert.match(authRoute, /withAuthRequestMetadata\(request/);
-  assert.match(auth, /prisma\.loginSession\.create/);
-  assert.match(auth, /provider: account\?\.provider \?\? null/);
+  assert.match(auth, /transaction\.loginSession\.create/);
+  assert.match(auth, /provider: login\?\.provider \?\? null/);
+  assert.match(auth, /activeSessionCount < MAX_ACTIVE_SESSIONS \? "ACTIVE" : "PENDING"/);
+  assert.match(auth, /describeSessionDevice\(requestMetadata\.userAgent\)/);
   assert.match(sessionsRoute, /export async function GET/);
-  assert.match(sessionsRoute, /orderBy: \{ signedInAt: "desc" \}[\s\S]*take: 5/);
-  assert.match(sessionsRoute, /active: session\.sessionId === user\?\.activeSessionId/);
+  assert.match(sessionsRoute, /status: "ACTIVE"[\s\S]*orderBy: \{ lastSeenAt: "desc" \}[\s\S]*take: MAX_ACTIVE_SESSIONS/);
+  assert.match(sessionsRoute, /current: session\.sessionId === token\?\.sessionId/);
+  assert.match(sessionsRoute, /body\.sessionId[\s\S]*status: "REVOKED"/);
   assert.match(retention, /LOGIN_SESSION_RETENTION_DAYS/);
   assert.match(retention, /DELETE TOP \(\$\{size\}\) FROM \[dbo\]\.\[LoginSession\]/);
-  assert.match(settings, /Recent sign-ins/);
-  assert.match(settings, /five most recent sign-ins/);
-  assert.match(privacy, /IP address and[\s\S]*country code associated with account sign-ins/);
+  assert.match(settings, /Active sessions/);
+  assert.match(settings, /up to five devices/);
+  assert.match(settings, /session\.deviceName/);
+  assert.match(settings, /sessionId: session\.sessionId/);
+  assert.match(privacy, /device\/browser type,[\s\S]*IP address,[\s\S]*country code associated with account sign-ins/);
+});
+
+test("Apple device labels avoid treating ambiguous mobile Safari as an iPad", () => {
+  assert.equal(
+    describeSessionDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"),
+    "iPhone · Safari",
+  );
+  assert.equal(
+    describeSessionDevice("Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"),
+    "iPad · Safari",
+  );
+  assert.equal(
+    describeSessionDevice("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"),
+    "Apple mobile device · Safari",
+  );
+  const desktopModeUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1";
+  assert.equal(describeClientDevice(desktopModeUserAgent, 5, 430, 932), "iPhone · Safari");
+  assert.equal(describeClientDevice(desktopModeUserAgent, 5, 820, 1180), "iPad · Safari");
 });

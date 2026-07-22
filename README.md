@@ -93,6 +93,7 @@ AI_WORKLOAD_INPUT_COST_PER_1M_USD="your-input-price-per-million-tokens"
 AI_WORKLOAD_OUTPUT_COST_PER_1M_USD="your-output-price-per-million-tokens"
 ADMIN="admin@example.com"
 ASK_NEST_HISTORY_RETENTION_DAYS="90"
+CARD_ALERT_BODY_RETENTION_DAYS="7"
 CRON_SECRET="a-long-random-secret"
 MASSIVE_API_BASE_URL="https://api.massive.com"
 MASSIVE_API_KEY="***"
@@ -109,7 +110,7 @@ Set the optional token-rate variables to your Azure deployment's current USD pri
 
 Ask Nest history and user-approved memory are persisted per user and workspace. Raw questions and answers are retained for 90 days by default, then the daily scheduler rolls their turn/token usage into permanent daily summaries and deletes the raw payloads. Clearing a conversation performs the same roll-up before removing its raw messages, so administrative usage and cost estimates are preserved. Set `ASK_NEST_HISTORY_RETENTION_DAYS` to a whole number from 30 to 3650 to change that period. Memories are retained, but no longer point to an expired conversation.
 
-The `/api/cron/ask-nest-retention` scheduler route runs daily at 02:00 Singapore time (18:00 UTC) through `vercel.json`. It now consolidates bounded retention for Ask Nest, expired security grants/challenges, background jobs, raw alert bodies, invitations, notifications, audit logs, and provider caches. It requires `Authorization: Bearer ${CRON_SECRET}` and fails closed if `CRON_SECRET` is not configured.
+The `/api/cron/ask-nest-retention` scheduler route runs daily at 02:00 Singapore time (18:00 UTC) through `vercel.json`. It now consolidates bounded retention for Ask Nest, expired security grants/challenges, background jobs, raw alert bodies, invitations, notifications, audit logs, and provider caches. Credit-alert bodies are retained only when parsing fails, encrypted at rest, limited to 32,000 characters, visible only to workspace owners on `/credit-alerts`, and redacted after seven days by default. Set `CARD_ALERT_BODY_RETENTION_DAYS` to a whole number from 1 to 365 to change that window. The scheduler requires `Authorization: Bearer ${CRON_SECRET}` and fails closed if `CRON_SECRET` is not configured.
 
 Finance tools remain read-only, rate-limited, and restricted to the authenticated active workspace. Azure requests use stateless Responses API calls and carry encrypted reasoning items only between the tool-call turns needed to answer the current question.
 

@@ -19,8 +19,8 @@ export default function PrivacyPolicyPage() {
         <h2>3. Data We Collect</h2>
         <p>
           We may collect account data (name, email, profile metadata), workspace and finance records you submit, integration
-          metadata (for example Gmail tokens and parsed card alerts when enabled), technical logs including the IP address and
-          country code associated with account sign-ins, and support communications.
+          metadata (for example Gmail tokens and parsed card alerts when enabled), technical logs including device/browser type,
+          IP address, and country code associated with account sign-ins, and support communications.
         </p>
 
         <h2>4. Sources of Data</h2>

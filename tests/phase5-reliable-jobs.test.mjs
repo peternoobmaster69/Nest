@@ -30,12 +30,15 @@ test("background jobs use database-enforced scope ownership, leases, retries, an
 });
 
 test("Gmail sync is bounded, resumable, cursor-based, and never launched after a response", async () => {
-  const [runner, provider, route, settings, ingest] = await Promise.all([
+  const [runner, provider, route, settings, ingest, diagnostics, creditAlerts, retention] = await Promise.all([
     source("lib/gmail-sync-runner.ts"),
     source("lib/gmail.ts"),
     source("app/api/gmail/sync/route.ts"),
     source("components/settings-page.tsx"),
     source("lib/credit-alert-ingest.ts"),
+    source("lib/credit-alert-diagnostics.ts"),
+    source("app/credit-alerts/page.tsx"),
+    source("lib/data-retention.ts"),
   ]);
 
   assert.doesNotMatch(runner, /activeSyncs|setTimeout|setInterval/);
@@ -47,6 +50,14 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
   assert.doesNotMatch(settings, /setInterval\([\s\S]{0,220}syncGmail\.mutate/);
   assert.match(ingest, /sourceMessageId/);
   assert.match(ingest, /\[redacted after parsing; sha256:/);
+  assert.match(ingest, /requiredMissing[\s\S]*?sealFailedCreditAlertBody/);
+  assert.match(ingest, /Unable to parse required fields: \$\{missingFields\.join\(", "\)\}/);
+  assert.match(diagnostics, /MAX_DIAGNOSTIC_BODY_CHARS = 32_000/);
+  assert.match(diagnostics, /encryptCredential/);
+  assert.match(creditAlerts, /requireWorkspaceAccess\(null, "OWNER"\)/);
+  assert.match(creditAlerts, /openFailedCreditAlertBody/);
+  assert.match(creditAlerts, /View retained body/);
+  assert.match(retention, /CARD_ALERT_BODY_RETENTION_DAYS[\s\S]*?defaultDays: 7/);
   assert.match(ingest, /processingStartedAt/);
   assert.match(ingest, /parseStatus: "PROCESSING"/);
 });

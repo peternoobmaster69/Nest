@@ -5,6 +5,7 @@ import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { DataValue, MobileDataCard } from "@/components/ui/data-view";
 import { formatMoney } from "@/lib/currency";
 import { formatLocalDateTime } from "@/lib/presentation";
+import { openFailedCreditAlertBody } from "@/lib/credit-alert-diagnostics";
 
 function formatDateTime(value: Date | null) {
   if (!value) return "—";
@@ -19,15 +20,18 @@ function formatAmount(cents: number | null, currency: string | null) {
 export default async function CreditAlertsRoute() {
   const session = await requireSession();
   const userName = session.user?.name || session.user?.email || "User";
-  const { workspaceId } = await requireWorkspaceAccess();
+  const { workspaceId } = await requireWorkspaceAccess(null, "OWNER");
 
-  const staged = await prisma.cardAlertStaging.findMany({
+  const storedAlerts = await prisma.cardAlertStaging.findMany({
     where: { workspaceId },
     orderBy: { createdAt: "desc" },
     take: 100,
     select: {
+      id: true,
       source: true,
       rawSubject: true,
+      rawBody: true,
+      sourceMessageKey: true,
       bankName: true,
       transactionRef: true,
       currency: true,
@@ -42,6 +46,12 @@ export default async function CreditAlertsRoute() {
       processedAt: true,
     },
   });
+  const staged = storedAlerts.map(({ rawBody, sourceMessageKey, ...alert }) => ({
+    ...alert,
+    diagnosticBody: alert.parseStatus === "FAILED"
+      ? openFailedCreditAlertBody({ workspaceId, sourceMessageKey, storedBody: rawBody })
+      : null,
+  }));
 
   return (
     <PageFrame title="Credit Alert Staging" current="/credit-alerts" userName={userName} userEmail={session.user?.email || undefined} userImage={session.user?.image || null}>
@@ -49,6 +59,9 @@ export default async function CreditAlertsRoute() {
         <div className="section-label" style={{ marginBottom: "12px" }}>
           Showing {staged.length} most recent staged {staged.length === 1 ? "alert" : "alerts"}
         </div>
+        <p className="credit-alert-retention-note">
+          Failed parser samples are encrypted and retained temporarily for diagnosis (seven days by default).
+        </p>
 
         <div className="cct-table-wrapper desktop-data-table">
           <table className="cct-table">
@@ -67,8 +80,8 @@ export default async function CreditAlertsRoute() {
               </tr>
             </thead>
             <tbody>
-              {staged.map((row, index) => (
-                <tr key={`${row.createdAt.toISOString()}-${index}`}>
+              {staged.map((row) => (
+                <tr key={row.id}>
                   <td>{formatDateTime(row.createdAt)}</td>
                   <td>{row.parseStatus}</td>
                   <td>{row.source}</td>
@@ -78,7 +91,15 @@ export default async function CreditAlertsRoute() {
                   <td>{row.merchant || "—"}</td>
                   <td>{formatAmount(row.amountCents, row.currency)}</td>
                   <td>{formatDateTime(row.transactionDate)}</td>
-                  <td>{row.failureReason || "—"}</td>
+                  <td>
+                    {row.failureReason || "—"}
+                    {row.diagnosticBody ? (
+                      <details className="credit-alert-diagnostic">
+                        <summary>View retained body</summary>
+                        <pre>{row.diagnosticBody}</pre>
+                      </details>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
               {staged.length === 0 ? (
@@ -92,8 +113,8 @@ export default async function CreditAlertsRoute() {
           </table>
         </div>
         <div className="mobile-data-list">
-          {staged.map((row, index) => (
-            <MobileDataCard key={`${row.createdAt.toISOString()}-mobile-${index}`}>
+          {staged.map((row) => (
+            <MobileDataCard key={`${row.id}-mobile`}>
               <div className="mobile-data-card-head">
                 <strong>{row.merchant || row.bankName || "Card alert"}</strong>
                 <span className={`badge ${row.parseStatus === "PARSED" || row.parseStatus === "PROCESSED" ? "badge-success" : "badge-warning"}`}>
@@ -104,6 +125,12 @@ export default async function CreditAlertsRoute() {
               <DataValue label="Card">{row.cardLast4 ? `••${row.cardLast4}` : "—"}</DataValue>
               <DataValue label="Created">{formatDateTime(row.createdAt)}</DataValue>
               {row.failureReason ? <DataValue label="Failure" priority="low">{row.failureReason}</DataValue> : null}
+              {row.diagnosticBody ? (
+                <details className="credit-alert-diagnostic">
+                  <summary>View retained body</summary>
+                  <pre>{row.diagnosticBody}</pre>
+                </details>
+              ) : null}
             </MobileDataCard>
           ))}
           {staged.length === 0 ? <div className="empty-state"><p className="empty-state-desc">No staged alerts found.</p></div> : null}

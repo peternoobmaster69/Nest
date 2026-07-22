@@ -37,6 +37,11 @@ import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { SettingsAppAccess } from "@/components/settings-app-access";
 import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
 import type { SettingsTab } from "@/lib/settings-tabs";
+import {
+  ActionableAuthenticationMessage,
+  isRecentAuthenticationRequired,
+  ReauthenticateButton,
+} from "@/components/reauthentication-message";
 
 type Context = {
   workspaceId: string | null;
@@ -118,11 +123,44 @@ type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
   message?: string;
 };
 
-type GmailNotice = {
+type SettingsOperationNoticeData = {
   title: string;
   detail: string | null;
-  tone: "success" | "info" | "error";
+  tone: "success" | "info" | "warning" | "error";
 };
+
+function SettingsOperationNotice({
+  notice,
+  className = "",
+  requiresReauthentication = false,
+}: {
+  notice: SettingsOperationNoticeData | null;
+  className?: string;
+  requiresReauthentication?: boolean;
+}) {
+  if (!notice) return null;
+
+  const NoticeIcon = notice.tone === "success"
+    ? CheckCircle2
+    : notice.tone === "info"
+      ? Info
+      : CircleAlert;
+
+  return (
+    <div
+      className={`settings-operation-notice is-${notice.tone}${className ? ` ${className}` : ""}`}
+      role={notice.tone === "error" ? "alert" : "status"}
+      aria-live="polite"
+    >
+      <NoticeIcon size={18} aria-hidden="true" />
+      <div className="settings-operation-notice-copy">
+        <strong>{notice.title}</strong>
+        {notice.detail ? <span>{notice.detail}</span> : null}
+      </div>
+      {requiresReauthentication ? <ReauthenticateButton /> : null}
+    </div>
+  );
+}
 
 function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSummary {
   return (
@@ -133,9 +171,17 @@ function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSum
   );
 }
 
-function getGmailNotice(message: string, phase?: GmailSyncProgress["phase"]): GmailNotice | null {
+function getGmailNotice(message: string, phase?: GmailSyncProgress["phase"]): SettingsOperationNoticeData | null {
   const normalized = message.trim();
   if (!normalized) return null;
+
+  if (isRecentAuthenticationRequired(normalized)) {
+    return {
+      title: "Re-authentication required",
+      detail: "Sign in again to continue this security-sensitive action.",
+      tone: "warning",
+    };
+  }
 
   const lastSyncedMarker = " Last synced at ";
   const lastSyncedIndex = normalized.indexOf(lastSyncedMarker);
@@ -150,12 +196,62 @@ function getGmailNotice(message: string, phase?: GmailSyncProgress["phase"]): Gm
     : sentenceBreakIndex >= 0
       ? normalized.slice(sentenceBreakIndex + 2)
       : null;
-  const hasFailure = /failed|denied|forbidden|error|could not be processed|completed with issues/i.test(normalized)
+  const hasProcessingIssues = /could not be processed|completed with issues/i.test(normalized)
+    && !/\b0 failed\b/i.test(normalized);
+  const hasFailure = /failed|denied|forbidden|error/i.test(normalized)
     && !/\b0 failed\b/i.test(normalized);
   const tone = phase === "error" || hasFailure
     ? "error"
-    : /skipped|queued|running|syncing|disconnected|up to date|no new|synced 0 emails/i.test(normalized)
-      ? "info"
+    : hasProcessingIssues
+      ? "warning"
+      : /skipped|queued|running|syncing|disconnected|up to date|no new|synced 0 emails/i.test(normalized)
+        ? "info"
+        : "success";
+
+  return { title, detail, tone };
+}
+
+function getAutoAccountingNotice(message: string): SettingsOperationNoticeData | null {
+  const normalized = message.trim();
+  if (!normalized) return null;
+
+  if (isRecentAuthenticationRequired(normalized)) {
+    return {
+      title: "Re-authentication required",
+      detail: "Sign in again to continue this security-sensitive action.",
+      tone: "warning",
+    };
+  }
+
+  const runResult = normalized.match(/^Auto-accounted (\d+) transactions? from (\d+) matched rule hits?\.$/i);
+  if (runResult) {
+    const accounted = Number(runResult[1]);
+    const matched = Number(runResult[2]);
+    if (accounted === 0) {
+      return {
+        title: "No transactions auto-accounted",
+        detail: matched === 0
+          ? "No unaccounted transactions matched your enabled rules."
+          : `${matched} matched rule ${matched === 1 ? "hit was" : "hits were"} found, but no transactions were accounted.`,
+        tone: matched === 0 ? "info" : "warning",
+      };
+    }
+    return {
+      title: `Auto-accounted ${accounted} transaction${accounted === 1 ? "" : "s"}`,
+      detail: `${matched} matched rule ${matched === 1 ? "hit" : "hits"}.`,
+      tone: "success",
+    };
+  }
+
+  const sentenceBreakIndex = normalized.indexOf(". ");
+  const title = sentenceBreakIndex >= 0
+    ? normalized.slice(0, sentenceBreakIndex)
+    : normalized.replace(/\.$/, "");
+  const detail = sentenceBreakIndex >= 0 ? normalized.slice(sentenceBreakIndex + 2) : null;
+  const tone = /failed|error|unable/i.test(normalized)
+    ? "error"
+    : /\bneeds?\b|could not|skipped/i.test(normalized)
+      ? "warning"
       : "success";
 
   return { title, detail, tone };
@@ -953,12 +1049,10 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
   const isGmailSyncActive = Boolean(
     gmailSyncProgress && gmailSyncProgress.phase !== "complete" && gmailSyncProgress.phase !== "error",
   );
+  const gmailRequiresReauthentication = isRecentAuthenticationRequired(gmailMessage);
   const gmailNotice = getGmailNotice(gmailMessage, gmailSyncProgress?.phase);
-  const GmailNoticeIcon = gmailNotice?.tone === "success"
-    ? CheckCircle2
-    : gmailNotice?.tone === "error"
-      ? CircleAlert
-      : Info;
+  const autoRuleRequiresReauthentication = isRecentAuthenticationRequired(autoRuleMessage);
+  const autoRuleNotice = getAutoAccountingNotice(autoRuleMessage);
 
   return (
     <div className="st-container">
@@ -1027,18 +1121,11 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             <progress className="gmail-sync-progress" value={Math.min(gmailSyncProgress.progress, 100)} max={100} />
           </div>
         ) : null}
-        {!isGmailSyncActive && gmailNotice ? (
-          <div
-            className={`gmail-sync-notice is-${gmailNotice.tone}`}
-            role={gmailNotice.tone === "error" ? "alert" : "status"}
-            aria-live="polite"
-          >
-            <GmailNoticeIcon size={18} aria-hidden="true" />
-            <div className="gmail-sync-notice-copy">
-              <strong>{gmailNotice.title}</strong>
-              {gmailNotice.detail ? <span>{gmailNotice.detail}</span> : null}
-            </div>
-          </div>
+        {!isGmailSyncActive ? (
+          <SettingsOperationNotice
+            notice={gmailNotice}
+            requiresReauthentication={gmailRequiresReauthentication}
+          />
         ) : null}
           </div> : null}
         </>
@@ -1067,7 +1154,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             ))}
           </select>
         </div>
-        {currencyMessage ? <div className="settings-message">{currencyMessage}</div> : null}
+        <ActionableAuthenticationMessage message={currencyMessage} className="settings-message" />
       </div>
 
       <div className="card settings-card-block">
@@ -1141,7 +1228,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             </div>
           </div>
         ) : null}
-        {publicNetWorthMessage ? <div className="settings-message">{publicNetWorthMessage}</div> : null}
+        <ActionableAuthenticationMessage message={publicNetWorthMessage} className="settings-message" />
       </div></> : null}
 
       <div className="card settings-card-block">
@@ -1199,7 +1286,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               ))}
           </select>
         </div>
-        {receivableAccountMessage ? <div className="settings-message">{receivableAccountMessage}</div> : null}
+        <ActionableAuthenticationMessage message={receivableAccountMessage} className="settings-message" />
           </div>
         </>
       ) : null}
@@ -1211,8 +1298,8 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
           <div className="settings-auto-copy">
             <div className="settings-section-title">Credit Card Auto Accounting</div>
             <div className="settings-section-copy settings-auto-description">
-              Ordered rules match unaccounted credit card transaction subjects using case-insensitive contains filters. First match wins.
-              Matching transactions are auto-accounted every 5 minutes.
+              Each rule checks if its keyword appears anywhere in the transaction subject (not case-sensitive). Rules are checked in order, and the first one that matches is used.
+              Matched transactions are automatically accounted once a day.
             </div>
           </div>
           <div className="settings-auto-actions">
@@ -1235,6 +1322,12 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             </button>
           </div>
         </div>
+
+        <SettingsOperationNotice
+          notice={autoRuleNotice}
+          className="settings-auto-notice"
+          requiresReauthentication={autoRuleRequiresReauthentication}
+        />
 
         {autoRules.isLoading ? (
           <SettingsAutoRulesSkeleton />
@@ -1289,14 +1382,10 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                 <Plus size={14} aria-hidden="true" />
                 Add Rule
               </button>
-              <div className="auto-rule-footnote">
-                Rules are checked top to bottom. Only unaccounted credit card transactions are affected.
-              </div>
             </div>
           </div>
         )}
 
-        {autoRuleMessage ? <div className="settings-message settings-message-auto">{autoRuleMessage}</div> : null}
       </div>
 
       {editingAutoRule && (

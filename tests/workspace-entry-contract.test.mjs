@@ -59,7 +59,7 @@ test("sign-in preserves the workspace entry callback", async () => {
   assert.match(panel, /signIn\("passkey", \{ loginToken: verified\.loginToken, redirect: false, callbackUrl \}\)/);
   assert.match(panel, /signIn\(provider\.id, \{ callbackUrl \}\)/);
   assert.match(home, /LandingSignInDialog[\s\S]*?callbackUrl=\{callbackUrl\}/);
-  assert.match(home, /takeoverRequired=\{session\?\.takeoverRequired\}/);
+  assert.match(home, /sessionLimitRequired=\{session\?\.sessionLimitRequired\}/);
   assert.match(home, /href="\/login"/);
   assert.match(config, /source: "\/login", destination: "\/\?login=1", permanent: false/);
   assert.match(auth, /signIn: "\/login"/);

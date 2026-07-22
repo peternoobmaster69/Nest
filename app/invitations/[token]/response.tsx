@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
+import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
 
 type Invite = {
   role: "EDITOR" | "VIEWER";
@@ -77,7 +78,7 @@ export function InvitationResponse({ token }: { token: string }) {
         </div>
       ) : null}
       {invite?.status && invite.status !== "PENDING" ? <p>This invitation is {invite.status.toLowerCase()}.</p> : null}
-      {message ? <p style={{ margin: 0, color: "var(--text-secondary)" }}>{message}</p> : null}
+      <ActionableAuthenticationMessage message={message} className="invitation-response-message" />
     </section>
   );
 }

@@ -19,6 +19,21 @@ test("public landing page contains decorative overflow on narrow screens", async
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
 
   assert.match(styles, /\.lp\s*\{[^}]*width:\s*100%[^}]*overflow-x:\s*clip/s);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.lp-hero\s*\{[^}]*padding:\s*22px 5px 64px/);
+  assert.match(styles, /@media \(max-width: 480px\)[\s\S]*?\.lp-hero\s*\{[^}]*padding-top:\s*16px/);
+});
+
+test("credit-card payable uses a readable card palette instead of the allocation marker colour", async () => {
+  const [landing, styles] = await Promise.all([
+    readFile(path.join(root, "app/page.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(landing, /lp-flow-card is-credit-payable/);
+  assert.doesNotMatch(landing, /lp-flow-card is-card/);
+  assert.match(styles, /\.lp-flow-card\.is-credit-payable\s*\{[\s\S]*?var\(--bg-elevated\)/);
+  assert.doesNotMatch(styles, /\.lp \.is-card\s*\{/);
+  assert.match(styles, /\.lp-allocation-bar \.is-card,[\s\S]*?\.lp-mock-list i\.is-card/);
 });
 
 test("mobile embedded sign-in keeps provider actions directly below its heading", async () => {
@@ -526,6 +541,12 @@ test("settings groups related controls into focused tabs", async () => {
   assert.match(settings, /section === "automation"/);
   assert.match(settings, /Gmail Card Alerts/);
   assert.match(settings, /section === "automation"[\s\S]*?Credit Card Auto Accounting/);
+  const automationLayout = settings.slice(settings.indexOf('{section === "automation" ? ('));
+  assert.ok(automationLayout.indexOf("Run Now") < automationLayout.indexOf("notice={autoRuleNotice}"));
+  assert.ok(automationLayout.indexOf("notice={autoRuleNotice}") < automationLayout.indexOf("autoRules.isLoading"));
+  assert.match(settings, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
+  assert.match(settings, /No transactions auto-accounted[\s\S]*?No unaccounted transactions matched your enabled rules/);
+  assert.match(styles, /\.settings-auto-notice\s*\{[^}]*margin-bottom:\s*18px/s);
   assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display/);
   assert.match(settings, /section === "workspaces"[\s\S]*?Bank accounts/);
   assert.match(settings, /section === "data"[\s\S]*?<DataImportSection/);
@@ -602,15 +623,38 @@ test("Gmail sync uses one responsive status surface", async () => {
 
   assert.match(settings, /const isGmailSyncActive = Boolean/);
   assert.match(settings, /\{isGmailSyncActive && gmailSyncProgress \?/);
-  assert.match(settings, /\{!isGmailSyncActive && gmailNotice \?/);
+  assert.match(settings, /\{!isGmailSyncActive \? \([\s\S]*?<SettingsOperationNotice[\s\S]*?notice=\{gmailNotice\}/);
   assert.doesNotMatch(settings, /gmailMessage \? <div className="settings-message settings-message-spaced"/);
   assert.match(settings, /className="gmail-sync-progress-header"/);
-  assert.match(settings, /className=\{`gmail-sync-notice is-\$\{gmailNotice\.tone\}`\}/);
+  assert.match(settings, /className=\{`settings-operation-notice is-\$\{notice\.tone\}/);
   assert.match(styles, /\.gmail-sync-progress-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/s);
-  assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.gmail-sync-notice-copy\s*\{[^}]*display:\s*grid/s);
+  assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-operation-notice-copy\s*\{[^}]*display:\s*grid/s);
+  assert.match(settings, /hasProcessingIssues[\s\S]*?\? "warning"/);
+  assert.match(styles, /\.settings-operation-notice\.is-warning\s*\{[^}]*background:\s*var\(--warning-bg\)/s);
   assert.match(summary, /Inbox is up to date\. No new card alert emails were found\./);
   assert.doesNotMatch(summary, /Synced \$\{data\.scannedMessages\} emails/);
   assert.match(settings, /!\/\\b0 failed\\b\/i\.test\(normalized\)/);
+});
+
+test("recent authentication errors provide a return-safe re-authentication action", async () => {
+  const [reauthentication, appAccess, collaborators, settings, invitation, styles] = await Promise.all([
+    readFile(path.join(root, "components/reauthentication-message.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings-app-access.tsx"), "utf8"),
+    readFile(path.join(root, "components/collaborators-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+    readFile(path.join(root, "app/invitations/[token]/response.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(reauthentication, /For your security, please re-authenticate to continue\. You’ll return here afterward\./);
+  assert.match(reauthentication, /window\.location\.pathname[\s\S]*?window\.location\.search[\s\S]*?window\.location\.hash/);
+  assert.match(reauthentication, /signOut\(\{ callbackUrl: signInUrl \}\)/);
+  assert.match(reauthentication, /"Re-authenticate"/);
+  assert.match(appAccess, /ActionableAuthenticationMessage message=\{message\}/);
+  assert.match(collaborators, /ActionableAuthenticationMessage message=\{message\}/);
+  assert.match(settings, /requiresReauthentication=\{gmailRequiresReauthentication\}/);
+  assert.match(invitation, /ActionableAuthenticationMessage message=\{message\}/);
+  assert.match(styles, /\.reauthentication-message\s*\{[^}]*display:\s*flex[^}]*background:\s*var\(--warning-bg\)/s);
 });
 
 test("transaction groups use compact two-row cards and a searchable picker", async () => {

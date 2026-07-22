@@ -38,11 +38,11 @@ export default async function Home({
   if (!session?.user) {
     return (
       <main className="lp">
-        {showSignIn || session?.takeoverRequired ? (
+        {showSignIn || session?.sessionLimitRequired ? (
           <LandingSignInDialog
             callbackUrl={callbackUrl}
             serviceMessage={signInErrorMessage}
-            takeoverRequired={session?.takeoverRequired}
+            sessionLimitRequired={session?.sessionLimitRequired}
           />
         ) : null}
         <header className="lp-nav">
@@ -66,10 +66,6 @@ export default async function Home({
 
         <section className="lp-hero">
           <div className="lp-hero-copy">
-            <div className="lp-badge">
-              <ShieldCheck size={16} aria-hidden="true" />
-              <span>Full visibility for real-life money</span>
-            </div>
             <h1>Know what you have, what it is for, and what comes next.</h1>
             <p>
               Nest brings your bank cash, virtual budgets, card payments, receivables, savings, and investments into one clear
@@ -276,10 +272,10 @@ export default async function Home({
               <p className="lp-flow-note"><BarChart3 size={15} aria-hidden="true" /> Sources must equal items. Bank cash changes only when income actually arrives.</p>
             </article>
 
-            <article className="lp-flow-card is-card">
+            <article className="lp-flow-card is-credit-payable">
               <header>
                 <span className="lp-icon-tile is-amber"><CreditCard size={21} aria-hidden="true" /></span>
-                <div><small>Credit-card payable</small><h3>Reserve now, pay later</h3></div>
+                <div><small >Credit-card payable</small><h3>Reserve now, pay later</h3></div>
               </header>
               <div className="lp-flow-steps">
                 <div><span>1</span><p><strong>Card purchase</strong><small>The payable rises; bank cash has not moved</small></p></div>

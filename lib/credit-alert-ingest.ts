@@ -4,6 +4,7 @@ import { getSingaporeBankByName } from "@/lib/singapore-banks";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
+import { sealFailedCreditAlertBody } from "@/lib/credit-alert-diagnostics";
 
 function hashKey(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -50,8 +51,19 @@ export async function ingestCreditAlert(params: {
       };
   }
 
-  const requiredMissing =
-    !parsedAlert.cardLast4 || !parsedAlert.merchant || !parsedAlert.amountCents || !parsedAlert.transactionDate;
+  const missingFields = [
+    !parsedAlert.cardLast4 ? "card last four digits" : null,
+    !parsedAlert.merchant ? "merchant" : null,
+    parsedAlert.amountCents === undefined ? "amount" : null,
+    !parsedAlert.transactionDate ? "transaction date" : null,
+  ].filter((field): field is string => Boolean(field));
+  const requiredMissing = missingFields.length > 0;
+  const parseFailureReason = requiredMissing
+    ? `Unable to parse required fields: ${missingFields.join(", ")}.`
+    : null;
+  const storedBody = requiredMissing
+    ? sealFailedCreditAlertBody({ workspaceId, sourceMessageKey, rawBody, contentHash })
+    : `[redacted after parsing; sha256:${contentHash}]`;
 
   if (!staging) {
     try {
@@ -60,7 +72,7 @@ export async function ingestCreditAlert(params: {
         workspaceId,
         source,
         rawSubject: rawSubject ? "[redacted after parsing]" : null,
-        rawBody: `[redacted after parsing; sha256:${contentHash}]`,
+        rawBody: storedBody,
         sourceMessageKey,
         transactionKey,
         contentHash,
@@ -72,7 +84,7 @@ export async function ingestCreditAlert(params: {
         merchant: parsedAlert.merchant,
         cardLast4: parsedAlert.cardLast4,
         parseStatus: requiredMissing ? "FAILED" : "PARSED",
-        failureReason: requiredMissing ? "Unable to parse required fields from alert." : null,
+        failureReason: parseFailureReason,
       },
       });
     } catch (error) {

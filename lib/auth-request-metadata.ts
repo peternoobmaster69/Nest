@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 export type AuthRequestMetadata = {
   ipAddress: string | null;
   countryCode: string | null;
+  userAgent: string | null;
 };
 
 type RequestMetadataEnvironment = Partial<
@@ -52,6 +53,7 @@ export function getTrustedRequestMetadata(
   env: RequestMetadataEnvironment = process.env,
 ): AuthRequestMetadata {
   const headers = request.headers;
+  const userAgent = headers.get("user-agent")?.trim().slice(0, 1000) || null;
 
   if (env.VERCEL) {
     return {
@@ -59,6 +61,7 @@ export function getTrustedRequestMetadata(
         headers.get("x-vercel-forwarded-for") ?? headers.get("x-forwarded-for"),
       ),
       countryCode: normalizeCountryCode(headers.get("x-vercel-ip-country")),
+      userAgent,
     };
   }
 
@@ -66,6 +69,7 @@ export function getTrustedRequestMetadata(
     return {
       ipAddress: normalizeIpAddress(headers.get("x-azure-clientip")),
       countryCode: normalizeCountryCode(configuredCountryHeader(request, env)),
+      userAgent,
     };
   }
 
@@ -79,10 +83,11 @@ export function getTrustedRequestMetadata(
       countryCode: normalizeCountryCode(
         configuredCountryHeader(request, env) ?? headers.get("cf-ipcountry"),
       ),
+      userAgent,
     };
   }
 
-  return { ipAddress: null, countryCode: null };
+  return { ipAddress: null, countryCode: null, userAgent };
 }
 
 export function withAuthRequestMetadata<T>(request: Request, action: () => T) {
@@ -90,5 +95,9 @@ export function withAuthRequestMetadata<T>(request: Request, action: () => T) {
 }
 
 export function getAuthRequestMetadata() {
-  return authRequestMetadata.getStore() ?? { ipAddress: null, countryCode: null };
+  return authRequestMetadata.getStore() ?? {
+    ipAddress: null,
+    countryCode: null,
+    userAgent: null,
+  };
 }

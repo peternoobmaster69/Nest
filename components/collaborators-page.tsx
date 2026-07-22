@@ -10,6 +10,7 @@ import { CollaboratorsAuditSkeleton, CollaboratorsInvitesSkeleton, Collaborators
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { useRouter } from "next/navigation";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
+import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
 
 // Default visibility for Money section pages
 const DEFAULT_MONEY_PAGES = {
@@ -315,11 +316,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
         </section>
       ) : null}
 
-      {message ? (
-        <div className="workspace-settings-message" role="status" aria-live="polite">
-          {message}
-        </div>
-      ) : null}
+      <ActionableAuthenticationMessage message={message} className="workspace-settings-message" />
 
       <section className="card workspace-picker-card">
         <div className={`workspace-settings-card-content${isWorkspaceChanging ? " is-changing" : ""}`}>

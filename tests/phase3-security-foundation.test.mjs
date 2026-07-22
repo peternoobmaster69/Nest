@@ -9,6 +9,10 @@ import {
   isEncryptedCredential,
 } from "../lib/credential-encryption.ts";
 import {
+  openFailedCreditAlertBody,
+  sealFailedCreditAlertBody,
+} from "../lib/credit-alert-diagnostics.ts";
+import {
   ApiRequestError,
   assertSameOriginRequest,
   parseJsonBody,
@@ -57,6 +61,53 @@ test("credential envelopes use versioned authenticated encryption and support ro
       INTEGRATION_ENCRYPTION_KEY_VERSION: original.version,
       INTEGRATION_ENCRYPTION_PREVIOUS_KEYS: original.previous,
       CARD_ENCRYPTION_KEY: original.legacy,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("failed credit-alert samples are bounded, encrypted, and workspace-bound", () => {
+  const original = {
+    key: process.env.INTEGRATION_ENCRYPTION_KEY,
+    version: process.env.INTEGRATION_ENCRYPTION_KEY_VERSION,
+    previous: process.env.INTEGRATION_ENCRYPTION_PREVIOUS_KEYS,
+  };
+  try {
+    process.env.INTEGRATION_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
+    process.env.INTEGRATION_ENCRYPTION_KEY_VERSION = "credit-alert-test";
+    delete process.env.INTEGRATION_ENCRYPTION_PREVIOUS_KEYS;
+
+    const rawBody = `Transaction alert\n${"x".repeat(33_000)}`;
+    const sourceMessageKey = "message-key";
+    const sealed = sealFailedCreditAlertBody({
+      workspaceId: "workspace-a",
+      sourceMessageKey,
+      rawBody,
+      contentHash: "content-hash",
+    });
+
+    assert.equal(isEncryptedCredential(sealed), true);
+    assert.doesNotMatch(sealed, /Transaction alert/);
+    const opened = openFailedCreditAlertBody({
+      workspaceId: "workspace-a",
+      sourceMessageKey,
+      storedBody: sealed,
+    });
+    assert.match(opened ?? "", /^Transaction alert/);
+    assert.match(opened ?? "", /\[Diagnostic sample truncated\]$/);
+    assert.equal((opened ?? "").length < rawBody.length, true);
+    assert.equal(openFailedCreditAlertBody({
+      workspaceId: "workspace-b",
+      sourceMessageKey,
+      storedBody: sealed,
+    }), null);
+  } finally {
+    for (const [name, value] of Object.entries({
+      INTEGRATION_ENCRYPTION_KEY: original.key,
+      INTEGRATION_ENCRYPTION_KEY_VERSION: original.version,
+      INTEGRATION_ENCRYPTION_PREVIOUS_KEYS: original.previous,
     })) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;

@@ -10,7 +10,7 @@ import {
   DATABASE_UNAVAILABLE_CODE,
   DATABASE_UNAVAILABLE_MESSAGE,
 } from "@/lib/database-errors";
-import { rememberPostSignInDestination } from "@/lib/session-takeover-client";
+import { rememberPostSignInDestination } from "@/lib/session-limit-client";
 
 type ProviderMap = Record<
   string,

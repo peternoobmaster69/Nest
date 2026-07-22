@@ -5603,7 +5603,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .lp-hero {
-  padding: clamp(54px, 8vw, 98px) 10px clamp(64px, 8vw, 104px);
+  padding: clamp(32px, 5vw, 60px) 10px clamp(64px, 8vw, 104px);
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(430px, 0.95fr);
   gap: clamp(38px, 7vw, 84px);
@@ -5828,11 +5828,15 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   border-radius: 0 999px 999px 0;
 }
 
-.lp .is-everyday { background: #35a875; }
-.lp .is-bills { background: #4f8fcf; }
-.lp .is-card { background: #e29b39; }
-.lp .is-savings { background: #8064c6; }
-.lp .is-free { background: var(--bg-subtle); }
+.lp-allocation-bar .is-everyday,
+.lp-mock-list i.is-everyday { background: #35a875; }
+.lp-allocation-bar .is-bills,
+.lp-mock-list i.is-bills { background: #4f8fcf; }
+.lp-allocation-bar .is-card,
+.lp-mock-list i.is-card { background: #ffddae; }
+.lp-allocation-bar .is-savings,
+.lp-mock-list i.is-savings { background: #8064c6; }
+.lp-allocation-bar .is-free { background: var(--bg-subtle); }
 
 .lp-mock-list {
   border: 1px solid var(--border-subtle);
@@ -6194,6 +6198,15 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   box-shadow: var(--shadow-sm);
 }
 
+.lp-flow-card.is-credit-payable {
+  border-color: color-mix(in srgb, var(--accent-500) 22%, var(--border-subtle));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-500) 5%, var(--bg-elevated)),
+    var(--bg-elevated) 58%
+  );
+}
+
 .lp-flow-card > header {
   display: flex;
   align-items: center;
@@ -6256,9 +6269,18 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   font-weight: 700;
 }
 
-.lp-flow-card.is-card .lp-flow-steps > div.is-emphasis {
+.lp-flow-card.is-credit-payable .lp-flow-steps > div.is-emphasis {
   border-color: color-mix(in srgb, var(--accent-500) 32%, var(--border-subtle));
   background: color-mix(in srgb, var(--accent-500) 6%, var(--bg-surface));
+}
+
+.lp-flow-card.is-credit-payable .lp-flow-steps > div.is-emphasis > span {
+  background: color-mix(in srgb, var(--accent-500) 14%, var(--bg-subtle));
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .lp-icon-tile.is-amber {
+  color: var(--warning);
 }
 
 .lp-flow-card.is-receivable .lp-flow-steps > div.is-emphasis {
@@ -6287,7 +6309,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--text-tertiary);
+  color: var(--text-primary);
   font-size: 10px;
 }
 
@@ -6498,7 +6520,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .lp-hero {
-    padding: 48px 5px 72px;
+    padding: 22px 5px 64px;
     gap: 42px;
   }
 
@@ -6583,6 +6605,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 @media (max-width: 480px) {
+  .lp-hero {
+    padding-top: 16px;
+  }
+
   .lp-use-card-footer {
     align-items: stretch;
     flex-direction: column;
@@ -9319,8 +9345,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   font-variant-numeric: tabular-nums;
 }
 
-.gmail-sync-notice {
-  margin-top: 12px;
+.settings-operation-notice {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -9333,36 +9358,42 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   line-height: 1.45;
 }
 
-.gmail-sync-notice > svg {
+.settings-operation-notice > svg {
   flex: 0 0 auto;
 }
 
-.gmail-sync-notice.is-success {
+.settings-operation-notice.is-success {
   border-color: color-mix(in srgb, var(--success) 22%, var(--color-border));
   background: var(--success-bg);
   color: var(--success);
 }
 
-.gmail-sync-notice.is-info {
+.settings-operation-notice.is-info {
   border-color: color-mix(in srgb, var(--brand-500) 18%, var(--color-border));
   background: color-mix(in srgb, var(--brand-500) 5%, var(--color-surface-subtle));
 }
 
-.gmail-sync-notice.is-info > svg {
+.settings-operation-notice.is-info > svg {
   color: var(--brand-500);
 }
 
-.gmail-sync-notice.is-info .gmail-sync-notice-copy strong {
+.settings-operation-notice.is-info .settings-operation-notice-copy strong {
   color: var(--text-primary);
 }
 
-.gmail-sync-notice.is-error {
+.settings-operation-notice.is-warning {
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--color-border));
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.settings-operation-notice.is-error {
   border-color: color-mix(in srgb, var(--danger) 22%, var(--color-border));
   background: var(--danger-bg);
   color: var(--danger);
 }
 
-.gmail-sync-notice-copy {
+.settings-operation-notice-copy {
   min-width: 0;
   display: flex;
   align-items: baseline;
@@ -9370,13 +9401,22 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   flex-wrap: wrap;
 }
 
-.gmail-sync-notice-copy strong {
+.settings-operation-notice-copy strong {
   color: inherit;
   font-weight: var(--font-weight-semibold);
 }
 
-.gmail-sync-notice-copy span {
+.settings-operation-notice-copy span {
   color: var(--text-secondary);
+}
+
+.settings-operation-notice > .btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.gmail-alerts-card .settings-operation-notice {
+  margin-top: 12px;
 }
 
 .settings-hub {
@@ -9826,6 +9866,13 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   gap: 6px;
 }
 
+.settings-session-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .btn-icon.settings-passkey-icon-button {
   width: 44px;
   height: 44px;
@@ -9896,6 +9943,47 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   font-size: var(--text-base);
 }
 
+.reauthentication-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--color-border));
+  border-radius: var(--r-md);
+  background: var(--warning-bg);
+  color: var(--text-secondary);
+}
+
+.reauthentication-message > span {
+  min-width: 0;
+}
+
+.reauthentication-message > .btn {
+  flex: 0 0 auto;
+}
+
+.settings-access-message.reauthentication-message {
+  padding: 10px 12px;
+}
+
+.invitation-response-message {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .reauthentication-message {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reauthentication-message > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .settings-inline-link {
   font-size: var(--text-base);
   color: var(--brand-500);
@@ -9915,10 +10003,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .settings-message-spaced {
   margin-top: 6px;
-}
-
-.settings-message-auto {
-  margin-top: 10px;
 }
 
 .settings-select-sm {
@@ -9950,6 +10034,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   flex-wrap: wrap;
   margin-left: auto;
   justify-content: flex-end;
+}
+
+.settings-auto-notice {
+  margin-bottom: 18px;
 }
 
 .settings-public-url-row {
@@ -10381,7 +10469,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .gmail-sync-progress-copy,
-  .gmail-sync-notice-copy {
+  .settings-operation-notice-copy {
     display: grid;
     gap: 2px;
   }
@@ -12470,6 +12558,47 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .cct-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.credit-alert-retention-note {
+  margin: -4px 0 14px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.credit-alert-diagnostic {
+  margin-top: 8px;
+}
+
+.credit-alert-diagnostic summary {
+  width: fit-content;
+  color: var(--brand-600);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.credit-alert-diagnostic pre {
+  width: min(640px, 70vw);
+  max-height: 280px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font: 12px/1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 600px) {
+  .credit-alert-diagnostic pre {
+    width: 100%;
+    max-height: 220px;
+  }
 }
 
 .cct-date-group-row {
@@ -21941,6 +22070,79 @@ html[data-ask-nest-open="true"] {
   color: var(--text-secondary);
 }
 
+.signin-session-status {
+  margin: 16px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.signin-session-list {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  max-height: 278px;
+  margin: 18px 0 0;
+  padding: 0 4px 0 0;
+  border: 0;
+  overflow-y: auto;
+}
+
+.signin-session-list legend {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.signin-session-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.signin-session-option:hover,
+.signin-session-option.is-selected {
+  border-color: color-mix(in srgb, var(--brand-500) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--brand-50) 45%, var(--bg-elevated));
+}
+
+.signin-session-option > input {
+  margin: 3px 0 0;
+  accent-color: var(--brand-600);
+}
+
+.signin-session-option > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.signin-session-option strong,
+.signin-session-option small {
+  overflow-wrap: anywhere;
+}
+
+.signin-session-option strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.signin-session-option small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .signin-takeover-panel .signin-error {
   margin-top: 14px;
   padding: 12px 14px;
@@ -22121,6 +22323,10 @@ html[data-ask-nest-open="true"] {
 
   .signin-takeover-actions {
     grid-template-columns: 1fr;
+  }
+
+  .signin-session-list {
+    max-height: 242px;
   }
 
   .signin-card-embedded .signin-divider-labelled {
