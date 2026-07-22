@@ -24,6 +24,7 @@ model User {
   updatedAt                DateTime                  @updatedAt
   accounts                 Account[]
   sessions                 Session[]
+  loginSessions            LoginSession[]
   memberships              WorkspaceMember[]
   budgets                  BudgetEnvelope[]          @relation("BudgetCreatedBy")
   receivablesFrom          Receivable[]              @relation("ReceivableFrom")
@@ -71,6 +72,20 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LoginSession {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique @db.VarChar(64)
+  userId      String
+  provider    String?  @db.VarChar(64)
+  ipAddress   String?  @db.VarChar(45)
+  countryCode String?  @db.VarChar(2)
+  signedInAt  DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, signedInAt])
+  @@index([signedInAt])
 }
 
 model VerificationToken {

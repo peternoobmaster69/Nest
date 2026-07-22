@@ -29,6 +29,15 @@ type PushStatus = {
 
 type AuthProvider = { id: string; name: string; type: string };
 
+type LoginSession = {
+  sessionId: string;
+  provider: string | null;
+  ipAddress: string | null;
+  countryCode: string | null;
+  signedInAt: string;
+  active: boolean;
+};
+
 type RegistrationOptions = Parameters<typeof startRegistration>[0]["optionsJSON"];
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
@@ -85,6 +94,31 @@ function passkeyMetadata(passkey: Passkey) {
   return `${kind} · Added ${added}${lastUsed ? ` · Last used ${lastUsed}` : " · Not used yet"}`;
 }
 
+function loginSessionLocation(session: LoginSession) {
+  let country = session.countryCode ?? "Country unavailable";
+  if (session.countryCode) {
+    try {
+      country = new Intl.DisplayNames(["en"], { type: "region" }).of(session.countryCode) ?? session.countryCode;
+    } catch {
+      country = session.countryCode;
+    }
+  }
+  return `${country} · ${session.ipAddress ?? "IP unavailable"}`;
+}
+
+function loginSessionDetails(session: LoginSession) {
+  const provider = session.provider
+    ? session.provider === "passkey"
+      ? "Passkey"
+      : `${session.provider.charAt(0).toUpperCase()}${session.provider.slice(1)}`
+    : "Sign-in provider unavailable";
+  const signedInAt = new Date(session.signedInAt).toLocaleString("en-SG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  return `${provider} · Signed in ${signedInAt}`;
+}
+
 export function SettingsAppAccess() {
   const queryClient = useQueryClient();
   const installAvailable = useSyncExternalStore(subscribeInstallPrompt, hasInstallPrompt, () => false);
@@ -122,6 +156,11 @@ export function SettingsAppAccess() {
   const linkedAccounts = useQuery({
     queryKey: ["settings-linked-accounts"],
     queryFn: () => jsonRequest<{ providers: string[] }>("/api/auth/accounts"),
+  });
+
+  const loginSessions = useQuery({
+    queryKey: ["settings-login-sessions"],
+    queryFn: () => jsonRequest<{ sessions: LoginSession[] }>("/api/auth/sessions"),
   });
 
   const installApp = useMutation({
@@ -416,6 +455,34 @@ export function SettingsAppAccess() {
           </div>
         ) : !passkeys.isLoading && !passkeys.isError ? (
           <div className="settings-muted-message settings-message-spaced">No passkeys added yet.</div>
+        ) : null}
+      </div>
+
+      <div className="card settings-card-block">
+        <div className="settings-row">
+          <div className="settings-item-copy">
+            <div className="settings-section-title">Recent sign-ins</div>
+            <div className="settings-section-copy">
+              Review the country and IP address recorded when each session was created. History is normally kept for 90 days.
+            </div>
+          </div>
+        </div>
+        {loginSessions.isLoading ? <div className="settings-muted-message settings-message-spaced">Loading sign-ins...</div> : null}
+        {loginSessions.isError ? <div className="settings-message settings-message-spaced">Sign-in history could not be loaded.</div> : null}
+        {loginSessions.data?.sessions.length ? (
+          <div className="settings-passkey-list">
+            {loginSessions.data.sessions.map((session) => (
+              <div className="settings-passkey-item" key={session.sessionId}>
+                <div className="settings-passkey-copy">
+                  <strong>{loginSessionLocation(session)}</strong>
+                  <span>{loginSessionDetails(session)}</span>
+                </div>
+                {session.active ? <span className="settings-status-pill is-enabled">Current</span> : null}
+              </div>
+            ))}
+          </div>
+        ) : !loginSessions.isLoading && !loginSessions.isError ? (
+          <div className="settings-muted-message settings-message-spaced">No sign-in history has been recorded yet.</div>
         ) : null}
       </div>
 

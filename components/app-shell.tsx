@@ -1,9 +1,10 @@
 "use client";
 
 import { ReactNode, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import {
-  ArrowLeft,
   ArrowUp,
   ChartNoAxesCombined,
   ChartPie,
@@ -12,20 +13,23 @@ import {
   Gift,
   Home,
   ListChecks,
+  LogOut,
   Menu,
+  Moon,
   ReceiptText,
   Settings,
+  Sun,
   Undo2,
-  Users,
-  UserRound,
   ShieldCheck,
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { NotificationBell } from "@/components/notification-bell";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
-import { MobileAccountPanel } from "@/components/mobile-account-panel";
 import { AskNest } from "@/components/ask-nest";
+import { useConfirmDialog } from "@/components/confirm-dialog";
+import { useTheme } from "@/components/theme-provider";
 import { getMotionSafeScrollBehavior } from "@/lib/motion";
+import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
 
 const SCROLL_TO_TOP_MIN_OFFSET = 480;
 
@@ -42,6 +46,16 @@ function getMobileDate(date: Date) {
     dateTime: `${year}-${month}-${day}`,
     label: MOBILE_DATE_FORMATTER.format(date),
   };
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 export type AppShellContext = {
@@ -61,7 +75,6 @@ export function AppShell({
   userName,
   userEmail,
   userImage,
-  onDisplayNameUpdated,
   badgeCounts,
   contextData,
   contextLoading,
@@ -73,7 +86,6 @@ export function AppShell({
   userName: string;
   userEmail?: string;
   userImage?: string | null;
-  onDisplayNameUpdated?: (name: string) => void;
   badgeCounts?: { budgets?: number; receivables?: number };
   contextData?: AppShellContext;
   contextLoading?: boolean;
@@ -82,9 +94,10 @@ export function AppShell({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-  const [mobileMoreView, setMobileMoreView] = useState<"navigation" | "account">("navigation");
   const [mobileCurrentDate, setMobileCurrentDate] = useState<{ dateTime: string; label: string } | null>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const { confirm } = useConfirmDialog();
+  const { theme, toggleTheme } = useTheme();
   const mainRef = useRef<HTMLElement | null>(null);
   const bodyScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileMoreRef = useRef<HTMLElement | null>(null);
@@ -108,8 +121,8 @@ export function AppShell({
     "/receivables",
     "/rewards",
     "/budgets",
-    "/collaborators",
     "/settings",
+    "/profile",
     "/admin",
   ].some((path) => currentPath === path || currentPath.startsWith(`${path}/`));
 
@@ -144,7 +157,6 @@ export function AppShell({
 
   useEffect(() => {
     setMobileMoreOpen(false);
-    setMobileMoreView("navigation");
   }, [currentPath]);
 
   useEffect(() => {
@@ -223,8 +235,22 @@ export function AppShell({
 
   const closeMobileNavigation = () => {
     setMobileMoreOpen(false);
-    setMobileMoreView("navigation");
     setSidebarOpen(false);
+  };
+
+  const confirmLogout = async () => {
+    closeMobileNavigation();
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    const confirmed = await confirm({
+      title: "Log out of Nest?",
+      message: "You will need to sign in again to access your account on this device.",
+      confirmLabel: "Log out",
+      cancelLabel: "Cancel",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    await purgePrivateServiceWorkerCaches();
+    await signOut({ callbackUrl: "/" });
   };
 
   const scrollToTop = () => {
@@ -239,7 +265,6 @@ export function AppShell({
         userName={userName}
         userEmail={userEmail}
         userImage={userImage}
-        onDisplayNameUpdated={onDisplayNameUpdated}
         currentPath={currentPath}
         badgeCounts={badgeCounts}
         sidebarOpen={sidebarOpen}
@@ -303,21 +328,14 @@ export function AppShell({
           <section id="mobile-more-menu" ref={mobileMoreRef} className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
             <div className="mobile-more-header">
               <div className="mobile-more-header-main">
-                {mobileMoreView === "account" ? (
-                  <button className="mobile-more-back" type="button" onClick={() => setMobileMoreView("navigation")} aria-label="Back to More navigation" autoFocus>
-                    <ArrowLeft size={19} aria-hidden="true" />
-                  </button>
-                ) : null}
                 <div>
-                  <h2 id="mobile-more-title">{mobileMoreView === "account" ? "Account" : "More"}</h2>
+                  <h2 id="mobile-more-title">More</h2>
                   <p>{contextData?.workspaceName || "Workspace"}</p>
                 </div>
               </div>
               <ModalCloseButton onClick={() => setMobileMoreOpen(false)} label="Close More navigation" />
             </div>
-            {mobileMoreView === "navigation" ? (
-              <>
-                <nav className="mobile-more-links" aria-label="More navigation">
+            <nav className="mobile-more-links" aria-label="More navigation">
               {showCreditTransactions ? (
                 <Link className={`mobile-more-link${currentPath === "/credit-cards" ? " is-active" : ""}`} href="/credit-cards" onClick={closeMobileNavigation}>
                   <CreditCard size={20} aria-hidden="true" />
@@ -342,13 +360,9 @@ export function AppShell({
                 <span><strong>Budget</strong><small>Plan monthly sources and spending</small></span>
                 {badgeCounts?.budgets ? <span className="mobile-more-badge">{badgeCounts.budgets}</span> : null}
               </Link>
-              <Link className={`mobile-more-link${currentPath === "/collaborators" ? " is-active" : ""}`} href="/collaborators" onClick={closeMobileNavigation}>
-                <Users size={20} aria-hidden="true" />
-                <span><strong>Workspaces</strong><small>Members and workspace access</small></span>
-              </Link>
               <Link className={`mobile-more-link${currentPath === "/settings" ? " is-active" : ""}`} href="/settings" onClick={closeMobileNavigation}>
                 <Settings size={20} aria-hidden="true" />
-                <span><strong>Settings</strong><small>Accounts and preferences</small></span>
+                <span><strong>Settings</strong><small>Preferences and workspaces</small></span>
               </Link>
               {contextData?.isAdmin ? (
                 <Link className={`mobile-more-link${currentPath === "/admin" ? " is-active" : ""}`} href="/admin" onClick={closeMobileNavigation}>
@@ -356,23 +370,34 @@ export function AppShell({
                   <span><strong>Admin</strong><small>System and Ask Nest oversight</small></span>
                 </Link>
               ) : null}
-                </nav>
-                <button className="mobile-more-account" type="button" onClick={() => setMobileMoreView("account")}>
-                  <span className="mobile-more-account-icon"><UserRound size={19} aria-hidden="true" /></span>
-                  <span><strong>{userName || "Account"}</strong><small>Profile, appearance, and workspace</small></span>
-                </button>
-              </>
-            ) : (
-              <MobileAccountPanel
-                userName={userName}
-                userEmail={userEmail}
-                userImage={userImage}
-                workspaceId={contextData?.workspaceId}
-                workspaceName={contextData?.workspaceName}
-                onDisplayNameUpdated={onDisplayNameUpdated}
-                onClose={closeMobileNavigation}
-              />
-            )}
+            </nav>
+            <button
+              className="mobile-more-logout"
+              type="button"
+              onClick={() => void confirmLogout()}
+            >
+              <LogOut size={19} aria-hidden="true" />
+              <span><strong>Log out</strong><small>Sign out of Nest on this device</small></span>
+            </button>
+            <div className="mobile-more-account-row">
+              <Link className="mobile-more-account" href="/profile" onClick={closeMobileNavigation}>
+                {userImage ? (
+                  <Image src={userImage} alt={userName || userEmail || "User"} width={38} height={38} className="avatar avatar-image mobile-more-account-avatar" />
+                ) : (
+                  <span className="avatar avatar-green mobile-more-account-avatar">{getInitials(userName)}</span>
+                )}
+                <span><strong>{userName || "Account"}</strong><small>View profile</small></span>
+              </Link>
+              <button
+                className="mobile-more-theme-toggle"
+                type="button"
+                onClick={toggleTheme}
+                aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+                title={theme === "light" ? "Dark mode" : "Light mode"}
+              >
+                {theme === "light" ? <Moon size={19} aria-hidden="true" /> : <Sun size={19} aria-hidden="true" />}
+              </button>
+            </div>
           </section>
         </>
       ) : null}
@@ -405,7 +430,6 @@ export function AppShell({
           type="button"
           className={`mobile-bottom-nav-item${mobileMoreOpen || moreRouteActive ? " is-active" : ""}`}
           onClick={() => {
-            setMobileMoreView("navigation");
             setMobileMoreOpen((open) => !open);
           }}
           aria-expanded={mobileMoreOpen}

@@ -6,6 +6,7 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { ChangeEvent, FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditTransactionsTableRowsSkeleton } from "@/components/skeletons/CreditTransactionsSkeleton";
@@ -1500,6 +1501,26 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     });
     if (confirmed) createSuggestedRule.mutate(suggestedRulePrompt);
   };
+
+  if (sortedCards.length === 0) {
+    return (
+      <div className="cct-container">
+        <div className="card cct-card-prerequisite">
+          <EmptyState
+            icon="💳"
+            title="Add a credit card first"
+            description="Credit card transactions need a card to attach to. Add your card details, then return here to record transactions and payment due dates."
+            action={(
+              <Link className="btn btn-primary" href="/credit-cards?add=1">
+                <Plus size={18} aria-hidden="true" />
+                Add a credit card
+              </Link>
+            )}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="cct-container">

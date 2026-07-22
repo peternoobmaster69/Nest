@@ -698,7 +698,7 @@ export function DashboardShell({
   const router = useRouter();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [displayName, setDisplayName] = useState(userName);
+  const displayName = userName;
   const [budgetName, setBudgetName] = useState("");
   const [budgetTarget, setBudgetTarget] = useState("");
   const [budgetAccountId, setBudgetAccountId] = useState("");
@@ -1397,7 +1397,6 @@ export function DashboardShell({
         userName={displayName}
         userEmail={userEmail}
         userImage={userImage}
-        onDisplayNameUpdated={setDisplayName}
         badgeCounts={{
           budgets: summary.budgets.length,
           receivables: pendingReceivables.length,

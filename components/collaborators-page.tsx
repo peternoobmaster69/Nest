@@ -292,7 +292,7 @@ export function CollaboratorsPage() {
   };
 
   return (
-    <div style={{ display: "grid", gap: "12px", position: "relative" }}>
+    <div className="workspace-settings-page">
       {isWorkspaceChanging ? (
         <section
           className="card"

@@ -3,7 +3,7 @@ export default function PrivacyPolicyPage() {
     <main className="legal-shell">
       <section className="legal-card">
         <h1>Privacy Policy</h1>
-        <p>Last updated: March 8, 2026</p>
+        <p>Last updated: July 22, 2026</p>
 
         <h2>1. Who We Are</h2>
         <p>
@@ -19,7 +19,8 @@ export default function PrivacyPolicyPage() {
         <h2>3. Data We Collect</h2>
         <p>
           We may collect account data (name, email, profile metadata), workspace and finance records you submit, integration
-          metadata (for example Gmail tokens and parsed card alerts when enabled), technical logs, and support communications.
+          metadata (for example Gmail tokens and parsed card alerts when enabled), technical logs including the IP address and
+          country code associated with account sign-ins, and support communications.
         </p>
 
         <h2>4. Sources of Data</h2>
@@ -31,7 +32,7 @@ export default function PrivacyPolicyPage() {
         <h2>5. Purposes of Processing</h2>
         <p>
           We process data to provide core product features, secure accounts, prevent fraud/abuse, provide support, maintain
-          reliability, and comply with legal obligations.
+          reliability, investigate suspicious sign-ins, and comply with legal obligations.
         </p>
 
         <h2>6. Legal Bases (EEA/UK)</h2>
@@ -55,7 +56,8 @@ export default function PrivacyPolicyPage() {
         <h2>9. Retention</h2>
         <p>
           We retain personal data only as long as needed for service delivery, legal compliance, dispute resolution, and security.
-          Retention periods vary by data category and legal requirement.
+          Retention periods vary by data category and legal requirement. Sign-in IP and country records are normally retained for
+          90 days, unless a different period is required for security or legal purposes.
         </p>
 
         <h2>10. Security</h2>
@@ -66,8 +68,8 @@ export default function PrivacyPolicyPage() {
 
         <h2>11. Cookies and Similar Technologies</h2>
         <p>
-          We use essential cookies/session technologies for authentication and product security. Where required, optional cookies
-          or trackers are used only with consent.
+          We use essential cookies/session technologies for authentication, product security, and remembered interface preferences,
+          such as the last-opened Settings tab. Where required, optional cookies or trackers are used only with consent.
         </p>
 
         <h2>12. Automated Decision-Making</h2>

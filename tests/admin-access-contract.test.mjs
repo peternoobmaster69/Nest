@@ -39,10 +39,11 @@ test("admin overview reports secret presence without returning secret values", a
 });
 
 test("admin overview lists users and workspace details", async () => {
-  const [overview, page, directories] = await Promise.all([
+  const [overview, page, directories, styles] = await Promise.all([
     read("lib/admin-overview.ts"),
     read("app/admin/page.tsx"),
     read("components/admin-directories.tsx"),
+    read("app/globals.css"),
   ]);
 
   assert.match(overview, /prisma\.user\.findMany/);
@@ -60,6 +61,12 @@ test("admin overview lists users and workspace details", async () => {
   assert.match(directories, /user\.lastSignedInAt/);
   assert.doesNotMatch(directories, />Sessions</);
   assert.match(overview, /lastSignedInAt: true/);
+  assert.match(overview, /loginSessions:/);
+  assert.match(directories, /user\.latestLoginSession/);
+  assert.match(directories, /admin-users-table/);
+  assert.doesNotMatch(directories, /admin-directory-table admin-responsive-table/);
+  assert.match(styles, /\.admin-directory-table-wrap \{ overflow-x: auto/);
+  assert.match(styles, /\.admin-directory-table th:first-child, \.admin-directory-table td:first-child \{ position: sticky/);
   assert.match(directories, />Transactions</);
 });
 

@@ -51,7 +51,7 @@ test("sign-in preserves the workspace entry callback", async () => {
   const config = await source("next.config.ts");
   const auth = await source("lib/auth.ts");
   const sidebar = await source("components/app-sidebar.tsx");
-  const mobileAccount = await source("components/mobile-account-panel.tsx");
+  const appShell = await source("components/app-shell.tsx");
 
   assert.match(page, /normalizeInternalAppPath\(params\.callbackUrl\)/);
   assert.match(page, /redirect\(callbackUrl\)/);
@@ -64,5 +64,5 @@ test("sign-in preserves the workspace entry callback", async () => {
   assert.match(auth, /signIn: "\/login"/);
   assert.doesNotMatch(sidebar, /signOut\(\{ callbackUrl: "\/signin" \}\)/);
   assert.match(sidebar, /signOut\(\{ callbackUrl: "\/" \}\)/);
-  assert.match(mobileAccount, /signOut\(\{ callbackUrl: "\/" \}\)/);
+  assert.match(appShell, /signOut\(\{ callbackUrl: "\/" \}\)/);
 });

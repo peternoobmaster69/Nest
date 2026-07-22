@@ -14,6 +14,14 @@ async function render(name, size) {
     .toFile(path.join(outputDir, name));
 }
 
+async function renderAppleTouchIcon() {
+  await sharp(source)
+    .resize(180, 180)
+    .flatten({ background: "#1E4035" })
+    .png({ compressionLevel: 9, palette: true })
+    .toFile(path.join(outputDir, "apple-touch-icon.png"));
+}
+
 async function renderMaskable(name, size) {
   const foregroundSize = Math.round(size * 0.8);
   const foreground = await sharp(source)
@@ -26,7 +34,7 @@ async function renderMaskable(name, size) {
       width: size,
       height: size,
       channels: 4,
-      background: "#1C2B1C",
+      background: "#1E4035",
     },
   })
     .composite([{ input: foreground, gravity: "centre" }])
@@ -37,7 +45,7 @@ async function renderMaskable(name, size) {
 await Promise.all([
   render("icon-192.png", 192),
   render("icon-512.png", 512),
-  render("apple-touch-icon.png", 180),
+  renderAppleTouchIcon(),
   renderMaskable("icon-maskable-192.png", 192),
   renderMaskable("icon-maskable-512.png", 512),
 ]);

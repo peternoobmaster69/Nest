@@ -63,7 +63,7 @@ These relations intentionally remain application-managed:
 
 ## Retention
 
-The existing `/api/cron/ask-nest-retention` schedule now runs consolidated bounded retention. It removes expired OAuth/WebAuthn records, scrubs old raw card-alert content, removes old terminal job payloads and records, expired/responded invites, old notifications, audit logs, expired provider caches, and inactive rate-limit rows. Ask Nest usage is summarized before raw turns are removed. Retention windows are documented in `.env.example`; each policy performs at most 20 bounded batches per invocation and continues on the next daily run.
+The existing `/api/cron/ask-nest-retention` schedule now runs consolidated bounded retention. It removes expired OAuth/WebAuthn records, scrubs old raw card-alert content, removes old terminal job payloads and records, expired/responded invites, old notifications, audit logs, login-session IP/country records, expired provider caches, and inactive rate-limit rows. Ask Nest usage is summarized before raw turns are removed. Retention windows are documented in `.env.example`; each policy performs at most 20 bounded batches per invocation and continues on the next daily run. Login-session metadata defaults to 90 days through `LOGIN_SESSION_RETENTION_DAYS`.
 
 ## Azure SQL backup and restore
 

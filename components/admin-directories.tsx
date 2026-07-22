@@ -13,6 +13,15 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-SG", {
   timeZone: "Asia/Singapore",
 });
 
+const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+
+function loginLocation(countryCode: string | null, ipAddress: string | null) {
+  const country = countryCode
+    ? REGION_NAMES.of(countryCode) ?? countryCode
+    : "Country unavailable";
+  return `${country} · ${ipAddress ?? "IP unavailable"}`;
+}
+
 export function AdminDirectories({
   users,
   workspaces,
@@ -53,8 +62,15 @@ export function AdminDirectories({
         <section id="admin-users" className="card admin-panel admin-directory">
           <div className="admin-panel-heading"><h2>Users</h2></div>
           {users.length ? (
-            <div className="admin-table-wrap">
-              <table className="admin-table admin-directory-table admin-responsive-table">
+            <div className="admin-table-wrap admin-directory-table-wrap">
+              <table className="admin-table admin-directory-table admin-users-table">
+                <colgroup>
+                  <col className="admin-user-column" />
+                  <col className="admin-joined-column" />
+                  <col className="admin-signin-column" />
+                  <col className="admin-access-column" />
+                  <col className="admin-ask-column" />
+                </colgroup>
                 <thead><tr><th>User</th><th>Joined</th><th>Last signed in</th><th>Workspace access</th><th>Ask Nest</th></tr></thead>
                 <tbody>
                   {users.map((user) => (
@@ -69,6 +85,14 @@ export function AdminDirectories({
                         {user.lastSignedInAt
                           ? <time dateTime={user.lastSignedInAt.toISOString()}>{DATE_FORMAT.format(user.lastSignedInAt)}</time>
                           : <span>Never</span>}
+                        {user.latestLoginSession ? (
+                          <span
+                            className="admin-login-location"
+                            title={loginLocation(user.latestLoginSession.countryCode, user.latestLoginSession.ipAddress)}
+                          >
+                            {loginLocation(user.latestLoginSession.countryCode, user.latestLoginSession.ipAddress)}
+                          </span>
+                        ) : null}
                       </td>
                       <td data-label="Workspace access">
                         {user.memberships.length ? (

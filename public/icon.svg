@@ -1,9 +1,35 @@
-<svg width="280" height="280" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">
-  <rect width="280" height="280" fill="#1C2B1C"/>
-  <circle cx="140" cy="140" r="118" fill="none" stroke="white" stroke-width="20" opacity="0.10"/>
-  <circle cx="140" cy="140" r="90" fill="none" stroke="white" stroke-width="20" opacity="0.22"/>
-  <circle cx="140" cy="140" r="62" fill="none" stroke="white" stroke-width="20" opacity="0.50"/>
-  <circle cx="140" cy="140" r="34" fill="none" stroke="white" stroke-width="20" opacity="0.85"/>
-  <circle cx="140" cy="140" r="22" fill="#3DBE6E"/>
-  <circle cx="140" cy="140" r="10" fill="#1C2B1C"/>
+<svg width="280" height="280" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Nest">
+  <style>
+    .tile { fill: #1e4035; }
+    .egg { stroke: #f4f0e9; }
+    .bar { fill: #88aa9a; }
+
+    @media (prefers-color-scheme: light) {
+      .tile { fill: #f4f0e9; }
+      .egg { stroke: #1e4035; }
+    }
+  </style>
+
+  <rect class="tile" width="280" height="280" rx="64" />
+
+  <defs>
+    <clipPath id="egg-interior">
+      <path d="M140 60C107 60 82 104 78 157C75 199 99 224 140 226C181 224 205 199 202 157C198 104 173 60 140 60Z" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#egg-interior)">
+    <rect class="bar" x="98" y="164" width="23" height="52" rx="6" />
+    <rect class="bar" x="129" y="130" width="23" height="86" rx="6" />
+    <rect class="bar" x="160" y="94" width="23" height="122" rx="6" />
+  </g>
+
+  <path
+    class="egg"
+    d="M140 60C107 60 82 104 78 157C75 199 99 224 140 226C181 224 205 199 202 157C198 104 173 60 140 60Z"
+    fill="none"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>

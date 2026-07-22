@@ -11,6 +11,7 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BellRing,
   CalendarDays,
@@ -103,6 +104,8 @@ function getBankInitials(bankName: string | null): string {
 
 export function CreditCardsPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [flippedCardId, setFlippedCardId] = useState<string | null>(null);
@@ -119,6 +122,28 @@ export function CreditCardsPage() {
   const [statementDay, setStatementDay] = useState("25");
   const [paymentDueDay, setPaymentDueDay] = useState("10");
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("add") !== "1") return;
+
+    setEditingCardId(null);
+    setCardName("");
+    setBankName(SINGAPORE_BANKS[0].name);
+    setCardLast4("");
+    setThemeKey("bank-default");
+    setPlainColor("#1f4ba5");
+    setExpiryMonth("");
+    setExpiryYear("");
+    setStatementDay("25");
+    setPaymentDueDay("10");
+    setNotes("");
+    setIsModalOpen(true);
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("add");
+    const query = nextParams.toString();
+    router.replace(`/credit-cards${query ? `?${query}` : ""}`, { scroll: false });
+  }, [router, searchParams]);
   const [isStackExpanded, setIsStackExpanded] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [selectedCardId, setSelectedCardId] = useSessionState<string | null>("nest:view:credit-cards:selected", null);

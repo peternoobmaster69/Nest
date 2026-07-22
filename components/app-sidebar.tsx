@@ -5,12 +5,11 @@ import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useTheme } from "./theme-provider";
+import { useConfirmDialog } from "./confirm-dialog";
 import { SidebarSkeleton } from "./ui-skeleton";
-import { ModalCloseButton } from "./ui/modal-close-button";
 import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
 import {
   ChartNoAxesCombined,
@@ -26,7 +25,6 @@ import {
   ShieldCheck,
   Sun,
   Undo2,
-  Users,
 } from "lucide-react";
 
 type Workspace = {
@@ -53,7 +51,6 @@ export function AppSidebar({
   userName,
   userEmail,
   userImage,
-  onDisplayNameUpdated,
   currentPath,
   badgeCounts,
   sidebarOpen,
@@ -64,7 +61,6 @@ export function AppSidebar({
   userName: string;
   userEmail?: string;
   userImage?: string | null;
-  onDisplayNameUpdated?: (name: string) => void;
   currentPath: string;
   badgeCounts?: {
     budgets?: number;
@@ -133,20 +129,16 @@ export function AppSidebar({
   const setIsOpen = onSidebarChange ?? setInternalSidebarOpen;
 
   const { theme, toggleTheme } = useTheme();
+  const { confirm } = useConfirmDialog();
 
-  const [displayName, setDisplayName] = useState(userName);
-  const [editingName, setEditingName] = useState(userName);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
-  const avatarAlt = displayName || userName || userEmail || "User";
+  const avatarAlt = userName || userEmail || "User";
 
   // Fetch all workspaces for switching
   const workspacesQuery = useQuery({
@@ -173,7 +165,7 @@ export function AppSidebar({
   useEffect(() => {
     if (!profileMenuOpen) return;
     const focusFrame = window.requestAnimationFrame(() => {
-      profileMenuRef.current?.querySelector<HTMLButtonElement>(".sb-user-menu button:not([disabled])")?.focus();
+      profileMenuRef.current?.querySelector<HTMLElement>(".sb-user-menu a[href],.sb-user-menu button:not([disabled])")?.focus();
     });
     const onClick = (event: MouseEvent) => {
       if (!profileMenuRef.current?.contains(event.target as Node)) {
@@ -187,59 +179,26 @@ export function AppSidebar({
     };
   }, [profileMenuOpen]);
 
-  useEffect(() => {
-    if (!profileModalOpen) return;
-    const onEsc = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setProfileModalOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onEsc);
-    return () => window.removeEventListener("keydown", onEsc);
-  }, [profileModalOpen]);
-
-  useEffect(() => {
-    setDisplayName(userName);
-    setEditingName(userName);
-  }, [userName]);
-
-  const saveDisplayName = async () => {
-    const nextName = editingName.trim();
-    if (!nextName) {
-      setProfileError("Display name is required.");
-      return;
-    }
-
-    setSavingProfile(true);
-    setProfileError(null);
-    try {
-      const res = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nextName }),
-      });
-
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        throw new Error(payload?.message || payload?.error || `Request failed (${res.status})`);
-      }
-
-      setDisplayName(nextName);
-      onDisplayNameUpdated?.(nextName);
-      setProfileModalOpen(false);
-    } catch (error) {
-      setProfileError(error instanceof Error ? error.message : "Failed to update profile.");
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
   const handleNavClick = () => {
     if (typeof window === "undefined") return;
     if (window.matchMedia("(max-width: 1280px)").matches) {
       setIsOpen(false);
       window.sessionStorage.setItem("nest:ui:sidebarOpen", "0");
     }
+  };
+
+  const confirmLogout = async () => {
+    setProfileMenuOpen(false);
+    const confirmed = await confirm({
+      title: "Log out of Nest?",
+      message: "You will need to sign in again to access your account on this device.",
+      confirmLabel: "Log out",
+      cancelLabel: "Cancel",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    await purgePrivateServiceWorkerCaches();
+    await signOut({ callbackUrl: "/" });
   };
 
   const switchWorkspace = async (workspaceId: string) => {
@@ -364,9 +323,6 @@ export function AppSidebar({
         </Link>
 
         <div className="sb-sec">Workspace</div>
-        <Link className={`sb-item${currentPath === "/collaborators" ? " on" : ""}`} href="/collaborators" onClick={handleNavClick}>
-          <Users className="sb-ic" size={18} aria-hidden="true" />Workspaces
-        </Link>
         <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href="/settings" onClick={handleNavClick}>
           <Settings className="sb-ic" size={18} aria-hidden="true" />Settings
         </Link>
@@ -377,7 +333,7 @@ export function AppSidebar({
         ) : null}
 
         {/* Mobile-only logout button */}
-        <button className="sb-item sb-logout-mobile" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/" }))}>
+        <button className="sb-item sb-logout-mobile" onClick={() => void confirmLogout()}>
           <LogOut className="sb-ic" size={18} aria-hidden="true" />Log Out
         </button>
       </div>
@@ -391,7 +347,7 @@ export function AppSidebar({
               <div className="avatar avatar-md avatar-green">{getInitials(userName)}</div>
             )}
             <div className="sb-user-meta">
-              <span className="sb-user-name">{displayName}</span>
+              <span className="sb-user-name">{userName}</span>
               <span className="sb-user-sub">
                 {resolvedContext?.isShared ? "👥" : "🔒"}{" "}
                 {resolvedContext?.workspaceName || "Workspace"}
@@ -401,11 +357,11 @@ export function AppSidebar({
           </button>
           {profileMenuOpen && (
             <div className="sb-user-menu">
-              <button
+              <Link
                 className="sb-user-menu-item"
+                href="/profile"
                 onClick={() => {
                   setProfileMenuOpen(false);
-                  setProfileModalOpen(true);
                   if (window.matchMedia("(max-width: 1280px)").matches) {
                     setIsOpen(false);
                     window.sessionStorage.setItem("nest:ui:sidebarOpen", "0");
@@ -413,7 +369,7 @@ export function AppSidebar({
                 }}
               >
                 View Profile
-              </button>
+              </Link>
               <button
                 className="sb-user-menu-item sb-user-menu-theme"
                 onClick={() => {
@@ -450,7 +406,7 @@ export function AppSidebar({
                 })
               )}
               <div className="sb-user-menu-divider" />
-              <button className="sb-user-menu-item" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/" }))}>
+              <button className="sb-user-menu-item" onClick={() => void confirmLogout()}>
                 Log Out
               </button>
             </div>
@@ -461,55 +417,6 @@ export function AppSidebar({
         )}
 
       </aside>
-
-      {profileModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay account-profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setProfileModalOpen(false))}>
-          <div className="profile-modal account-profile-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="profile-modal-head">
-              <h3>Profile</h3>
-              <ModalCloseButton onClick={() => setProfileModalOpen(false)} label="Close Profile" />
-            </div>
-            <div className="modal-form-shell">
-              <div className="profile-modal-body">
-              {userImage ? (
-                <Image src={userImage} alt={avatarAlt} width={44} height={44} className="avatar avatar-lg avatar-image" />
-              ) : (
-                <div className="avatar avatar-lg avatar-green">{getInitials(displayName)}</div>
-              )}
-              <div className="profile-field">
-                <span>Name</span>
-                <input
-                  className="input"
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  maxLength={120}
-                />
-              </div>
-              <div className="profile-field">
-                <span>Email</span>
-                <strong title={userEmail || "No email"}>{userEmail || "No email"}</strong>
-              </div>
-              <div className="profile-field">
-                <span>Account</span>
-                <strong>Personal Workspace</strong>
-              </div>
-              {profileError && (
-                <div className="profile-error">{profileError}</div>
-              )}
-              </div>
-              <div className="profile-actions">
-                <button className="btn btn-ghost btn-xs" onClick={() => setProfileModalOpen(false)} disabled={savingProfile}>
-                  Cancel
-                </button>
-                <button className="btn btn-primary btn-xs" onClick={saveDisplayName} disabled={savingProfile}>
-                  {savingProfile ? "Saving..." : "Update"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
 
       {/* Workspace Transition Overlay */}
       {isTransitioning && (

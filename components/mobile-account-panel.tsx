@@ -2,12 +2,10 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronRight, LogOut, Moon, Sun, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, ChevronRight, Moon, Sun } from "lucide-react";
+import { useState } from "react";
 import { useTheme } from "@/components/theme-provider";
-import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
 
 type Workspace = {
   id: string;
@@ -31,7 +29,6 @@ export function MobileAccountPanel({
   userImage,
   workspaceId,
   workspaceName,
-  onDisplayNameUpdated,
   onClose,
 }: {
   userName: string;
@@ -39,20 +36,14 @@ export function MobileAccountPanel({
   userImage?: string | null;
   workspaceId?: string | null;
   workspaceName?: string | null;
-  onDisplayNameUpdated?: (name: string) => void;
   onClose: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const [displayName, setDisplayName] = useState(userName);
-  const [editingName, setEditingName] = useState(userName);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [savingProfile, setSavingProfile] = useState(false);
   const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const avatarAlt = displayName || userEmail || "User";
+  const avatarAlt = userName || userEmail || "User";
 
   const workspaces = useQuery({
     queryKey: ["workspaces"],
@@ -62,51 +53,6 @@ export function MobileAccountPanel({
       return response.json() as Promise<Workspace[]>;
     },
   });
-
-  useEffect(() => {
-    setDisplayName(userName);
-    setEditingName(userName);
-  }, [userName]);
-
-  useEffect(() => {
-    if (!profileOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      setProfileOpen(false);
-    };
-    document.addEventListener("keydown", closeOnEscape, true);
-    return () => document.removeEventListener("keydown", closeOnEscape, true);
-  }, [profileOpen]);
-
-  const saveDisplayName = async () => {
-    const nextName = editingName.trim();
-    if (!nextName) {
-      setProfileError("Display name is required.");
-      return;
-    }
-    setSavingProfile(true);
-    setProfileError(null);
-    try {
-      const response = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nextName }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || payload?.error || "Failed to update profile");
-      }
-      setDisplayName(nextName);
-      onDisplayNameUpdated?.(nextName);
-      setProfileOpen(false);
-    } catch (error) {
-      setProfileError(error instanceof Error ? error.message : "Failed to update profile.");
-    } finally {
-      setSavingProfile(false);
-    }
-  };
 
   const switchWorkspace = async (nextWorkspaceId: string) => {
     if (nextWorkspaceId === workspaceId) return;
@@ -155,58 +101,17 @@ export function MobileAccountPanel({
   return (
     <>
       <div className="mobile-account-panel">
-        {profileOpen ? (
-          <form
-            className="mobile-account-profile-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveDisplayName();
-            }}
-          >
-            <button className="mobile-account-profile-back" type="button" onClick={() => setProfileOpen(false)}>
-              <ArrowLeft size={17} aria-hidden="true" /> Back to account
-            </button>
-            <div className="mobile-account-profile-heading">
-              {userImage ? (
-                <Image src={userImage} alt={avatarAlt} width={44} height={44} className="avatar avatar-lg avatar-image" />
-              ) : (
-                <div className="avatar avatar-lg avatar-green">{initials(displayName)}</div>
-              )}
-              <div><strong>Edit profile</strong><span>Update your Nest account details.</span></div>
-            </div>
-            <label className="mobile-account-profile-field">
-              <span>Name</span>
-              <input className="input" value={editingName} onChange={(event) => setEditingName(event.target.value)} maxLength={120} autoFocus />
-            </label>
-            <div className="mobile-account-profile-meta"><span>Email</span><strong>{userEmail || "No email"}</strong></div>
-            <div className="mobile-account-profile-meta"><span>Workspace</span><strong>{workspaceName || "Personal workspace"}</strong></div>
-            {profileError ? <div className="profile-error">{profileError}</div> : null}
-            <div className="mobile-account-profile-actions">
-              <button className="btn btn-ghost" type="button" onClick={() => setProfileOpen(false)} disabled={savingProfile}>Cancel</button>
-              <button className="btn btn-primary" type="submit" disabled={savingProfile}>
-                {savingProfile ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <>
         <div className="mobile-account-identity">
           {userImage ? (
             <Image src={userImage} alt={avatarAlt} width={44} height={44} className="avatar avatar-lg avatar-image" />
           ) : (
-            <div className="avatar avatar-lg avatar-green">{initials(displayName)}</div>
+            <div className="avatar avatar-lg avatar-green">{initials(userName)}</div>
           )}
           <div>
-            <strong>{displayName || "Account"}</strong>
+            <strong>{userName || "Account"}</strong>
             <span>{userEmail || workspaceName || "Nest account"}</span>
           </div>
         </div>
-
-        <button className="mobile-account-action" type="button" onClick={() => setProfileOpen(true)}>
-          <UserRound size={19} aria-hidden="true" />
-          <span><strong>View profile</strong><small>Update your name and account details</small></span>
-          <ChevronRight size={17} aria-hidden="true" />
-        </button>
 
         <button className="mobile-account-action" type="button" onClick={toggleTheme}>
           {theme === "light" ? <Moon size={19} aria-hidden="true" /> : <Sun size={19} aria-hidden="true" />}
@@ -240,13 +145,6 @@ export function MobileAccountPanel({
             );
           })}
         </div>
-
-        <button className="mobile-account-action mobile-account-logout" type="button" onClick={() => void purgePrivateServiceWorkerCaches().finally(() => signOut({ callbackUrl: "/" }))}>
-          <LogOut size={19} aria-hidden="true" />
-          <span><strong>Log out</strong><small>Sign out of Nest on this device</small></span>
-        </button>
-          </>
-        )}
       </div>
 
       {isTransitioning ? (

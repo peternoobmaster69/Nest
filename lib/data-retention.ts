@@ -15,6 +15,7 @@ type PolicyName =
   | "workspaceInvites"
   | "notifications"
   | "auditLogs"
+  | "loginSessions"
   | "expiredCaches"
   | "rateLimits";
 
@@ -33,6 +34,7 @@ const POLICIES = {
   readNotifications: { env: "READ_NOTIFICATION_RETENTION_DAYS", defaultDays: 90, minimumDays: 7, maximumDays: 3_650 },
   notifications: { env: "NOTIFICATION_RETENTION_DAYS", defaultDays: 365, minimumDays: 30, maximumDays: 3_650 },
   auditLogs: { env: "AUDIT_LOG_RETENTION_DAYS", defaultDays: 730, minimumDays: 90, maximumDays: 7_300 },
+  loginSessions: { env: "LOGIN_SESSION_RETENTION_DAYS", defaultDays: 90, minimumDays: 7, maximumDays: 730 },
 } satisfies Record<string, RetentionPolicy>;
 
 function boundedInteger(value: string | undefined, fallback: number, minimum: number, maximum: number) {
@@ -55,6 +57,7 @@ export function getDataRetentionConfig() {
     readNotificationDays: retentionDays(POLICIES.readNotifications),
     notificationDays: retentionDays(POLICIES.notifications),
     auditLogDays: retentionDays(POLICIES.auditLogs),
+    loginSessionDays: retentionDays(POLICIES.loginSessions),
   };
 }
 
@@ -150,6 +153,14 @@ export async function runDataRetention(options: { now?: Date } = {}) {
   const auditCutoff = cutoff(now, config.auditLogDays);
   results.auditLogs = await runBoundedPolicy(
     (size) => prisma.$executeRaw(Prisma.sql`DELETE TOP (${size}) FROM [dbo].[WorkspaceAuditLog] WHERE [createdAt] < ${auditCutoff}`),
+    config.batchSize,
+  );
+
+  const loginSessionCutoff = cutoff(now, config.loginSessionDays);
+  results.loginSessions = await runBoundedPolicy(
+    (size) => prisma.$executeRaw(Prisma.sql`
+      DELETE TOP (${size}) FROM [dbo].[LoginSession] WHERE [signedInAt] < ${loginSessionCutoff}
+    `),
     config.batchSize,
   );
 

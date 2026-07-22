@@ -64,7 +64,6 @@ test("authenticated feature routes use the shared shell", async () => {
     "app/credit-alerts/page.tsx",
     "app/rewards/page.tsx",
     "app/settings/page.tsx",
-    "app/collaborators/page.tsx",
     "app/budgets/plan/page.tsx",
   ];
 
@@ -348,6 +347,26 @@ test("credit transaction card selection uses a compact mobile-only dropdown", as
   assert.doesNotMatch(styles, /modal-overlay-mobile-sheet|modal-mobile-sheet/);
 });
 
+test("credit transactions guide cardless workspaces to add a card before opening the form", async () => {
+  const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
+  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+
+  assert.match(component, /if \(sortedCards\.length === 0\)[\s\S]*?title="Add a credit card first"/);
+  assert.match(component, /href="\/credit-cards\?add=1"[\s\S]*?Add a credit card/);
+  assert.match(component, /Credit card transactions need a card to attach to/);
+  assert.match(styles, /\.cct-card-prerequisite\s*\{[^}]*min-height:[^}]*place-items:\s*center/s);
+});
+
+test("the card prerequisite deep link opens the add-card modal once", async () => {
+  const component = await readFile(path.join(root, "components/credit-cards-page.tsx"), "utf8");
+
+  assert.match(component, /useSearchParams\(\)/);
+  assert.match(component, /searchParams\.get\("add"\) !== "1"/);
+  assert.match(component, /setEditingCardId\(null\)[\s\S]*?setIsModalOpen\(true\)/);
+  assert.match(component, /nextParams\.delete\("add"\)/);
+  assert.match(component, /router\.replace\(`[\s\S]*?scroll: false/);
+});
+
 test("tablet and desktop card rails use stable explicit navigation", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
@@ -363,7 +382,6 @@ test("tablet and desktop card rails use stable explicit navigation", async () =>
 
 test("phone layouts use the native-style mobile application shell", async () => {
   const shell = await readFile(path.join(root, "components/app-shell.tsx"), "utf8");
-  const mobileAccount = await readFile(path.join(root, "components/mobile-account-panel.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
   const moreNavigationStart = shell.indexOf('<nav className="mobile-more-links"');
@@ -379,23 +397,50 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(bottomNavigation, /href="\/investments"[\s\S]*?<span>Investments<\/span>/);
   assert.doesNotMatch(bottomNavigation, /href="\/budgets\/plan"/);
   assert.match(moreNavigation, /href="\/budgets\/plan"[\s\S]*?<strong>Budget<\/strong>/);
+  assert.doesNotMatch(moreNavigation, /href="\/profile"|<strong>Profile<\/strong>/);
   assert.doesNotMatch(moreNavigation, /href="\/investments"/);
   assert.match(shell, /aria-haspopup="dialog"[\s\S]*?<span>More<\/span>/);
   assert.match(shell, /className="mobile-bottom-nav-workspace"[\s\S]*?Current workspace:/);
   assert.match(styles, /\.mobile-bottom-nav-workspace\s*\{[^}]*position:\s*absolute[^}]*height:\s*var\(--mobile-nav-safe-bottom\)/s);
-  assert.match(shell, /className="mobile-more-account"[\s\S]*?Profile, appearance, and workspace/);
-  assert.match(shell, /setMobileMoreView\("account"\)/);
-  assert.match(shell, /<MobileAccountPanel[\s\S]*?onClose=\{closeMobileNavigation\}/);
-  assert.doesNotMatch(shell, /profileMenuRequest|mobileAccountRequest/);
-  assert.match(mobileAccount, /className="mobile-account-profile-form"/);
-  assert.doesNotMatch(mobileAccount, /profile-modal-overlay|account-profile-modal/);
+  assert.match(shell, /className="mobile-more-account" href="\/profile"[\s\S]*?userImage \?[\s\S]*?<Image src=\{userImage\}[\s\S]*?<small>View profile<\/small>/);
+  assert.match(shell, /className="mobile-more-theme-toggle"[\s\S]*?onClick=\{toggleTheme\}[\s\S]*?Switch to dark mode/);
+  assert.match(shell, /className="mobile-more-logout"[\s\S]*?<strong>Log out<\/strong>/);
+  assert.ok(shell.indexOf('className="mobile-more-logout"') < shell.indexOf('className="mobile-more-account-row"'));
+  assert.match(shell, /const confirmLogout = async \(\) => \{[\s\S]*?closeMobileNavigation\(\)[\s\S]*?await confirm\(\{[\s\S]*?title: "Log out of Nest\?"[\s\S]*?if \(!confirmed\) return;[\s\S]*?signOut\(\{ callbackUrl: "\/" \}\)/);
+  assert.match(shell, /className="mobile-more-logout"[\s\S]*?onClick=\{\(\) => void confirmLogout\(\)\}/);
+  assert.doesNotMatch(shell, /MobileAccountPanel|mobileMoreView|setMobileMoreView|profileMenuRequest|mobileAccountRequest/);
+  assert.match(styles, /\.mobile-more-account-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 60px/s);
+  assert.match(styles, /\.mobile-more-theme-toggle\s*\{[^}]*position:\s*relative[^}]*width:\s*44px[^}]*height:\s*44px/s);
+  assert.match(styles, /\.mobile-more-theme-toggle > svg\s*\{[^}]*top:\s*50%[^}]*left:\s*50%[^}]*transform:\s*translate\(-50%, -50%\)/s);
   assert.match(shell, /document\.documentElement\.dataset\.mobileMoreOpen/);
   assert.match(styles, /\.mobile-bottom-nav,[\s\S]*?\.mobile-more-menu\s*\{[\s\S]*?display:\s*none/);
   assert.match(styles, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.topbar \.hamburger\s*\{[^}]*display:\s*none\s*!important[\s\S]*?\.mobile-bottom-nav\s*\{[^}]*position:\s*fixed[^}]*display:\s*flex/s);
+  assert.match(styles, /\.topbar \.notification-badge\s*\{[^}]*top:\s*4px[^}]*right:\s*4px/s);
   assert.match(layout, /viewportFit:\s*"cover"/);
   assert.match(styles, /--mobile-nav-safe-bottom:\s*max\(24px, env\(safe-area-inset-bottom, 0px\)\)/);
   assert.match(styles, /\.mobile-bottom-nav\s*\{[^}]*min-height:\s*var\(--mobile-nav-height\)[^}]*padding:[^;]*var\(--mobile-nav-safe-bottom\)/s);
   assert.match(styles, /\.body\s*\{[^}]*padding:\s*14px 12px calc\(16px \+ var\(--mobile-nav-height\)\)/s);
+});
+
+test("profile details live on a dedicated authenticated page", async () => {
+  const [route, profile, sidebar, styles] = await Promise.all([
+    readFile(path.join(root, "app/profile/page.tsx"), "utf8"),
+    readFile(path.join(root, "components/profile-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/app-sidebar.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(route, /await requireSession\(\)/);
+  assert.match(route, /current="\/profile"/);
+  assert.match(route, /<ProfilePage/);
+  assert.match(profile, /fetch\("\/api\/profile"[\s\S]*?method:\s*"PATCH"/);
+  assert.match(profile, /"Save profile"/);
+  assert.match(profile, /href="\/settings\?tab=settings"/);
+  assert.match(sidebar, /href="\/profile"[\s\S]*?View Profile/);
+  assert.doesNotMatch(sidebar, /account-profile-modal|profileModalOpen/);
+  assert.match(styles, /\.card\.profile-page-card\s*\{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s);
+  assert.match(styles, /@media\s*\(max-width:\s*700px\)[\s\S]*?\.profile-page-avatar\s*\{[^}]*width:\s*52px[^}]*height:\s*52px/s);
+  assert.match(styles, /@media\s*\(max-width:\s*700px\)[\s\S]*?\.profile-page-actions \.btn\s*\{[^}]*width:\s*100%[^}]*min-height:\s*44px/s);
 });
 
 test("long application pages expose an accessible scroll-to-top control", async () => {
@@ -452,10 +497,35 @@ test("settings keeps a compact continuous layout", async () => {
   assert.match(settings, /Automation/);
   assert.match(settings, /Data tools/);
   assert.match(settings, /Bank accounts/);
-  assert.doesNotMatch(settings, /role="tablist"|activeSettingsTab|settings-tab/);
-  assert.doesNotMatch(styles, /\.settings-tab/);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-card-block \{\s*padding: 14px/s);
   assert.match(styles, /\.st-container \.st-grid[\s\S]*?gap: 10px/s);
+});
+
+test("settings and workspaces share cookie-backed tabs", async () => {
+  const [route, tabs, legacyRoute, tabConfig, shell, sidebar, styles] = await Promise.all([
+    readFile(path.join(root, "app/settings/page.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings-tabs.tsx"), "utf8"),
+    readFile(path.join(root, "app/collaborators/page.tsx"), "utf8"),
+    readFile(path.join(root, "lib/settings-tabs.ts"), "utf8"),
+    readFile(path.join(root, "components/app-shell.tsx"), "utf8"),
+    readFile(path.join(root, "components/app-sidebar.tsx"), "utf8"),
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+  ]);
+
+  assert.match(route, /searchParams\?: Promise<\{ tab\?: string \}>/);
+  assert.match(route, /cookies\(\)/);
+  assert.match(route, /parseSettingsTab\(params\.tab\)[\s\S]*?cookieStore\.get\(SETTINGS_TAB_COOKIE\)/);
+  assert.match(route, /activeTab === "workspaces" \? <CollaboratorsPage \/> : <SettingsPage \/>/);
+  assert.match(tabs, /role="tablist"[\s\S]*?role="tab"[\s\S]*?role="tabpanel"/);
+  assert.match(tabs, /event\.key === "ArrowRight"[\s\S]*?event\.key === "ArrowLeft"[\s\S]*?router\.push\(`\/settings\?tab=\$\{nextTab\}`\)/);
+  assert.match(tabs, /document\.cookie = `\$\{SETTINGS_TAB_COOKIE\}=\$\{tab\}; Path=\/; Max-Age=\$\{ONE_YEAR_SECONDS\}; SameSite=Lax/);
+  assert.match(tabConfig, /SETTINGS_TAB_COOKIE = "nest-settings-tab"/);
+  assert.match(legacyRoute, /await requireSession\(\)[\s\S]*?redirect\("\/settings\?tab=workspaces"\)/);
+  assert.doesNotMatch(shell, /href="\/collaborators"/);
+  assert.doesNotMatch(sidebar, /href="\/collaborators"/);
+  assert.match(styles, /\.settings-tabs\s*\{[^}]*display:\s*flex[^}]*border-bottom:\s*1px solid var\(--border-subtle\)/s);
+  assert.match(styles, /\.settings-tab\.is-active::after\s*\{[^}]*background:\s*var\(--brand-500\)/s);
+  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*?\.settings-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s);
 });
 
 test("Gmail sync uses one responsive status surface", async () => {

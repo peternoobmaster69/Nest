@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { getTrustedRequestMetadata } from "@/lib/auth-request-metadata";
 import { ensureDatabaseReady } from "@/lib/database-readiness";
 import { prisma } from "@/lib/prisma";
 
@@ -11,28 +12,10 @@ type RateLimitOptions = {
   blockMs?: number;
 };
 
-function requestAddress(request: Request) {
-  const headers = request.headers;
-  if (process.env.VERCEL) {
-    return (headers.get("x-vercel-forwarded-for")?.split(",")[0] || "unknown").trim();
-  }
-  if (process.env.WEBSITE_SITE_NAME || process.env.WEBSITE_INSTANCE_ID) {
-    return (headers.get("x-azure-clientip") || "unknown").trim();
-  }
-  if (process.env.TRUST_PROXY_HEADERS === "true") {
-    return (
-      headers.get("cf-connecting-ip") ||
-      headers.get("x-real-ip") ||
-      headers.get("x-forwarded-for")?.split(",")[0] ||
-      "unknown"
-    ).trim();
-  }
-  return "unknown";
-}
-
 export async function enforceDistributedRateLimit(request: Request, options: RateLimitOptions) {
   await ensureDatabaseReady();
-  const rawKey = `${options.scope}:${requestAddress(request)}:${options.identifier ?? ""}`;
+  const requestAddress = getTrustedRequestMetadata(request).ipAddress ?? "unknown";
+  const rawKey = `${options.scope}:${requestAddress}:${options.identifier ?? ""}`;
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
   const now = new Date();
   const cutoff = new Date(now.getTime() - options.windowMs);

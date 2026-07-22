@@ -7,6 +7,7 @@ import AppleProvider from "next-auth/providers/apple";
 import FacebookProvider from "next-auth/providers/facebook";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { getAuthRequestMetadata } from "@/lib/auth-request-metadata";
 import { prisma } from "@/lib/prisma";
 import { consumePasskeyLoginTicket } from "@/lib/passkeys";
 import {
@@ -46,7 +47,11 @@ async function claimSessionIfAvailable({
   return claimed.count === 1;
 }
 
-async function initializeSessionToken(token: JWT, userId: string) {
+async function initializeSessionToken(
+  token: JWT,
+  userId: string,
+  login?: { provider: string | null },
+) {
   const now = new Date();
   const storedUser = await prisma.user.findUnique({
     where: { id: userId },
@@ -63,6 +68,20 @@ async function initializeSessionToken(token: JWT, userId: string) {
   token.takeoverRequired = false;
 
   if (!storedUser) return token;
+
+  if (login) {
+    const requestMetadata = getAuthRequestMetadata();
+    await prisma.loginSession.create({
+      data: {
+        sessionId: token.sessionId,
+        userId,
+        provider: login.provider,
+        ipAddress: requestMetadata.ipAddress,
+        countryCode: requestMetadata.countryCode,
+        signedInAt: now,
+      },
+    });
+  }
 
   const claimed = await claimSessionIfAvailable({
     userId,
@@ -132,10 +151,10 @@ export const authOptions: NextAuthOptions = {
         claims.verified === true
       );
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user?.id) {
         token.authenticatedAt = Math.floor(Date.now() / 1000);
-        return initializeSessionToken(token, user.id);
+        return initializeSessionToken(token, user.id, { provider: account?.provider ?? null });
       }
 
       if (!token.id) return token;
