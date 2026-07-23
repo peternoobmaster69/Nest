@@ -12,6 +12,7 @@ export async function GET() {
     const userId = await requireSessionUserId();
     const memberships = await prisma.workspaceMember.findMany({
       where: { userId },
+      take: 100,
       include: {
         workspace: {
           select: { id: true, name: true, baseCurrency: true },

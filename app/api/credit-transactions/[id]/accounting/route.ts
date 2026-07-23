@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSmartReviewFingerprint, isSmartReviewGeneratedAtFresh } from "@/lib/ai/smart-review";
-import { claimCreditCardTransaction, createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
+import { claimCreditCardTransaction, createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";

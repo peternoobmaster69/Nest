@@ -25,6 +25,7 @@ export async function GET(request: Request) {
     const budgets = await prisma.budgetEnvelope.findMany({
       where: { workspaceId, isActive: true },
       orderBy: { name: "asc" },
+      take: 500,
       select: {
         id: true,
         accountId: true,

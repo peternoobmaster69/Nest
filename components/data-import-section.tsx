@@ -1,10 +1,10 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { Upload, AlertCircle, CheckCircle, XCircle, Calculator } from "lucide-react";
 
 interface DataImportSectionProps {
@@ -76,22 +76,10 @@ type RecalculateResult = {
 
 const CHUNK_SIZE = 25; // Process 25 records at a time
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
-    try {
-      const payload = await res.json();
-      detail = payload?.message || payload?.error || detail;
-    } catch {}
-    throw new Error(detail);
-  }
-  return res.json();
-}
-
 export function DataImportSection({ workspaceId, baseCurrency }: DataImportSectionProps) {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const importRunRef = useRef<{ fingerprint: string; id: string } | null>(null);
   const [jsonInput, setJsonInput] = useState("");
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
@@ -199,6 +187,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
 
   // Update preview when JSON changes
   const handleJsonChange = (value: string) => {
+    importRunRef.current = null;
     setJsonInput(value);
     setPreview(validateJson(value));
     setMessage("");
@@ -210,10 +199,15 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     transactions: unknown[],
     chunkIndex: number,
     chunkSize: number,
+    totalChunks: number,
+    importRunId: string,
   ): Promise<ChunkResult> => {
     return fetchJson<ChunkResult>("/api/transactions/bulk-import", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": `json-import:${importRunId}:${chunkIndex}`,
+      },
       body: JSON.stringify({
         workspaceId: activeWorkspaceId,
         accountId: selectedAccountId,
@@ -222,7 +216,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         transactions,
         chunkIndex,
         chunkSize,
-        recalculate: false,
+        totalChunks,
+        importRunId,
+        recalculate: true,
       }),
     });
   }, [activeWorkspaceId, selectedAccountId, selectedBudgetId, kind]);
@@ -273,6 +269,17 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     try {
       const totalTransactions = preview.transactions.length;
       const totalChunks = Math.ceil(totalTransactions / CHUNK_SIZE);
+      const fingerprint = JSON.stringify({
+        workspaceId: activeWorkspaceId,
+        accountId: selectedAccountId,
+        budgetId: selectedBudgetId,
+        kind,
+        transactions: preview.transactions,
+      });
+      if (importRunRef.current?.fingerprint !== fingerprint) {
+        importRunRef.current = { fingerprint, id: crypto.randomUUID() };
+      }
+      const importRunId = importRunRef.current.id;
       let totalImported = 0;
       let totalDuplicates = 0;
       const allDuplicateRecords: DuplicateRecord[] = [];
@@ -290,7 +297,13 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
           current: startIndex,
         }));
 
-        const result = await importChunk(chunkTransactions, chunkIndex, CHUNK_SIZE);
+        const result = await importChunk(
+          chunkTransactions,
+          chunkIndex,
+          CHUNK_SIZE,
+          totalChunks,
+          importRunId,
+        );
 
         totalImported += result.imported;
         totalDuplicates += result.duplicates;
@@ -326,6 +339,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       setMessage(`Import complete! Imported ${totalImported} transactions. ${totalDuplicates} duplicates skipped. ${totalFailed} failed.${recalculationMessage}`);
       setJsonInput("");
       setPreview(null);
+      importRunRef.current = null;
       invalidateFinancialQueries();
     } catch (error) {
       setMessage(`Import failed: ${error instanceof Error ? error.message : "Unknown error"}`);

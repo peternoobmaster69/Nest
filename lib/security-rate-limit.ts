@@ -72,7 +72,7 @@ export function rateLimitResponse(error: unknown) {
       : null;
   if (!retryAfter) return null;
   return Response.json(
-    { error: "Too many requests" },
+    { error: "Too many requests", code: "RATE_LIMITED" },
     { status: 429, headers: { "Retry-After": String(retryAfter) } },
   );
 }

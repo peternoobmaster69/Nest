@@ -17,18 +17,22 @@ export async function GET() {
     const [creditCardRewards, frequentFlyers, hotelRewards, conversions] = await Promise.all([
       prisma.creditCardReward.findMany({
         where: { workspaceId },
+        take: 500,
         include: { creditCard: true },
       }),
       prisma.frequentFlyerAccount.findMany({
         where: { workspaceId },
+        take: 500,
         orderBy: { programName: "asc" },
       }),
       prisma.hotelRewardAccount.findMany({
         where: { workspaceId, isActive: true },
+        take: 500,
         orderBy: { programName: "asc" },
       }),
       prisma.pointConversion.findMany({
         where: { workspaceId },
+        take: 500,
         include: {
           creditCardReward: { include: { creditCard: true } },
           frequentFlyer: true,
@@ -39,6 +43,7 @@ export async function GET() {
 
     const expiringMiles = frequentFlyers.length
       ? await prisma.mileProgram.findMany({
+          take: 5_000,
           where: {
             workspaceId,
             frequentFlyerId: { in: frequentFlyers.map((flyer) => flyer.id) },
@@ -95,6 +100,7 @@ export async function GET() {
 
     const allCards = await prisma.creditCardAccount.findMany({
       where: { workspaceId, isActive: true },
+      take: 500,
       select: { id: true, cardName: true, bankName: true, last4Digit: true },
     });
 

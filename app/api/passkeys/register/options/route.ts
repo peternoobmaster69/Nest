@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     });
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-    const existing = await prisma.passkeyCredential.findMany({ where: { userId: user.id } });
+    const existing = await prisma.passkeyCredential.findMany({ where: { userId: user.id }, take: 100 });
     const { rpID, rpName } = getWebAuthnConfig(request);
     const options = await generateRegistrationOptions({
       rpName,

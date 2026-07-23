@@ -1,5 +1,5 @@
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
-import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
+import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";

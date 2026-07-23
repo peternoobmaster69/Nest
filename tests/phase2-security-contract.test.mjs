@@ -191,6 +191,13 @@ test("production startup rejects missing or unsafe security settings", () => {
   assert.throws(() => assertProductionConfig({ ...safe, NEXTAUTH_SECRET: "short" }), /NEXTAUTH_SECRET/);
   assert.throws(() => assertProductionConfig({ ...safe, NEXTAUTH_URL: "http://nest.example.com" }), /HTTPS origin/);
   assert.throws(() => assertProductionConfig({ ...safe, DATABASE_URL: safe.DATABASE_URL.replace("encrypt=true", "encrypt=false") }), /encrypt=true/);
+  assert.throws(
+    () => assertProductionConfig({ ...safe, ENABLE_API_DOCS: "true", ADMIN: "" }),
+    /ADMIN is required/,
+  );
+  assert.doesNotThrow(
+    () => assertProductionConfig({ ...safe, ENABLE_API_DOCS: "true", ADMIN: "admin@example.com" }),
+  );
 });
 
 test("legacy password session and account pages are gone", async () => {

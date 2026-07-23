@@ -13,6 +13,12 @@ export async function GET(request: Request) {
     const workspaceId = searchParams.get("workspaceId");
     const accountId = searchParams.get("accountId");
     const budgetId = searchParams.get("budgetId");
+    if ([workspaceId, accountId, budgetId].some((value) => (value?.length ?? 0) > 191)) {
+      return NextResponse.json(
+        { error: "Workspace, account, or budget id is too long", code: "INVALID_REQUEST" },
+        { status: 400 },
+      );
+    }
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
@@ -29,7 +35,7 @@ export async function GET(request: Request) {
         expenseCents: number | bigint | null;
       }>
     >(Prisma.sql`
-      SELECT
+      SELECT TOP (240)
         YEAR([date]) AS [year],
         MONTH([date]) AS [month],
         COUNT_BIG(*) AS [count],

@@ -1,12 +1,22 @@
 import { PrismaClient } from "@prisma/client";
+import {
+  assertMutationAllowed,
+  auditDataScript,
+  parseSafetyArgs,
+} from "./data-script-safety.mjs";
 
 const prisma = new PrismaClient();
-const DEFAULT_URL = "https://peter-htet.outsystemscloud.com/FM/rest/KFMiles/GetKFMiles";
 
 function toDate(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function safeUrlLabel(value) {
+  const url = new URL(value);
+  if (url.username || url.password) throw new Error("Legacy API URL must not contain credentials.");
+  return `${url.origin}${url.pathname}`;
 }
 
 async function runWithConcurrency(items, limit, worker, onProgress) {
@@ -28,11 +38,19 @@ async function runWithConcurrency(items, limit, worker, onProgress) {
 }
 
 async function main() {
-  const workspaceId = process.argv[2];
-  const apiUrl = process.argv[3] || DEFAULT_URL;
-  if (!workspaceId) {
-    throw new Error("Usage: node scripts/import-kf-miles.mjs <workspaceId> [apiUrl]");
+  const args = process.argv.slice(2);
+  const positional = args.filter((arg) => !arg.startsWith("--"));
+  const workspaceId = positional[0];
+  const apiUrl = positional[1];
+  if (!workspaceId || !apiUrl) {
+    throw new Error(
+      "Usage: node scripts/import-kf-miles.mjs <workspaceId> <apiUrl> " +
+      "[--apply --environment=<name> --confirm=<workspaceId>]",
+    );
   }
+  const safety = parseSafetyArgs(args);
+  assertMutationAllowed({ safety, workspaceId, operation: "import-kf-miles" });
+  const apiLabel = safeUrlLabel(apiUrl);
 
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
@@ -42,7 +60,7 @@ async function main() {
     throw new Error(`Workspace not found: ${workspaceId}`);
   }
 
-  console.log(`Import start: workspace=${workspaceId}, api=${apiUrl}`);
+  console.log(`Import start: workspace=${workspaceId}, api=${apiLabel}`);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000);
@@ -62,12 +80,28 @@ async function main() {
   console.log(
     `Parsed payload: miles=${legacyMiles.length}, redemptions=${legacyRedemptions.length}, details=${legacyDetails.length}`,
   );
+  if ([legacyMiles, legacyRedemptions, legacyDetails].some((rows) => rows.length > 10_000)) {
+    throw new Error("Legacy import collections are limited to 10,000 rows each.");
+  }
+  if (!safety.apply) {
+    auditDataScript({
+      operation: "import-kf-miles",
+      mode: "dry-run",
+      workspaceId,
+      apiUrl: apiLabel,
+      miles: legacyMiles.length,
+      redemptions: legacyRedemptions.length,
+      redemptionDetails: legacyDetails.length,
+    });
+    return;
+  }
 
   // Clear existing workspace data before import to avoid duplicates.
   const workspaceRedemptionIds = (
     await prisma.mileRedemption.findMany({
       where: { workspaceId },
       select: { id: true },
+      take: 10_000,
     })
   ).map((row) => row.id);
 
@@ -75,6 +109,7 @@ async function main() {
     await prisma.mileProgram.findMany({
       where: { workspaceId },
       select: { id: true },
+      take: 10_000,
     })
   ).map((row) => row.id);
 
@@ -164,19 +199,15 @@ async function main() {
     },
   );
 
-  console.log(
-    JSON.stringify(
-      {
-        workspaceId,
-        workspaceName: workspace.name,
-        importedMiles: legacyMiles.length,
-        importedRedemptions: legacyRedemptions.length,
-        importedRedemptionDetails: legacyDetails.length,
-      },
-      null,
-      2,
-    ),
-  );
+  auditDataScript({
+    operation: "import-kf-miles",
+    mode: "apply",
+    workspaceId,
+    workspaceName: workspace.name,
+    importedMiles: legacyMiles.length,
+    importedRedemptions: legacyRedemptions.length,
+    importedRedemptionDetails: legacyDetails.length,
+  });
 }
 
 main()

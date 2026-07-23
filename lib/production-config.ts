@@ -88,5 +88,10 @@ export function assertProductionConfig(env: EnvMap = process.env) {
   if (required(env, "CRON_SECRET").length < 32) {
     throw new Error("Production configuration error: CRON_SECRET must contain at least 32 characters.");
   }
+  if (env.ENABLE_API_DOCS === "true" && !env.ADMIN?.trim()) {
+    throw new Error(
+      "Production configuration error: ADMIN is required when ENABLE_API_DOCS=true.",
+    );
+  }
   assertDatabaseTls(env);
 }

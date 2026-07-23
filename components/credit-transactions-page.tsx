@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 
@@ -115,20 +115,6 @@ type PaymentDueMonthsResponse = {
     paymentDueDate: string;
   }>;
 };
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const payload = await res.json();
-      if (typeof payload?.error === "string") message = payload.error;
-      else if (typeof payload?.message === "string") message = payload.message;
-    } catch {}
-    throw new Error(message);
-  }
-  return res.json();
-}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -869,7 +855,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   });
 
   const importMaybankCsv = useMutation({
-    mutationFn: async (payload: { creditCardId: string; csvContent: string }) =>
+    mutationFn: async (payload: { creditCardId: string; csvContent: string; importRunId: string }) =>
       fetchJson<{
         imported: number;
         skippedDuplicates: number;
@@ -877,7 +863,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         totalRows: number;
       }>("/api/credit-transactions/import-maybank", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": `maybank:${payload.importRunId}:0`,
+        },
         body: JSON.stringify(payload),
       }),
     onSuccess: (result, payload) => {
@@ -1198,7 +1187,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
     try {
       const csvContent = await file.text();
-      importMaybankCsv.mutate({ creditCardId: selectedCardId, csvContent });
+      importMaybankCsv.mutate({
+        creditCardId: selectedCardId,
+        csvContent,
+        importRunId: crypto.randomUUID(),
+      });
     } catch {
       setImportMessage("Failed to read CSV file.");
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 
@@ -255,20 +255,6 @@ function getAutoAccountingNotice(message: string): SettingsOperationNoticeData |
       : "success";
 
   return { title, detail, tone };
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
-    try {
-      const payload = await res.json();
-      const payloadDetail = payload?.message || payload?.error;
-      detail = typeof payloadDetail === "string" ? payloadDetail : JSON.stringify(payloadDetail || payload) || detail;
-    } catch {}
-    throw new Error(detail);
-  }
-  return res.json();
 }
 
 function getRuleFilters(rule: AutoRule) {

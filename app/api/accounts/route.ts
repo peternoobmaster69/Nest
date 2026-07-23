@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     const accounts = await prisma.financialAccount.findMany({
       where: { workspaceId, kind: "BANK" },
       orderBy: { createdAt: "asc" },
+      take: 500,
     });
 
     const consistency = await getBankConsistency(prisma, workspaceId);

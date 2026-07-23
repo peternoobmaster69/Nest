@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -54,19 +54,6 @@ type InvestmentChartPoint = {
   invested: number;
   current: number;
 };
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) {
-    try {
-      const payload = await res.json();
-      throw new Error(payload?.message || payload?.error || `Request failed (${res.status})`);
-    } catch {
-      throw new Error(`Request failed (${res.status})`);
-    }
-  }
-  return res.json();
-}
 
 function toIsoFromDateInput(value: string) {
   return new Date(`${value}T00:00:00`).toISOString();

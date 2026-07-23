@@ -33,6 +33,7 @@ export async function GET(request: Request) {
     await requireWorkspaceAccess(workspaceId);
 
     const cards = await prisma.creditCardAccount.findMany({
+      take: 500,
       where: { workspaceId, isActive: true },
       orderBy: { updatedAt: "desc" },
       select: {

@@ -1,18 +1,19 @@
-"use client";
+import { notFound } from "next/navigation";
+import { ApiDocsClient } from "@/app/api-docs/api-docs-client";
+import { requireSession } from "@/lib/require-session";
+import { isAdminEmail } from "@/lib/admin-auth";
 
-import "swagger-ui-react/swagger-ui.css";
-
-import dynamic from "next/dynamic";
-
-const SwaggerUI = dynamic(() => import("swagger-ui-react"), {
-  ssr: false,
-  loading: () => <p>Loading Component...</p>,
-});
-
-export default function ApiDocsPage() {
+export default async function ApiDocsPage() {
+  if (process.env.NODE_ENV === "production" && process.env.ENABLE_API_DOCS !== "true") {
+    notFound();
+  }
+  const session = await requireSession();
+  if (process.env.NODE_ENV === "production" && !isAdminEmail(session.user?.email)) {
+    notFound();
+  }
   return (
-    <section>
-      <SwaggerUI url="/openapi.json" />
-    </section>
+    <main aria-label="API documentation">
+      <ApiDocsClient />
+    </main>
   );
 }

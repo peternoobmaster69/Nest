@@ -18,6 +18,8 @@ import {
   failClaimedBackgroundJob,
 } from "@/lib/background-jobs";
 import { buildCreditCardStatementPath, buildWorkspaceEntryHref } from "@/lib/workspace-entry";
+import { ApiRequestError } from "@/lib/api-security";
+import { decodeCursor, toListEnvelope } from "@/lib/api/pagination";
 
 const CREDIT_CARD_DUE_TYPE = "CREDIT_CARD_DUE";
 const WORKSPACE_INVITATION_TYPE = "WORKSPACE_INVITATION";
@@ -298,14 +300,66 @@ export async function syncCreditCardDueNotificationsForAllUsers() {
   }
 }
 
-export async function listInAppNotifications(userId: string, workspaceId: string) {
-  return prisma.$queryRaw<InAppNotification[]>(Prisma.sql`
-    SELECT TOP (50) [id], [type], [title], [message], [href], [readAt], [createdAt], [updatedAt]
-    FROM [dbo].[InAppNotification]
-    WHERE [userId] = ${userId} AND [workspaceId] = ${workspaceId}
-      AND [type] IN (${CREDIT_CARD_DUE_TYPE}, ${WORKSPACE_INVITATION_TYPE})
-    ORDER BY CASE WHEN [readAt] IS NULL THEN 0 ELSE 1 END, [updatedAt] DESC
-  `);
+export async function listInAppNotifications(
+  userId: string,
+  workspaceId: string,
+  options: { limit: number; cursor?: string },
+) {
+  let cursor: ReturnType<typeof decodeCursor> | null = null;
+  if (options.cursor) {
+    try {
+      cursor = decodeCursor(options.cursor);
+    } catch {
+      throw new ApiRequestError(400, "Invalid notification cursor");
+    }
+  }
+  const cursorDate = cursor ? new Date(cursor.sortValue) : null;
+  if (cursorDate && Number.isNaN(cursorDate.getTime())) {
+    throw new ApiRequestError(400, "Invalid notification cursor");
+  }
+  const where = {
+    userId,
+    workspaceId,
+    type: { in: [CREDIT_CARD_DUE_TYPE, WORKSPACE_INVITATION_TYPE] },
+    ...(cursor && cursorDate ? {
+      OR: [
+        { updatedAt: { lt: cursorDate } },
+        { updatedAt: cursorDate, id: { lt: cursor.id } },
+      ],
+    } : {}),
+  };
+  const [rows, unreadCount] = await Promise.all([
+    prisma.inAppNotification.findMany({
+      where,
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: options.limit + 1,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        message: true,
+        href: true,
+        readAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.inAppNotification.count({
+      where: {
+        userId,
+        workspaceId,
+        readAt: null,
+        type: { in: [CREDIT_CARD_DUE_TYPE, WORKSPACE_INVITATION_TYPE] },
+      },
+    }),
+  ]);
+  return {
+    page: toListEnvelope(rows, options.limit, (row) => ({
+      id: row.id,
+      sortValue: row.updatedAt.toISOString(),
+    })),
+    unreadCount,
+  };
 }
 
 export async function markInAppNotificationRead(userId: string, notificationId: string) {

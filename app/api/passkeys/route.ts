@@ -7,6 +7,7 @@ export async function GET() {
   const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const passkeys = await prisma.passkeyCredential.findMany({
+    take: 100,
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
     select: { id: true, name: true, deviceType: true, backedUp: true, createdAt: true, lastUsedAt: true },

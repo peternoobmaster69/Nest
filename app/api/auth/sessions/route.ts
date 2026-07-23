@@ -73,6 +73,7 @@ export async function DELETE(request: NextRequest) {
       if (result.count !== 1) return false;
 
       const memberships = await transaction.workspaceMember.findMany({
+        take: 100,
         where: { userId },
         select: { workspaceId: true },
       });

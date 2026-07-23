@@ -46,6 +46,7 @@ export async function POST(request: Request) {
 
     // Get budgets to recalculate
     const budgets = await prisma.budgetEnvelope.findMany({
+      take: 500,
       where,
       select: { id: true, name: true, availableCents: true },
     });

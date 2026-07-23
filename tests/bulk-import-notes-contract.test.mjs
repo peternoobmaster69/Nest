@@ -8,8 +8,10 @@ const source = (file) => readFile(path.join(root, file), "utf8");
 
 test("bulk transaction import accepts and persists Notes", async () => {
   const route = await source("app/api/transactions/bulk-import/route.ts");
+  const contracts = await source("lib/domains/integrations/import-contracts.ts");
 
-  assert.match(route, /Notes:\s*z\.string\(\)\.optional\(\)/);
+  assert.match(route, /BulkImportSchema/);
+  assert.match(contracts, /Notes:\s*z\.string\(\)\.trim\(\)\.max\([^)]*\)\.optional\(\)/);
   assert.match(route, /notes:\s*item\.tx\.Notes\?\.trim\(\)\s*\|\|\s*null/);
 });
 

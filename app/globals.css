@@ -13351,6 +13351,9 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .calc-input-wrap {
   position: relative;
   display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .calc-input-field {
@@ -17220,6 +17223,20 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   gap: 12px;
 }
 
+.bp-confirm-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bp-confirm-summary > * {
+  min-width: 0;
+}
+
+.bp-confirm-summary .bp-item-amount {
+  overflow-wrap: anywhere;
+}
+
 .bp-form .form-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -17229,6 +17246,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 @media (max-width: 480px) {
   .bp-form .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .bp-confirm-summary {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -18189,6 +18210,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 /* Form Inputs — Standardized */
 .input {
+  box-sizing: border-box;
   font-family: var(--font-body);
   font-size: var(--text-base);
   color: var(--text-primary);
@@ -18197,6 +18219,8 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   border-radius: var(--input-radius);
   padding: var(--input-padding);
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   height: var(--input-height);
   outline: none;
   transition:
@@ -18790,32 +18814,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
   .cct-receivable-form .cct-modal-actions {
     padding: 10px 16px !important;
-  }
-}
-
-@media (min-width: 360px) and (max-width: 768px) {
-  .cct-receivable-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .cct-receivable-title {
-    grid-column: span 4;
-  }
-
-  .cct-receivable-amount {
-    grid-column: span 2;
-  }
-
-  .cct-receivable-date,
-  .cct-receivable-txn-date,
-  .cct-receivable-source-workspace,
-  .cct-receivable-source-account {
-    grid-column: span 3;
-  }
-
-  .cct-receivable-grid .cct-cross-workspace-toggle,
-  .cct-receivable-source-budget {
-    grid-column: 1 / -1;
   }
 }
 
@@ -22608,6 +22606,8 @@ html[data-ask-nest-open="true"] {
   height: var(--visual-viewport-height, 100dvh) !important;
   box-sizing: border-box !important;
   display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
   place-items: center !important;
   padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)) !important;
   overflow: hidden !important;
@@ -22642,6 +22642,14 @@ html[data-ask-nest-open="true"] {
   border-radius: var(--modal-radius) !important;
   box-shadow: var(--modal-shadow) !important;
   isolation: isolate;
+}
+
+/* Transaction entry has enough fields to use the whole safe overlay track.
+   Keep short balance, transfer, and informational dialogs content-sized. */
+body .profile-modal.txn-modal.txn-entry-modal[class] {
+  width: 100% !important;
+  max-width: none !important;
+  justify-self: stretch;
 }
 
 .tx-month-popover {
@@ -22768,6 +22776,49 @@ html[data-ask-nest-open="true"] {
   padding: 2px 16px 14px !important;
 }
 
+:where(
+  .cc-form-grid,
+  .cct-form-grid,
+  .st-form-grid,
+  .recv-modal-form,
+  .txn-modal-form,
+  .inv-modal-body,
+  .auto-rule-editor-grid,
+  .auto-rule-field-grid,
+  .auto-rule-field-grid-three
+) > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(
+  .modal-container,
+  .profile-modal,
+  .cc-modal,
+  .cct-modal,
+  .st-modal,
+  .auto-rule-modal,
+  .inv-modal
+) :where(.input, .calc-input-wrap, .segmented-toggle, .markdown-editor) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(
+  .modal-container,
+  .profile-modal,
+  .cc-modal,
+  .cct-modal,
+  .st-modal,
+  .auto-rule-modal,
+  .inv-modal
+) :where(label, .label, .form-hint, .form-error, .profile-field > span) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .cct-form-grid,
 .st-form-grid {
   padding-top: 14px !important;
@@ -22837,6 +22888,9 @@ html[data-ask-nest-open="true"] {
     .auto-rule-modal-overlay,
     .tx-popover-overlay
   ) {
+    --mobile-modal-inline-size: calc(
+      100vw - max(6px, env(safe-area-inset-left, 0px)) - max(6px, env(safe-area-inset-right, 0px))
+    );
     padding: max(6px, env(safe-area-inset-top, 0px)) max(6px, env(safe-area-inset-right, 0px)) max(6px, env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px)) !important;
   }
 
@@ -22850,8 +22904,10 @@ html[data-ask-nest-open="true"] {
     .inv-modal,
     .tx-month-popover
   )[class] {
-    width: 100% !important;
-    max-width: 100% !important;
+    width: var(--mobile-modal-inline-size) !important;
+    min-width: 0 !important;
+    max-width: var(--mobile-modal-inline-size) !important;
+    justify-self: center !important;
     height: auto !important;
     max-height: 100% !important;
     margin: auto !important;
@@ -22988,6 +23044,34 @@ html[data-ask-nest-open="true"] {
   ) textarea {
     min-height: 72px;
     max-height: 160px;
+  }
+
+  :where(
+    .modal-container,
+    .profile-modal,
+    .cc-modal,
+    .cct-modal,
+    .st-modal,
+    .auto-rule-modal,
+    .inv-modal
+  ) :is(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="time"]) {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  :where(
+    .modal-container,
+    .profile-modal,
+    .cc-modal,
+    .cct-modal,
+    .st-modal,
+    .auto-rule-modal,
+    .inv-modal
+  ) :is(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="time"])::-webkit-date-and-time-value {
+    min-width: 0;
+    text-align: left;
   }
 
   :where(
@@ -23285,8 +23369,9 @@ html[data-ask-nest-open="true"] {
   }
 }
 
-/* Two useful columns on ordinary phones; one column only when truly narrow. */
-@media (min-width: 390px) and (max-width: 820px) {
+/* Phone forms use one reliable reading column. Two-column form layouts start
+   at tablet width, where native date/select controls have enough room. */
+@media (min-width: 600px) and (max-width: 820px) {
   .cc-form-grid,
   .cct-form-grid,
   .st-form-grid,
@@ -23322,7 +23407,7 @@ html[data-ask-nest-open="true"] {
   }
 }
 
-@media (max-width: 389px) {
+@media (max-width: 599px) {
   .cc-form-grid,
   .cct-form-grid,
   .st-form-grid,
@@ -23344,6 +23429,91 @@ html[data-ask-nest-open="true"] {
     .inv-modal-body
   ) > * {
     grid-column: auto !important;
+    min-width: 0;
+  }
+
+  /* Statement month/year is the only deliberately paired phone field. Both
+     tracks are shrinkable so the native controls cannot escape the row. */
+  .cct-statement-period {
+    grid-column: auto !important;
+    grid-template-columns: minmax(0, 1fr) minmax(96px, 0.62fr) !important;
+    gap: 8px !important;
+    min-width: 0;
+  }
+
+  .cc-theme-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .auto-rule-action-row {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .auto-rule-action-row .input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .auto-rule-action-cue {
+    white-space: normal;
+  }
+
+  :where(
+    .modal-footer,
+    .profile-actions,
+    .txn-modal-actions,
+    .cc-modal-actions,
+    .cct-modal-actions,
+    .st-modal-actions,
+    .inv-modal-actions,
+    .tx-popover-actions
+  ) {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :where(
+    .modal-footer,
+    .profile-actions,
+    .txn-modal-actions,
+    .cc-modal-actions,
+    .cct-modal-actions,
+    .st-modal-actions,
+    .inv-modal-actions,
+    .tx-popover-actions
+  ) > :empty {
+    display: none;
+  }
+
+  :where(
+    .modal-footer,
+    .profile-actions,
+    .txn-modal-actions,
+    .cc-modal-actions,
+    .cct-modal-actions,
+    .st-modal-actions,
+    .inv-modal-actions,
+    .tx-popover-actions
+  ) > .btn {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  :where(
+    .modal-footer,
+    .profile-actions,
+    .txn-modal-actions,
+    .cc-modal-actions,
+    .cct-modal-actions,
+    .st-modal-actions,
+    .inv-modal-actions,
+    .tx-popover-actions
+  ) > .modal-action-group {
+    width: 100%;
+    grid-column: 1 / -1;
   }
 
   :where(
@@ -23355,7 +23525,6 @@ html[data-ask-nest-open="true"] {
     .st-modal-actions,
     .inv-modal-actions
   ):has(> :is(.modal-action-destructive, .cc-delete, .cct-modal-delete)) {
-    display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -23368,9 +23537,9 @@ html[data-ask-nest-open="true"] {
     .st-modal-actions,
     .inv-modal-actions
   ):has(> :is(.modal-action-destructive, .cc-delete, .cct-modal-delete)) > :is(.modal-action-destructive, .cc-delete, .cct-modal-delete) {
-    width: auto !important;
+    width: 100% !important;
     grid-column: 1 / -1;
-    justify-self: start;
+    justify-self: stretch;
   }
 
   :where(
@@ -23389,6 +23558,10 @@ html[data-ask-nest-open="true"] {
 
 /* Page-level forms use the same dense labels, controls, and right-aligned actions. */
 @media (max-width: 600px) {
+  .bp-form .form-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .profile-page-form {
     gap: 10px !important;
     padding: 12px !important;
@@ -23424,18 +23597,13 @@ html[data-ask-nest-open="true"] {
   .workspace-details-form,
   .workspace-invite-form {
     width: 100%;
-    grid-template-columns: minmax(0, 1fr) auto !important;
-    align-items: end;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: stretch;
     gap: 8px !important;
   }
 
-  .workspace-details-form > :first-child,
-  .workspace-invite-form > :first-child {
-    grid-column: 1 / -1;
-  }
-
   .workspace-settings-page form .btn {
-    width: auto !important;
+    width: 100% !important;
     min-width: 44px;
     min-height: 44px;
     padding-inline: 12px;
@@ -23446,7 +23614,7 @@ html[data-ask-nest-open="true"] {
   }
 
   .workspace-money-page-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 
   .settings-passkey-form,
@@ -23468,13 +23636,6 @@ html[data-ask-nest-open="true"] {
   .settings-passkey-form-actions .btn,
   .settings-passkey-edit-actions .btn {
     min-height: 44px;
-  }
-}
-
-@media (min-width: 360px) and (max-width: 480px) {
-  .bp-form .form-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
   }
 }
 

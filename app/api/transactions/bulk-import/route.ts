@@ -1,37 +1,16 @@
 import { applyBudgetAvailableDelta, getBudgetAvailableDeltaCents } from "@/lib/budget-ledger";
-import { executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
+import { executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { enforceDistributedRateLimit } from "@/lib/security-rate-limit";
 import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { z } from "zod";
-
-// Schema for a single imported transaction
-const ImportedTransactionSchema = z.object({
-  AccountName: z.string().min(1).optional(),
-  Direction: z.enum(["DEBIT", "CREDIT"]),
-  Subject: z.string().min(1),
-  Date: z.string(), // Accepts various date formats (YYYY-MM-DD or ISO)
-  AmountCents: z.number().int().positive(),
-  Details: z.string().optional(),
-  Notes: z.string().optional(),
-});
-
-// Schema for the overall JSON input
-const BulkImportSchema = z.object({
-  workspaceId: z.string().min(1),
-  accountId: z.string().min(1),
-  budgetId: z.string().min(1),
-  kind: z.string().default("Migration"),
-  transactions: z.array(ImportedTransactionSchema).min(1).max(1000), // Max 1000 at a time
-  chunkIndex: z.number().int().min(0).optional(),
-  chunkSize: z.number().int().min(1).max(1000).optional(),
-  recalculate: z.boolean().default(true),
-});
-
-type ImportedTransaction = z.infer<typeof ImportedTransactionSchema>;
+import {
+  BulkImportSchema,
+  type ImportedTransaction,
+} from "@/lib/domains/integrations/import-contracts";
+import { chunkValues } from "@/lib/api/batching";
 
 interface DuplicateRecord {
   date: string;
@@ -87,35 +66,38 @@ async function getExistingDuplicateKeys(
 ) {
   if (transactions.length === 0) return new Set<string>();
 
-  const existing = await prisma.transaction.findMany({
-    where: {
-      workspaceId,
-      accountId,
-      budgetId,
-      voidedAt: null,
-      kind: { not: "REVERSAL" },
-      OR: transactions.map((tx) => {
-        const { start, end } = getUtcDayRange(tx.date);
-        return {
-          date: {
-            gte: start,
-            lt: end,
-          },
-          subject: tx.subject,
-          amountCents: tx.amountCents,
-        };
-      }),
-    },
-    select: { date: true, subject: true, amountCents: true },
-  });
-
-  return new Set(existing.map((tx) => getDuplicateKey(tx.date, tx.subject, tx.amountCents)));
+  const keys = new Set<string>();
+  for (const batch of chunkValues(transactions)) {
+    const existing = await prisma.transaction.findMany({
+      where: {
+        workspaceId,
+        accountId,
+        budgetId,
+        voidedAt: null,
+        kind: { not: "REVERSAL" },
+        OR: batch.map((tx) => {
+          const { start, end } = getUtcDayRange(tx.date);
+          return {
+            date: { gte: start, lt: end },
+            subject: tx.subject,
+            amountCents: tx.amountCents,
+          };
+        }),
+      },
+      take: Math.min(500, batch.length * 10),
+      select: { date: true, subject: true, amountCents: true },
+    });
+    for (const tx of existing) {
+      keys.add(getDuplicateKey(tx.date, tx.subject, tx.amountCents));
+    }
+  }
+  return keys;
 }
 
 export async function POST(request: Request) {
   return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to import transactions" }, async () => {
    try {
-    const parsed = { data: await parseJsonBody(request, BulkImportSchema, 2 * 1024 * 1024) };
+    const parsed = { data: await parseJsonBody(request, BulkImportSchema, 1024 * 1024) };
 
     const { workspaceId, accountId, budgetId, kind, transactions, chunkIndex, chunkSize, recalculate } = parsed.data;
 
@@ -236,7 +218,12 @@ export async function POST(request: Request) {
       const posting = await executePosting({
           workspaceId,
           operation: "TRANSACTION_BULK_IMPORT",
-          idempotencyKey: getIdempotencyKey(request),
+          idempotencyKey: getIdempotencyKey(
+            request,
+            parsed.data.importRunId && chunkIndex !== undefined
+              ? `json-import:${parsed.data.importRunId}:${chunkIndex}`
+              : undefined,
+          ),
           actorUserId: userId,
           sourceType: "IMPORT",
           sourceId: chunkIndex === undefined ? null : String(chunkIndex),
@@ -264,9 +251,7 @@ export async function POST(request: Request) {
         result.errors = [];
       }
     } catch (error) {
-      if (error instanceof PostingConflictError) throw error;
-      result.failed += nonDuplicates.length;
-      result.errors.push("Transaction creation failed. Retry this import chunk.");
+      throw error;
     }
 
     return NextResponse.json({
@@ -275,6 +260,8 @@ export async function POST(request: Request) {
       total: transactions.length,
       chunked: chunkIndex !== undefined || chunkSize !== undefined,
       chunkIndex: chunkIndex ?? 0,
+      totalChunks: parsed.data.totalChunks ?? 1,
+      nextChunkIndex: (chunkIndex ?? 0) + 1,
       chunkSize: chunkSize ?? transactions.length,
       processedCount: transactions.length,
       remainingCount: 0,

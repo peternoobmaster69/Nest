@@ -1,46 +1,24 @@
 import { ingestCreditAlert } from "@/lib/credit-alert-ingest";
-import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { listCardAlerts } from "@/lib/domains/cards";
+import { ApiRequestError } from "@/lib/api-security";
 
 const IngestAlertSchema = z.object({
   rawBody: z.string().min(20),
   rawSubject: z.string().max(255).optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { workspaceId } = await requireWorkspaceAccess();
-    const staged = await prisma.cardAlertStaging.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      select: {
-        id: true,
-        source: true,
-        bankName: true,
-        transactionRef: true,
-        currency: true,
-        amountCents: true,
-        transactionDate: true,
-        merchant: true,
-        cardLast4: true,
-        parseStatus: true,
-        failureReason: true,
-        creditCardId: true,
-        creditTransactionId: true,
-        createdAt: true,
-        processedAt: true,
-      },
-    });
-    return NextResponse.json(staged);
+    return NextResponse.json(await listCardAlerts(workspaceId, request));
   } catch (error) {
-    if (error instanceof ApiAuthError) {
+    if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to fetch alert staging", message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch alert staging" }, { status: 500 });
   }
 }
 

@@ -6,13 +6,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const CreateTransactionSchema = z.object({
-  creditCardId: z.string(),
+  creditCardId: z.string().trim().min(1).max(191),
   transactionDate: z.string().datetime(),
   paymentDueDate: z.string().datetime().optional(),
   statementMonth: z.number().int().min(1).max(12),
   statementYear: z.number().int().min(2020).max(2100),
   amountCents: z.number().int(),
-  subject: z.string().min(1),
+  subject: z.string().trim().min(1).max(500),
 });
 
 const DEFAULT_PAGE_LIMIT = 250;
@@ -28,6 +28,21 @@ export async function GET(request: Request) {
     const pageParam = searchParams.get("page");
     const limitParam = searchParams.get("limit");
     const cursor = searchParams.get("cursor");
+    if ((cardId?.length ?? 0) > 191 || (cursor?.length ?? 0) > 191) {
+      return NextResponse.json(
+        { error: "Card id or cursor is too long", code: "INVALID_REQUEST" },
+        { status: 400 },
+      );
+    }
+    if (
+      (year && (!/^\d{4}$/.test(year) || Number(year) < 2020 || Number(year) > 2100)) ||
+      (month && (!/^\d{1,2}$/.test(month) || Number(month) < 1 || Number(month) > 12))
+    ) {
+      return NextResponse.json(
+        { error: "Invalid statement period", code: "INVALID_REQUEST" },
+        { status: 400 },
+      );
+    }
 
     const where: Prisma.CreditCardTransactionWhereInput = { workspaceId };
 

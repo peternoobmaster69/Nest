@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, Check, CreditCard, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch } from "@/lib/api/client";
+import type { ListEnvelope } from "@/lib/api/contracts";
+import { queryKeys } from "@/lib/query-keys";
 
 type NotificationItem = {
   id: string;
@@ -18,23 +20,20 @@ type NotificationItem = {
 };
 
 type NotificationResponse = {
-  notifications: NotificationItem[];
+  notifications: ListEnvelope<NotificationItem>;
   unreadCount: number;
 };
 
 async function fetchNotifications() {
-  const response = await workspaceFetch("/api/notifications", { cache: "no-store" });
-  if (!response.ok) throw new Error("Unable to load notifications");
-  return response.json() as Promise<NotificationResponse>;
+  return apiFetch<NotificationResponse>("/api/notifications", { cache: "no-store" });
 }
 
 async function updateNotifications(payload: { notificationId: string } | { markAllRead: true }) {
-  const response = await workspaceFetch("/api/notifications", {
+  await apiFetch<{ ok: true }>("/api/notifications", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Unable to update notifications");
 }
 
 function relativeTime(value: string) {
@@ -53,7 +52,7 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
-  const queryKey = ["in-app-notifications", workspaceId];
+  const queryKey = queryKeys.notifications(workspaceId);
   const notificationsQuery = useQuery({
     queryKey,
     queryFn: fetchNotifications,
@@ -89,19 +88,31 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
   const markReadLocally = (notificationId: string) => {
     queryClient.setQueryData<NotificationResponse>(queryKey, (current) => {
       if (!current) return current;
-      const notifications = current.notifications.map((notification) =>
+      const items = current.notifications.items.map((notification) =>
         notification.id === notificationId && !notification.readAt
           ? { ...notification, readAt: new Date().toISOString() }
           : notification,
       );
-      return { notifications, unreadCount: notifications.filter((notification) => !notification.readAt).length };
+      return {
+        notifications: { ...current.notifications, items },
+        unreadCount: Math.max(0, current.unreadCount - 1),
+      };
     });
   };
 
   const markAllRead = () => {
     const readAt = new Date().toISOString();
     queryClient.setQueryData<NotificationResponse>(queryKey, (current) => current
-      ? { notifications: current.notifications.map((notification) => ({ ...notification, readAt: notification.readAt ?? readAt })), unreadCount: 0 }
+      ? {
+          notifications: {
+            ...current.notifications,
+            items: current.notifications.items.map((notification) => ({
+              ...notification,
+              readAt: notification.readAt ?? readAt,
+            })),
+          },
+          unreadCount: 0,
+        }
       : current);
     updateMutation.mutate({ markAllRead: true });
   };
@@ -145,8 +156,8 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
                 <span>Notifications couldn’t be loaded.</span>
                 <button type="button" onClick={() => notificationsQuery.refetch()}>Try again</button>
               </div>
-            ) : data?.notifications.length ? (
-              data.notifications.map((notification) => {
+            ) : data?.notifications.items.length ? (
+              data.notifications.items.map((notification) => {
                 const content = (
                   <>
                     <span className="notification-icon" aria-hidden="true"><CreditCard size={17} /></span>

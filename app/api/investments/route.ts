@@ -25,15 +25,19 @@ export async function GET(request: Request) {
 
     const accounts = await prisma.investmentAccount.findMany({
       where: { workspaceId },
+      take: 500,
       include: {
         entries: {
-          orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+          take: 5_000,
         },
       },
       orderBy: [{ inceptionDate: "asc" }, { createdAt: "asc" }],
     });
 
-    return NextResponse.json(accounts);
+    return NextResponse.json(
+      accounts.map((account) => ({ ...account, entries: account.entries.reverse() })),
+    );
   } catch (error) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

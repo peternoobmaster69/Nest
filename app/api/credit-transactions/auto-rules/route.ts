@@ -26,6 +26,7 @@ async function validateRuleTargets(workspaceId: string, rules: z.infer<typeof Cr
       }
 
       const sameWorkspaceBudgets = await prisma.budgetEnvelope.findMany({
+        take: 500,
         where: {
           id: { in: [rule.sourceBudgetId, rule.destinationBudgetId] },
           workspaceId,

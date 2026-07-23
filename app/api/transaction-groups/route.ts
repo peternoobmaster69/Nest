@@ -33,10 +33,12 @@ export async function GET(request: Request) {
 
     const groups = await prisma.transactionGroup.findMany({
       where: { workspaceId, budgetId },
+      take: 500,
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       include: {
         transactions: {
           where: { voidedAt: null, kind: { not: "REVERSAL" } },
+          take: 5_000,
           select: { amountCents: true, direction: true, date: true },
         },
       },
@@ -90,6 +92,7 @@ export async function POST(request: Request) {
 
     const uniqueTransactionIds = [...new Set(transactionIds)];
     const transactions = await prisma.transaction.findMany({
+      take: 100,
       where: {
         id: { in: uniqueTransactionIds },
         workspaceId,

@@ -7,7 +7,7 @@ import {
   executePosting,
   getIdempotencyKey,
   PostingConflictError,
-} from "@/lib/posting-service";
+} from "@/lib/domains/ledger";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";

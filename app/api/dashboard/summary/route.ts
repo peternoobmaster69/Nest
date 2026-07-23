@@ -3,9 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import { CACHE_POLICIES } from "@/lib/api/contracts";
+import { withQueryTelemetry } from "@/lib/observability/query-telemetry";
 
 const DASHBOARD_CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+  "Cache-Control": CACHE_POLICIES.privateNoStore,
+  Vary: "Cookie, X-Workspace-Id",
 };
 
 function getMonthKey(date: Date) {
@@ -23,6 +27,7 @@ function toNumber(value: number | bigint | null | undefined) {
 export async function GET() {
   try {
     const { workspaceId } = await requireWorkspaceAccess();
+    const requestId = randomUUID();
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -41,10 +46,13 @@ export async function GET() {
       bankConsistency,
       creditCardDueRows,
       cashFlowRows,
-    ] = await Promise.all([
+    ] = await withQueryTelemetry(
+      { domain: "dashboard", operation: "summary", workspaceId, requestId },
+      () => Promise.all([
       prisma.budgetEnvelope.findMany({
         where: { workspaceId },
         orderBy: { name: "asc" },
+        take: 500,
       }),
       prisma.transaction.groupBy({
         by: ["budgetId"],
@@ -94,7 +102,7 @@ export async function GET() {
           outstandingCents: number | bigint;
         }>
       >(Prisma.sql`
-        SELECT
+        SELECT TOP (500)
           cct.[creditCardId] AS [cardId],
           cc.[cardName] AS [cardName],
           cc.[bankName] AS [bankName],
@@ -126,7 +134,7 @@ export async function GET() {
           amountCents: number | bigint;
         }>
       >(Prisma.sql`
-        SELECT
+        SELECT TOP (10000)
           YEAR([date]) AS [year],
           MONTH([date]) AS [month],
           [accountId],
@@ -146,7 +154,8 @@ export async function GET() {
           [budgetId],
           [direction]
       `),
-    ]);
+      ]),
+    );
 
     const outgoingByBudget = new Map(
       monthlyBudgetOutgoing
@@ -160,7 +169,9 @@ export async function GET() {
     );
     const budgetIds = budgets.map((budget) => budget.id);
     if (budgetIds.length > 0) {
-      const legacyReceivableTotals = await prisma.receivable.groupBy({
+      const legacyReceivableTotals = await withQueryTelemetry(
+        { domain: "dashboard", operation: "legacy_receivable_totals", workspaceId, requestId },
+        () => prisma.receivable.groupBy({
         by: ["budgetId"],
         where: {
           budgetId: { in: budgetIds },
@@ -168,7 +179,8 @@ export async function GET() {
           status: { in: ["OPEN", "PARTIAL"] },
         },
         _sum: { amountCents: true },
-      });
+        }),
+      );
       for (const row of legacyReceivableTotals) {
         if (!row.budgetId) continue;
         receivableByBudget.set(row.budgetId, (receivableByBudget.get(row.budgetId) ?? 0) + (row._sum.amountCents ?? 0));
@@ -297,7 +309,7 @@ export async function GET() {
         },
         cashFlow,
       },
-      { headers: DASHBOARD_CACHE_HEADERS },
+      { headers: { ...DASHBOARD_CACHE_HEADERS, "X-Request-Id": requestId } },
     );
   } catch (err) {
     if (err instanceof ApiAuthError) {

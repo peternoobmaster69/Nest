@@ -3,6 +3,8 @@ import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { listFrequentFlyerHistory } from "@/lib/domains/rewards";
+import { ApiRequestError } from "@/lib/api-security";
 
 const CreateEarnSchema = z.object({
   type: z.literal("earn"),
@@ -103,6 +105,7 @@ async function createRedemptionWithAutoAllocation(params: {
   const { tx, workspaceId, frequentFlyerId, redemptionTitle, dateTime, milesToRedeem } = params;
 
   const sources = await tx.mileProgram.findMany({
+    take: 5_000,
     where: {
       workspaceId,
       frequentFlyerId,
@@ -160,60 +163,9 @@ async function createRedemptionWithAutoAllocation(params: {
 export async function GET(request: Request) {
   try {
     const { workspaceId } = await requireWorkspaceAccess();
-    const { searchParams } = new URL(request.url);
-    const frequentFlyerId = searchParams.get("frequentFlyerId");
-    if (!frequentFlyerId) {
-      return NextResponse.json({ error: "frequentFlyerId is required" }, { status: 400 });
-    }
-
-    await ensureFrequentFlyer(workspaceId, frequentFlyerId);
-
-    const today = startOfTodayUtc();
-    const [milePrograms, redemptions, earnedTotals, availableTotals] = await Promise.all([
-      prisma.mileProgram.findMany({
-        where: { workspaceId, frequentFlyerId },
-        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      }),
-      prisma.mileRedemption.findMany({
-        where: { workspaceId, frequentFlyerId },
-        include: {
-          details: {
-            include: {
-              milesFile: {
-                select: { id: true, title: true, date: true },
-              },
-            },
-          },
-        },
-        orderBy: [{ dateTime: "desc" }, { createdAt: "desc" }],
-      }),
-      prisma.mileProgram.aggregate({
-        where: { workspaceId, frequentFlyerId },
-        _sum: { miles: true },
-      }),
-      prisma.mileProgram.aggregate({
-        where: {
-          workspaceId,
-          frequentFlyerId,
-          OR: [{ expiryDate: null }, { expiryDate: { gte: today } }],
-        },
-        _sum: { balanceMiles: true },
-      }),
-    ]);
-
-    const redeemed = redemptions.reduce((sum, item) => sum + item.totalMilesRedeemed, 0);
-
-    return NextResponse.json({
-      milePrograms,
-      redemptions,
-      totals: {
-        earned: earnedTotals._sum.miles ?? 0,
-        available: availableTotals._sum.balanceMiles ?? 0,
-        redeemed,
-      },
-    });
+    return NextResponse.json(await listFrequentFlyerHistory(workspaceId, request));
   } catch (error) {
-    if (error instanceof ApiAuthError) {
+    if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     return NextResponse.json({ error: "Failed to fetch transaction history" }, { status: 500 });

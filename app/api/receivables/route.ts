@@ -57,6 +57,7 @@ export async function GET(request: Request) {
       sourceAccountIds.length
         ? prisma.financialAccount.findMany({
             where: { id: { in: sourceAccountIds } },
+            take: 100,
             select: {
               id: true,
               name: true,
@@ -70,6 +71,7 @@ export async function GET(request: Request) {
       sourceBudgetIds.length
         ? prisma.budgetEnvelope.findMany({
             where: { id: { in: sourceBudgetIds } },
+            take: 100,
             select: {
               id: true,
               name: true,

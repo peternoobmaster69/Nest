@@ -23,7 +23,13 @@ const transactionOptionSelect = {
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const search = new URL(request.url).searchParams.get("search")?.trim().slice(0, 120) ?? "";
+    const search = new URL(request.url).searchParams.get("search")?.trim() ?? "";
+    if (search.length > 100) {
+      return NextResponse.json(
+        { error: "Search must not exceed 100 characters", code: "INVALID_REQUEST" },
+        { status: 400 },
+      );
+    }
     const group = await prisma.transactionGroup.findUnique({
       where: { id },
       select: { id: true, name: true, icon: true, workspaceId: true, budgetId: true },
@@ -32,6 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     await requireWorkspaceAccess(group.workspaceId);
 
     const members = await prisma.transaction.findMany({
+      take: 5_000,
       where: {
         workspaceId: group.workspaceId,
         budgetId: group.budgetId,

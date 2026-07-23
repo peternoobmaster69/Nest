@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       windowMs: 10 * 60_000,
     });
     const integrations = await prisma.gmailIntegration.findMany({
+      take: 100,
       where: { workspaceId, userId, isActive: true },
       select: { id: true, workspaceId: true, accessToken: true, refreshToken: true },
     });

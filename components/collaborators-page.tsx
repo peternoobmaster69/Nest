@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,8 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { useRouter } from "next/navigation";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
+import type { ListEnvelope } from "@/lib/api/contracts";
+import { queryKeys } from "@/lib/query-keys";
 
 // Default visibility for Money section pages
 const DEFAULT_MONEY_PAGES = {
@@ -43,12 +45,12 @@ type AppContext = {
 type CollaboratorData = {
   role: "OWNER" | "EDITOR" | "VIEWER";
   workspace: { id: string; name: string; isShared: boolean } | null;
-  members: Array<{
+  members: ListEnvelope<{
     id: string;
     role: string;
     user: { id: string; name: string | null; email: string | null };
   }>;
-  invites: Array<{
+  invites: ListEnvelope<{
     id: string;
     invitedEmail: string;
     status: string;
@@ -57,7 +59,7 @@ type CollaboratorData = {
     expiresAt: string | null;
     invitedBy: { id: string; name: string | null; email: string | null } | null;
   }>;
-  auditLogs: Array<{
+  auditLogs: ListEnvelope<{
     id: string;
     action: string;
     details: string;
@@ -65,19 +67,6 @@ type CollaboratorData = {
     actorUser: { id: string; name: string | null; email: string | null } | null;
   }>;
 };
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const payload = await res.json();
-      message = payload?.message || payload?.error || message;
-    } catch {}
-    throw new Error(message);
-  }
-  return res.json();
-}
 
 export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: ReactNode }) {
   const routeWorkspaceId = useWorkspaceId();
@@ -93,17 +82,20 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
   const [message, setMessage] = useState("");
 
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.context(routeWorkspaceId),
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId ?? null;
 
   const collab = useQuery({
-    queryKey: ["collaborators", workspaceId],
+    queryKey: queryKeys.collaborators(workspaceId),
     enabled: Boolean(workspaceId),
     queryFn: () => fetchJson<CollaboratorData>(`/api/collaborators?workspaceId=${workspaceId}`),
   });
   const { isLoading: isCollabLoading, isError: isCollabError, refetch: refetchCollab } = collab;
+  const members = collab.data?.members.items ?? [];
+  const invites = collab.data?.invites.items ?? [];
+  const auditLogs = collab.data?.auditLogs.items ?? [];
 
   const workspaceMeta = collab.data?.workspace
     ? collab.data.workspace
@@ -454,7 +446,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                 />
               )}
 
-              {!isCollabLoading && !isCollabError && (collab.data?.members ?? []).map((member) => (
+              {!isCollabLoading && !isCollabError && members.map((member) => (
                 <div key={member.id} className="crud-row">
                   <span>{member.user.name || member.user.email || member.user.id}</span>
                   <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
@@ -481,7 +473,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                   </div>
                 </div>
               ))}
-              {!isCollabLoading && !isCollabError && !(collab.data?.members?.length) && (
+              {!isCollabLoading && !isCollabError && members.length === 0 && (
                 <EmptyState icon="👥" title="No collaborators yet" description="Invite team members to collaborate on this workspace." />
               )}
             </div>
@@ -527,7 +519,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
           <div className="settings-section-title">Pending invites</div>
           <div className="simple-list">
             {isCollabLoading && <CollaboratorsInvitesSkeleton />}
-            {!isCollabLoading && !isCollabError && (collab.data?.invites ?? []).map((invite) => (
+            {!isCollabLoading && !isCollabError && invites.map((invite) => (
               <div key={invite.id} className="crud-row">
                 <span>{invite.invitedEmail} · {invite.role}</span>
                 <div style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
@@ -536,7 +528,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                 </div>
               </div>
             ))}
-            {!isCollabLoading && !isCollabError && !(collab.data?.invites?.length) && (
+            {!isCollabLoading && !isCollabError && invites.length === 0 && (
               <EmptyState
                 icon="📧"
                 title="No pending invites"
@@ -554,7 +546,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
             {isCollabLoading && (
               <CollaboratorsAuditSkeleton />
             )}
-            {!isCollabLoading && !isCollabError && (collab.data?.auditLogs ?? []).map((log) => (
+            {!isCollabLoading && !isCollabError && auditLogs.map((log) => (
               <article key={log.id} className="audit-item">
                 <div className="audit-dot" aria-hidden="true" />
                 <div className="audit-content">
@@ -565,7 +557,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                 </div>
               </article>
             ))}
-            {!isCollabLoading && !isCollabError && !(collab.data?.auditLogs?.length) && (
+            {!isCollabLoading && !isCollabError && auditLogs.length === 0 && (
               <EmptyState icon="📋" title="No audit logs yet" description="Activity in this workspace will be recorded here." />
             )}
           </div>

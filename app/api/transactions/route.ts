@@ -1,5 +1,5 @@
 import { applyTransactionBudgetDelta } from "@/lib/budget-ledger";
-import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/posting-service";
+import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import type { Prisma } from "@prisma/client";
@@ -52,12 +52,18 @@ export async function GET(request: Request) {
     const accountId = searchParams.get("accountId");
     const budgetId = searchParams.get("budgetId");
     const groupId = searchParams.get("groupId");
-    const transactionId = searchParams.get("transactionId")?.trim().slice(0, 180) || "";
+    const transactionId = searchParams.get("transactionId")?.trim() || "";
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
     const monthKey = searchParams.get("month");
     const monthsParam = searchParams.get("months");
-    const search = searchParams.get("search")?.trim().slice(0, 120) || "";
+    const search = searchParams.get("search")?.trim() || "";
+    if (search.length > 100 || transactionId.length > 191 || (cursor?.length ?? 0) > 191) {
+      return NextResponse.json(
+        { error: "Search, cursor, or transaction id is too long", code: "INVALID_REQUEST" },
+        { status: 400 },
+      );
+    }
     const wantsPaginatedResponse =
       searchParams.get("paginated") === "1" ||
       pageParam !== null ||
@@ -204,6 +210,7 @@ export async function GET(request: Request) {
     const txs = await prisma.transaction.findMany({
       where,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      take: MAX_TRANSACTION_PAGE_LIMIT,
       select,
     });
 

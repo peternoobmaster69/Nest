@@ -10,6 +10,7 @@ export type BankConsistencyRow = {
 
 export async function getBankConsistency(prisma: PrismaClient, workspaceId: string): Promise<BankConsistencyRow[]> {
   const bankAccounts = await prisma.financialAccount.findMany({
+    take: 500,
     where: { workspaceId, kind: "BANK" },
     orderBy: { createdAt: "asc" },
     select: {
@@ -26,6 +27,7 @@ export async function getBankConsistency(prisma: PrismaClient, workspaceId: stri
   const bankIds = bankAccounts.map((a) => a.id);
 
   const budgets = await prisma.budgetEnvelope.findMany({
+    take: 5_000,
     where: {
       workspaceId,
       accountId: { in: bankIds },

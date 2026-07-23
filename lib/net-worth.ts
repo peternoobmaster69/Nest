@@ -23,10 +23,12 @@ export async function getWorkspaceNetWorthPayload(
       select: { baseCurrency: true },
     }),
     db.budgetEnvelope.findMany({
+      take: 500,
       where: { workspaceId, isActive: true },
       select: { name: true, icon: true, availableCents: true },
     }),
     db.investmentAccount.findMany({
+      take: 500,
       where: { workspaceId },
       select: {
         isLiquid: true,

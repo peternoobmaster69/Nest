@@ -1,4 +1,4 @@
-import { reconcileWorkspaceBudgets } from "@/lib/posting-service";
+import { reconcileWorkspaceBudgets } from "@/lib/domains/ledger";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";

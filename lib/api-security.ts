@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { ZodError, type ZodType } from "zod";
 import { isDatabaseWakeTransientError } from "@/lib/database-errors";
 import { rateLimitResponse } from "@/lib/security-rate-limit";
+import { ApiRequestError, apiErrorCodeForStatus } from "@/lib/api/contracts";
+import { DATABASE_UNAVAILABLE_CODE } from "@/lib/database-errors";
 import {
   ApiAuthError,
   requireRecentAuthentication,
@@ -11,15 +13,7 @@ import {
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024;
 
-export class ApiRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ApiRequestError";
-  }
-}
+export { ApiRequestError } from "@/lib/api/contracts";
 
 function expectedOrigin(request: Request) {
   const configured = process.env.NEXTAUTH_URL?.trim();
@@ -118,15 +112,21 @@ export async function runSecureApiRoute(
     const limited = rateLimitResponse(error);
     if (limited) return secureHeaders(limited, requestId, true);
     if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
+      const code = error instanceof ApiRequestError
+        ? error.code
+        : apiErrorCodeForStatus(error.status);
       return secureHeaders(
-        Response.json({ error: error.message, requestId }, { status: error.status }),
+        Response.json({ error: error.message, code, requestId }, { status: error.status }),
         requestId,
         true,
       );
     }
     if (error instanceof ZodError) {
       return secureHeaders(
-        Response.json({ error: "Invalid request", issues: error.flatten(), requestId }, { status: 400 }),
+        Response.json(
+          { error: "Invalid request", code: "UNPROCESSABLE_ENTITY", issues: error.flatten(), requestId },
+          { status: 422 },
+        ),
         requestId,
         true,
       );
@@ -134,7 +134,11 @@ export async function runSecureApiRoute(
     if (isDatabaseWakeTransientError(error)) {
       return secureHeaders(
         Response.json(
-          { error: "The database is waking up. Please retry shortly.", requestId },
+          {
+            error: "The database is waking up. Please retry shortly.",
+            code: DATABASE_UNAVAILABLE_CODE,
+            requestId,
+          },
           { status: 503, headers: { "Retry-After": "5" } },
         ),
         requestId,
@@ -144,7 +148,7 @@ export async function runSecureApiRoute(
     console.error(`[api:${requestId}] ${options.errorMessage ?? "Request failed"}`, error);
     return secureHeaders(
       Response.json(
-        { error: options.errorMessage ?? "Request failed", requestId },
+        { error: options.errorMessage ?? "Request failed", code: "INTERNAL_ERROR", requestId },
         { status: 500 },
       ),
       requestId,

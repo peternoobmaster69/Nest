@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -117,23 +117,6 @@ function formatDisplayDate(value: string) {
     year: "numeric",
     timeZone: "UTC",
   });
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) {
-    try {
-      const payload = await res.json();
-      const detail = payload?.message || payload?.error || JSON.stringify(payload) || `Request failed (${res.status})`;
-      throw new Error(detail);
-    } catch (e) {
-      if (e instanceof Error && e.message !== `Request failed (${res.status})`) {
-        throw e;
-      }
-      throw new Error(`Request failed (${res.status})`);
-    }
-  }
-  return res.json();
 }
 
 export function ReceivablesPage() {

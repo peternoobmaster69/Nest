@@ -58,10 +58,12 @@ export async function GET(request: Request) {
       prisma.receivable.findMany({
         where: sourceWhere,
         select: receivableListSelect,
+        take: 100,
       }),
       prisma.receivable.findMany({
         where: legacyWhere,
         select: receivableListSelect,
+        take: 100,
       }),
     ]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -262,29 +262,6 @@ function getContextualGroupDefaults(budget: Budget | undefined, transactions: Tr
     suggestedName: `${name} · ${period}`,
     placeholder: `e.g. ${context?.example ?? "Annual renewal"}`,
   };
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  const data = (await res.json().catch(() => null)) as
-    | T
-    | {
-        error?: string;
-        message?: string;
-      }
-    | null;
-
-  if (!res.ok) {
-    const errorMessage =
-      data && typeof data === "object" && "message" in data && typeof data.message === "string"
-        ? data.message
-        : data && typeof data === "object" && "error" in data && typeof data.error === "string"
-          ? data.error
-          : `Request failed (${res.status})`;
-    throw new Error(errorMessage);
-  }
-
-  return data as T;
 }
 
 export function TransactionsPage() {
@@ -2553,7 +2530,7 @@ export function TransactionsPage() {
 
       {isCreateModalOpen && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsCreateModalOpen(false))}>
-          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal txn-entry-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Add Transaction</h3>
               <ModalCloseButton onClick={() => setIsCreateModalOpen(false)} label="Close Add Transaction" />
@@ -2681,7 +2658,7 @@ export function TransactionsPage() {
 
       {editingTxId && typeof document !== "undefined" && createPortal(
         <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEditModal)}>
-          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal txn-entry-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>Edit Transaction</h3>
               <ModalCloseButton onClick={closeEditModal} label="Close Edit Transaction" />

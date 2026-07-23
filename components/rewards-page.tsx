@@ -1,6 +1,8 @@
 "use client";
 
 import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch } from "@/lib/api/client";
+import type { ListEnvelope } from "@/lib/api/contracts";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +15,7 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ArrowLeftRight, Building2, CreditCard, Plane, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { queryKeys } from "@/lib/query-keys";
 
 type CreditCardReward = {
   id: string;
@@ -86,8 +89,8 @@ type MileRedemptionHistory = {
 };
 
 type FrequentFlyerHistoryResponse = {
-  milePrograms: MileProgramHistory[];
-  redemptions: MileRedemptionHistory[];
+  milePrograms: ListEnvelope<MileProgramHistory>;
+  redemptions: ListEnvelope<MileRedemptionHistory>;
   totals: {
     earned: number;
     available: number;
@@ -283,17 +286,14 @@ export function RewardsPage({
   });
 
   const historyQuery = useQuery({
-    queryKey: ["rewards", routeWorkspaceId, "frequent-flyer-history", openHistoryFFId],
+    queryKey: queryKeys.rewardHistory(routeWorkspaceId, openHistoryFFId),
     queryFn: async (): Promise<FrequentFlyerHistoryResponse> => {
       if (!openHistoryFFId) {
         throw new Error("Frequent flyer is required");
       }
-      const res = await workspaceFetch(`/api/rewards/frequent-flyer/history?frequentFlyerId=${openHistoryFFId}`);
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error || "Failed to load history");
-      }
-      return (await res.json()) as FrequentFlyerHistoryResponse;
+      return apiFetch<FrequentFlyerHistoryResponse>(
+        `/api/rewards/frequent-flyer/history?frequentFlyerId=${encodeURIComponent(openHistoryFFId)}&limit=100`,
+      );
     },
     enabled: !!openHistoryFFId,
   });
@@ -871,8 +871,8 @@ export function RewardsPage({
     }, 0) || 0;
   const totalCombinedMiles = totalCreditCardMiles + totalMiles;
   const selectedHistoryFrequentFlyer = data?.frequentFlyers.find((ff) => ff.id === openHistoryFFId) ?? null;
-  const earnEntries = historyQuery.data?.milePrograms ?? [];
-  const redemptionEntries = historyQuery.data?.redemptions ?? [];
+  const earnEntries = historyQuery.data?.milePrograms.items ?? [];
+  const redemptionEntries = historyQuery.data?.redemptions.items ?? [];
   const earnTotalPages = Math.max(1, Math.ceil(earnEntries.length / EARN_PAGE_SIZE));
   const redemptionTotalPages = Math.max(1, Math.ceil(redemptionEntries.length / REDEMPTION_PAGE_SIZE));
   const safeEarnPage = Math.min(earnPage, earnTotalPages);

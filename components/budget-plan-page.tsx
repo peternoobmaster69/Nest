@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
@@ -124,25 +124,6 @@ type SourceFields = {
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await workspaceFetch(url, init);
-  if (!response.ok) {
-    let detail = `Request failed (${response.status})`;
-    try {
-      const body = await response.json();
-      if (typeof body?.message === "string") {
-        detail = body.message;
-      } else if (typeof body?.error === "string") {
-        detail = body.error;
-      }
-    } catch {
-      // Keep the HTTP status when the response is not JSON.
-    }
-    throw new Error(detail);
-  }
-  return response.json();
-}
 
 function requestBody(action: string, workspaceId: string, payload: Record<string, unknown> = {}) {
   return JSON.stringify({ workspaceId, action, ...payload });
@@ -1177,7 +1158,7 @@ export function BudgetPlanPage() {
               <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.5 }}>
                 Confirm {MONTHS[selectedMonth - 1]} {selectedYear}. Confirmed plans are read-only, and linked budget item amounts will be applied to their destination sub-accounts.
               </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <div className="bp-confirm-summary">
                 <div className="bp-stat">
                   <div className="bp-stat-label">Sources</div>
                   <div className="bp-item-amount" style={{ marginTop: "4px" }}>{formatCents(sourceTotalCents)}</div>

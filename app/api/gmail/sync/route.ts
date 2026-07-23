@@ -1,10 +1,10 @@
-import { backgroundJobToProgress, findLatestBackgroundJob } from "@/lib/background-jobs";
+import { backgroundJobToProgress, findLatestBackgroundJob } from "@/lib/domains/jobs";
 import {
   GMAIL_SYNC_JOB_TYPE,
   getGmailSyncJobKey,
   processGmailSyncQueue,
   queueGmailSyncForIntegration,
-} from "@/lib/gmail-sync-runner";
+} from "@/lib/domains/integrations";
 import { prisma } from "@/lib/prisma";
 import { runSecureApiRoute } from "@/lib/api-security";
 import { enforceDistributedRateLimit } from "@/lib/security-rate-limit";

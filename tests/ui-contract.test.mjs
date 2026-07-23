@@ -416,13 +416,21 @@ test("compact dialog and form contract is keyboard-aware and uniform", async () 
   }
 
   assert.match(contract, /height:\s*var\(--visual-viewport-height, 100dvh\)\s*!important/);
+  assert.match(contract, /grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/);
+  assert.match(contract, /grid-template-rows:\s*minmax\(0, 1fr\)\s*!important/);
   assert.match(contract, /\.modal-form-shell,[\s\S]*?\.st-modal-form\s*\{[^}]*overflow:\s*hidden\s*!important/s);
   assert.match(contract, /\.cc-modal-scroll,[\s\S]*?\.cct-form-grid,[\s\S]*?\.tx-popover-body[\s\S]*?overflow-y:\s*auto\s*!important/s);
   assert.match(contract, /font-size:\s*16px\s*!important/);
   assert.match(contract, /\.calc-input-btn\s*\{[^}]*width:\s*44px\s*!important[^}]*height:\s*44px\s*!important/s);
-  assert.match(contract, /@media \(min-width: 390px\) and \(max-width: 820px\)[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)\s*!important/s);
+  assert.match(contract, /--mobile-modal-inline-size:\s*calc\([\s\S]*?100vw[\s\S]*?safe-area-inset-left[\s\S]*?safe-area-inset-right[\s\S]*?\)/s);
+  assert.match(contract, /width:\s*var\(--mobile-modal-inline-size\)\s*!important[\s\S]*?max-width:\s*var\(--mobile-modal-inline-size\)\s*!important/s);
+  assert.match(contract, /@media \(max-width: 599px\)[\s\S]*?\.cc-form-grid,[\s\S]*?\.inv-modal-body,[\s\S]*?\.auto-rule-field-grid-three\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/s);
+  assert.match(contract, /@media \(min-width: 600px\) and \(max-width: 820px\)[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)\s*!important/s);
+  assert.doesNotMatch(contract, /@media \(min-width: 390px\) and \(max-width: 820px\)/);
+  assert.match(contract, /input\[type="date"\][\s\S]*?min-width:\s*0/);
+  assert.match(contract, /\.auto-rule-action-row\s*\{[^}]*flex-direction:\s*column/s);
   assert.match(contract, /\.modal-action-group\s*\{[^}]*justify-content:\s*flex-end[^}]*margin-inline-start:\s*auto/s);
-  assert.match(contract, /\.workspace-create-form,[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto\s*!important/s);
+  assert.match(contract, /\.workspace-create-form,[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/s);
   assert.match(contract, /\.ask-nest-layer\s*\{[^}]*--visual-viewport-offset-top/s);
   assert.match(contract, /\.lp-signin-overlay\s*\{[^}]*--visual-viewport-offset-top/s);
   assert.match(contract, /\.notification-popover\s*\{[^}]*--visual-viewport-height/s);
@@ -435,7 +443,7 @@ test("compact dialog and form contract is keyboard-aware and uniform", async () 
   assert.match(transactions, /className="tx-popover-overlay"[\s\S]*?className="tx-month-popover"/);
 });
 
-test("Create Receivable uses its compact responsive modal layout", async () => {
+test("Create Receivable uses a non-overlapping responsive modal layout", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
 
@@ -443,8 +451,27 @@ test("Create Receivable uses its compact responsive modal layout", async () => {
   assert.match(component, /cct-form-grid cct-receivable-grid/);
   assert.match(styles, /\.cct-receivable-grid\s*\{[^}]*gap:\s*10px 12px[^}]*padding:\s*14px 16px/s);
   assert.match(styles, /@media \(min-width: 769px\)[\s\S]*?\.cct-receivable-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /@media \(min-width: 360px\) and \(max-width: 768px\)[\s\S]*?\.cct-receivable-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.cct-receivable-title\s*\{[^}]*grid-column:\s*span 4[\s\S]*?\.cct-receivable-amount\s*\{[^}]*grid-column:\s*span 2/);
+  assert.doesNotMatch(styles, /@media \(min-width: 360px\) and \(max-width: 768px\)[\s\S]*?\.cct-receivable-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6/);
+  assert.match(styles, /@media \(max-width: 599px\)[\s\S]*?\.cct-form-grid,[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/s);
+});
+
+test("phone popup fields and actions cannot overflow their grid tracks", async () => {
+  const [styles, budgetPlan, transactions] = await Promise.all([
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readFile(path.join(root, "components/budget-plan-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/transactions-page.tsx"), "utf8"),
+  ]);
+  const contract = styles.slice(styles.indexOf("COMPACT FORM + DIALOG CONTRACT"));
+
+  assert.match(contract, /\.cc-form-grid,[\s\S]*?\.auto-rule-field-grid-three[\s\S]*?> \* \{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+  assert.match(contract, /\.modal-container,[\s\S]*?\.inv-modal[\s\S]*?:where\(\.input, \.calc-input-wrap, \.segmented-toggle, \.markdown-editor\) \{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+  assert.match(contract, /@media \(max-width: 599px\)[\s\S]*?\.modal-footer,[\s\S]*?\.tx-popover-actions[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s);
+  assert.match(contract, /modal-action-destructive,[\s\S]*?grid-column:\s*1 \/ -1/s);
+  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*?\.bp-form \.form-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/s);
+  assert.match(budgetPlan, /className="bp-confirm-summary"/);
+  assert.doesNotMatch(budgetPlan, /gridTemplateColumns:\s*"1fr 1fr"/);
+  assert.equal((transactions.match(/className="profile-modal txn-modal txn-entry-modal"/g) ?? []).length, 2);
+  assert.match(contract, /body \.profile-modal\.txn-modal\.txn-entry-modal\[class\]\s*\{[^}]*width:\s*100%\s*!important[^}]*max-width:\s*none\s*!important/s);
 });
 
 test("credit transaction card selection uses a compact mobile-only dropdown", async () => {

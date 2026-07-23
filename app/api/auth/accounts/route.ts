@@ -6,6 +6,7 @@ export async function GET() {
   try {
     const userId = await requireSessionUserId();
     const accounts = await prisma.account.findMany({
+      take: 100,
       where: { userId },
       orderBy: { provider: "asc" },
       select: { provider: true },

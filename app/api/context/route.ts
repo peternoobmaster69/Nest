@@ -17,6 +17,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminEmail } from "@/lib/admin-auth";
 import { WORKSPACE_ID_HEADER } from "@/lib/workspace-request";
+import { randomUUID } from "node:crypto";
+import { withQueryTelemetry } from "@/lib/observability/query-telemetry";
 
 const UpdateContextSchema = z.object({
   workspaceId: z.string().min(1).optional(),
@@ -73,6 +75,7 @@ function parseSidebarMoneyPages(value: string | null | undefined) {
 
 export async function GET(request: Request) {
   try {
+    const requestId = randomUUID();
     const session = await getDatabaseReadyServerSession();
     const email = session?.user?.email?.toLowerCase();
     const isAdmin = isAdminEmail(email);
@@ -86,7 +89,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const memberships = await prisma.workspaceMember.findMany({
+    const memberships = await withQueryTelemetry(
+      { domain: "workspaces", operation: "context_memberships", requestId, workspaceId: null },
+      () => prisma.workspaceMember.findMany({
       where: { userId },
       include: {
         workspace: {
@@ -110,7 +115,9 @@ export async function GET(request: Request) {
         },
       },
       orderBy: { createdAt: "asc" },
-    });
+      take: 100,
+      }),
+    );
 
     const requestedWorkspaceId = request.headers.get(WORKSPACE_ID_HEADER)?.trim() || null;
     if (requestedWorkspaceId) {
@@ -137,7 +144,9 @@ export async function GET(request: Request) {
       return NextResponse.json(emptyContextResponse(workspaceSummaries, isAdmin));
     }
 
-    const [workspace, pendingInviteCount] = await Promise.all([
+    const [workspace, pendingInviteCount] = await withQueryTelemetry(
+      { domain: "workspaces", operation: "context_workspace", requestId, workspaceId: selectedWorkspaceId },
+      () => Promise.all([
       prisma.workspace.findUnique({
         where: { id: selectedWorkspaceId },
         select: {
@@ -153,6 +162,7 @@ export async function GET(request: Request) {
           financials: {
             where: { isActive: true },
             orderBy: { createdAt: "asc" },
+            take: 500,
             select: {
               id: true,
               name: true,
@@ -172,7 +182,8 @@ export async function GET(request: Request) {
       prisma.workspaceInvite.count({
         where: { workspaceId: selectedWorkspaceId, status: "PENDING" },
       }),
-    ]);
+      ]),
+    );
 
     if (!workspace) {
       return NextResponse.json(emptyContextResponse(workspaceSummaries, isAdmin));

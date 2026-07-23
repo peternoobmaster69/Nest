@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 
@@ -51,12 +51,6 @@ type CardTheme = {
   label: string;
   background: string;
 };
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return res.json();
-}
 
 // Rich, low-glare issuer materials inspired by native wallet cards.
 const BANK_GRADIENTS: Record<string, string> = {

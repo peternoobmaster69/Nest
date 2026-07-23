@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
       if (promoted.count !== 1) throw new InvalidPendingSessionError();
 
       const memberships = await transaction.workspaceMember.findMany({
+        take: 100,
         where: { userId: token.id },
         select: { workspaceId: true },
       });

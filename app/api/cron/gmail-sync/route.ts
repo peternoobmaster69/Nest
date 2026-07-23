@@ -1,4 +1,4 @@
-import { runScheduledGmailSyncs } from "@/lib/gmail-sync-runner";
+import { runScheduledGmailSyncs } from "@/lib/domains/integrations";
 import { authorizeCronRequest } from "@/lib/cron-auth";
 import { ensureDatabaseReady } from "@/lib/database-readiness";
 import { NextResponse } from "next/server";

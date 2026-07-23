@@ -209,18 +209,18 @@ Exit criteria:
 
 ### Phase 6 — Backend API and architecture improvement
 
-Target: 2–3 weeks, incremental. Owner: backend. Status: Not started.
+Target: 2–3 weeks, incremental. Owner: backend. Status: Complete.
 
-- [ ] Organize server code by domain (`workspaces`, `ledger`, `cards`, `receivables`, `rewards`, `integrations`, `jobs`) with route handlers limited to transport concerns.
-- [ ] Extract shared request schemas, response DTOs, error codes, query keys, cache policies, and role requirements.
-- [ ] Generate OpenAPI from the actual handlers/schemas, describe cookie/session auth correctly, and protect or remove Swagger in production as appropriate.
-- [ ] Standardize list envelopes and cursor pagination. Add bounded pagination to reward history, alerts, collaborators/audit, notifications, and any unbounded collection.
-- [ ] Add strict search lengths, import limits, and SQL Server-safe batching; the current 1,000-row duplicate OR query can exceed practical parameter/query limits.
-- [ ] Make Maybank/JSON imports atomic per chunk, resumable, and idempotent instead of partial row-by-row commits.
-- [ ] Replace duplicated component-local `fetchJson` helpers with one typed client that handles 401/403/409/422/429/503 consistently.
-- [ ] Split the 786-line multi-action budget-plan handler into action-specific services/routes without changing the public workflow.
-- [ ] Remove ad hoc production-data scripts or add explicit environment allowlists, dry-run defaults, confirmation, audit output, and tests. Delete hard-coded record IDs.
-- [ ] Profile dashboard/context/database queries with real telemetry before adding caches. Cache only non-sensitive, user-correct data with explicit invalidation.
+- [x] Organize server code by domain (`workspaces`, `ledger`, `cards`, `receivables`, `rewards`, `integrations`, `jobs`) with route handlers limited to transport concerns.
+- [x] Extract shared request schemas, response DTOs, error codes, query keys, cache policies, and role requirements.
+- [x] Generate OpenAPI from the actual handlers/schemas, describe cookie/session auth correctly, and protect or remove Swagger in production as appropriate.
+- [x] Standardize list envelopes and cursor pagination. Add bounded pagination to reward history, alerts, collaborators/audit, notifications, and any unbounded collection.
+- [x] Add strict search lengths, import limits, and SQL Server-safe batching; the current 1,000-row duplicate OR query can exceed practical parameter/query limits.
+- [x] Make Maybank/JSON imports atomic per chunk, resumable, and idempotent instead of partial row-by-row commits.
+- [x] Replace duplicated component-local `fetchJson` helpers with one typed client that handles 401/403/409/422/429/503 consistently.
+- [x] Split the 786-line multi-action budget-plan handler into action-specific services/routes without changing the public workflow.
+- [x] Remove ad hoc production-data scripts or add explicit environment allowlists, dry-run defaults, confirmation, audit output, and tests. Delete hard-coded record IDs.
+- [x] Profile dashboard/context/database queries with real telemetry before adding caches. Cache only non-sensitive, user-correct data with explicit invalidation.
 
 Exit criteria:
 

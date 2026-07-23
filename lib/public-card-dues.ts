@@ -75,6 +75,7 @@ export async function getWorkspaceCardsDuePayload(
           id: { in: cardIds },
           isActive: true,
         },
+        take: 500,
         select: {
           id: true,
           bankName: true,

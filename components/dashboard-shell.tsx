@@ -1,6 +1,6 @@
 "use client";
 
-import { workspaceFetch } from "@/lib/workspace-client";
+import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -206,19 +206,7 @@ function getAmountToneClass(valueCents: number) {
 }
 
 async function getSummary(): Promise<DashboardSummary> {
-  const res = await workspaceFetch("/api/dashboard/summary", { cache: "no-cache" });
-  if (!res.ok) {
-    throw new Error("Unable to load dashboard");
-  }
-  return res.json();
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await workspaceFetch(url, init);
-  if (!res.ok) {
-    throw new Error(`Request failed (${res.status})`);
-  }
-  return res.json();
+  return fetchJson<DashboardSummary>("/api/dashboard/summary", { cache: "no-cache" });
 }
 
 function getGreeting() {
