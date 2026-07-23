@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api/client";
 import type { ListEnvelope } from "@/lib/api/contracts";
 import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
 
 type NotificationItem = {
   id: string;
@@ -119,7 +120,7 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
 
   return (
     <div className="notification-center" ref={rootRef}>
-      <button
+      <Button
         type="button"
         className={`notification-bell${open ? " open" : ""}`}
         aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
@@ -129,7 +130,7 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
       >
         <Bell size={19} strokeWidth={1.8} aria-hidden="true" />
         {unreadCount > 0 ? <span className="notification-badge">{unreadCount > 9 ? "9+" : unreadCount}</span> : null}
-      </button>
+      </Button>
 
       {open ? (
         <section className="notification-popover" role="dialog" aria-label="Notifications">
@@ -139,9 +140,9 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
               <p>{unreadCount ? `${unreadCount} unread` : "You’re up to date"}</p>
             </div>
             {unreadCount > 0 ? (
-              <button type="button" className="notification-mark-all" onClick={markAllRead} disabled={updateMutation.isPending}>
+              <Button type="button" className="notification-mark-all" onClick={markAllRead} disabled={updateMutation.isPending}>
                 <Check size={14} aria-hidden="true" /> Mark all read
-              </button>
+              </Button>
             ) : null}
           </header>
 
@@ -154,7 +155,7 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
             ) : notificationsQuery.isError ? (
               <div className="notification-state notification-state-error">
                 <span>Notifications couldn’t be loaded.</span>
-                <button type="button" onClick={() => notificationsQuery.refetch()}>Try again</button>
+                <Button type="button" onClick={() => notificationsQuery.refetch()}>Try again</Button>
               </div>
             ) : data?.notifications.items.length ? (
               data.notifications.items.map((notification) => {
@@ -190,9 +191,9 @@ export function NotificationBell({ workspaceId }: { workspaceId?: string | null 
                     {content}
                   </Link>
                 ) : (
-                  <button key={notification.id} type="button" className={`notification-item${notification.readAt ? "" : " unread"}`} onClick={onOpen}>
+                  <Button key={notification.id} type="button" className={`notification-item${notification.readAt ? "" : " unread"}`} onClick={onOpen}>
                     {content}
-                  </button>
+                  </Button>
                 );
               })
             ) : (

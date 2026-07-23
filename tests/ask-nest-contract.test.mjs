@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { readAppStyles } from "./read-app-styles.mjs";
 
 const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
@@ -146,7 +147,7 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
 test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", async () => {
   const shell = await source("components/app-shell.tsx");
   const panel = await source("components/ask-nest.tsx");
-  const styles = await source("app/globals.css");
+  const styles = await readAppStyles(root);
 
   assert.match(shell, /<AskNest/);
   assert.match(panel, /role="dialog"/);
@@ -207,16 +208,20 @@ test("Ask Nest derives charts and trip cards from successful tool output", async
 });
 
 test("Transactions supports Ask Nest deep links and multiple custom months", async () => {
-  const page = await source("components/transactions-page.tsx");
+  const [page, monthList] = await Promise.all([
+    source("components/transactions-page.tsx"),
+    source("components/transactions/transaction-month-list.tsx"),
+  ]);
   const route = await source("app/api/transactions/route.ts");
   const tools = await source("lib/ai/ask-nest-tools.ts");
-  const styles = await source("app/globals.css");
+  const styles = await readAppStyles(root);
 
   assert.match(page, /searchParams\.get\(["']view["']\) === ["']ask-nest["']/);
   assert.match(page, /searchParams\.get\(["']transactionId["']\)/);
   assert.match(page, /params\.set\(["']transactionId["'], targetTransactionId\)/);
   assert.match(page, /document\.getElementById\(`transaction-\$\{targetTransactionId\}`\)/);
-  assert.match(page, /isDeepLinked \? ["'] is-deep-linked["']/);
+  assert.match(page, /targetId=\{targetTransactionId\}/);
+  assert.match(monthList, /deepLinked \? ["'] is-deep-linked["']/);
   assert.match(route, /transactionId \? \{ id: transactionId \} : \{\}/);
   assert.match(tools, /function transactionRecordEvidence/);
   assert.match(tools, /accountId: row\.accountId[\s\S]*?budgetId: row\.budgetId[\s\S]*?transactionId: row\.id/);

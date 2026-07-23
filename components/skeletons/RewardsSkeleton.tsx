@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ArrowLeftRight, Building2, CreditCard, Plane } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function RewardsPageSkeleton() {
   return (
@@ -9,22 +10,22 @@ export function RewardsPageSkeleton() {
       </section>
       <div className="rewards-tabs-row">
         <div className="segmented rewards-tabs">
-          <button className="segmented-btn on" type="button" disabled aria-label="Credit cards">
+          <Button className="segmented-btn on" type="button" disabled aria-label="Credit cards">
             <CreditCard className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Credit cards</span>
-          </button>
-          <button className="segmented-btn" type="button" disabled aria-label="Frequent flyer">
+          </Button>
+          <Button className="segmented-btn" type="button" disabled aria-label="Frequent flyer">
             <Plane className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Frequent flyer</span>
-          </button>
-          <button className="segmented-btn" type="button" disabled aria-label="Hotel rewards">
+          </Button>
+          <Button className="segmented-btn" type="button" disabled aria-label="Hotel rewards">
             <Building2 className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Hotel rewards</span>
-          </button>
-          <button className="segmented-btn" type="button" disabled aria-label="Conversions">
+          </Button>
+          <Button className="segmented-btn" type="button" disabled aria-label="Conversions">
             <ArrowLeftRight className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Conversions</span>
-          </button>
+          </Button>
         </div>
         <Skeleton className="rewards-tab-action-skeleton" width={168} height={44} borderRadius="var(--r-md)" />
       </div>

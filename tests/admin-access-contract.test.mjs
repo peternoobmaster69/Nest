@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readAppStyles } from "./read-app-styles.mjs";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -44,7 +45,7 @@ test("admin overview lists users and workspace details", async () => {
     read("app/admin/page.tsx"),
     read("components/admin-directories.tsx"),
     read("components/admin-pagination.tsx"),
-    read("app/globals.css"),
+    readAppStyles(),
   ]);
 
   assert.match(overview, /prisma\.user\.findMany/);
@@ -96,7 +97,7 @@ test("admin record tables paginate after ten items", async () => {
     read("app/admin/page.tsx"),
     read("components/admin-record-tables.tsx"),
     read("components/admin-pagination.tsx"),
-    read("app/globals.css"),
+    readAppStyles(),
   ]);
 
   assert.match(page, /<AdminRecentActivityTable turns={overview\.recentTurns}/);

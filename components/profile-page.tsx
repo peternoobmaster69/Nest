@@ -7,6 +7,8 @@ import { FormEvent, useState } from "react";
 import { ArrowRight, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/controls";
 
 function initials(name: string) {
   return name
@@ -88,7 +90,7 @@ export function ProfilePage({
         <form className="profile-page-form" onSubmit={saveProfile}>
           <label className="profile-page-field">
             <span><UserRound size={16} aria-hidden="true" /> Display name</span>
-            <input
+            <Input
               className="input"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
@@ -108,13 +110,13 @@ export function ProfilePage({
             </div>
           ) : null}
           <div className="profile-page-actions">
-            <button
+            <Button
               className="btn btn-primary"
               type="submit"
               disabled={saving || displayName.trim() === savedName}
             >
               {saving ? "Saving..." : "Save profile"}
-            </button>
+            </Button>
           </div>
         </form>
       </section>

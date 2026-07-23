@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
+import { Button } from "@/components/ui/button";
 
 type Invite = {
   role: "EDITOR" | "VIEWER";
@@ -73,8 +74,8 @@ export function InvitationResponse({ token }: { token: string }) {
       </div>
       {invite?.status === "PENDING" ? (
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-primary" disabled={submitting} onClick={() => respond("accept")}>Accept</button>
-          <button className="btn btn-ghost" disabled={submitting} onClick={() => respond("decline")}>Decline</button>
+          <Button className="btn btn-primary" disabled={submitting} onClick={() => respond("accept")}>Accept</Button>
+          <Button className="btn btn-ghost" disabled={submitting} onClick={() => respond("decline")}>Decline</Button>
         </div>
       ) : null}
       {invite?.status && invite.status !== "PENDING" ? <p>This invitation is {invite.status.toLowerCase()}.</p> : null}

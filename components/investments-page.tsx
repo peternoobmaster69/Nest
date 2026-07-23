@@ -11,12 +11,15 @@ import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
 import { Droplet, Lock, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import { compareInvestmentEntries, getLatestInvestmentEntry } from "@/lib/investment-entry-order";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
 
 type AppContext = {
   workspaceId: string | null;
@@ -127,13 +130,13 @@ export function InvestmentsPage() {
   const [entryCurrentValue, setEntryCurrentValue] = useState("0");
 
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId;
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
   const formatCents = (value: number) => formatMoney(value, baseCurrency);
-  const investmentsQueryKey = ["investments", workspaceId] as const;
+  const investmentsQueryKey = queryKeys.investments(workspaceId);
 
   const accounts = useQuery({
     queryKey: investmentsQueryKey,
@@ -671,27 +674,27 @@ export function InvestmentsPage() {
           {showAllAccounts ? "All Accounts" : selectedAccount ? `${selectedAccount.displayName || selectedAccount.productName}` : "Select an account to view details"}
         </div>
         <div className="segmented">
-          <button
+          <Button
             type="button"
             className={`segmented-btn ${showAllAccounts ? "on" : ""}`}
             onClick={() => setShowAllAccounts(true)}
           >
             All Accounts
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             className={`segmented-btn ${!showAllAccounts ? "on" : ""}`}
             onClick={() => setShowAllAccounts(false)}
             disabled={!selectedAccount}
           >
             Single Account
-          </button>
+          </Button>
         </div>
       </section>
 
       {!accountsLoading && !accountsError && (accounts.data?.length ?? 0) > 0 ? (
         <div className="inv-account-create-row">
-          <button
+          <Button
             className="btn btn-ghost btn-sm inv-add-account-btn"
             type="button"
             onClick={openCreateAccountModal}
@@ -701,7 +704,7 @@ export function InvestmentsPage() {
           >
             <Plus size={15} aria-hidden="true" />
             <span>Add account</span>
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -715,9 +718,9 @@ export function InvestmentsPage() {
               icon="⚠️"
               title="Failed to load investments"
               action={
-                <button className="btn btn-primary" onClick={() => refetch()}>
+                <Button className="btn btn-primary" onClick={() => refetch()}>
                   Retry
-                </button>
+                </Button>
               }
             />
           </div>
@@ -730,9 +733,9 @@ export function InvestmentsPage() {
               title="No investment accounts yet"
               description="Add your first investment account to start tracking your portfolio performance."
               action={
-                <button className="btn btn-primary" onClick={openCreateAccountModal}>
+                <Button className="btn btn-primary" onClick={openCreateAccountModal}>
                   + Add Investment Account
-                </button>
+                </Button>
               }
             />
           </div>
@@ -754,7 +757,7 @@ export function InvestmentsPage() {
           const inceptionBadge = formatInceptionBadge(account.inceptionDate);
           return (
             <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""} ${recentlyUpdated ? "is-recently-updated" : ""}`}>
-              <button
+              <Button
                 className="inv-edit-icon"
                 type="button"
                 onClick={() => openEditAccountModal(account)}
@@ -762,8 +765,8 @@ export function InvestmentsPage() {
                 title="Edit"
               >
                 ✎
-              </button>
-              <button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
+              </Button>
+              <Button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
                 <div className="inv-account-head">
                   <div className="inv-account-title-row">
                     <strong>{account.displayName || account.productName}</strong>
@@ -790,7 +793,7 @@ export function InvestmentsPage() {
                     <p className={currentValueClass}>{formatCents(currentCents)}</p>
                   </div>
                 </div>
-              </button>
+              </Button>
               <div className="inv-account-actions">
                 {inceptionBadge ? (
                   <span
@@ -801,7 +804,7 @@ export function InvestmentsPage() {
                     {inceptionBadge.full}
                   </span>
                 ) : null}
-                <button
+                <Button
                   className="btn btn-primary btn-icon btn-xs inv-add-update-btn"
                   type="button"
                   onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}
@@ -811,7 +814,7 @@ export function InvestmentsPage() {
                 <path d="M13.5 8A5.5 5.5 0 1 1 10 3.07" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 <polygon points="10,1 14,4 10,5.5" fill="currentColor"/>
               </svg>
-                </button>
+                </Button>
               </div>
             </article>
           );
@@ -840,14 +843,14 @@ export function InvestmentsPage() {
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div className="inv-range">
                   {(["90D", "180D", "1Y", "ALL"] as TimeRange[]).map((range) => (
-                    <button
+                    <Button
                       key={range}
                       type="button"
                       className={`inv-range-btn ${timeRange === range ? "on" : ""}`}
                       onClick={() => setTimeRange(range)}
                     >
                       {range}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -962,9 +965,9 @@ export function InvestmentsPage() {
             <section className="card inv-history-card">
               <div className="inv-history-head">
                 <div className="inv-title">History</div>
-                <button className="btn btn-primary btn-xs" type="button" onClick={() => selectedAccount && openCreateEntryModal(selectedAccount)}>
+                <Button className="btn btn-primary btn-xs" type="button" onClick={() => selectedAccount && openCreateEntryModal(selectedAccount)}>
                   + Add Entry
-                </button>
+                </Button>
               </div>
               <div className="inv-history-list">
                 {selectedEntries.length ? (
@@ -978,7 +981,7 @@ export function InvestmentsPage() {
                           <span>Invested: {formatCents(entry.investedCents)}</span>
                           <span>Current: {formatCents(entry.currentValueCents)}</span>
                         </div>
-                        <button
+                        <Button
                           className="btn btn-ghost btn-icon"
                           style={{ width: "32px", height: "32px" }}
                           type="button"
@@ -987,7 +990,7 @@ export function InvestmentsPage() {
                           aria-label="Edit entry"
                         >
                           ✎
-                        </button>
+                        </Button>
                       </div>
                     ))
                 ) : (
@@ -1010,7 +1013,7 @@ export function InvestmentsPage() {
       ) : null}
 
       {accountModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeAccountModal)}>
+        <Dialog open onClose={closeAccountModal} title="Investment account" surface="custom" overlayClassName="profile-modal-overlay">
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
@@ -1031,73 +1034,73 @@ export function InvestmentsPage() {
               <div className="profile-modal-body inv-modal-body">
               <div className="profile-field">
                 <span>Display Name of the Account</span>
-                <input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                <Input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
               </div>
               <div className="profile-field">
                 <span>Financial Institution Name</span>
-                <input className="input" value={institutionName} onChange={(e) => setInstitutionName(e.target.value)} required />
+                <Input className="input" value={institutionName} onChange={(e) => setInstitutionName(e.target.value)} required />
               </div>
               <div className="profile-field">
                 <span>Product Name</span>
-                <input className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required />
+                <Input className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required />
               </div>
               <div className="profile-field">
                 <span>Inception Date</span>
-                <input className="input" type="date" value={inceptionDate} onChange={(e) => setInceptionDate(e.target.value)} required />
+                <Input className="input" type="date" value={inceptionDate} onChange={(e) => setInceptionDate(e.target.value)} required />
               </div>
               <div className="profile-field">
                 <span>Divested Date (Optional)</span>
-                <input className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
+                <Input className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
               </div>
               <div className="profile-field">
                 <span>Is liquid (Available to withdraw anytime?)</span>
                 <div className="segmented-toggle inv-liquidity-toggle" role="group" aria-label="Is liquid">
-                  <button
+                  <Button
                     type="button"
                     className={`segmented-toggle-btn inv-liquidity-toggle-btn ${isLiquid ? "is-active" : ""}`}
                     aria-pressed={isLiquid}
                     onClick={() => setIsLiquid(true)}
                   >
                     Yes
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     className={`segmented-toggle-btn inv-liquidity-toggle-btn ${!isLiquid ? "is-active" : ""}`}
                     aria-pressed={!isLiquid}
                     onClick={() => setIsLiquid(false)}
                   >
                     No
-                  </button>
+                  </Button>
                 </div>
               </div>
               {accountError ? <div className="profile-error">{accountError}</div> : null}
               </div>
               <div className="profile-actions inv-modal-actions">
                 {accountModalMode === "edit" && editingAccountId ? (
-                  <button
+                  <Button
                     type="button"
                     className="btn btn-ghost btn-xs modal-action-destructive"
                     onClick={() => confirmDeleteAccount(editingAccountId)}
                     disabled={deleteAccount.isPending}
                   >
                     {deleteAccount.isPending ? "Deleting..." : "Delete"}
-                  </button>
+                  </Button>
                 ) : <span />}
                 <div className="inv-modal-primary-actions modal-action-group">
-                  <button type="button" className="btn btn-ghost btn-xs" onClick={closeAccountModal}>Cancel</button>
-                  <button type="submit" className="btn btn-primary btn-xs" disabled={createAccount.isPending || updateAccount.isPending}>
+                  <Button type="button" className="btn btn-ghost btn-xs" onClick={closeAccountModal}>Cancel</Button>
+                  <Button type="submit" className="btn btn-primary btn-xs" disabled={createAccount.isPending || updateAccount.isPending}>
                     {accountModalMode === "edit" ? (updateAccount.isPending ? "Saving..." : "Save") : (createAccount.isPending ? "Adding..." : "Add")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </form>
           </div>
-        </div>,
+        </Dialog>,
         document.body
       )}
 
       {entryModalOpen && typeof document !== "undefined" && createPortal(
-        <div className="profile-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEntryModal)}>
+        <Dialog open onClose={closeEntryModal} title="Investment entry" surface="custom" overlayClassName="profile-modal-overlay">
           <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
             <div className="profile-modal-head">
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
@@ -1118,7 +1121,7 @@ export function InvestmentsPage() {
               <div className="profile-modal-body inv-modal-body">
               <div className="profile-field">
                 <span>Date</span>
-                <input className="input" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
+                <Input className="input" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
               </div>
               {entryModalMode === "create" ? (
                 <div className="profile-field">
@@ -1138,25 +1141,25 @@ export function InvestmentsPage() {
               </div>
               <div className="profile-actions inv-modal-actions">
                 {entryModalMode === "edit" && editingEntryId ? (
-                  <button
+                  <Button
                     type="button"
                     className="btn btn-ghost btn-xs modal-action-destructive"
                     onClick={() => confirmDeleteEntry(editingEntryId)}
                     disabled={deleteEntry.isPending}
                   >
                     {deleteEntry.isPending ? "Deleting..." : "Delete"}
-                  </button>
+                  </Button>
                 ) : <span />}
                 <div className="inv-modal-primary-actions modal-action-group">
-                  <button type="button" className="btn btn-ghost btn-xs" onClick={closeEntryModal}>Cancel</button>
-                  <button type="submit" className="btn btn-primary btn-xs" disabled={createEntry.isPending || updateEntry.isPending}>
+                  <Button type="button" className="btn btn-ghost btn-xs" onClick={closeEntryModal}>Cancel</Button>
+                  <Button type="submit" className="btn btn-primary btn-xs" disabled={createEntry.isPending || updateEntry.isPending}>
                     {entryModalMode === "edit" ? (updateEntry.isPending ? "Saving..." : "Save") : (createEntry.isPending ? "Adding..." : "Add")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </form>
           </div>
-        </div>,
+        </Dialog>,
         document.body
       )}
     </div>

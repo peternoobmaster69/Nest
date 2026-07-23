@@ -12,7 +12,6 @@ import Image from "next/image";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -27,6 +26,10 @@ import {
   RotateCcw,
   WalletCards,
 } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
 
 type AppContext = {
   workspaceId: string | null;
@@ -158,20 +161,20 @@ export function CreditCardsPage() {
   }, []);
 
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = context.data?.workspaceId;
 
   const cards = useQuery({
-    queryKey: ["credit-cards", workspaceId],
+    queryKey: queryKeys.key(["credit-cards", workspaceId]),
     queryFn: () => fetchJson<CreditCard[]>(`/api/credit-cards?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
   const invalidateCreditCardDependencies = () => {
-    void queryClient.invalidateQueries({ queryKey: ["credit-cards", workspaceId], refetchType: "active" });
-    void queryClient.invalidateQueries({ queryKey: ["credit-transactions"], refetchType: "active" });
-    void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-cards", workspaceId]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-transactions"]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
   };
   const sortedCards = useMemo(() => {
     const list = [...(cards.data ?? [])];
@@ -340,10 +343,10 @@ export function CreditCardsPage() {
             ) : null}
           </div>
         </div>
-        <button className="btn btn-primary cc-add-btn mobile-primary-create" onClick={openModal} aria-label="Add card" title="Add card">
+        <Button className="btn btn-primary cc-add-btn mobile-primary-create" onClick={openModal} aria-label="Add card" title="Add card">
           <Plus size={18} aria-hidden="true" />
           <span className="mobile-primary-create-label">Add Card</span>
-        </button>
+        </Button>
       </div>
 
       {/* Cards Grid - Apple Wallet Style (mobile only) */}
@@ -354,9 +357,9 @@ export function CreditCardsPage() {
           <div className="cc-empty">
             <div className="cc-empty-icon">⚠️</div>
             <p>Failed to load cards</p>
-            <button className="btn btn-primary" onClick={() => cards.refetch()}>
+            <Button className="btn btn-primary" onClick={() => cards.refetch()}>
               Retry
-            </button>
+            </Button>
           </div>
         )}
 
@@ -448,7 +451,7 @@ export function CreditCardsPage() {
                     <span className="cc-back-kicker">{card.bankName || "Credit card"}</span>
                     <span className="cc-back-card-name">{card.cardName}</span>
                   </div>
-                  <button
+                  <Button
                     className="cc-edit-card-btn"
                     onClick={(event) => {
                       event.stopPropagation();
@@ -458,7 +461,7 @@ export function CreditCardsPage() {
                     title="Edit card"
                   >
                     <Pencil size={15} aria-hidden="true" />
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="cc-back-magnetic-stripe" aria-hidden="true"><span /></div>
@@ -511,14 +514,14 @@ export function CreditCardsPage() {
 
         {/* Show All / Collapse Button - Mobile Only */}
         {!cards.isLoading && !cards.isError && isMobileView && sortedCards.length > 1 && (
-          <button
+          <Button
             className="cc-show-all-btn"
             onClick={() => setIsStackExpanded(!isStackExpanded)}
             aria-expanded={isStackExpanded}
           >
             {isStackExpanded ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
             <span>{isStackExpanded ? "Stack cards" : `Browse all ${sortedCards.length} cards`}</span>
-          </button>
+          </Button>
         )}
 
         {/* Empty State */}
@@ -529,9 +532,9 @@ export function CreditCardsPage() {
               title="No credit cards yet"
               description="Add your first credit card to track rewards, monitor spending, and manage payment due dates."
               action={
-                <button className="btn btn-primary" onClick={openModal}>
+                <Button className="btn btn-primary" onClick={openModal}>
                   + Add Your First Card
-                </button>
+                </Button>
               }
             />
           </div>
@@ -540,7 +543,7 @@ export function CreditCardsPage() {
 
       {/* Add Card Modal */}
       {isModalOpen && (
-        <div className="cc-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeModal)}>
+        <Dialog open onClose={closeModal} title="Credit card" surface="custom" overlayClassName="cc-modal-overlay">
           <div className="cc-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cc-modal-header">
               <h3>{editingCardId ? "Edit Credit Card" : "Add Credit Card"}</h3>
@@ -575,7 +578,7 @@ export function CreditCardsPage() {
               <div className="cc-form-grid">
                 <div className="form-group">
                   <label className="label">Card Name</label>
-                  <input
+                  <Input
                     className="input"
                     placeholder="e.g., DBS Altitude"
                     value={cardName}
@@ -586,18 +589,18 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label className="label">Bank</label>
-                  <select className="input" value={bankName} onChange={(e) => setBankName(e.target.value)}>
+                  <Select className="input" value={bankName} onChange={(e) => setBankName(e.target.value)}>
                     {SINGAPORE_BANKS.map((bank) => (
                       <option key={bank.code} value={bank.name}>
                         {bank.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="form-group cc-span-2">
                   <label className="label">Last 4 digits</label>
-                  <input
+                  <Input
                     className="input"
                     placeholder="3456"
                     value={cardLast4}
@@ -616,7 +619,7 @@ export function CreditCardsPage() {
                 <div className="form-group cc-span-2">
                   <label className="label">Card Theme</label>
                   <div className="cc-theme-grid">
-                    <button
+                    <Button
                       type="button"
                       className={`cc-theme-chip${themeKey.startsWith("custom:") ? " on" : ""}`}
                       onClick={() => setThemeKey(`custom:${plainColor}`)}
@@ -625,7 +628,7 @@ export function CreditCardsPage() {
                     >
                       <span className="cc-theme-swatch" style={{ background: plainColor }} />
                       <span className="cc-theme-label">Plain Color</span>
-                      <input
+                      <Input
                         type="color"
                         value={plainColor}
                         className="cc-theme-color"
@@ -635,9 +638,9 @@ export function CreditCardsPage() {
                           setThemeKey(`custom:${e.target.value}`);
                         }}
                       />
-                    </button>
+                    </Button>
                     {CARD_THEMES.map((theme) => (
-                      <button
+                      <Button
                         key={theme.key}
                         type="button"
                         className={`cc-theme-chip${themeKey === theme.key ? " on" : ""}`}
@@ -652,7 +655,7 @@ export function CreditCardsPage() {
                           }}
                         />
                         <span className="cc-theme-label">{theme.label}</span>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -707,7 +710,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group cc-span-2">
                   <label className="label">Notes (optional)</label>
-                  <input
+                  <Input
                     className="input"
                     placeholder="Additional notes..."
                     value={notes}
@@ -719,19 +722,19 @@ export function CreditCardsPage() {
               </div>
               <div className="cc-modal-actions">
                 {editingCardId ? (
-                  <button
+                  <Button
                     type="button"
                     className="btn btn-ghost cc-delete modal-action-destructive"
                     disabled={deleteCard.isPending}
                     onClick={() => confirmDeleteCard(editingCardId)}
                   >
                     {deleteCard.isPending ? "Deleting..." : "Delete Card"}
-                  </button>
+                  </Button>
                 ) : null}
-                <button type="button" className="btn btn-ghost" onClick={closeModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeModal}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   className="btn btn-primary"
                   disabled={createCard.isPending || updateCard.isPending}
@@ -739,11 +742,11 @@ export function CreditCardsPage() {
                   {editingCardId
                     ? (updateCard.isPending ? "Saving..." : "Save Changes")
                     : (createCard.isPending ? "Adding..." : "Add Card")}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

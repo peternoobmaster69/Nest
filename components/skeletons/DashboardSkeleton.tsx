@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BankSelectorSkeleton } from "@/components/skeletons/BankSelectorSkeleton";
+import { Button } from "@/components/ui/button";
 
 /*
 Structural inventory: Dashboard data regions
@@ -162,9 +163,9 @@ export function DashboardCreditCardPanelSkeleton() {
           <span aria-hidden="true"> </span>
           <span>Payments due</span>
         </div>
-        <button className="btn btn-ghost btn-xs" type="button" disabled>
+        <Button className="btn btn-ghost btn-xs" type="button" disabled>
           View all
-        </button>
+        </Button>
       </div>
       <div className="cc-home-list">
         {Array.from({ length: 2 }).map((_, index) => (

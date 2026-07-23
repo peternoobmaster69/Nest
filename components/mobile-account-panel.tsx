@@ -8,6 +8,8 @@ import { useState } from "react";
 import { useTheme } from "@/components/theme-provider";
 import { workspaceFetch } from "@/lib/workspace-client";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
+import { invalidateWorkspaceQueries, queryKeys, removeWorkspaceQueries } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
 
 type Workspace = {
   id: string;
@@ -48,7 +50,7 @@ export function MobileAccountPanel({
   const avatarAlt = userName || userEmail || "User";
 
   const workspaces = useQuery({
-    queryKey: ["workspaces"],
+    queryKey: queryKeys.key(["workspaces"]),
     queryFn: async () => {
       const response = await workspaceFetch("/api/workspaces");
       if (!response.ok) throw new Error("Failed to load workspaces");
@@ -69,7 +71,7 @@ export function MobileAccountPanel({
       });
       if (!response.ok) throw new Error("Failed to switch workspace");
 
-      queryClient.setQueryData(["app-context"], (existing: {
+      queryClient.setQueryData(queryKeys.contextAll, (existing: {
         workspaceId?: string | null;
         workspaceName?: string | null;
       } | undefined) => existing ? {
@@ -78,19 +80,10 @@ export function MobileAccountPanel({
         workspaceName: nextWorkspace?.name ?? existing.workspaceName,
       } : existing);
 
-      queryClient.removeQueries({ queryKey: ["credit-transactions"] });
-      queryClient.removeQueries({ queryKey: ["rewards"] });
-      void queryClient.invalidateQueries({ queryKey: ["app-context"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-      void queryClient.removeQueries({ queryKey: ["budgets"] });
-      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      void queryClient.invalidateQueries({ queryKey: ["receivables"] });
-      void queryClient.invalidateQueries({ queryKey: ["receivables-summary"] });
-      void queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      void queryClient.invalidateQueries({ queryKey: ["investments"] });
-      void queryClient.invalidateQueries({ queryKey: ["credit-cards"] });
-      void queryClient.invalidateQueries({ queryKey: ["collaborators"] });
-      void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      removeWorkspaceQueries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contextAll });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.all("workspaces") });
+      void invalidateWorkspaceQueries(queryClient, nextWorkspaceId);
 
       onClose();
       router.push(buildWorkspacePath(nextWorkspaceId));
@@ -115,14 +108,14 @@ export function MobileAccountPanel({
           </div>
         </div>
 
-        <button className="mobile-account-action" type="button" onClick={toggleTheme}>
+        <Button className="mobile-account-action" type="button" onClick={toggleTheme}>
           {theme === "light" ? <Moon size={19} aria-hidden="true" /> : <Sun size={19} aria-hidden="true" />}
           <span>
             <strong>{theme === "light" ? "Dark mode" : "Light mode"}</strong>
             <small>Change the app appearance</small>
           </span>
           <ChevronRight size={17} aria-hidden="true" />
-        </button>
+        </Button>
 
         <div className="mobile-account-section-label">Switch workspace</div>
         <div className="mobile-account-workspaces">
@@ -132,7 +125,7 @@ export function MobileAccountPanel({
             const isCurrent = workspace.id === workspaceId;
             const isSwitching = switchingWorkspaceId === workspace.id;
             return (
-              <button
+              <Button
                 className={`mobile-account-workspace${isCurrent ? " is-current" : ""}`}
                 type="button"
                 key={workspace.id}
@@ -143,7 +136,7 @@ export function MobileAccountPanel({
                   {isSwitching ? <span className="sb-workspace-spinner" /> : isCurrent ? <Check size={16} aria-hidden="true" /> : null}
                 </span>
                 <span><strong>{workspace.name}</strong><small>{workspace.baseCurrency}</small></span>
-              </button>
+              </Button>
             );
           })}
         </div>

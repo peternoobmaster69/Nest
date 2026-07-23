@@ -36,6 +36,8 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     }
     case "admin":
       return <AdminRoute />;
+    case "accounts":
+      redirect(buildWorkspacePath(workspaceId, "/settings?tab=workspaces#bank-accounts"));
     case "budgets":
       redirect(buildWorkspacePath(workspaceId));
     case "budgets/plan":

@@ -7,7 +7,6 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPlanSkeleton";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { summarizeMonthlyBudgetPlan } from "@/lib/monthly-budget-plan.mjs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -31,6 +30,10 @@ import {
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
 
 type WorkspaceMember = {
   user: { id: string; name: string | null; email: string | null };
@@ -150,12 +153,7 @@ function ModalShell({
   closeDisabled?: boolean;
 }) {
   return (
-    <div
-      className="st-modal-overlay"
-      onMouseDown={(event) => {
-        if (!closeDisabled) closeOnBackdropClick(event, onClose);
-      }}
-    >
+    <Dialog open onClose={onClose} title={title} closeDisabled={closeDisabled} surface="custom" overlayClassName="st-modal-overlay">
       <div className="st-modal" onClick={(event) => event.stopPropagation()}>
         <div className="st-modal-header">
           <h3>{title}</h3>
@@ -163,7 +161,7 @@ function ModalShell({
         </div>
         {children}
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -210,7 +208,7 @@ export function BudgetPlanPage() {
   const [sourceOwnerId, setSourceOwnerId] = useState("");
 
   const contextQuery = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const workspaceId = contextQuery.data?.workspaceId ?? null;
@@ -218,7 +216,7 @@ export function BudgetPlanPage() {
   const formatCents = (cents: number) => formatMoney(cents, baseCurrency);
 
   const planQuery = useQuery({
-    queryKey: ["budget-plan", workspaceId, selectedYear, selectedMonth],
+    queryKey: queryKeys.key(["budget-plan", workspaceId, selectedYear, selectedMonth]),
     queryFn: () =>
       fetchJson<BudgetPlanData>(
         `/api/budgets/plan?workspaceId=${encodeURIComponent(workspaceId ?? "")}&year=${selectedYear}&month=${selectedMonth}`,
@@ -257,8 +255,8 @@ export function BudgetPlanPage() {
   const hasSetupSeed = setupSources.length > 0 || setupItems.some((item) => item.isMonthly);
 
   const invalidateCurrentPlan = () =>
-    queryClient.invalidateQueries({ queryKey: ["budget-plan", workspaceId, selectedYear, selectedMonth] });
-  const invalidateAllPlanData = () => queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.key(["budget-plan", workspaceId, selectedYear, selectedMonth]) });
+  const invalidateAllPlanData = () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["budget-plan"]) });
 
   const startPlan = useMutation<MonthlyBudgetPlan, Error, "startBlank" | "startFromSetup">({
     mutationFn: (action) =>
@@ -411,9 +409,9 @@ export function BudgetPlanPage() {
     onSuccess: () => {
       setShowConfirmModal(false);
       invalidateCurrentPlan();
-      queryClient.invalidateQueries({ queryKey: ["budgets", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
     },
   });
 
@@ -615,18 +613,18 @@ export function BudgetPlanPage() {
               Manage this month without changing Budget Setup.
             </p>
           </div>
-          <button className="btn btn-ghost" type="button" onClick={() => setShowSetup(true)}>
+          <Button className="btn btn-ghost" type="button" onClick={() => setShowSetup(true)}>
             <LayoutTemplate size={16} />
             Budget Setup
             <ChevronDown size={15} />
-          </button>
+          </Button>
         </div>
 
         <div className="bp-form" style={{ paddingBottom: "18px", borderBottom: "1px solid var(--border-subtle)" }}>
           <div className="form-row">
             <div className="form-group">
               <label className="label" htmlFor="budget-plan-month">Month</label>
-              <select
+              <Select
                 id="budget-plan-month"
                 className="input"
                 value={selectedMonth}
@@ -635,7 +633,7 @@ export function BudgetPlanPage() {
                 {MONTHS.map((month, index) => (
                   <option key={month} value={index + 1}>{month}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="form-group">
               <label className="label">Year</label>
@@ -672,7 +670,7 @@ export function BudgetPlanPage() {
             <h3 className="empty-state-title">No monthly budget</h3>
             <p className="empty-state-desc">Start with Budget Setup or create an empty monthly plan.</p>
             <div className="empty-state-action" style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
-              <button
+              <Button
                 className="btn btn-primary"
                 type="button"
                 onClick={() => startPlan.mutate("startFromSetup")}
@@ -681,8 +679,8 @@ export function BudgetPlanPage() {
               >
                 <LayoutTemplate size={16} />
                 {startPlan.isPending && startPlan.variables === "startFromSetup" ? "Starting..." : "Start from Setup"}
-              </button>
-              <button
+              </Button>
+              <Button
                 className="btn btn-ghost"
                 type="button"
                 onClick={() => startPlan.mutate("startBlank")}
@@ -690,7 +688,7 @@ export function BudgetPlanPage() {
               >
                 <FilePlus2 size={16} />
                 {startPlan.isPending && startPlan.variables === "startBlank" ? "Starting..." : "Start Blank"}
-              </button>
+              </Button>
             </div>
             {planActionError && <p style={{ marginTop: "12px", color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
           </div>
@@ -799,7 +797,7 @@ export function BudgetPlanPage() {
                 </p>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {monthlySources.length === 0 && monthlyItems.length === 0 && (
-                    <button
+                    <Button
                       className="btn btn-ghost"
                       type="button"
                       onClick={() => startPlan.mutate("startFromSetup")}
@@ -808,16 +806,16 @@ export function BudgetPlanPage() {
                     >
                       <LayoutTemplate size={15} />
                       {startPlan.isPending ? "Applying..." : "Start from Setup"}
-                    </button>
+                    </Button>
                   )}
-                  <button className="btn btn-danger" type="button" onClick={handleDiscardDraft} disabled={discardDraft.isPending}>
+                  <Button className="btn btn-danger" type="button" onClick={handleDiscardDraft} disabled={discardDraft.isPending}>
                     <Trash2 size={15} />
                     {discardDraft.isPending ? "Discarding..." : "Discard Draft"}
-                  </button>
-                  <button className="btn btn-primary" type="button" onClick={() => setShowConfirmModal(true)} disabled={!canConfirm}>
+                  </Button>
+                  <Button className="btn btn-primary" type="button" onClick={() => setShowConfirmModal(true)} disabled={!canConfirm}>
                     <Check size={16} />
                     Confirm Monthly Budget
-                  </button>
+                  </Button>
                 </div>
                 {planActionError && <p style={{ width: "100%", margin: 0, color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
               </div>
@@ -828,9 +826,9 @@ export function BudgetPlanPage() {
                 <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
                   <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Sources</h4>
                   {isDraft && (
-                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")}>
+                    <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")}>
                       <Plus size={14} /> Add Source
-                    </button>
+                    </Button>
                   )}
                 </div>
                 <div className="st-grid">
@@ -849,9 +847,9 @@ export function BudgetPlanPage() {
                           <div className="bp-compact-right">
                             <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
                             {isDraft ? (
-                              <button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlySource(source)} title="Edit source" aria-label={`Edit ${source.title}`}>
+                              <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlySource(source)} title="Edit source" aria-label={`Edit ${source.title}`}>
                                 <Pencil size={13} />
-                              </button>
+                              </Button>
                             ) : (
                               <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only source" />
                             )}
@@ -864,7 +862,7 @@ export function BudgetPlanPage() {
                     <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
                       <CircleDollarSign size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
                       <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly sources</div>
-                      {isDraft && <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Source</button>}
+                      {isDraft && <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Source</Button>}
                     </div>
                   )}
                 </div>
@@ -874,9 +872,9 @@ export function BudgetPlanPage() {
                 <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
                   <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Budget Items</h4>
                   {isDraft && (
-                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")}>
+                    <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")}>
                       <Plus size={14} /> Add Item
-                    </button>
+                    </Button>
                   )}
                 </div>
                 <div className="st-grid">
@@ -895,9 +893,9 @@ export function BudgetPlanPage() {
                           <div className="bp-compact-right">
                             <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
                             {isDraft ? (
-                              <button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlyItem(item)} title="Edit budget item" aria-label={`Edit ${item.title}`}>
+                              <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlyItem(item)} title="Edit budget item" aria-label={`Edit ${item.title}`}>
                                 <Pencil size={13} />
-                              </button>
+                              </Button>
                             ) : (
                               <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only budget item" />
                             )}
@@ -910,7 +908,7 @@ export function BudgetPlanPage() {
                     <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
                       <ListChecks size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
                       <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly budget items</div>
-                      {isDraft && <button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Item</button>}
+                      {isDraft && <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Item</Button>}
                     </div>
                   )}
                 </div>
@@ -952,13 +950,13 @@ export function BudgetPlanPage() {
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <button className="btn btn-ghost btn-icon" type="button" onClick={() => planQuery.refetch()} disabled={planQuery.isFetching} title="Refresh setup" aria-label="Refresh setup">
+              <Button className="btn btn-ghost btn-icon" type="button" onClick={() => planQuery.refetch()} disabled={planQuery.isFetching} title="Refresh setup" aria-label="Refresh setup">
                 <RefreshCw size={15} className={planQuery.isFetching ? "spin" : undefined} />
-              </button>
-              <button className="btn btn-ghost" type="button" onClick={() => setShowSetup(false)}>
+              </Button>
+              <Button className="btn btn-ghost" type="button" onClick={() => setShowSetup(false)}>
                 <CalendarRange size={16} />
                 Monthly Budget
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -972,9 +970,9 @@ export function BudgetPlanPage() {
             <div className="bp-col">
               <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
                 <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Sources</h4>
-                <button className="btn btn-primary btn-xs" type="button" onClick={() => openNewSource("template")}>
+                <Button className="btn btn-primary btn-xs" type="button" onClick={() => openNewSource("template")}>
                   <Plus size={14} /> Add Source
-                </button>
+                </Button>
               </div>
               <div className="st-grid">
                 {planQuery.isLoading && <BudgetPlanCompactCardsSkeleton />}
@@ -992,9 +990,9 @@ export function BudgetPlanPage() {
                         </div>
                         <div className="bp-compact-right">
                           <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
-                          <button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupSource(source)} title="Edit setup source" aria-label={`Edit ${source.title}`}>
+                          <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupSource(source)} title="Edit setup source" aria-label={`Edit ${source.title}`}>
                             <Pencil size={13} />
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -1011,9 +1009,9 @@ export function BudgetPlanPage() {
             <div className="bp-col">
               <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
                 <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Budget Items</h4>
-                <button className="btn btn-primary btn-xs" type="button" onClick={() => openNewItem("template")}>
+                <Button className="btn btn-primary btn-xs" type="button" onClick={() => openNewItem("template")}>
                   <Plus size={14} /> Add Item
-                </button>
+                </Button>
               </div>
               <div className="st-grid">
                 {planQuery.isLoading && <BudgetPlanCompactCardsSkeleton />}
@@ -1034,9 +1032,9 @@ export function BudgetPlanPage() {
                         </div>
                         <div className="bp-compact-right">
                           <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
-                          <button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupItem(item)} title="Edit setup item" aria-label={`Edit ${item.title}`}>
+                          <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupItem(item)} title="Edit setup item" aria-label={`Edit ${item.title}`}>
                             <Pencil size={13} />
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -1063,7 +1061,7 @@ export function BudgetPlanPage() {
             <div className="st-form-grid">
               <div className="form-group st-span-2">
                 <label className="label" htmlFor="budget-item-title">Title</label>
-                <input id="budget-item-title" className="input" value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} maxLength={200} required autoFocus />
+                <Input id="budget-item-title" className="input" value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} maxLength={200} required autoFocus />
               </div>
               <div className="form-group st-span-2">
                 <label className="label">Amount</label>
@@ -1072,35 +1070,35 @@ export function BudgetPlanPage() {
               {itemModal.scope === "template" && (
                 <div className="form-group st-span-2">
                   <label className="label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <input type="checkbox" checked={itemIsMonthly} onChange={(event) => setItemIsMonthly(event.target.checked)} />
+                    <Input type="checkbox" checked={itemIsMonthly} onChange={(event) => setItemIsMonthly(event.target.checked)} />
                     Include when starting a month from Setup
                   </label>
                 </div>
               )}
               <div className="form-group st-span-2">
                 <label className="label" htmlFor="budget-item-destination">Destination Sub-Account (optional)</label>
-                <select id="budget-item-destination" className="input" value={itemDestinationId} onChange={(event) => setItemDestinationId(event.target.value)}>
+                <Select id="budget-item-destination" className="input" value={itemDestinationId} onChange={(event) => setItemDestinationId(event.target.value)}>
                   <option value="">No destination</option>
                   {subAccounts.map((subAccount) => <option key={subAccount.id} value={subAccount.id}>{subAccount.name}</option>)}
-                </select>
+                </Select>
               </div>
             </div>
             <ErrorMessage error={itemError} />
             <div className="st-modal-actions">
               {itemModal.id && (
-                <button
+                <Button
                   className="btn btn-danger modal-action-destructive"
                   type="button"
                   onClick={() => removeEntity(itemModal.id!, itemModal.scope === "template" ? "templateItem" : "monthlyItem", "this budget item")}
                   disabled={itemSaving || deleteEntity.isPending}
                 >
                   <Trash2 size={15} /> {deleteEntity.isPending ? "Deleting..." : "Delete"}
-                </button>
+                </Button>
               )}
-              <button className="btn btn-ghost" type="button" onClick={closeItemModal} disabled={itemSaving || deleteEntity.isPending}>Cancel</button>
-              <button className="btn btn-primary" type="submit" disabled={itemSaving || deleteEntity.isPending}>
+              <Button className="btn btn-ghost" type="button" onClick={closeItemModal} disabled={itemSaving || deleteEntity.isPending}>Cancel</Button>
+              <Button className="btn btn-primary" type="submit" disabled={itemSaving || deleteEntity.isPending}>
                 {itemSaving ? "Saving..." : itemModal.id ? "Save Changes" : "Add Item"}
-              </button>
+              </Button>
             </div>
           </form>
         </ModalShell>
@@ -1116,7 +1114,7 @@ export function BudgetPlanPage() {
             <div className="st-form-grid">
               <div className="form-group st-span-2">
                 <label className="label" htmlFor="budget-source-title">Title</label>
-                <input id="budget-source-title" className="input" value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} maxLength={200} required autoFocus />
+                <Input id="budget-source-title" className="input" value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} maxLength={200} required autoFocus />
               </div>
               <div className="form-group st-span-2">
                 <label className="label">Amount</label>
@@ -1124,28 +1122,28 @@ export function BudgetPlanPage() {
               </div>
               <div className="form-group st-span-2">
                 <label className="label" htmlFor="budget-source-owner">Owner</label>
-                <select id="budget-source-owner" className="input" value={sourceOwnerId} onChange={(event) => setSourceOwnerId(event.target.value)} required>
+                <Select id="budget-source-owner" className="input" value={sourceOwnerId} onChange={(event) => setSourceOwnerId(event.target.value)} required>
                   <option value="">Select workspace member</option>
                   {members.map((member) => <option key={member.user.id} value={member.user.id}>{personLabel(member.user)}</option>)}
-                </select>
+                </Select>
               </div>
             </div>
             <ErrorMessage error={sourceError} />
             <div className="st-modal-actions">
               {sourceModal.id && (
-                <button
+                <Button
                   className="btn btn-danger modal-action-destructive"
                   type="button"
                   onClick={() => removeEntity(sourceModal.id!, sourceModal.scope === "template" ? "templateSource" : "monthlySource", "this budget source")}
                   disabled={sourceSaving || deleteEntity.isPending}
                 >
                   <Trash2 size={15} /> {deleteEntity.isPending ? "Deleting..." : "Delete"}
-                </button>
+                </Button>
               )}
-              <button className="btn btn-ghost" type="button" onClick={closeSourceModal} disabled={sourceSaving || deleteEntity.isPending}>Cancel</button>
-              <button className="btn btn-primary" type="submit" disabled={sourceSaving || deleteEntity.isPending || !sourceOwnerId}>
+              <Button className="btn btn-ghost" type="button" onClick={closeSourceModal} disabled={sourceSaving || deleteEntity.isPending}>Cancel</Button>
+              <Button className="btn btn-primary" type="submit" disabled={sourceSaving || deleteEntity.isPending || !sourceOwnerId}>
                 {sourceSaving ? "Saving..." : sourceModal.id ? "Save Changes" : "Add Source"}
-              </button>
+              </Button>
             </div>
           </form>
         </ModalShell>
@@ -1171,10 +1169,10 @@ export function BudgetPlanPage() {
               {confirmPlan.error && <div role="alert" style={{ color: "var(--danger)", fontSize: "13px" }}>{confirmPlan.error.message}</div>}
             </div>
             <div className="st-modal-actions">
-              <button className="btn btn-ghost" type="button" onClick={() => setShowConfirmModal(false)} disabled={confirmPlan.isPending}>Cancel</button>
-              <button className="btn btn-primary" type="button" onClick={() => confirmPlan.mutate({ planId: monthlyPlan.id })} disabled={confirmPlan.isPending || !canConfirm}>
+              <Button className="btn btn-ghost" type="button" onClick={() => setShowConfirmModal(false)} disabled={confirmPlan.isPending}>Cancel</Button>
+              <Button className="btn btn-primary" type="button" onClick={() => confirmPlan.mutate({ planId: monthlyPlan.id })} disabled={confirmPlan.isPending || !canConfirm}>
                 <Check size={16} /> {confirmPlan.isPending ? "Confirming..." : "Confirm"}
-              </button>
+              </Button>
             </div>
           </div>
         </ModalShell>

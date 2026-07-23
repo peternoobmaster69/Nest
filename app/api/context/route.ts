@@ -57,6 +57,11 @@ function emptyContextResponse(workspaces: WorkspaceSummary[] = [], isAdmin = fal
     pendingInviteCount: 0,
     workspaces,
     accounts: [],
+    setupProgress: {
+      bankAccountCount: 0,
+      subAccountCount: 0,
+      creditCardCount: 0,
+    },
     sidebarMoneyPages: DEFAULT_SIDEBAR_MONEY_PAGES,
     publicNetWorthEnabled: false,
     publicNetWorthToken: null,
@@ -104,10 +109,10 @@ export async function GET(request: Request) {
             sidebarMoneyPages: true,
             _count: {
               select: {
-                budgetEnvelopes: true,
+                budgetEnvelopes: { where: { isActive: true } },
                 transactions: true,
                 receivables: true,
-                creditCards: true,
+                creditCards: { where: { isActive: true } },
                 investmentAccounts: true,
               },
             },
@@ -216,6 +221,11 @@ export async function GET(request: Request) {
         name: a.name,
         kind: a.kind,
       })),
+      setupProgress: {
+        bankAccountCount: workspace.financials.filter((account) => account.kind === "BANK").length,
+        subAccountCount: selectedMembership?.workspace._count.budgetEnvelopes ?? 0,
+        creditCardCount: selectedMembership?.workspace._count.creditCards ?? 0,
+      },
       isAdmin,
     });
     if (!requestedWorkspaceId && cookieWorkspaceId !== workspace.id) {

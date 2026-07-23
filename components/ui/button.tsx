@@ -13,7 +13,7 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     className = "",
-    variant = "secondary",
+    variant,
     size = "md",
     loading = false,
     iconOnly = false,
@@ -24,11 +24,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   },
   ref,
 ) {
+  // Existing feature classes remain authoritative while screens migrate. New
+  // actions opt into the token-backed variants explicitly.
+  const primitiveClasses = variant ? `btn btn-${variant} btn-${size}` : "";
   return (
     <button
       ref={ref}
       type={type}
-      className={`btn btn-${variant} btn-${size}${iconOnly ? " btn-icon" : ""}${loading ? " is-loading" : ""} ${className}`.trim()}
+      className={`${primitiveClasses}${iconOnly ? " btn-icon" : ""}${loading ? " is-loading" : ""} ${className}`.trim()}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       {...props}

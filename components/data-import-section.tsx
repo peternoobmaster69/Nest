@@ -6,6 +6,10 @@ import { useWorkspaceId } from "@/components/workspace-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { Upload, AlertCircle, CheckCircle, XCircle, Calculator } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Select, Textarea } from "@/components/ui/controls";
+import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
 
 interface DataImportSectionProps {
   workspaceId: string | null;
@@ -14,13 +18,6 @@ interface DataImportSectionProps {
 
 type Context = {
   workspaces?: Array<{ id: string; name: string }>;
-};
-
-type BankAccount = {
-  id: string;
-  name: string;
-  bankName: string | null;
-  isActive: boolean;
 };
 
 type Budget = {
@@ -105,20 +102,16 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
   const [recalcResult, setRecalcResult] = useState<RecalculateResult | null>(null);
 
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<Context>("/api/context"),
   });
 
   const activeWorkspaceId = selectedWorkspaceId || workspaceId || "";
 
-  const accounts = useQuery({
-    queryKey: ["bank-accounts", activeWorkspaceId],
-    queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${activeWorkspaceId}`),
-    enabled: Boolean(activeWorkspaceId),
-  });
+  const accounts = useQuery(bankAccountsQueryOptions(activeWorkspaceId));
 
   const budgets = useQuery({
-    queryKey: ["budgets", activeWorkspaceId],
+    queryKey: queryKeys.key(["budgets", activeWorkspaceId]),
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${activeWorkspaceId}`),
     enabled: Boolean(activeWorkspaceId),
   });
@@ -224,10 +217,10 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
   }, [activeWorkspaceId, selectedAccountId, selectedBudgetId, kind]);
 
   const invalidateFinancialQueries = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-    queryClient.invalidateQueries({ queryKey: ["budgets"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions"]) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts"]) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets"]) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
   }, [queryClient]);
 
   const recalculateBudget = useCallback(
@@ -410,7 +403,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         {workspaces.length > 1 && (
           <div className="settings-field">
             <label>Workspace</label>
-            <select
+            <Select
               className="input"
               value={selectedWorkspaceId || workspaceId || ""}
               onChange={(e) => {
@@ -427,7 +420,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
                   {w.name}
                 </option>
               ))}
-            </select>
+            </Select>
             {!workspaceId && !selectedWorkspaceId && (
               <div className="settings-field-hint is-warning">
                 <AlertCircle size={12} />
@@ -440,7 +433,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         {/* Bank Account */}
         <div className="settings-field">
           <label>Bank Account</label>
-          <select
+          <Select
             className="input"
             value={selectedAccountId}
             onChange={(e) => {
@@ -456,13 +449,13 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
                 {account.name} {account.bankName ? `(${account.bankName})` : ""}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {/* Sub Account (Budget) */}
         <div className="settings-field">
           <label>Sub Account (Budget)</label>
-          <select
+          <Select
             className="input"
             value={selectedBudgetId}
             onChange={(e) => {
@@ -477,7 +470,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
                 {budget.name}
               </option>
             ))}
-          </select>
+          </Select>
           {selectedAccountId && activeBudgets.length === 0 && !budgets.isLoading && (
             <div className="settings-field-hint is-warning">
               <AlertCircle size={12} />
@@ -489,20 +482,20 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         {/* Kind */}
         <div className="settings-field">
           <label>Transaction Kind</label>
-          <select className="input" value={kind} onChange={(e) => setKind(e.target.value)} disabled={isImporting}>
+          <Select className="input" value={kind} onChange={(e) => setKind(e.target.value)} disabled={isImporting}>
             <option value="Migration">Migration</option>
             <option value="Adjustment">Adjustment</option>
             <option value="EXPENSE">Expense</option>
             <option value="INCOME">Income</option>
             <option value="TRANSFER">Transfer</option>
-          </select>
+          </Select>
         </div>
       </div>
 
       {/* JSON Input */}
       <div className="settings-field settings-json-field">
         <label>JSON Data</label>
-        <textarea
+        <Textarea
           className="input settings-json-input"
           rows={8}
           placeholder={`Paste JSON here, e.g.:
@@ -558,11 +551,11 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
 
       {/* Import and Recalculate Buttons */}
       <div className="settings-card-actions settings-import-actions">
-        <button className="btn btn-primary" onClick={handleImport} disabled={!canImport}>
+        <Button className="btn btn-primary" onClick={handleImport} disabled={!canImport}>
           <Upload size={16} aria-hidden="true" />
           {isImporting ? "Importing..." : "Import Transactions"}
-        </button>
-        <button
+        </Button>
+        <Button
           className="btn btn-ghost"
           onClick={handleRecalculate}
           disabled={!canRecalculate}
@@ -570,11 +563,11 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         >
           <Calculator size={16} aria-hidden="true" />
           {isRecalculating ? "Calculating..." : "Recalculate"}
-        </button>
+        </Button>
         {jsonInput && !isImporting && (
-          <button className="btn btn-ghost" onClick={() => handleJsonChange("")}>
+          <Button className="btn btn-ghost" onClick={() => handleJsonChange("")}>
             Clear
-          </button>
+          </Button>
         )}
       </div>
 

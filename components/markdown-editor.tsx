@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef } from "react";
+import { Textarea } from "@/components/ui/controls";
 
 type NotesInputProps = {
   label: string;
@@ -232,7 +233,7 @@ export function MarkdownEditor({
           </span>
         ) : null}
       </span>
-      <textarea
+      <Textarea
         ref={textareaRef}
         className="input"
         style={{

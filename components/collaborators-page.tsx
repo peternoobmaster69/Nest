@@ -12,7 +12,9 @@ import { useRouter } from "next/navigation";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
 import type { ListEnvelope } from "@/lib/api/contracts";
-import { queryKeys } from "@/lib/query-keys";
+import { invalidateWorkspaceQueries, queryKeys, removeWorkspaceQueries } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/controls";
 
 // Default visibility for Money section pages
 const DEFAULT_MONEY_PAGES = {
@@ -127,9 +129,9 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
     onSuccess: async (workspace) => {
       setMessage(`Workspace "${workspace.name}" created.`);
       setNewWorkspaceName("");
-      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
-      await queryClient.invalidateQueries({ queryKey: ["collaborators"] });
-      await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["collaborators"]) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["workspaces"]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to create workspace."),
   });
@@ -147,18 +149,9 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
       setMessage("");
     },
     onSuccess: async (_, targetWorkspaceId) => {
-      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
-      await queryClient.invalidateQueries({ queryKey: ["collaborators"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["receivables"] });
-      await queryClient.invalidateQueries({ queryKey: ["receivables-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      await queryClient.invalidateQueries({ queryKey: ["investments"] });
-      await queryClient.invalidateQueries({ queryKey: ["credit-cards"] });
-      await queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      removeWorkspaceQueries(queryClient);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.contextAll });
+      await invalidateWorkspaceQueries(queryClient, targetWorkspaceId);
       setMessage("Workspace switched.");
       router.push(buildWorkspacePath(targetWorkspaceId, "/settings?tab=workspaces"));
     },
@@ -211,8 +204,8 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
         };
       });
       setMessage("Workspace info updated.");
-      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
-      await queryClient.invalidateQueries({ queryKey: ["collaborators", updatedWorkspace.id] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["collaborators", updatedWorkspace.id]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to update workspace."),
   });
@@ -227,8 +220,8 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
     onSuccess: async (data) => {
       setMessage(data.emailSent ? "Invite sent." : `Invite created. Copy this one-time link: ${data.inviteUrl}`);
       setInviteEmail("");
-      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
-      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["collaborators", workspaceId]) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to invite collaborator."),
   });
@@ -240,8 +233,8 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
       }),
     onSuccess: async () => {
       setMessage("Collaborator removed.");
-      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
-      await queryClient.invalidateQueries({ queryKey: ["app-context"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["collaborators", workspaceId]) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to remove collaborator."),
   });
@@ -255,7 +248,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
       }),
     onSuccess: async () => {
       setMessage("Collaborator role updated.");
-      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["collaborators", workspaceId]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to update collaborator."),
   });
@@ -264,7 +257,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
     mutationFn: (inviteId: string) => fetchJson(`/api/collaborators/invites/${inviteId}`, { method: "DELETE" }),
     onSuccess: async () => {
       setMessage("Invitation revoked.");
-      await queryClient.invalidateQueries({ queryKey: ["collaborators", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["collaborators", workspaceId]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to revoke invitation."),
   });
@@ -318,7 +311,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
           </div>
           <div className="workspace-picker-options" role="group" aria-label="Available workspaces">
             {(context.data?.workspaces ?? []).map((workspace) => (
-              <button
+              <Button
                 key={workspace.id}
                 type="button"
                 className={`btn btn-ghost btn-xs workspace-picker-option${workspace.id === workspaceId ? " is-current" : ""}`}
@@ -327,21 +320,21 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                 disabled={isWorkspaceChanging}
               >
                 {workspace.name}
-              </button>
+              </Button>
             ))}
           </div>
 
           <form className="workspace-create-form" onSubmit={onCreateWorkspace}>
-            <input
+            <Input
               className="input"
               aria-label="New workspace name"
               placeholder="New workspace name"
               value={newWorkspaceName}
               onChange={(e) => setNewWorkspaceName(e.target.value)}
             />
-            <button className="btn btn-primary btn-xs" type="submit" disabled={createWorkspace.isPending || isWorkspaceChanging}>
+            <Button className="btn btn-primary btn-xs" type="submit" disabled={createWorkspace.isPending || isWorkspaceChanging}>
               {createWorkspace.isPending ? "Creating..." : "Add workspace"}
-            </button>
+            </Button>
           </form>
         </div>
       </section>
@@ -365,7 +358,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
             <form className="workspace-details-form" onSubmit={onUpdateWorkspace}>
             <label className="workspace-settings-field">
               <span>Name</span>
-              <input
+              <Input
                 className="input"
                 placeholder="Workspace name"
                 value={workspaceNameInput}
@@ -374,22 +367,22 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
             </label>
             <label className="workspace-settings-field">
               <span>Access</span>
-              <select
+              <Select
                 className="input"
                 value={workspaceMode}
                 onChange={(e) => setWorkspaceMode(e.target.value === "SHARED" ? "SHARED" : "PRIVATE")}
               >
                 <option value="PRIVATE">Private workspace</option>
                 <option value="SHARED">Shared workspace</option>
-              </select>
+              </Select>
             </label>
-            <button
+            <Button
               className="btn btn-primary btn-xs"
               type="submit"
               disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
             >
               {updateWorkspace.isPending ? "Saving..." : "Save details"}
-            </button>
+            </Button>
             </form>
 
             <div className="workspace-money-pages">
@@ -402,7 +395,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                   key={page.key}
                   className="workspace-money-page-option"
                 >
-                  <input
+                  <Input
                     type="checkbox"
                     checked={sidebarMoneyPages[page.key] ?? true}
                     onChange={(e) => {
@@ -442,7 +435,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                 <EmptyState
                   icon="⚠️"
                   title="Failed to load collaborators"
-                  action={<button className="btn btn-primary" onClick={() => refetchCollab()}>Retry</button>}
+                  action={<Button className="btn btn-primary" onClick={() => refetchCollab()}>Retry</Button>}
                 />
               )}
 
@@ -451,7 +444,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                   <span>{member.user.name || member.user.email || member.user.id}</span>
                   <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
                     {isOwner && member.role !== "OWNER" ? (
-                      <select
+                      <Select
                         className="input"
                         value={member.role === "MEMBER" ? "EDITOR" : member.role}
                         onChange={(event) => updateMemberRole.mutate({ memberId: member.id, role: event.target.value === "VIEWER" ? "VIEWER" : "EDITOR" })}
@@ -459,16 +452,16 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                       >
                         <option value="EDITOR">Editor</option>
                         <option value="VIEWER">Viewer</option>
-                      </select>
+                      </Select>
                     ) : <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{member.role}</span>}
                     {isOwner && member.role !== "OWNER" ? (
-                      <button
+                      <Button
                         className="btn btn-ghost btn-xs"
                         onClick={() => confirmRemoveMember(member.id)}
                         disabled={removeMember.isPending || isWorkspaceChanging}
                       >
                         Remove
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 </div>
@@ -488,24 +481,24 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
           <div className={`workspace-settings-card-content${isWorkspaceChanging ? " is-changing" : ""}`}>
             <div className="settings-section-title">Invite people</div>
             <form className="workspace-invite-form" onSubmit={onInvite}>
-              <input
+              <Input
                 className="input"
                 type="email"
                 placeholder="name@email.com"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
             />
-              <select className="input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value === "VIEWER" ? "VIEWER" : "EDITOR")}>
+              <Select className="input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value === "VIEWER" ? "VIEWER" : "EDITOR")}>
                 <option value="EDITOR">Editor</option>
                 <option value="VIEWER">Viewer</option>
-              </select>
-              <button
+              </Select>
+              <Button
                 className="btn btn-primary btn-xs"
                 type="submit"
                 disabled={!workspaceMeta?.id || inviteMutation.isPending || isWorkspaceChanging}
               >
                 {inviteMutation.isPending ? "Sending..." : "Invite"}
-              </button>
+              </Button>
             </form>
             <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
               Invitations require explicit acceptance, expire after seven days, and can be revoked below.
@@ -524,7 +517,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
                 <span>{invite.invitedEmail} · {invite.role}</span>
                 <div style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                   <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>Expires {invite.expiresAt ? new Date(invite.expiresAt).toLocaleString() : "soon"}</span>
-                  <button className="btn btn-ghost btn-xs" onClick={() => revokeInvite.mutate(invite.id)} disabled={revokeInvite.isPending}>Revoke</button>
+                  <Button className="btn btn-ghost btn-xs" onClick={() => revokeInvite.mutate(invite.id)} disabled={revokeInvite.isPending}>Revoke</Button>
                 </div>
               </div>
             ))}

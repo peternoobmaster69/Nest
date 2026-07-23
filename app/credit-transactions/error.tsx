@@ -1,0 +1,7 @@
+"use client";
+
+import { RouteErrorState } from "@/components/ui/route-state";
+
+export default function Error({ reset }: { error: Error; reset: () => void }) {
+  return <RouteErrorState reset={reset} title="Credit transactions could not be loaded" />;
+}

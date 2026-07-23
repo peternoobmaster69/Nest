@@ -1,4 +1,5 @@
 import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, useId } from "react";
+import { Input, Select, Textarea } from "./controls";
 
 type FieldShellProps = {
   label: string;
@@ -35,7 +36,7 @@ export function TextField({ label, hint, error, id, required, className = "", ..
   const describedBy = error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined;
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} htmlFor={fieldId}>
-      <input
+      <Input
         id={fieldId}
         className={`input${error ? " is-error" : ""} ${className}`.trim()}
         required={required}
@@ -60,7 +61,7 @@ export function SelectField({ label, hint, error, id, required, className = "", 
   const fieldId = id || generatedId;
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} htmlFor={fieldId}>
-      <select
+      <Select
         id={fieldId}
         className={`input${error ? " is-error" : ""} ${className}`.trim()}
         required={required}
@@ -69,7 +70,7 @@ export function SelectField({ label, hint, error, id, required, className = "", 
         {...props}
       >
         {children}
-      </select>
+      </Select>
     </FieldShell>
   );
 }
@@ -86,7 +87,7 @@ export function TextAreaField({ label, hint, error, id, required, className = ""
   const fieldId = id || generatedId;
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} htmlFor={fieldId}>
-      <textarea
+      <Textarea
         id={fieldId}
         className={`input textarea${error ? " is-error" : ""} ${className}`.trim()}
         required={required}

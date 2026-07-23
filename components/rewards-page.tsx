@@ -10,12 +10,15 @@ import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui-skeleton";
-import { RewardsCardGridSkeleton, RewardsRowsSkeleton, RewardsSummarySkeleton } from "@/components/skeletons/RewardsSkeleton";
+import { RewardsCardGridSkeleton, RewardsRowsSkeleton } from "@/components/skeletons/RewardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ArrowLeftRight, Building2, CreditCard, Plane, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input, Select, Textarea } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
+import { RewardsOverview } from "@/components/rewards/rewards-overview";
 
 type CreditCardReward = {
   id: string;
@@ -260,7 +263,7 @@ export function RewardsPage({
   const [hotelFormNotes, setHotelFormNotes] = useState("");
 
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: async () => {
       const res = await workspaceFetch("/api/context");
       if (!res.ok) throw new Error("Failed to fetch context");
@@ -274,7 +277,7 @@ export function RewardsPage({
   };
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["rewards", routeWorkspaceId],
+    queryKey: queryKeys.key(["rewards", routeWorkspaceId]),
     queryFn: fetchRewards,
     initialData: {
       creditCards: initialCreditCards,
@@ -333,7 +336,7 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       closeCardRewardModal();
     },
   });
@@ -346,7 +349,7 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       setEditingCardId(null);
       setEditingCardPoints("");
     },
@@ -370,7 +373,7 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       closeFFModal();
     },
   });
@@ -394,7 +397,7 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       closeFFModal();
     },
   });
@@ -415,7 +418,7 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       closeHotelModal();
     },
   });
@@ -437,7 +440,7 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       closeHotelModal();
     },
   });
@@ -456,29 +459,29 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       closeConversionModal();
     },
   });
 
   const deleteCardReward = useMutation({
     mutationFn: (id: string) => workspaceFetch(`/api/rewards/credit-card?id=${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const deleteFrequentFlyer = useMutation({
     mutationFn: (id: string) => workspaceFetch(`/api/rewards/frequent-flyer?id=${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const deleteHotelReward = useMutation({
     mutationFn: (id: string) => workspaceFetch(`/api/rewards/hotel-rewards?id=${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const deleteConversion = useMutation({
     mutationFn: (id: string) => workspaceFetch(`/api/rewards/conversion?id=${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rewards"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const updateConversion = useMutation({
@@ -489,7 +492,7 @@ export function RewardsPage({
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
       setEditingConversionId(null);
       setEditingConvPoints("");
       setEditingConvMiles("");
@@ -498,10 +501,10 @@ export function RewardsPage({
   });
 
   const refreshRewardsAndHistory = () => {
-    queryClient.invalidateQueries({ queryKey: ["rewards"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
     if (openHistoryFFId) {
       queryClient.invalidateQueries({
-        queryKey: ["rewards", routeWorkspaceId, "frequent-flyer-history", openHistoryFFId],
+        queryKey: queryKeys.key(["rewards", routeWorkspaceId, "frequent-flyer-history", openHistoryFFId]),
       });
     }
   };
@@ -911,80 +914,42 @@ export function RewardsPage({
 
   const activeTabAction =
     activeTab === "credit-cards" && data?.cardsWithoutRewards.length ? (
-      <button className="btn btn-primary rewards-tab-action" onClick={openCardRewardModal}>
+      <Button className="btn btn-primary rewards-tab-action" onClick={openCardRewardModal}>
         <Plus size={16} aria-hidden="true" />
         Add card rewards
-      </button>
+      </Button>
     ) : activeTab === "frequent-flyers" ? (
-      <button className="btn btn-primary rewards-tab-action" onClick={openAddFFModal}>
+      <Button className="btn btn-primary rewards-tab-action" onClick={openAddFFModal}>
         <Plus size={16} aria-hidden="true" />
         Add frequent flyer
-      </button>
+      </Button>
     ) : activeTab === "hotel-rewards" ? (
-      <button className="btn btn-primary rewards-tab-action" onClick={openAddHotelModal}>
+      <Button className="btn btn-primary rewards-tab-action" onClick={openAddHotelModal}>
         <Plus size={16} aria-hidden="true" />
         Add hotel rewards
-      </button>
+      </Button>
     ) : activeTab === "conversions" && data?.creditCards.length && data?.frequentFlyers.length ? (
-      <button className="btn btn-primary rewards-tab-action" onClick={openConversionModal}>
+      <Button className="btn btn-primary rewards-tab-action" onClick={openConversionModal}>
         <Plus size={16} aria-hidden="true" />
         Add conversion rate
-      </button>
+      </Button>
     ) : null;
 
   return (
     <div ref={rewardsTopRef} className="rewards-page-top">
       {/* Summary Stats */}
-      <section className="rewards-overview">
-        {isLoading ? (
-          <RewardsSummarySkeleton />
-        ) : (
-          <>
-            <div className="rewards-overview-grid">
-              <div className="rewards-overview-card">
-                <div className="rewards-overview-label">
-                  <CreditCard size={16} aria-hidden="true" />
-                  Card Miles
-                </div>
-                <div className="rewards-overview-value">{formatNumber(totalCreditCardMiles)}</div>
-                <div className="rewards-overview-sub">Across {data?.creditCards.length || 0} cards</div>
-              </div>
-              <div className="rewards-overview-card">
-                <div className="rewards-overview-label">
-                  <Plane size={16} aria-hidden="true" />
-                  Frequent Flyer
-                </div>
-                <div className="rewards-overview-value">{formatNumber(totalMiles)}</div>
-                <div className="rewards-overview-sub">Across {data?.frequentFlyers.length || 0} programs</div>
-              </div>
-              <div className="rewards-overview-card">
-                <div className="rewards-overview-label">
-                  <Building2 size={16} aria-hidden="true" />
-                  Hotel Points
-                </div>
-                <div className="rewards-overview-value">{formatNumber(totalHotelPoints)}</div>
-                <div className="rewards-overview-sub">Across {data?.hotelRewards.length || 0} programs</div>
-                <div className="rewards-overview-value-sub">~ {formatCurrency(totalHotelValueCents)}</div>
-              </div>
-            </div>
-            <div className="rewards-total-panel">
-              <div>
-                <div className="rewards-total-label">Total travel miles</div>
-                <div className="rewards-total-value">{formatNumber(totalCombinedMiles)}</div>
-                <div className="rewards-total-sub">Cards + frequent flyer combined</div>
-              </div>
-              <div className="rewards-total-divider" aria-hidden="true" />
-              <div>
-                <div className="rewards-total-label">Hotel points value</div>
-                <div className="rewards-total-value">{formatCurrency(totalHotelValueCents)}</div>
-                <div className="rewards-total-sub">
-                  {formatNumber(totalHotelPoints)} points tracked separately
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </section>
+      <RewardsOverview
+        loading={isLoading}
+        cardMiles={totalCreditCardMiles}
+        cardCount={data?.creditCards.length ?? 0}
+        frequentFlyerMiles={totalMiles}
+        frequentFlyerCount={data?.frequentFlyers.length ?? 0}
+        hotelPoints={totalHotelPoints}
+        hotelCount={data?.hotelRewards.length ?? 0}
+        hotelValue={totalHotelValueCents}
+        combinedMiles={totalCombinedMiles}
+        formatCurrency={formatCurrency}
+      />
 
       {isError && (
         <div className="card" style={{ marginBottom: "20px" }}>
@@ -992,9 +957,9 @@ export function RewardsPage({
             icon="⚠️"
             title="Failed to load rewards"
             action={
-              <button className="btn btn-primary" onClick={() => refetch()}>
+              <Button className="btn btn-primary" onClick={() => refetch()}>
                 Retry
-              </button>
+              </Button>
             }
           />
         </div>
@@ -1003,7 +968,7 @@ export function RewardsPage({
       {/* Tabs */}
       <div className="rewards-tabs-row">
         <div className="segmented rewards-tabs">
-          <button
+          <Button
             type="button"
             aria-label="Credit cards"
             className={`segmented-btn ${activeTab === "credit-cards" ? "on" : ""}`}
@@ -1011,8 +976,8 @@ export function RewardsPage({
           >
             <CreditCard className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Credit cards</span>
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             aria-label="Frequent flyer"
             className={`segmented-btn ${activeTab === "frequent-flyers" ? "on" : ""}`}
@@ -1020,8 +985,8 @@ export function RewardsPage({
           >
             <Plane className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Frequent flyer</span>
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             aria-label="Hotel rewards"
             className={`segmented-btn ${activeTab === "hotel-rewards" ? "on" : ""}`}
@@ -1029,8 +994,8 @@ export function RewardsPage({
           >
             <Building2 className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Hotel rewards</span>
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             aria-label="Conversions"
             className={`segmented-btn ${activeTab === "conversions" ? "on" : ""}`}
@@ -1038,7 +1003,7 @@ export function RewardsPage({
           >
             <ArrowLeftRight className="rewards-tab-icon" size={16} aria-hidden="true" />
             <span className="rewards-tab-label">Conversions</span>
-          </button>
+          </Button>
         </div>
         {activeTabAction}
       </div>
@@ -1066,12 +1031,12 @@ export function RewardsPage({
                       {card.creditCard.bankName || "Unknown Bank"}
                     </div>
                   </div>
-                  <button
+                  <Button
                     className="btn btn-ghost btn-xs"
                     onClick={() => confirmDeleteCardReward(card.id)}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </div>
                 <div style={{ marginTop: "12px" }}>
                   <div style={{ fontSize: "24px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
@@ -1102,7 +1067,7 @@ export function RewardsPage({
                       onValueChange={setEditingCardPoints}
                       style={{ flex: "1 1 140px", minWidth: "120px" }}
                     />
-                    <button
+                    <Button
                       className="btn btn-secondary btn-xs"
                       onClick={() =>
                         updateCardReward.mutate({
@@ -1112,14 +1077,14 @@ export function RewardsPage({
                       }
                     >
                       Save
-                    </button>
-                    <button className="btn btn-ghost btn-xs" onClick={() => setEditingCardId(null)}>
+                    </Button>
+                    <Button className="btn btn-ghost btn-xs" onClick={() => setEditingCardId(null)}>
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div style={{ marginTop: "10px" }}>
-                    <button
+                    <Button
                       className="btn btn-ghost btn-xs"
                       onClick={() => {
                         setEditingCardId(card.id);
@@ -1127,7 +1092,7 @@ export function RewardsPage({
                       }}
                     >
                       Edit Balance
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1166,24 +1131,24 @@ export function RewardsPage({
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: "6px" }}>
-                    <button
+                    <Button
                       className="btn btn-ghost btn-xs"
                       onClick={() => openHistoryForFrequentFlyer(ff.id)}
                     >
                       {openHistoryFFId === ff.id ? "Hide History" : "History"}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       className="btn btn-ghost btn-xs"
                       onClick={() => openEditFFModal(ff)}
                     >
                       Edit
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       className="btn btn-ghost btn-xs"
                       onClick={() => confirmDeleteFrequentFlyer(ff.id)}
                     >
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 <div style={{ marginTop: "12px" }}>
@@ -1230,25 +1195,25 @@ export function RewardsPage({
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <button
+                  <Button
                     className="btn btn-ghost btn-icon"
                     onClick={() => setIsAddEarnModalOpen(true)}
                     title="Add Earn Transaction"
                     style={{ width: "28px", height: "28px", fontSize: "14px" }}
                   >
                     ➕
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     className="btn btn-ghost btn-icon"
                     onClick={() => setIsRedeemModalOpen(true)}
                     title="Redeem Miles"
                     style={{ width: "28px", height: "28px", fontSize: "14px" }}
                   >
                     ✈️
-                  </button>
-                  <button className="btn btn-ghost btn-xs" onClick={closeHistoryAndScrollToTop}>
+                  </Button>
+                  <Button className="btn btn-ghost btn-xs" onClick={closeHistoryAndScrollToTop}>
                     Close
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1292,23 +1257,23 @@ export function RewardsPage({
                       <div style={{ fontSize: "13px", fontWeight: 600 }}>Earn Transactions</div>
                       {earnEntries.length > EARN_PAGE_SIZE && (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <button
+                          <Button
                             className="btn btn-ghost btn-xs"
                             onClick={() => setEarnPage((p) => Math.max(1, p - 1))}
                             disabled={safeEarnPage <= 1}
                           >
                             Prev
-                          </button>
+                          </Button>
                           <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
                             {safeEarnPage}/{earnTotalPages}
                           </div>
-                          <button
+                          <Button
                             className="btn btn-ghost btn-xs"
                             onClick={() => setEarnPage((p) => Math.min(earnTotalPages, p + 1))}
                             disabled={safeEarnPage >= earnTotalPages}
                           >
                             Next
-                          </button>
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -1327,7 +1292,7 @@ export function RewardsPage({
                       <div key={entry.id} className="card-sm" style={{ display: "grid", gap: "8px" }}>
                         {editingEarnId === entry.id ? (
                           <div className="crud-edit" style={{ gridTemplateColumns: "140px 140px 1fr 140px auto auto" }}>
-                            <input
+                            <Input
                               className="input"
                               type="date"
                               value={editingEarnDate}
@@ -1339,19 +1304,19 @@ export function RewardsPage({
                               value={editingEarnMiles}
                               onValueChange={setEditingEarnMiles}
                             />
-                            <input
+                            <Input
                               className="input"
                               type="text"
                               value={editingEarnTitle}
                               onChange={(e) => setEditingEarnTitle(e.target.value)}
                             />
-                            <input
+                            <Input
                               className="input"
                               type="date"
                               value={editingEarnExpiryDate}
                               onChange={(e) => setEditingEarnExpiryDate(e.target.value)}
                             />
-                            <button
+                            <Button
                               className="btn btn-secondary btn-xs"
                               onClick={() =>
                                 updateEarnTransaction.mutate({
@@ -1365,10 +1330,10 @@ export function RewardsPage({
                               }
                             >
                               Save
-                            </button>
-                            <button className="btn btn-ghost btn-xs" onClick={() => setEditingEarnId(null)}>
+                            </Button>
+                            <Button className="btn btn-ghost btn-xs" onClick={() => setEditingEarnId(null)}>
                               Cancel
-                            </button>
+                            </Button>
                           </div>
                         ) : (
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
@@ -1388,7 +1353,7 @@ export function RewardsPage({
                                 {entry.expiryDate ? ` • expires ${toDateInputValue(entry.expiryDate)}` : ""}
                               </div>
                             </div>
-                            <button
+                            <Button
                               className="btn btn-ghost btn-xs"
                               onClick={() => {
                                 setEditingEarnId(entry.id);
@@ -1399,7 +1364,7 @@ export function RewardsPage({
                               }}
                             >
                               Edit
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1416,23 +1381,23 @@ export function RewardsPage({
                       <div style={{ fontSize: "13px", fontWeight: 600 }}>Redemption Transactions</div>
                       {redemptionEntries.length > REDEMPTION_PAGE_SIZE && (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <button
+                          <Button
                             className="btn btn-ghost btn-xs"
                             onClick={() => setRedemptionPage((p) => Math.max(1, p - 1))}
                             disabled={safeRedemptionPage <= 1}
                           >
                             Prev
-                          </button>
+                          </Button>
                           <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
                             {safeRedemptionPage}/{redemptionTotalPages}
                           </div>
-                          <button
+                          <Button
                             className="btn btn-ghost btn-xs"
                             onClick={() => setRedemptionPage((p) => Math.min(redemptionTotalPages, p + 1))}
                             disabled={safeRedemptionPage >= redemptionTotalPages}
                           >
                             Next
-                          </button>
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -1496,18 +1461,18 @@ export function RewardsPage({
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: "6px" }}>
-                      <button
+                      <Button
                         className="btn btn-ghost btn-xs"
                         onClick={() => openEditHotelModal(hotel)}
                       >
                         Edit
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         className="btn btn-ghost btn-xs"
                         onClick={() => confirmDeleteHotelReward(hotel.id)}
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   <div style={{ marginTop: "12px" }}>
@@ -1561,14 +1526,14 @@ export function RewardsPage({
                       value={editingConvMiles}
                       onValueChange={setEditingConvMiles}
                     />
-                    <input
+                    <Input
                       type="text"
                       className="input"
                       value={editingConvDesc}
                       onChange={(e) => setEditingConvDesc(e.target.value)}
                       placeholder="Description"
                     />
-                    <button
+                    <Button
                       className="btn btn-secondary btn-xs"
                       onClick={() =>
                         updateConversion.mutate({
@@ -1580,10 +1545,10 @@ export function RewardsPage({
                       }
                     >
                       Save
-                    </button>
-                    <button className="btn btn-ghost btn-xs" onClick={() => setEditingConversionId(null)}>
+                    </Button>
+                    <Button className="btn btn-ghost btn-xs" onClick={() => setEditingConversionId(null)}>
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1601,18 +1566,18 @@ export function RewardsPage({
                         {conv.conversionRate.toFixed(3)}x
                       </div>
                       <div style={{ display: "flex", gap: "6px" }}>
-                        <button
+                        <Button
                           className="btn btn-ghost btn-xs"
                           onClick={() => beginEditConversion(conv)}
                         >
                           Edit
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           className="btn btn-ghost btn-xs"
                           onClick={() => confirmDeleteConversion(conv.id)}
                         >
                           Delete
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -1638,7 +1603,7 @@ export function RewardsPage({
 
       {/* Credit Card Rewards Modal */}
       {isCardRewardModalOpen && data?.cardsWithoutRewards.length ? (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeCardRewardModal)}>
+        <Dialog open onClose={closeCardRewardModal} title="Add card rewards" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Credit Card Rewards</h3>
@@ -1648,7 +1613,7 @@ export function RewardsPage({
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
                   <label className="label" htmlFor="reward-card-id">Card</label>
-                  <select
+                  <Select
                     id="reward-card-id"
                     className="input"
                     value={newCardId}
@@ -1661,7 +1626,7 @@ export function RewardsPage({
                         {card.cardName} ••{card.last4Digit}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group">
                   <label className="label" htmlFor="reward-card-points">Current Points</label>
@@ -1708,7 +1673,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label" htmlFor="reward-card-conv-desc">Conversion Description</label>
-                  <input
+                  <Input
                     id="reward-card-conv-desc"
                     type="text"
                     className="input"
@@ -1724,21 +1689,21 @@ export function RewardsPage({
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeCardRewardModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeCardRewardModal}>
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={createCardReward.isPending}>
+                </Button>
+                <Button type="submit" className="btn btn-primary" disabled={createCardReward.isPending}>
                   {createCardReward.isPending ? "Adding..." : "Add Rewards"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       ) : null}
 
       {/* Conversion Rate Modal */}
       {isConversionModalOpen && data?.creditCards.length && data?.frequentFlyers.length ? (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeConversionModal)}>
+        <Dialog open onClose={closeConversionModal} title="Add point conversion" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Conversion Rate</h3>
@@ -1748,7 +1713,7 @@ export function RewardsPage({
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
                   <label className="label" htmlFor="conversion-card-id">From Card</label>
-                  <select
+                  <Select
                     id="conversion-card-id"
                     className="input"
                     value={convCardId}
@@ -1761,11 +1726,11 @@ export function RewardsPage({
                         {card.creditCard.cardName}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label" htmlFor="conversion-ff-id">To Program</label>
-                  <select
+                  <Select
                     id="conversion-ff-id"
                     className="input"
                     value={convFFId}
@@ -1778,7 +1743,7 @@ export function RewardsPage({
                         {ff.programName}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group">
                   <label className="label" htmlFor="conversion-points">From Points</label>
@@ -1806,7 +1771,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label" htmlFor="conversion-desc">Description</label>
-                  <input
+                  <Input
                     id="conversion-desc"
                     type="text"
                     className="input"
@@ -1822,21 +1787,21 @@ export function RewardsPage({
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeConversionModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeConversionModal}>
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={createConversion.isPending}>
+                </Button>
+                <Button type="submit" className="btn btn-primary" disabled={createConversion.isPending}>
                   {createConversion.isPending ? "Adding..." : "Add Conversion"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       ) : null}
 
       {/* Hotel Rewards Modal */}
       {isHotelModalOpen && (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeHotelModal)}>
+        <Dialog open onClose={closeHotelModal} title="Hotel reward account" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingHotelId ? "Edit Hotel Rewards" : "Add Hotel Rewards"}</h3>
@@ -1846,7 +1811,7 @@ export function RewardsPage({
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
                   <label className="label">Program Name</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="e.g., Marriott Bonvoy"
@@ -1857,7 +1822,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Hotel Brand</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="e.g., Marriott"
@@ -1868,7 +1833,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group">
                   <label className="label">Account Number</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="Optional"
@@ -1910,7 +1875,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Notes</label>
-                  <textarea
+                  <Textarea
                     className="input"
                     rows={3}
                     placeholder="Optional notes..."
@@ -1925,10 +1890,10 @@ export function RewardsPage({
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeHotelModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeHotelModal}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   className="btn btn-primary"
                   disabled={createHotelReward.isPending || updateHotelReward.isPending}
@@ -1940,16 +1905,16 @@ export function RewardsPage({
                     : createHotelReward.isPending
                       ? "Adding..."
                       : "Add Program"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Frequent Flyer Modal */}
       {isFFModalOpen && (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeFFModal)}>
+        <Dialog open onClose={closeFFModal} title="Frequent flyer account" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>{editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}</h3>
@@ -1959,7 +1924,7 @@ export function RewardsPage({
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
                   <label className="label">Program Name</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="e.g., KrisFlyer"
@@ -1970,7 +1935,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Airline Name</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="e.g., Singapore Airlines"
@@ -1981,7 +1946,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group">
                   <label className="label">Account Number</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="Optional"
@@ -2031,7 +1996,7 @@ export function RewardsPage({
                       color: "var(--text-secondary)",
                     }}
                   >
-                    <input
+                    <Input
                       id="ff-mile-never-expire"
                       type="checkbox"
                       checked={ffFormMileNeverExpire}
@@ -2055,7 +2020,7 @@ export function RewardsPage({
                 )}
                 <div className="form-group st-span-2">
                   <label className="label">Notes</label>
-                  <textarea
+                  <Textarea
                     className="input"
                     rows={3}
                     placeholder="Optional notes..."
@@ -2070,10 +2035,10 @@ export function RewardsPage({
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeFFModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeFFModal}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   className="btn btn-primary"
                   disabled={createFrequentFlyer.isPending || updateFrequentFlyer.isPending}
@@ -2085,16 +2050,16 @@ export function RewardsPage({
                     : createFrequentFlyer.isPending
                       ? "Adding..."
                       : "Add Program"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Add Earn Transaction Modal */}
       {isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsAddEarnModalOpen(false))}>
+        <Dialog open onClose={() => setIsAddEarnModalOpen(false)} title="Add miles earned" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Earn Transaction</h3>
@@ -2117,7 +2082,7 @@ export function RewardsPage({
               <div className="st-form-grid">
                 <div className="form-group">
                   <label className="label">Date</label>
-                  <input
+                  <Input
                     className="input"
                     type="date"
                     value={earnDate}
@@ -2138,7 +2103,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Title (optional)</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="e.g., Flight credit, Bonus miles"
@@ -2148,7 +2113,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Expiry Date</label>
-                  <input
+                  <Input
                     className="input"
                     type="date"
                     value={earnExpiryDate}
@@ -2163,25 +2128,25 @@ export function RewardsPage({
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => setIsAddEarnModalOpen(false)}>
+                <Button type="button" className="btn btn-ghost" onClick={() => setIsAddEarnModalOpen(false)}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   className="btn btn-primary"
                   disabled={createEarnTransaction.isPending}
                 >
                   {createEarnTransaction.isPending ? "Saving..." : "Add Transaction"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Redeem Miles Modal */}
       {isRedeemModalOpen && selectedHistoryFrequentFlyer && (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsRedeemModalOpen(false))}>
+        <Dialog open onClose={() => setIsRedeemModalOpen(false)} title="Redeem miles" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Redeem Miles</h3>
@@ -2203,7 +2168,7 @@ export function RewardsPage({
               <div className="st-form-grid">
                 <div className="form-group">
                   <label className="label">Date</label>
-                  <input
+                  <Input
                     className="input"
                     type="date"
                     value={redeemDate}
@@ -2224,7 +2189,7 @@ export function RewardsPage({
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Redemption Title</label>
-                  <input
+                  <Input
                     className="input"
                     type="text"
                     placeholder="e.g., Flight award, Upgrade"
@@ -2240,20 +2205,20 @@ export function RewardsPage({
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => setIsRedeemModalOpen(false)}>
+                <Button type="button" className="btn btn-ghost" onClick={() => setIsRedeemModalOpen(false)}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   className="btn btn-primary"
                   disabled={createRedeemTransaction.isPending}
                 >
                   {createRedeemTransaction.isPending ? "Redeeming..." : "Redeem Miles"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

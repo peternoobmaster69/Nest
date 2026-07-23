@@ -1,6 +1,6 @@
 "use client";
 
-import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionProvider } from "next-auth/react";
 import { ReactNode, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -8,18 +8,30 @@ import { CollaborationBanner } from "@/components/collaboration-banner";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { NavigationLoader } from "@/components/navigation-loader";
 import { ConfirmDialogProvider } from "@/components/confirm-dialog";
-import { ModalViewportManager } from "@/components/modal-viewport-manager";
 import { notifyToast, ToastProvider } from "@/components/toast-provider";
 import { MobileWorkflowManager } from "@/components/mobile-workflow-manager";
 import { DeviceIntegration } from "@/components/device-integration";
+import { mutationFailureMessage } from "@/lib/api/client";
+import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
     () => {
       const client = new QueryClient({
         mutationCache: new MutationCache({
-          onError: (error) => {
-            notifyToast(error instanceof Error ? error.message : "The action could not be completed.", "error");
+          onError: (error) => notifyToast(mutationFailureMessage(error), "error"),
+          onSuccess: (_data, _variables, _context, mutation) => {
+            const successMessage = mutation.meta?.successMessage;
+            if (typeof successMessage === "string" && successMessage.trim()) {
+              notifyToast(successMessage, "success");
+            }
+          },
+        }),
+        queryCache: new QueryCache({
+          onError: (_error, query) => {
+            if (query.state.data !== undefined) {
+              notifyToast("Could not refresh. Showing the last available data.", "error");
+            }
           },
         }),
         defaultOptions: {
@@ -51,9 +63,9 @@ export function Providers({ children }: { children: ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <ConfirmDialogProvider>
             <ToastProvider>
-              <ModalViewportManager />
               <MobileWorkflowManager />
               <DeviceIntegration />
+              <WebVitalsReporter />
               {children}
               <NavigationLoader />
               <CollaborationBanner />

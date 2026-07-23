@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 const CONSENT_KEY = "nest_cookie_consent_v1";
 
@@ -33,9 +34,9 @@ export function CookieConsentBanner() {
     <div className="cookie-overlay" role="dialog" aria-live="polite" aria-label="Cookie consent">
       <p className="cookie-overlay-text">
         This website uses cookies for essential sessions and security. To accept, press{" "}
-        <button type="button" className="cookie-overlay-btn" onClick={acceptCookies}>
+        <Button type="button" className="cookie-overlay-btn" onClick={acceptCookies}>
           here
-        </button>
+        </Button>
         .
       </p>
     </div>

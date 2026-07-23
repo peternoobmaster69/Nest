@@ -10,6 +10,9 @@ import {
   clearPostSignInDestination,
   consumePostSignInDestination,
 } from "@/lib/session-limit-client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
 
 type ActiveSession = {
   sessionId: string;
@@ -116,21 +119,21 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
           <legend className="sr-only">{requiresSelection ? "Choose sessions to end" : "Active sessions"}</legend>
           <div className="signin-session-toolbar">
             <span aria-hidden="true">{requiresSelection ? "Choose sessions to end" : "Active sessions"}</span>
-            <button
+            <Button
               type="button"
               className="signin-session-select-all"
               onClick={() => setSelectedSessionIds(allSessionsSelected ? [] : sessions.map((session) => session.sessionId))}
               disabled={isApproving}
             >
               {allSessionsSelected ? "Clear all" : "Select all"}
-            </button>
+            </Button>
           </div>
           {sessions.map((session, index) => (
             <label
               className={`signin-session-option${selectedSessionIds.includes(session.sessionId) ? " is-selected" : ""}`}
               key={session.sessionId}
             >
-              <input
+              <Input
                 ref={index === 0 ? firstSessionRef : undefined}
                 type="checkbox"
                 name="sessions-to-revoke"
@@ -154,7 +157,7 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
       {errorMessage ? <p className="signin-error" role="alert">{errorMessage}</p> : null}
 
       <div className="signin-takeover-actions">
-        <button
+        <Button
           type="button"
           className="lp-btn-primary"
           onClick={() => void approveDevice()}
@@ -169,10 +172,10 @@ function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
                 : selectedSessionIds.length > 1
                   ? `End ${selectedSessionIds.length} and continue`
               : "Continue on this device"}
-        </button>
-        <button type="button" className="lp-btn-secondary" onClick={onCancel} disabled={isApproving}>
+        </Button>
+        <Button type="button" className="lp-btn-secondary" onClick={onCancel} disabled={isApproving}>
           Cancel
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -188,7 +191,6 @@ export function LandingSignInDialog({
   sessionLimitRequired?: boolean;
 }) {
   const router = useRouter();
-  const dialogRef = useRef<HTMLDivElement>(null);
 
   const cancelPendingSession = useCallback(() => {
     clearPostSignInDestination();
@@ -202,41 +204,17 @@ export function LandingSignInDialog({
     router.replace("/", { scroll: false });
   }, [cancelPendingSession, router, sessionLimitRequired]);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const dialog = dialogRef.current;
-    const focusTarget = dialog?.querySelector<HTMLElement>("button, a[href]");
-    focusTarget?.focus();
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [close]);
-
   return (
-    <div
-      className={`lp-signin-overlay${sessionLimitRequired ? " is-session-limit" : ""}`}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) close();
-      }}
-    >
+    <Dialog open onClose={close} title={sessionLimitRequired ? "Choose a device to sign out" : "Sign in to Nest"} surface="custom" overlayClassName={`lp-signin-overlay${sessionLimitRequired ? " is-session-limit" : ""}`}>
       <div
-        ref={dialogRef}
         className={`lp-signin-dialog${sessionLimitRequired ? " is-session-limit" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={sessionLimitRequired ? "Choose a device to sign out" : "Sign in to Nest"}
       >
-        <button className="lp-signin-close" type="button" onClick={close} aria-label="Close sign in">
+        <Button className="lp-signin-close" type="button" onClick={close} aria-label="Close sign in">
           <X size={19} aria-hidden="true" />
-        </button>
+        </Button>
         <aside className="lp-signin-story">
           <div className="lp-signin-story-brand">
             <span className="lp-signin-story-logo">
@@ -288,6 +266,6 @@ export function LandingSignInDialog({
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

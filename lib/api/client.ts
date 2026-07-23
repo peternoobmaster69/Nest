@@ -1,7 +1,7 @@
 import { apiErrorCodeForStatus, type ApiErrorCode, type ApiErrorEnvelope } from "@/lib/api/contracts";
 import { workspaceFetch } from "@/lib/workspace-client";
 
-export const HANDLED_API_ERROR_STATUSES = [401, 403, 409, 422, 429, 503] as const;
+export const HANDLED_API_ERROR_STATUSES = [401, 403, 409, 412, 422, 429, 503] as const;
 
 export class ApiClientError extends Error {
   readonly name = "ApiClientError";
@@ -57,4 +57,33 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
 
 export function isApiClientError(error: unknown, ...statuses: number[]): error is ApiClientError {
   return error instanceof ApiClientError && (statuses.length === 0 || statuses.includes(error.status));
+}
+
+export type MutationFailureKind = "offline" | "permission" | "conflict" | "stale" | "validation" | "unknown";
+
+export function classifyMutationFailure(error: unknown): MutationFailureKind {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return "offline";
+  if (!(error instanceof ApiClientError)) return "unknown";
+  if (error.status === 401 || error.status === 403) return "permission";
+  if (error.status === 409) return "conflict";
+  if (error.status === 412) return "stale";
+  if (error.status === 422) return "validation";
+  if (error.status === 503) return "offline";
+  return "unknown";
+}
+
+export function mutationFailureMessage(error: unknown): string {
+  const fallback = error instanceof Error ? error.message : "The action could not be completed.";
+  switch (classifyMutationFailure(error)) {
+    case "offline":
+      return "You appear to be offline. Your changes were not submitted.";
+    case "permission":
+      return "You do not have permission to make this change.";
+    case "conflict":
+      return "This record changed elsewhere. Refresh it and try again.";
+    case "stale":
+      return "This form is out of date. Refresh it before saving.";
+    default:
+      return fallback;
+  }
 }

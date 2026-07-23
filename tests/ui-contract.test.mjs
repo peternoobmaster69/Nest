@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import path from "node:path";
+import { readAppStyles } from "./read-app-styles.mjs";
 
 const root = process.cwd();
 
@@ -16,7 +17,7 @@ test("public landing page offers self-hosted and best-effort hosted paths", asyn
 });
 
 test("public landing page contains decorative overflow on narrow screens", async () => {
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(styles, /\.lp\s*\{[^}]*width:\s*100%[^}]*overflow-x:\s*clip/s);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.lp-hero\s*\{[^}]*padding:\s*22px 5px 64px/);
@@ -26,7 +27,7 @@ test("public landing page contains decorative overflow on narrow screens", async
 test("credit-card payable uses a readable card palette instead of the allocation marker colour", async () => {
   const [landing, styles] = await Promise.all([
     readFile(path.join(root, "app/page.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
 
   assert.match(landing, /lp-flow-card is-credit-payable/);
@@ -37,7 +38,7 @@ test("credit-card payable uses a readable card palette instead of the allocation
 });
 
 test("mobile embedded sign-in keeps provider actions directly below its heading", async () => {
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(styles, /@media \(max-width: 480px\)[\s\S]*?\.signin-card:not\(\.signin-card-embedded\)\s*\{[\s\S]*?min-height: calc\(100dvh - 32px\)/);
   assert.match(styles, /\.signin-card:not\(\.signin-card-embedded\) \.signin-providers\s*\{[\s\S]*?margin-top: auto/);
@@ -48,7 +49,7 @@ test("mobile embedded sign-in keeps provider actions directly below its heading"
 test("session-limit sign-in keeps five active sessions in a compact centered dialog", async () => {
   const [dialog, styles] = await Promise.all([
     readFile(path.join(root, "components/landing-signin-dialog.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
 
   assert.match(dialog, /lp-signin-dialog\$\{sessionLimitRequired \? " is-session-limit" : ""\}/);
@@ -161,7 +162,7 @@ test("dashboard and transactions share the bank selector presentation", async ()
   const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
   const dashboardSkeleton = await readFile(path.join(root, "components/skeletons/DashboardSkeleton.tsx"), "utf8");
   const transactionsSkeleton = await readFile(path.join(root, "components/skeletons/TransactionsSkeleton.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.equal(dashboard.match(/className="bm-edit-btn tx-bank-action-btn"/g)?.length, 2);
   assert.equal(transactions.match(/className="bm-edit-btn tx-bank-action-btn"/g)?.length, 2);
@@ -182,7 +183,7 @@ test("dashboard and transactions share the bank selector presentation", async ()
 test("dashboard uses one responsive overview and a clear content hierarchy", async () => {
   const component = await readFile(path.join(root, "components/dashboard-shell.tsx"), "utf8");
   const skeleton = await readFile(path.join(root, "components/skeletons/DashboardSkeleton.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(component, /className="dashboard-overview-card"/);
   assert.match(component, /Available bank balance/);
@@ -215,7 +216,7 @@ test("dashboard uses one responsive overview and a clear content hierarchy", asy
 
 test("transaction sub-account cards keep compact uniform geometry", async () => {
   const component = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
 
   assert.match(component, /hasDisplayedDiscrepancy \? \([\s\S]*?className="tx-reconciliation"[\s\S]*?\) : null/);
   assert.match(component, /displayedDiscrepancyAmount} unallocated/);
@@ -236,7 +237,7 @@ test("transaction sub-account cards keep compact uniform geometry", async () => 
 });
 
 test("mobile editable controls do not trigger viewport focus zoom", async () => {
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
 
   assert.match(source, /\(hover:\s*none\)\s+and\s+\(pointer:\s*coarse\)/);
   assert.match(
@@ -247,7 +248,7 @@ test("mobile editable controls do not trigger viewport focus zoom", async () => 
 
 test("credit transaction records use a compact mobile card layout", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
 
   assert.doesNotMatch(source, /\.cct-table td\s*\{[^}]*height:\s*56\.5px/s);
   assert.match(component, /transactionDateGroups\.map\(\(group\)[\s\S]*?className="cct-date-group-row"/);
@@ -279,7 +280,7 @@ test("credit transaction records use a compact mobile card layout", async () => 
 
 test("payment due card saves from its compact date tag", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
 
   assert.match(component, /className="cct-due-picker"[\s\S]*?onChange=\{\(e\) => saveSharedPaymentDue\(e\.target\.value\)\}/);
   assert.match(component, /picker\.parentElement\?\.scrollIntoView\(\{ block: "nearest", inline: "nearest" \}\)/);
@@ -296,7 +297,7 @@ test("payment due card saves from its compact date tag", async () => {
 
 test("credit transaction form keeps statement month and year on one row", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
 
   assert.match(component, /className="cct-statement-period"[\s\S]*?Statement Month[\s\S]*?Statement Year/);
   assert.match(source, /\.cct-statement-period\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1\.2fr\) minmax\(120px, 0\.8fr\)/s);
@@ -306,7 +307,7 @@ test("credit transaction form keeps statement month and year on one row", async 
 test("month dropdown identifies outstanding payment due dates", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
   const route = await readFile(path.join(root, "app/api/credit-transactions/payment-due/route.ts"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(component, /fetchJson<PaymentDueMonthsResponse>\(`\/api\/credit-transactions\/payment-due\?\$\{/);
   assert.match(component, /return getDaysUntil\(paymentDueDate\) <= 5 \? "is-due-soon" : "is-due-later";/);
@@ -330,7 +331,7 @@ test("month dropdown identifies outstanding payment due dates", async () => {
 });
 
 test("all modal families use the centered viewport contract", async () => {
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
   const contract = source.slice(source.indexOf("MODAL VIEWPORT CONTRACT"));
 
   for (const selector of [
@@ -351,7 +352,7 @@ test("all modal families use the centered viewport contract", async () => {
 });
 
 test("small-screen modals use the available width without stretching short forms", async () => {
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
   const contract = source.slice(source.indexOf("MODAL VIEWPORT CONTRACT"));
 
   assert.match(contract, /@media\s*\(max-width:\s*820px\)/);
@@ -379,7 +380,7 @@ test("modal close controls use the shared icon button", async () => {
 });
 
 test("modal action bars remain outside independently scrolling content", async () => {
-  const source = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const source = await readAppStyles(root);
   const contract = source.slice(source.indexOf("MODAL VIEWPORT CONTRACT"));
 
   assert.match(contract, /\.modal-form-shell,[\s\S]*?\.cc-modal-form,[\s\S]*?\.cct-modal-form,[\s\S]*?\.st-modal-form\s*\{[\s\S]*?flex-direction:\s*column\s*!important[\s\S]*?overflow:\s*hidden\s*!important/);
@@ -393,9 +394,9 @@ test("modal action bars remain outside independently scrolling content", async (
 });
 
 test("compact dialog and form contract is keyboard-aware and uniform", async () => {
-  const [styles, manager, layout, transactions] = await Promise.all([
-    readFile(path.join(root, "app/globals.css"), "utf8"),
-    readFile(path.join(root, "components/modal-viewport-manager.tsx"), "utf8"),
+  const [styles, dialog, layout, transactions] = await Promise.all([
+    readAppStyles(root),
+    readFile(path.join(root, "components/ui/dialog.tsx"), "utf8"),
     readFile(path.join(root, "app/layout.tsx"), "utf8"),
     readFile(path.join(root, "components/transactions-page.tsx"), "utf8"),
   ]);
@@ -418,7 +419,7 @@ test("compact dialog and form contract is keyboard-aware and uniform", async () 
   assert.match(contract, /height:\s*var\(--visual-viewport-height, 100dvh\)\s*!important/);
   assert.match(contract, /grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/);
   assert.match(contract, /grid-template-rows:\s*minmax\(0, 1fr\)\s*!important/);
-  assert.match(contract, /\.modal-form-shell,[\s\S]*?\.st-modal-form\s*\{[^}]*overflow:\s*hidden\s*!important/s);
+  assert.match(contract, /:where\([\s\S]*?\.profile-modal,[\s\S]*?\.inv-modal[\s\S]*?\)\s*\{[^}]*flex-direction:\s*column\s*!important[^}]*overflow:\s*hidden\s*!important/s);
   assert.match(contract, /\.cc-modal-scroll,[\s\S]*?\.cct-form-grid,[\s\S]*?\.tx-popover-body[\s\S]*?overflow-y:\s*auto\s*!important/s);
   assert.match(contract, /font-size:\s*16px\s*!important/);
   assert.match(contract, /\.calc-input-btn\s*\{[^}]*width:\s*44px\s*!important[^}]*height:\s*44px\s*!important/s);
@@ -436,16 +437,21 @@ test("compact dialog and form contract is keyboard-aware and uniform", async () 
   assert.match(contract, /\.notification-popover\s*\{[^}]*--visual-viewport-height/s);
   assert.match(contract, /\.cookie-overlay\s*\{[^}]*safe-area-inset-bottom/s);
 
-  assert.match(manager, /"\.tx-popover-overlay"/);
-  assert.match(manager, /"\.tx-month-popover"/);
-  assert.match(manager, /window\.visualViewport\?\.addEventListener\("resize", syncVisualViewport\)/);
+  assert.match(dialog, /function lockViewport\(\)/);
+  assert.match(dialog, /event\.key === "Escape"/);
+  assert.match(dialog, /const onCloseRef = useRef\(onClose\)/);
+  assert.match(dialog, /onCloseRef\.current\(\)/);
+  assert.match(dialog, /preferredInitialFocus \|\| firstFocusable \|\| container/);
+  assert.match(dialog, /\}, \[open, surface\]\);/);
+  assert.doesNotMatch(dialog, /\[closeDisabled, onClose, open, surface\]/);
+  assert.match(dialog, /window\.visualViewport\?\.addEventListener\("resize", syncVisualViewport\)/);
   assert.match(layout, /interactiveWidget:\s*"resizes-content"/);
-  assert.match(transactions, /className="tx-popover-overlay"[\s\S]*?className="tx-month-popover"/);
+  assert.match(transactions, /overlayClassName="tx-popover-overlay"[\s\S]*?className="tx-month-popover"/);
 });
 
 test("Create Receivable uses a non-overlapping responsive modal layout", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(component, /cct-modal cct-receivable-modal/);
   assert.match(component, /cct-form-grid cct-receivable-grid/);
@@ -457,7 +463,7 @@ test("Create Receivable uses a non-overlapping responsive modal layout", async (
 
 test("phone popup fields and actions cannot overflow their grid tracks", async () => {
   const [styles, budgetPlan, transactions] = await Promise.all([
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
     readFile(path.join(root, "components/budget-plan-page.tsx"), "utf8"),
     readFile(path.join(root, "components/transactions-page.tsx"), "utf8"),
   ]);
@@ -476,7 +482,7 @@ test("phone popup fields and actions cannot overflow their grid tracks", async (
 
 test("credit transaction card selection uses a compact mobile-only dropdown", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(component, /className="cct-mobile-card-trigger"[\s\S]*?aria-haspopup="listbox"/);
   assert.match(component, /className="cct-mobile-card-dropdown"/);
@@ -493,7 +499,7 @@ test("credit transaction card selection uses a compact mobile-only dropdown", as
 
 test("credit transactions guide cardless workspaces to add a card before opening the form", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(component, /if \(sortedCards\.length === 0\)[\s\S]*?title="Add a credit card first"/);
   assert.match(component, /href=\{routeWorkspaceId \? buildWorkspacePath\(routeWorkspaceId, "\/credit-cards\?add=1"\) : "\/credit-cards\?add=1"\}[\s\S]*?Add a credit card/);
@@ -513,7 +519,7 @@ test("the card prerequisite deep link opens the add-card modal once", async () =
 
 test("tablet and desktop card rails use stable explicit navigation", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(component, /aria-label="Show previous cards"/);
   assert.match(component, /aria-label="Show more cards"/);
@@ -526,7 +532,7 @@ test("tablet and desktop card rails use stable explicit navigation", async () =>
 
 test("phone layouts use the native-style mobile application shell", async () => {
   const shell = await readFile(path.join(root, "components/app-shell.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
   const moreNavigationStart = shell.indexOf('<nav className="mobile-more-links"');
   const moreNavigationEnd = shell.indexOf("</nav>", moreNavigationStart);
@@ -547,8 +553,8 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(shell, /aria-haspopup="dialog"[\s\S]*?<span>More<\/span>/);
   assert.match(shell, /className="mobile-bottom-nav-workspace"[\s\S]*?Current workspace:/);
   assert.match(styles, /\.mobile-bottom-nav-workspace\s*\{[^}]*position:\s*absolute[^}]*height:\s*var\(--mobile-nav-safe-bottom\)/s);
-  assert.match(shell, /queryKey:\s*\["workspaces"\][\s\S]*?enabled:\s*mobileMoreOpen/);
-  assert.match(shell, /queryKey:\s*\["receivables-summary", navigationWorkspaceId\][\s\S]*?\/api\/receivables\/summary\?workspaceId=\$\{navigationWorkspaceId\}/);
+  assert.match(shell, /queryKey:\s*queryKeys\.key\(\["workspaces"\]\)[\s\S]*?enabled:\s*mobileMoreOpen/);
+  assert.match(shell, /queryKey:\s*queryKeys\.key\(\["receivables-summary", navigationWorkspaceId\]\)[\s\S]*?\/api\/receivables\/summary\?workspaceId=\$\{navigationWorkspaceId\}/);
   assert.match(moreNavigation, /mobileReceivablesCount \? <span className="mobile-more-badge">\{mobileReceivablesCount\}<\/span>/);
   assert.match(shell, /className="mobile-more-workspace-switcher"[\s\S]*?mobile-more-link mobile-more-workspace-trigger/);
   assert.match(shell, /aria-controls="mobile-more-workspace-options"[\s\S]*?id="mobile-more-workspace-options"[\s\S]*?role="listbox"/);
@@ -584,7 +590,7 @@ test("profile details live on a dedicated authenticated page", async () => {
     readFile(path.join(root, "app/profile/page.tsx"), "utf8"),
     readFile(path.join(root, "components/profile-page.tsx"), "utf8"),
     readFile(path.join(root, "components/app-sidebar.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
 
   assert.match(route, /await requireSession\(\)/);
@@ -603,7 +609,7 @@ test("profile details live on a dedicated authenticated page", async () => {
 test("long application pages expose an accessible scroll-to-top control", async () => {
   const [shell, styles] = await Promise.all([
     readFile(path.join(root, "components/app-shell.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
 
   assert.match(shell, /scrollContainer\.scrollHeight > scrollContainer\.clientHeight \* 1\.5/);
@@ -618,7 +624,7 @@ test("long application pages expose an accessible scroll-to-top control", async 
 
 test("settings uses the shared typography and layout contract", async () => {
   const settings = await readFile(path.join(root, "components/settings-page.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
   const appAccess = await readFile(path.join(root, "components/settings-app-access.tsx"), "utf8");
   const settingsStart = styles.indexOf(".settings-card-block");
@@ -646,7 +652,7 @@ test("settings uses the shared typography and layout contract", async () => {
 test("settings groups related controls into focused tabs", async () => {
   const [settings, styles] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
 
   assert.match(settings, /section === "settings"/);
@@ -678,7 +684,7 @@ test("settings sections share accessible cookie-backed tabs", async () => {
     readFile(path.join(root, "lib/settings-tabs.ts"), "utf8"),
     readFile(path.join(root, "components/app-shell.tsx"), "utf8"),
     readFile(path.join(root, "components/app-sidebar.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
 
   assert.match(route, /searchParams\?: Promise<\{ tab\?: string \}>/);
@@ -707,7 +713,7 @@ test("workspace settings flow from selection through configuration and access", 
     readFile(path.join(root, "app/settings/page.tsx"), "utf8"),
     readFile(path.join(root, "components/collaborators-page.tsx"), "utf8"),
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
   const layout = collaborators.slice(collaborators.indexOf("return ("));
 
@@ -729,10 +735,11 @@ test("workspace settings flow from selection through configuration and access", 
 });
 
 test("Gmail sync uses one responsive status surface", async () => {
-  const [settings, styles, summary] = await Promise.all([
+  const [settings, styles, summary, notice] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
     readFile(path.join(root, "lib/gmail-sync-summary.ts"), "utf8"),
+    readFile(path.join(root, "components/settings/operation-notice.tsx"), "utf8"),
   ]);
 
   assert.match(settings, /const isGmailSyncActive = Boolean/);
@@ -740,7 +747,7 @@ test("Gmail sync uses one responsive status surface", async () => {
   assert.match(settings, /\{!isGmailSyncActive \? \([\s\S]*?<SettingsOperationNotice[\s\S]*?notice=\{gmailNotice\}/);
   assert.doesNotMatch(settings, /gmailMessage \? <div className="settings-message settings-message-spaced"/);
   assert.match(settings, /className="gmail-sync-progress-header"/);
-  assert.match(settings, /className=\{`settings-operation-notice is-\$\{notice\.tone\}/);
+  assert.match(notice, /className=\{`settings-operation-notice is-\$\{notice\.tone\}/);
   assert.match(styles, /\.gmail-sync-progress-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/s);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-operation-notice-copy\s*\{[^}]*display:\s*grid/s);
   assert.match(settings, /hasProcessingIssues[\s\S]*?\? "warning"/);
@@ -757,7 +764,7 @@ test("recent authentication errors provide a return-safe re-authentication actio
     readFile(path.join(root, "components/collaborators-page.tsx"), "utf8"),
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
     readFile(path.join(root, "app/invitations/[token]/response.tsx"), "utf8"),
-    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readAppStyles(root),
   ]);
 
   assert.match(reauthentication, /For your security, please re-authenticate to continue\. You’ll return here afterward\./);
@@ -773,7 +780,7 @@ test("recent authentication errors provide a return-safe re-authentication actio
 
 test("transaction groups use compact two-row cards and a searchable picker", async () => {
   const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
 
   assert.match(transactions, /className="tx-group-card-copy"[\s\S]*?<strong>\{group\.name\}<\/strong>/);
   assert.doesNotMatch(transactions, /\{group\.transactionCount\}/);
@@ -799,11 +806,11 @@ test("transaction groups use compact two-row cards and a searchable picker", asy
 });
 
 test("mobile quality uses the Phase 4 accessibility and performance contract", async () => {
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
   const shell = await readFile(path.join(root, "components/app-shell.tsx"), "utf8");
   const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
   const creditTransactions = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
-  const modalManager = await readFile(path.join(root, "components/modal-viewport-manager.tsx"), "utf8");
+  const dialog = await readFile(path.join(root, "components/ui/dialog.tsx"), "utf8");
   const navigationLoader = await readFile(path.join(root, "components/navigation-loader.tsx"), "utf8");
   const investments = await readFile(path.join(root, "components/investments-page.tsx"), "utf8");
   const motion = await readFile(path.join(root, "lib/motion.ts"), "utf8");
@@ -819,7 +826,8 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(shell, /id="main-content" tabIndex=\{-1\}/);
   assert.match(shell, /aria-controls="mobile-more-menu"/);
   assert.match(transactions, /className="budget-mini budget-mini-compact tx-account-card"[\s\S]*?role="button"[\s\S]*?aria-pressed=/);
-  assert.match(modalManager, /legacyModal\.setAttribute\("aria-labelledby", heading\.id\)/);
+  assert.match(dialog, /role="dialog"/);
+  assert.match(dialog, /"aria-labelledby": labelledBy/);
   assert.match(navigationLoader, /performance\.measure\(ROUTE_MEASURE/);
   assert.match(navigationLoader, /nest:route-performance/);
   assert.doesNotMatch(navigationLoader, /navigation-loader-spinner/);
@@ -858,7 +866,7 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
 });
 
 test("core mobile workflows use the Phase 2 interaction contract", async () => {
-  const styles = await readFile(path.join(root, "app/globals.css"), "utf8");
+  const styles = await readAppStyles(root);
   const providers = await readFile(path.join(root, "app/providers.tsx"), "utf8");
   const workflowManager = await readFile(path.join(root, "components/mobile-workflow-manager.tsx"), "utf8");
   const sessionState = await readFile(path.join(root, "lib/use-session-state.ts"), "utf8");

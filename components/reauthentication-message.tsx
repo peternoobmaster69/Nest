@@ -2,6 +2,7 @@
 
 import { signOut } from "next-auth/react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 const RECENT_AUTHENTICATION_MESSAGES = new Set([
   "Recent authentication required",
@@ -28,9 +29,9 @@ export function ReauthenticateButton({ className = "btn btn-primary btn-xs" }: {
   };
 
   return (
-    <button className={className} type="button" onClick={reauthenticate} disabled={isRedirecting}>
+    <Button className={className} type="button" onClick={reauthenticate} disabled={isRedirecting}>
       {isRedirecting ? "Redirecting…" : "Re-authenticate"}
-    </button>
+    </Button>
   );
 }
 

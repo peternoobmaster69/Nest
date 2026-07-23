@@ -13,6 +13,9 @@ import {
 } from "@/lib/install-prompt";
 import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
 import { describeClientDevice } from "@/lib/session-device";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/controls";
 
 type Passkey = {
   id: string;
@@ -125,27 +128,27 @@ export function SettingsAppAccess() {
   }, []);
 
   const passkeys = useQuery({
-    queryKey: ["settings-passkeys"],
+    queryKey: queryKeys.key(["settings-passkeys"]),
     queryFn: () => jsonRequest<{ passkeys: Passkey[] }>("/api/passkeys"),
   });
 
   const pushStatus = useQuery({
-    queryKey: ["settings-push-status"],
+    queryKey: queryKeys.key(["settings-push-status"]),
     queryFn: () => jsonRequest<PushStatus>("/api/push-subscriptions"),
   });
 
   const authProviders = useQuery({
-    queryKey: ["settings-auth-providers"],
+    queryKey: queryKeys.key(["settings-auth-providers"]),
     queryFn: () => jsonRequest<Record<string, AuthProvider>>("/api/auth/providers"),
   });
 
   const linkedAccounts = useQuery({
-    queryKey: ["settings-linked-accounts"],
+    queryKey: queryKeys.key(["settings-linked-accounts"]),
     queryFn: () => jsonRequest<{ providers: string[] }>("/api/auth/accounts"),
   });
 
   const loginSessions = useQuery({
-    queryKey: ["settings-login-sessions"],
+    queryKey: queryKeys.key(["settings-login-sessions"]),
     queryFn: () => jsonRequest<{ sessions: LoginSession[] }>("/api/auth/sessions"),
   });
 
@@ -164,7 +167,7 @@ export function SettingsAppAccess() {
         return;
       }
       setMessage(`${session.deviceName} was signed out.`);
-      await queryClient.invalidateQueries({ queryKey: ["settings-login-sessions"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-login-sessions"]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "The device could not be signed out."),
   });
@@ -200,7 +203,7 @@ export function SettingsAppAccess() {
       setMessage("Passkey added. You can now use it to sign in.");
       setIsNamingPasskey(false);
       setNewPasskeyName("");
-      await queryClient.invalidateQueries({ queryKey: ["settings-passkeys"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-passkeys"]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey could not be added."),
   });
@@ -215,7 +218,7 @@ export function SettingsAppAccess() {
       setMessage("Passkey name updated.");
       setEditingPasskeyId(null);
       setEditingPasskeyName("");
-      await queryClient.invalidateQueries({ queryKey: ["settings-passkeys"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-passkeys"]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey name could not be updated."),
   });
@@ -229,7 +232,7 @@ export function SettingsAppAccess() {
     onSuccess: async () => {
       setMessage("Passkey removed.");
       setEditingPasskeyId(null);
-      await queryClient.invalidateQueries({ queryKey: ["settings-passkeys"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-passkeys"]) });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey could not be removed."),
   });
@@ -261,7 +264,7 @@ export function SettingsAppAccess() {
     },
     onSuccess: async () => {
       setMessage("Notifications enabled.");
-      await queryClient.invalidateQueries({ queryKey: ["settings-push-status"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
     },
   });
 
@@ -278,7 +281,7 @@ export function SettingsAppAccess() {
     },
     onSuccess: async () => {
       setMessage("Notifications disabled.");
-      await queryClient.invalidateQueries({ queryKey: ["settings-push-status"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
     },
   });
 
@@ -303,9 +306,9 @@ export function SettingsAppAccess() {
           ) : capabilities.ios ? (
             <span className="settings-status-pill">Browser menu</span>
           ) : (
-            <button className="btn btn-primary btn-xs" type="button" onClick={() => installApp.mutate()} disabled={!installAvailable || installApp.isPending}>
+            <Button className="btn btn-primary btn-xs" type="button" onClick={() => installApp.mutate()} disabled={!installAvailable || installApp.isPending}>
               {installApp.isPending ? "Installing..." : "Install"}
-            </button>
+            </Button>
           )}
         </div>
 
@@ -319,18 +322,18 @@ export function SettingsAppAccess() {
             </div>
           </div>
           {pushStatus.data?.subscribed ? (
-            <button className="btn btn-ghost btn-xs" type="button" onClick={() => disableNotifications.mutate()} disabled={disableNotifications.isPending}>
+            <Button className="btn btn-ghost btn-xs" type="button" onClick={() => disableNotifications.mutate()} disabled={disableNotifications.isPending}>
               {disableNotifications.isPending ? "Disabling..." : "Disable"}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               className="btn btn-primary btn-xs"
               type="button"
               onClick={() => enableNotifications.mutate()}
               disabled={!capabilities.push || !pushStatus.data?.configured || enableNotifications.isPending}
             >
               {enableNotifications.isPending ? "Enabling..." : "Enable"}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -341,9 +344,9 @@ export function SettingsAppAccess() {
             <div className="settings-section-title">Passkeys</div>
             <div className="settings-section-copy">Sign in securely with Face ID, Touch ID, Windows Hello, or a security key.</div>
           </div>
-          <button className="btn btn-primary btn-xs" type="button" onClick={openPasskeyNameForm} disabled={!capabilities.passkeys || addPasskey.isPending || isNamingPasskey}>
+          <Button className="btn btn-primary btn-xs" type="button" onClick={openPasskeyNameForm} disabled={!capabilities.passkeys || addPasskey.isPending || isNamingPasskey}>
             Add Passkey
-          </button>
+          </Button>
         </div>
 
         {isNamingPasskey ? (
@@ -355,7 +358,7 @@ export function SettingsAppAccess() {
             }}
           >
             <label htmlFor="new-passkey-name">Passkey name</label>
-            <input
+            <Input
               id="new-passkey-name"
               className="input"
               value={newPasskeyName}
@@ -367,7 +370,7 @@ export function SettingsAppAccess() {
             />
             <p>Choose a name that identifies the device, browser, or security key. You can rename it later.</p>
             <div className="settings-passkey-form-actions">
-              <button
+              <Button
                 className="btn btn-ghost btn-xs"
                 type="button"
                 onClick={() => {
@@ -377,10 +380,10 @@ export function SettingsAppAccess() {
                 disabled={addPasskey.isPending}
               >
                 Cancel
-              </button>
-              <button className="btn btn-primary btn-xs" type="submit" disabled={!newPasskeyName.trim() || addPasskey.isPending}>
+              </Button>
+              <Button className="btn btn-primary btn-xs" type="submit" disabled={!newPasskeyName.trim() || addPasskey.isPending}>
                 {addPasskey.isPending ? "Adding..." : "Continue"}
-              </button>
+              </Button>
             </div>
           </form>
         ) : null}
@@ -399,7 +402,7 @@ export function SettingsAppAccess() {
                       if (editingPasskeyName.trim()) renamePasskey.mutate({ id: passkey.id, name: editingPasskeyName });
                     }}
                   >
-                    <input
+                    <Input
                       className="input"
                       value={editingPasskeyName}
                       onChange={(event) => setEditingPasskeyName(event.target.value)}
@@ -409,7 +412,7 @@ export function SettingsAppAccess() {
                       required
                     />
                     <div className="settings-passkey-edit-actions">
-                      <button
+                      <Button
                         className="btn btn-ghost btn-xs"
                         type="button"
                         onClick={() => {
@@ -419,10 +422,10 @@ export function SettingsAppAccess() {
                         disabled={renamePasskey.isPending}
                       >
                         Cancel
-                      </button>
-                      <button className="btn btn-primary btn-xs" type="submit" disabled={!editingPasskeyName.trim() || renamePasskey.isPending}>
+                      </Button>
+                      <Button className="btn btn-primary btn-xs" type="submit" disabled={!editingPasskeyName.trim() || renamePasskey.isPending}>
                         {renamePasskey.isPending ? "Saving..." : "Save"}
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 ) : (
@@ -432,7 +435,7 @@ export function SettingsAppAccess() {
                       <span>{passkeyMetadata(passkey)}</span>
                     </div>
                     <div className="settings-passkey-actions">
-                      <button
+                      <Button
                         className="btn-icon settings-passkey-icon-button"
                         type="button"
                         onClick={() => {
@@ -444,8 +447,8 @@ export function SettingsAppAccess() {
                         aria-label={`Rename ${passkey.name || "passkey"}`}
                       >
                         <Pencil size={16} aria-hidden="true" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         className="btn-icon settings-passkey-icon-button"
                         type="button"
                         onClick={() => removePasskey.mutate(passkey.id)}
@@ -453,7 +456,7 @@ export function SettingsAppAccess() {
                         aria-label={`Remove ${passkey.name || "passkey"}`}
                       >
                         <Trash2 size={16} aria-hidden="true" />
-                      </button>
+                      </Button>
                     </div>
                   </>
                 )}
@@ -487,7 +490,7 @@ export function SettingsAppAccess() {
                 </div>
                 <div className="settings-session-actions">
                   {session.current ? <span className="settings-status-pill is-enabled">Current</span> : null}
-                  <button
+                  <Button
                     className="btn btn-ghost btn-xs"
                     type="button"
                     onClick={() => revokeSession.mutate(session)}
@@ -496,7 +499,7 @@ export function SettingsAppAccess() {
                     {revokeSession.isPending && revokeSession.variables?.sessionId === session.sessionId
                       ? "Signing out..."
                       : "Sign out"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -524,13 +527,13 @@ export function SettingsAppAccess() {
                 {linked ? (
                   <span className="settings-status-pill is-enabled">Linked</span>
                 ) : (
-                  <button
+                  <Button
                     className="btn btn-primary btn-xs"
                     type="button"
                     onClick={() => signIn(provider.id, { callbackUrl: "/settings" })}
                   >
                     Link account
-                  </button>
+                  </Button>
                 )}
               </div>
             );

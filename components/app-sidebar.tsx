@@ -29,6 +29,8 @@ import {
   Sun,
   Undo2,
 } from "lucide-react";
+import { invalidateWorkspaceQueries, queryKeys, removeWorkspaceQueries } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
 
 type Workspace = {
   id: string;
@@ -85,7 +87,7 @@ export function AppSidebar({
 }) {
   const routeWorkspaceId = useWorkspaceId();
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: async () => {
       const res = await workspaceFetch("/api/context");
       if (!res.ok) throw new Error("Failed to load context");
@@ -105,7 +107,7 @@ export function AppSidebar({
 
   const resolvedContext = contextData ?? context.data;
   const receivablesSummary = useQuery({
-    queryKey: ["receivables-summary", resolvedContext?.workspaceId],
+    queryKey: queryKeys.key(["receivables-summary", resolvedContext?.workspaceId]),
     queryFn: async () => {
       const res = await workspaceFetch(`/api/receivables/summary?workspaceId=${resolvedContext?.workspaceId}`);
       if (!res.ok) throw new Error("Failed to load receivables summary");
@@ -149,7 +151,7 @@ export function AppSidebar({
 
   // Fetch all workspaces for switching
   const workspacesQuery = useQuery({
-    queryKey: ["workspaces"],
+    queryKey: queryKeys.key(["workspaces"]),
     queryFn: async () => {
       const res = await workspaceFetch("/api/workspaces");
       if (!res.ok) throw new Error("Failed to load workspaces");
@@ -222,7 +224,7 @@ export function AppSidebar({
       });
       if (!res.ok) throw new Error("Failed to switch workspace");
 
-      queryClient.setQueryData(["app-context", workspaceId], (existing: {
+      queryClient.setQueryData(queryKeys.context(workspaceId), (existing: {
         workspaceId?: string | null;
         workspaceName?: string | null;
       } | undefined) =>
@@ -235,20 +237,10 @@ export function AppSidebar({
           : existing,
       );
 
-      queryClient.removeQueries({ queryKey: ["credit-transactions"] });
-      queryClient.removeQueries({ queryKey: ["rewards"] });
-
-      void queryClient.invalidateQueries({ queryKey: ["app-context"] });
-      void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-      void queryClient.removeQueries({ queryKey: ["budgets"] });
-      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      void queryClient.invalidateQueries({ queryKey: ["receivables"] });
-      void queryClient.invalidateQueries({ queryKey: ["receivables-summary"] });
-      void queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      void queryClient.invalidateQueries({ queryKey: ["investments"] });
-      void queryClient.invalidateQueries({ queryKey: ["credit-cards"] });
-      void queryClient.invalidateQueries({ queryKey: ["collaborators"] });
-      void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      removeWorkspaceQueries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contextAll });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.all("workspaces") });
+      void invalidateWorkspaceQueries(queryClient, workspaceId);
 
       router.push(buildWorkspacePath(workspaceId));
       setTimeout(() => {
@@ -270,7 +262,7 @@ export function AppSidebar({
             <Image src="/icon.svg" alt="" width={30} height={30} className="brand-logo-sm" />
             <span>Nest</span>
           </Link>
-          <button
+          <Button
             className="sidebar-close"
             onClick={(e) => {
               e.preventDefault();
@@ -280,7 +272,7 @@ export function AppSidebar({
             aria-label="Close sidebar"
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         {isContextLoading ? (
@@ -340,14 +332,14 @@ export function AppSidebar({
         ) : null}
 
         {/* Mobile-only logout button */}
-        <button className="sb-item sb-logout-mobile" onClick={() => void confirmLogout()}>
+        <Button className="sb-item sb-logout-mobile" onClick={() => void confirmLogout()}>
           <LogOut className="sb-ic" size={18} aria-hidden="true" />Log Out
-        </button>
+        </Button>
       </div>
 
       <div className="sb-bot">
         <div className="sb-user-wrap" ref={profileMenuRef}>
-          <button className="sb-user" onClick={() => setProfileMenuOpen((open) => !open)}>
+          <Button className="sb-user" onClick={() => setProfileMenuOpen((open) => !open)}>
             {userImage ? (
               <Image src={userImage} alt={avatarAlt} width={36} height={36} className="avatar avatar-md avatar-image" />
             ) : (
@@ -361,7 +353,7 @@ export function AppSidebar({
               </span>
             </div>
             <span className={`sb-user-chevron${profileMenuOpen ? " open" : ""}`}>▾</span>
-          </button>
+          </Button>
           {profileMenuOpen && (
             <div className="sb-user-menu">
               <Link
@@ -377,7 +369,7 @@ export function AppSidebar({
               >
                 View Profile
               </Link>
-              <button
+              <Button
                 className="sb-user-menu-item sb-user-menu-theme"
                 onClick={() => {
                   setProfileMenuOpen(false);
@@ -385,7 +377,7 @@ export function AppSidebar({
                 }}
               >
                 {theme === "light" ? <><Moon size={16} aria-hidden="true" /> Dark mode</> : <><Sun size={16} aria-hidden="true" /> Light mode</>}
-              </button>
+              </Button>
               <div className="sb-user-menu-divider" />
               <div className="sb-user-menu-section">Switch Workspace</div>
               {workspacesQuery.isLoading ? (
@@ -398,7 +390,7 @@ export function AppSidebar({
                   const isCurrent = ws.id === resolvedContext?.workspaceId;
                   const isSwitching = switchingWorkspaceId === ws.id;
                   return (
-                    <button
+                    <Button
                       key={ws.id}
                       className={`sb-user-menu-item sb-user-menu-workspace${isCurrent ? " active" : ""}${isSwitching ? " switching" : ""}`}
                       onClick={() => switchWorkspace(ws.id)}
@@ -408,14 +400,14 @@ export function AppSidebar({
                         {isSwitching ? <span className="sb-workspace-spinner" /> : isCurrent ? "✓" : "○"}
                       </span>
                       <span className="sb-workspace-name">{ws.name}</span>
-                    </button>
+                    </Button>
                   );
                 })
               )}
               <div className="sb-user-menu-divider" />
-              <button className="sb-user-menu-item" onClick={() => void confirmLogout()}>
+              <Button className="sb-user-menu-item" onClick={() => void confirmLogout()}>
                 Log Out
-              </button>
+              </Button>
             </div>
           )}
         </div>

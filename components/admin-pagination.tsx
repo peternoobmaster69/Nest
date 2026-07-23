@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export const ADMIN_PAGE_SIZE = 10;
 
@@ -43,25 +44,25 @@ export function AdminPagination({
         Showing <strong>{firstItem}–{lastItem}</strong> of <strong>{totalItems}</strong>
       </p>
       <div className="admin-pagination-controls">
-        <button
+        <Button
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
         >
           Previous
-        </button>
+        </Button>
         <span className="admin-pagination-page" aria-live="polite">
           Page {page} of {pageCount}
         </span>
-        <button
+        <Button
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={() => onPageChange(page + 1)}
           disabled={page === pageCount}
         >
           Next
-        </button>
+        </Button>
       </div>
     </nav>
   );

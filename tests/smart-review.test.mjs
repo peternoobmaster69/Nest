@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { readAppStyles } from "./read-app-styles.mjs";
 import {
   displayMerchantName,
   hasReceivableLanguage,
@@ -69,7 +70,7 @@ test("Smart Review is scoped to unaccounted transactions and uses accounted hist
   const review = await source("lib/ai/smart-review.ts");
   const component = await source("components/credit-transactions-page.tsx");
   const types = await source("lib/ai/smart-review-types.ts");
-  const styles = await source("app/globals.css");
+  const styles = await readAppStyles(root);
 
   assert.match(review, /id: \{ in: params\.transactionIds \}, isAllocated: false/);
   assert.match(review, /workspaceId: params\.workspaceId, isAllocated: true/);
@@ -85,7 +86,7 @@ test("Smart Review is scoped to unaccounted transactions and uses accounted hist
 test("Smart Review suggestions expose concrete name and accounting actions", async () => {
   const review = await source("lib/ai/smart-review.ts");
   const component = await source("components/credit-transactions-page.tsx");
-  const styles = await source("app/globals.css");
+  const styles = await readAppStyles(root);
 
   assert.match(component, /Transaction name updated to/);
   assert.match(component, /"Update name"/);

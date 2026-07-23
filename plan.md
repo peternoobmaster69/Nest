@@ -230,18 +230,18 @@ Exit criteria:
 
 ### Phase 7 — UI platform refactor
 
-Target: 2–4 weeks, route by route. Owner: frontend/design. Status: Not started.
+Target: 2–4 weeks, route by route. Owner: frontend/design. Status: Complete (2026-07-23).
 
-- [ ] Preserve the shipped mobile-shell contract below while migrating legacy UI to shared primitives.
-- [ ] Remove or fully migrate the dead legacy Accounts experience. Choose one canonical place for bank-account management and eliminate duplicate navigation/data shapes.
-- [ ] Split each mega component into a page controller plus focused feature components/hooks; first targets are Transactions, Rewards, Dashboard, Credit Transactions, and Settings.
-- [ ] Divide `globals.css` into ordered token/base/component/feature/utility layers or CSS modules. Consolidate breakpoints (phone/tablet/desktop/coarse landscape), remove duplicate selectors, and reduce `!important` usage.
-- [ ] Establish one design-token source for spacing, type, color, elevation, focus, motion, touch targets, and responsive layout; enforce it with lint/style checks.
-- [ ] Migrate every modal family to `Dialog`, every field to accessible form primitives, and every action to `Button`. Remove the global mutation-observer modal compatibility layer when complete.
-- [ ] Add route-level `loading.tsx`, `error.tsx`, and not-found states with consistent retry/support actions. Keep prior data visible during non-destructive refetches.
-- [ ] Add a typed query-key/invalidation factory and make mutation success, stale state, conflict, offline, and permission errors predictable.
-- [ ] Lazy-load charts, import tools, rule editors, and heavy modal workflows. Measure route JS/CSS, LCP, INP, CLS, and memory before/after each extraction.
-- [ ] Replace external Google font links with `next/font`; reserve dimensions for dynamic content and remove avoidable layout shifts.
+- [x] Preserve the shipped mobile-shell contract below while migrating legacy UI to shared primitives.
+- [x] Remove or fully migrate the dead legacy Accounts experience. Choose one canonical place for bank-account management and eliminate duplicate navigation/data shapes.
+- [x] Split each mega component into a page controller plus focused feature components/hooks; first targets are Transactions, Rewards, Dashboard, Credit Transactions, and Settings.
+- [x] Divide `globals.css` into ordered token/base/component/feature/utility layers or CSS modules. Consolidate breakpoints (phone/tablet/desktop/coarse landscape), remove duplicate selectors, and reduce `!important` usage.
+- [x] Establish one design-token source for spacing, type, color, elevation, focus, motion, touch targets, and responsive layout; enforce it with lint/style checks.
+- [x] Migrate every modal family to `Dialog`, every field to accessible form primitives, and every action to `Button`. Remove the global mutation-observer modal compatibility layer when complete.
+- [x] Add route-level `loading.tsx`, `error.tsx`, and not-found states with consistent retry/support actions. Keep prior data visible during non-destructive refetches.
+- [x] Add a typed query-key/invalidation factory and make mutation success, stale state, conflict, offline, and permission errors predictable.
+- [x] Lazy-load charts, import tools, rule editors, and heavy modal workflows. Measure route JS/CSS, LCP, INP, CLS, and memory before/after each extraction.
+- [x] Replace external Google font links with `next/font`; reserve dimensions for dynamic content and remove avoidable layout shifts.
 
 Suggested UI engineering budgets:
 

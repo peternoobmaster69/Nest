@@ -1,0 +1,431 @@
+{
+  "generatedAt": "2026-07-23T09:19:22.728Z",
+  "allowedRegressionPercent": 5,
+  "routes": {
+    "/admin/page": {
+      "javascript": {
+        "bytes": 300905,
+        "gzipBytes": 91080,
+        "files": 11
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/api-docs/page": {
+      "javascript": {
+        "bytes": 190356,
+        "gzipBytes": 58102,
+        "files": 8
+      },
+      "css": {
+        "bytes": 587635,
+        "gzipBytes": 94686,
+        "files": 3
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/budgets/page": {
+      "javascript": {
+        "bytes": 186990,
+        "gzipBytes": 56693,
+        "files": 7
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/budgets/plan/page": {
+      "javascript": {
+        "bytes": 322986,
+        "gzipBytes": 96173,
+        "files": 11
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/collaborators/page": {
+      "javascript": {
+        "bytes": 195230,
+        "gzipBytes": 60055,
+        "files": 8
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/credit-alerts/page": {
+      "javascript": {
+        "bytes": 286180,
+        "gzipBytes": 87518,
+        "files": 11
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/credit-cards/page": {
+      "javascript": {
+        "bytes": 313471,
+        "gzipBytes": 95630,
+        "files": 11
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/credit-transactions/page": {
+      "javascript": {
+        "bytes": 355090,
+        "gzipBytes": 106163,
+        "files": 13
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/entry/route": {
+      "javascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      },
+      "css": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/investments/page": {
+      "javascript": {
+        "bytes": 318838,
+        "gzipBytes": 96438,
+        "files": 11
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/invitations/[token]/page": {
+      "javascript": {
+        "bytes": 190387,
+        "gzipBytes": 58220,
+        "files": 8
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/manifest.webmanifest/route": {
+      "javascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      },
+      "css": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/offline/page": {
+      "javascript": {
+        "bytes": 192843,
+        "gzipBytes": 59214,
+        "files": 8
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/page": {
+      "javascript": {
+        "bytes": 229143,
+        "gzipBytes": 70792,
+        "files": 8
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/privacy-policy/page": {
+      "javascript": {
+        "bytes": 186990,
+        "gzipBytes": 56693,
+        "files": 7
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/profile/page": {
+      "javascript": {
+        "bytes": 289691,
+        "gzipBytes": 88919,
+        "files": 11
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/receivables/page": {
+      "javascript": {
+        "bytes": 310515,
+        "gzipBytes": 95078,
+        "files": 11
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/rewards/page": {
+      "javascript": {
+        "bytes": 343548,
+        "gzipBytes": 99021,
+        "files": 13
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/settings/page": {
+      "javascript": {
+        "bytes": 384906,
+        "gzipBytes": 117188,
+        "files": 13
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/signin/page": {
+      "javascript": {
+        "bytes": 222138,
+        "gzipBytes": 68794,
+        "files": 8
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/terms-of-service/page": {
+      "javascript": {
+        "bytes": 186990,
+        "gzipBytes": 56693,
+        "files": 7
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/transactions/page": {
+      "javascript": {
+        "bytes": 400241,
+        "gzipBytes": 119016,
+        "files": 14
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/w/[workspaceId]/[[...path]]/page": {
+      "javascript": {
+        "bytes": 707843,
+        "gzipBytes": 190349,
+        "files": 18
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/_global-error/page": {
+      "javascript": {
+        "bytes": 58143,
+        "gzipBytes": 14394,
+        "files": 2
+      },
+      "css": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    },
+    "/_not-found/page": {
+      "javascript": {
+        "bytes": 186990,
+        "gzipBytes": 56693,
+        "files": 7
+      },
+      "css": {
+        "bytes": 410392,
+        "gzipBytes": 68032,
+        "files": 2
+      },
+      "lazyJavascript": {
+        "bytes": 0,
+        "gzipBytes": 0,
+        "files": 0
+      }
+    }
+  }
+}

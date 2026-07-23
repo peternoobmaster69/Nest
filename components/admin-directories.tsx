@@ -4,6 +4,7 @@ import { Building2, ChevronDown, Users } from "lucide-react";
 import { useState } from "react";
 import { AdminPagination, useAdminPagination } from "@/components/admin-pagination";
 import type { getAdminOverview } from "@/lib/admin-overview";
+import { Button } from "@/components/ui/button";
 
 type AdminOverview = Awaited<ReturnType<typeof getAdminOverview>>;
 type Directory = "users" | "workspaces";
@@ -43,7 +44,7 @@ export function AdminDirectories({
   return (
     <>
       <section className="admin-stats admin-directory-stats" aria-label="Account directories">
-        <button
+        <Button
           type="button"
           className={`admin-stat admin-stat-button${openDirectory === "users" ? " is-open" : ""}`}
           onClick={() => toggleDirectory("users")}
@@ -51,8 +52,8 @@ export function AdminDirectories({
           aria-controls="admin-users"
         >
           <Users aria-hidden="true" /><span>Users</span><strong>{users.length.toLocaleString()}</strong>
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           className={`admin-stat admin-stat-button${openDirectory === "workspaces" ? " is-open" : ""}`}
           onClick={() => toggleDirectory("workspaces")}
@@ -60,7 +61,7 @@ export function AdminDirectories({
           aria-controls="admin-workspaces"
         >
           <Building2 aria-hidden="true" /><span>Workspaces</span><strong>{workspaces.length.toLocaleString()}</strong>
-        </button>
+        </Button>
       </section>
 
       {openDirectory === "users" ? (

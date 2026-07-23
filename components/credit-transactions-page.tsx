@@ -15,7 +15,6 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditTransactionsTableRowsSkeleton } from "@/components/skeletons/CreditTransactionsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
-import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
 import { useSessionState } from "@/lib/use-session-state";
@@ -28,6 +27,12 @@ import type {
   SmartReviewSuggestion,
 } from "@/lib/ai/smart-review-types";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, PencilLine, Plus, RefreshCw, Sparkles, X } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
+import { CreditTransactionSummary as CreditTransactionSummaryView } from "@/components/credit-transactions/credit-transaction-summary";
+import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
 
 type CreditCard = {
   id: string;
@@ -69,17 +74,6 @@ type AppContext = {
   defaultAccountId?: string | null;
   defaultBudgetId?: string | null;
   workspaces?: Array<{ id: string; name: string }>;
-};
-
-type BankAccount = {
-  id: string;
-  name: string;
-  isActive: boolean;
-  workspaceId?: string;
-  workspace?: {
-    id: string;
-    name: string;
-  };
 };
 
 type Budget = {
@@ -404,7 +398,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   }, [selectedMonth]);
 
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
@@ -412,32 +406,27 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const defaultReceivableAccountId = context.data?.defaultAccountId ?? null;
   const defaultReceivableBudgetId = context.data?.defaultBudgetId ?? null;
 
-  const bankAccounts = useQuery({
-    queryKey: ["bank-accounts", context.data?.workspaceId],
-    queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${context.data?.workspaceId}`),
-    enabled: Boolean(context.data?.workspaceId),
-  });
+  const bankAccounts = useQuery(bankAccountsQueryOptions(context.data?.workspaceId));
 
   const budgets = useQuery({
-    queryKey: ["budgets", context.data?.workspaceId],
+    queryKey: queryKeys.key(["budgets", context.data?.workspaceId]),
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${context.data?.workspaceId}`),
     enabled: Boolean(context.data?.workspaceId),
   });
 
   const receivableSourceAccounts = useQuery({
-    queryKey: ["bank-accounts", receivableSourceWorkspaceId],
-    queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${receivableSourceWorkspaceId}`),
+    ...bankAccountsQueryOptions(receivableSourceWorkspaceId),
     enabled: useCrossWorkspaceReceivableSource && Boolean(receivableSourceWorkspaceId),
   });
 
   const receivableSourceBudgets = useQuery({
-    queryKey: ["budgets", receivableSourceWorkspaceId],
+    queryKey: queryKeys.key(["budgets", receivableSourceWorkspaceId]),
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${receivableSourceWorkspaceId}`),
     enabled: useCrossWorkspaceReceivableSource && Boolean(receivableSourceWorkspaceId),
   });
 
   const receivablesSummary = useQuery({
-    queryKey: ["receivables-summary", context.data?.workspaceId],
+    queryKey: queryKeys.key(["receivables-summary", context.data?.workspaceId]),
     queryFn: () =>
       fetchJson<{ totalCents: number }>(`/api/receivables/summary?workspaceId=${context.data?.workspaceId}`),
     enabled: Boolean(context.data?.workspaceId),
@@ -461,20 +450,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const invalidateCreditTransactionDependencies = () => {
     void queryClient.invalidateQueries({ queryKey: creditTransactionsKeyPrefix, refetchType: "active" });
     void queryClient.invalidateQueries({ queryKey: paymentDueMonthsKeyPrefix, refetchType: "active" });
-    void queryClient.invalidateQueries({ queryKey: ["dashboard-summary"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
   };
 
   const invalidateCreditAccountingDependencies = () => {
     invalidateCreditTransactionDependencies();
-    void queryClient.invalidateQueries({ queryKey: ["transactions"], refetchType: "active" });
-    void queryClient.invalidateQueries({ queryKey: ["receivables"], refetchType: "active" });
-    void queryClient.invalidateQueries({ queryKey: ["budgets"], refetchType: "active" });
-    void queryClient.invalidateQueries({ queryKey: ["bank-accounts"], refetchType: "active" });
-    void queryClient.invalidateQueries({ queryKey: ["receivables-summary"], refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions"]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["receivables"]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets"]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts"]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["receivables-summary"]), refetchType: "active" });
   };
 
   const paymentDueMonths = useQuery({
-    queryKey: [...paymentDueMonthsKeyPrefix, selectedCardId, selectedYear],
+    queryKey: queryKeys.key([...paymentDueMonthsKeyPrefix, selectedCardId, selectedYear]),
     queryFn: () =>
       fetchJson<PaymentDueMonthsResponse>(`/api/credit-transactions/payment-due?${new URLSearchParams({
         cardId: selectedCardId,
@@ -630,7 +619,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     [filteredTransactions],
   );
   const smartReview = useQuery({
-    queryKey: [
+    queryKey: queryKeys.key([
       "smart-review",
       context.data?.workspaceId,
       selectedCardId,
@@ -638,7 +627,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       selectedMonth,
       showUnaccountedOnly,
       smartReviewTransactionIds.join(","),
-    ],
+    ]),
     queryFn: () => fetchJson<SmartReviewResponse>("/api/ai/smart-review", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -939,7 +928,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         });
       }
       invalidateCreditAccountingDependencies();
-      void queryClient.invalidateQueries({ queryKey: ["smart-review", context.data?.workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["smart-review", context.data?.workspaceId]), refetchType: "active" });
       if (variables.ruleDraft) setSuggestedRulePrompt(variables.ruleDraft);
       if (variables.action === "DEDUCT") {
         closeAccountingModal();
@@ -964,7 +953,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       syncCreditTransactionCaches({ previousTx: mutationContext?.previousTx ?? null, nextTx: transaction });
       setImportMessage(`Transaction name updated to “${transaction.subject}”.`);
       invalidateCreditTransactionDependencies();
-      void queryClient.invalidateQueries({ queryKey: ["smart-review", context.data?.workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["smart-review", context.data?.workspaceId]), refetchType: "active" });
     },
     onError: (error) => {
       setImportMessage(error instanceof Error ? error.message : "Failed to update the transaction name.");
@@ -1002,8 +991,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     onSuccess: (result) => {
       setImportMessage(result.alreadyExists ? "A matching auto-accounting rule already exists." : "Auto-accounting rule created.");
       setSuggestedRulePrompt(null);
-      void queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", context.data?.workspaceId] });
-      void queryClient.invalidateQueries({ queryKey: ["smart-review", context.data?.workspaceId], refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-txn-auto-rules", context.data?.workspaceId]) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["smart-review", context.data?.workspaceId]), refetchType: "active" });
     },
     onError: (error) => {
       setImportMessage(error instanceof Error ? error.message : "Failed to create the suggested rule.");
@@ -1523,7 +1512,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   return (
     <div className="cct-container">
       <div className="cct-mobile-card-picker" ref={mobileCardPickerRef}>
-        <button
+        <Button
           type="button"
           className="cct-mobile-card-trigger"
           aria-haspopup="listbox"
@@ -1568,12 +1557,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             </span>
           ) : null}
           <ChevronDown size={19} aria-hidden="true" />
-        </button>
+        </Button>
         {isMobileCardPickerOpen ? (
           <div className="cct-mobile-card-dropdown">
             {sortedCards.length > 6 ? (
               <div className="cct-mobile-card-search">
-                <input
+                <Input
                   className="input"
                   type="search"
                   aria-label="Search cards"
@@ -1585,7 +1574,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             ) : null}
             <div id="mobile-credit-card-options" className="cct-mobile-card-options" role="listbox" aria-label="Credit cards">
               {!mobileCardQuery.trim() ? (
-                <button
+                <Button
                   type="button"
                   className={`cct-mobile-card-option${selectedCardId === "all" ? " is-selected" : ""}`}
                   role="option"
@@ -1601,7 +1590,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   </span>
                   {unaccountedCardCountTotal > 0 ? <span className="cct-mobile-card-count">{unaccountedCardCountTotal}</span> : null}
                   {selectedCardId === "all" ? <Check size={18} aria-hidden="true" /> : <span className="cct-mobile-card-check-space" />}
-                </button>
+                </Button>
               ) : null}
               {mobileCardOptions.map((card) => {
                 const bank = getSingaporeBankByName(card.bankName);
@@ -1609,7 +1598,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 const count = getCardCount(card.id);
                 const isSelected = selectedCardId === card.id;
                 return (
-                  <button
+                  <Button
                     key={card.id}
                     type="button"
                     className={`cct-mobile-card-option${isSelected ? " is-selected" : ""}`}
@@ -1639,7 +1628,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     </span>
                     {count > 0 ? <span className="cct-mobile-card-count">{count}</span> : null}
                     {isSelected ? <Check size={18} aria-hidden="true" /> : <span className="cct-mobile-card-check-space" />}
-                  </button>
+                  </Button>
                 );
               })}
               {mobileCardOptions.length === 0 ? (
@@ -1652,7 +1641,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Card Selector Bar */}
       <div className="cct-card-selector">
-        <button
+        <Button
           type="button"
           className={`cct-card-chip cct-card-chip-all ${selectedCardId === "all" ? "active" : ""}`}
           onClick={() => setSelectedCardId("all")}
@@ -1660,8 +1649,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           <span className="cct-card-chip-icon">📋</span>
           <span className="cct-card-chip-name">All Cards</span>
           {unaccountedCardCountTotal > 0 && <span className="cct-card-chip-badge">{unaccountedCardCountTotal}</span>}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           className="cct-card-rail-button"
           onClick={() => scrollCardRail(-1)}
@@ -1669,14 +1658,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           aria-label="Show previous cards"
         >
           <ArrowLeft size={18} aria-hidden="true" />
-        </button>
+        </Button>
         <div ref={cardBarRef} className="cct-card-bar">
           {sortedCards.map((card) => {
             const bank = getSingaporeBankByName(card.bankName);
             const logo = getBankLogoUrl(bank);
             const count = getCardCount(card.id);
             return (
-              <button
+              <Button
                 key={card.id}
                 type="button"
                 data-card-id={card.id}
@@ -1699,11 +1688,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               )}
               <span className="cct-card-chip-name">{card.cardName}</span>
               {count > 0 && <span className="cct-card-chip-badge">{count}</span>}
-              </button>
+              </Button>
             );
           })}
         </div>
-        <button
+        <Button
           type="button"
           className="cct-card-rail-button"
           onClick={() => scrollCardRail(1)}
@@ -1711,13 +1700,13 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           aria-label="Show more cards"
         >
           <ArrowRight size={18} aria-hidden="true" />
-        </button>
+        </Button>
       </div>
 
       {/* Period Filter */}
       <div className="cct-mobile-period-selectors" aria-label="Statement period filters">
         <div className="cct-mobile-period-picker cct-mobile-month-picker" ref={mobileMonthPickerRef}>
-          <button
+          <Button
             type="button"
             className={`cct-mobile-period-trigger${selectedMonthPaymentDueTone ? ` ${selectedMonthPaymentDueTone}` : ""}`}
             aria-label="Statement month"
@@ -1739,7 +1728,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               <span className="cct-mobile-period-dot-space" aria-hidden="true" />
             )}
             <ChevronDown size={17} aria-hidden="true" />
-          </button>
+          </Button>
           {isMobileMonthPickerOpen ? (
             <div
               id="mobile-statement-month-options"
@@ -1754,7 +1743,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 const paymentDueTone = paymentDueDate ? getPaymentDueTone(paymentDueDate) : "";
                 const isSelected = selectedMonth === monthIndex;
                 return (
-                  <button
+                  <Button
                     key={month}
                     type="button"
                     className={`cct-mobile-period-option${paymentDueTone ? ` ${paymentDueTone}` : ""}${isSelected ? " is-selected" : ""}`}
@@ -1774,14 +1763,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     ) : (
                       <span className="cct-mobile-period-check-space" aria-hidden="true" />
                     )}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
           ) : null}
         </div>
         <div className="cct-mobile-period-picker cct-mobile-year-picker" ref={mobileYearPickerRef}>
-          <button
+          <Button
             type="button"
             className="cct-mobile-period-trigger"
             aria-label="Statement year"
@@ -1797,7 +1786,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             <span className="cct-mobile-period-trigger-label">{selectedYear}</span>
             <span className="cct-mobile-period-dot-space" aria-hidden="true" />
             <ChevronDown size={17} aria-hidden="true" />
-          </button>
+          </Button>
           {isMobileYearPickerOpen ? (
             <div
               id="mobile-statement-year-options"
@@ -1808,7 +1797,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               {statementYearOptions.map((year) => {
                 const isSelected = selectedYear === year;
                 return (
-                  <button
+                  <Button
                     key={year}
                     type="button"
                     className={`cct-mobile-period-option${isSelected ? " is-selected" : ""}`}
@@ -1823,7 +1812,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     ) : (
                       <span className="cct-mobile-period-check-space" aria-hidden="true" />
                     )}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -1832,23 +1821,23 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       </div>
       <div className="cct-period-bar">
         <div className={`cct-month-tabs-shell${isMonthTabsScrolled ? " is-scrolled" : ""}`}>
-          <button
+          <Button
             data-month="-1"
             className={`cct-month-tab cct-month-tab-all ${selectedMonth === -1 ? "active" : ""}`}
             onClick={() => setSelectedMonth(-1)}
           >
             All
-          </button>
+          </Button>
           <div ref={monthTabsRef} className="cct-month-tabs">
             {MONTHS.map((month, idx) => (
-              <button
+              <Button
                 key={month}
                 data-month={idx}
                 className={`cct-month-tab ${selectedMonth === idx ? "active" : ""}`}
                 onClick={() => setSelectedMonth(idx)}
               >
                 {month}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -1866,32 +1855,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       </div>
 
       {/* Summary Section */}
-      <div className="cct-summary">
-        <div className="cct-summary-left">
-          <div className="cct-summary-item">
-            <span className="cct-summary-label">Total Amount</span>
-            <span className={`cct-summary-value ${getAmountToneClass(totals.total)}`}>{formatCurrency(totals.total)}</span>
-          </div>
-          <div className="cct-summary-group">
-            <div className="cct-summary-item">
-              <span className="cct-summary-label">Total Receivable</span>
-              <span className="cct-summary-value">{formatCurrency(receivablesSummary.data?.totalCents ?? 0)}</span>
-            </div>
-            <div className="cct-summary-item">
-              <span className="cct-summary-label">{defaultReceivableSubaccount?.name ?? "Default Subaccount"}</span>
-              <span className={`cct-summary-value ${getAmountToneClass(defaultSubaccountBalance)}`}>{formatCurrency(defaultSubaccountBalance)}</span>
-            </div>
-          </div>
-        </div>
-        {totals.unaccounted > 0 && (
-          <div className="cct-summary-right">
-            <div className="cct-summary-item cct-summary-deficit">
-              <span className="cct-summary-label">Shortfall</span>
-              <span className={`cct-summary-value ${getAmountToneClass(totals.unaccounted)}`}>{formatCurrency(totals.unaccounted)}</span>
-            </div>
-          </div>
-        )}
-      </div>
+      <CreditTransactionSummaryView
+        total={totals.total}
+        receivableTotal={receivablesSummary.data?.totalCents ?? 0}
+        defaultSubaccountName={defaultReceivableSubaccount?.name ?? "Default Subaccount"}
+        defaultSubaccountBalance={defaultSubaccountBalance}
+        shortfall={totals.unaccounted}
+        formatCurrency={formatCurrency}
+      />
 
       {balanceStatus ? <div className={balanceStatus.className}>{balanceStatus.label}</div> : null}
 
@@ -1902,7 +1873,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
           </div>
           <div className="cct-due-panel-controls">
             <span className="cct-due-date-control">
-              <button
+              <Button
                 type="button"
                 className={`cct-due-badge cct-due-date-trigger ${earliestDueIsOverdue ? "overdue" : earliestDueIsUrgent ? "urgent" : ""} ${updateSharedPaymentDue.isPending ? "is-saving" : ""}`}
                 onClick={openSharedPaymentDuePicker}
@@ -1913,8 +1884,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 {earliestDueIsOverdue ? "⚠️ " : earliestDueIsUrgent ? "⏰ " : ""}
                 <span>{displayedPaymentDueDate ? formatDate(displayedPaymentDueDate) : "Set date"}</span>
                 {updateSharedPaymentDue.isPending ? <span className="cct-due-saving" aria-hidden="true">…</span> : null}
-              </button>
-              <input
+              </Button>
+              <Input
                 ref={paymentDueInputRef}
                 type="date"
                 className="cct-due-picker"
@@ -1926,7 +1897,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               />
             </span>
             {hasMonthlyPaymentBalance ? (
-              <button
+              <Button
                 type="button"
                 className="btn btn-primary cct-payment-btn"
                 onClick={submitPayment}
@@ -1940,7 +1911,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 }
               >
                 {makePayment.isPending ? "Paying…" : "Pay"}
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
@@ -1953,7 +1924,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       <div className="cct-actions">
         {unaccountedTransactionCount > 0 ? (
           <label className="cct-toggle">
-            <input
+            <Input
               type="checkbox"
               checked={showUnaccountedOnly}
               onChange={(e) => setShowUnaccountedOnly(e.target.checked)}
@@ -1961,7 +1932,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             <span>Unaccounted only</span>
           </label>
         ) : null}
-        <button
+        <Button
           type="button"
           className={`btn cct-smart-review-toggle${isSmartReviewMode ? " is-active" : ""}`}
           aria-pressed={isSmartReviewMode}
@@ -1969,13 +1940,13 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         >
           <Sparkles size={16} aria-hidden="true" />
           <span>Review suggestions</span>
-        </button>
-        <button className="btn btn-primary mobile-primary-create" onClick={openModal} aria-label="Add card transaction" title="Add card transaction">
+        </Button>
+        <Button className="btn btn-primary mobile-primary-create" onClick={openModal} aria-label="Add card transaction" title="Add card transaction">
           <Plus size={18} aria-hidden="true" />
           <span className="mobile-primary-create-label">Add Transaction</span>
-        </button>
+        </Button>
         {canImportMaybankCsv && (
-          <button
+          <Button
             type="button"
             className="btn btn-ghost btn-icon cct-import-btn"
             onClick={() => maybankFileInputRef.current?.click()}
@@ -1984,9 +1955,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             aria-label={importMaybankCsv.isPending ? "Importing Maybank CSV" : "Import Maybank CSV"}
           >
             {importMaybankCsv.isPending ? "…" : "📄"}
-          </button>
+          </Button>
         )}
-        <input
+        <Input
           ref={maybankFileInputRef}
           type="file"
           accept=".csv,text/csv"
@@ -2018,10 +1989,10 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             </span>
           </div>
           <div className="cct-rule-prompt-actions">
-            <button type="button" className="btn btn-ghost" onClick={() => setSuggestedRulePrompt(null)}>Not now</button>
-            <button type="button" className="btn btn-primary" onClick={confirmSuggestedRule} disabled={createSuggestedRule.isPending}>
+            <Button type="button" className="btn btn-ghost" onClick={() => setSuggestedRulePrompt(null)}>Not now</Button>
+            <Button type="button" className="btn btn-primary" onClick={confirmSuggestedRule} disabled={createSuggestedRule.isPending}>
               {createSuggestedRule.isPending ? "Creating…" : "Preview & create"}
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}
@@ -2044,7 +2015,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             </div>
           </div>
           <div className="cct-smart-review-summary-actions">
-            <button
+            <Button
               type="button"
               className="btn btn-ghost"
               onClick={dismissAllSmartReviewSuggestions}
@@ -2052,8 +2023,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             >
               <X size={15} aria-hidden="true" />
               <span>Dismiss all</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               className="btn btn-ghost cct-smart-review-refresh"
               onClick={() => smartReview.refetch()}
@@ -2062,7 +2033,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             >
               <RefreshCw size={15} aria-hidden="true" />
               <span>{smartReview.isFetching ? "Checking…" : "Refresh"}</span>
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}
@@ -2088,9 +2059,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   <div className="empty-state cct-load-error">
                     <div className="empty-state-icon">⚠️</div>
                     <h3 className="empty-state-title">Failed to load transactions</h3>
-                    <button className="btn btn-primary" onClick={() => refetch()}>
+                    <Button className="btn btn-primary" onClick={() => refetch()}>
                       Retry
-                    </button>
+                    </Button>
                   </div>
                 </td>
               </tr>
@@ -2131,7 +2102,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                       <td className={`cct-tx-amount ${getAmountToneClass(tx.amountCents)}`} data-label="Amount">{formatCurrency(tx.amountCents)}</td>
                       <td className="cct-tx-card" data-label="Card">
                         <label className="cct-card-checkbox">
-                          <input
+                          <Input
                             type="checkbox"
                             checked={tx.isAllocated}
                             onChange={() => toggleAllocated.mutate({ id: tx.id, isAllocated: !tx.isAllocated })}
@@ -2144,7 +2115,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                       <td className="cct-tx-actions" data-label="Actions">
                         {!tx.isAllocated ? (
                           <>
-                            <button
+                            <Button
                               className="btn btn-ghost btn-icon cct-action-btn cct-action-accounting"
                               onClick={() => openDeductModal(tx)}
                               disabled={accountCreditTxn.isPending || isDeleting}
@@ -2152,8 +2123,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                               aria-label="Deduct transaction"
                             >
                               ➖
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               className="btn btn-ghost btn-icon cct-action-btn cct-action-accounting"
                               onClick={() => openReceivableModal(tx)}
                               disabled={accountCreditTxn.isPending || isDeleting}
@@ -2161,12 +2132,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                               aria-label="Create receivable"
                             >
                               🧾
-                            </button>
+                            </Button>
                           </>
                         ) : (
                           <span className="cct-action-placeholder" aria-hidden="true" />
                         )}
-                        <button
+                        <Button
                           className="btn btn-ghost btn-icon cct-action-btn cct-action-edit"
                           onClick={() => openEditModal(tx)}
                           disabled={updateTransaction.isPending || isDeleting}
@@ -2174,8 +2145,8 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                           aria-label={`Edit transaction: ${tx.subject}`}
                         >
                           ✏️
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           className="btn btn-ghost btn-icon cct-action-btn cct-action-delete"
                           onClick={() => confirmDeleteTransaction(tx.id)}
                           disabled={deleteTransaction.isPending || isDeleting}
@@ -2183,7 +2154,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                           aria-label={`Delete transaction: ${tx.subject}`}
                         >
                           🗑
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                     {showReviewSuggestion && reviewSuggestion ? (
@@ -2242,16 +2213,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                             </div>
 
                             <div className="cct-smart-review-card-actions">
-                              <button
+                              <Button
                                 type="button"
                                 className="btn btn-ghost cct-smart-review-dismiss"
                                 onClick={() => setDismissedSmartReviewIds((current) => [...current, tx.id])}
                               >
                                 <X size={14} aria-hidden="true" />
                                 Dismiss
-                              </button>
+                              </Button>
                               {hasNameRecommendation ? (
-                                <button
+                                <Button
                                   type="button"
                                   className="btn btn-ghost cct-smart-review-name-update"
                                   onClick={() => reviewSuggestion.nameRecommendation && updateSmartReviewName.mutate({
@@ -2263,20 +2234,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                                 >
                                   <PencilLine size={14} aria-hidden="true" />
                                   {isNameUpdatePending ? "Updating…" : "Update name"}
-                                </button>
+                                </Button>
                               ) : null}
                               {reviewSuggestion.action ? (
-                                <button
+                                <Button
                                   type="button"
                                   className={`btn ${reviewSuggestion.canApprove ? "btn-ghost" : "btn-primary"}`}
                                   onClick={() => openSmartReviewEditor(tx, reviewSuggestion)}
                                   disabled={accountCreditTxn.isPending || updateSmartReviewName.isPending || isDeleting}
                                 >
                                   Review &amp; apply
-                                </button>
+                                </Button>
                               ) : null}
                               {reviewSuggestion.canApprove ? (
-                                <button
+                                <Button
                                   type="button"
                                   className="btn btn-primary"
                                   onClick={() => approveSmartReview(tx, reviewSuggestion)}
@@ -2284,26 +2255,26 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                                   aria-busy={isReviewApprovalPending}
                                 >
                                   {isReviewApprovalPending ? "Approving…" : "Approve"}
-                                </button>
+                                </Button>
                               ) : null}
                               {!reviewSuggestion.action ? (
                                 <>
-                                  <button
+                                  <Button
                                     type="button"
                                     className="btn btn-ghost"
                                     onClick={() => openDeductModal(tx)}
                                     disabled={accountCreditTxn.isPending || updateSmartReviewName.isPending || isDeleting}
                                   >
                                     Deduct
-                                  </button>
-                                  <button
+                                  </Button>
+                                  <Button
                                     type="button"
                                     className="btn btn-primary"
                                     onClick={() => openReceivableModal(tx)}
                                     disabled={accountCreditTxn.isPending || updateSmartReviewName.isPending || isDeleting}
                                   >
                                     Create receivable
-                                  </button>
+                                  </Button>
                                 </>
                               ) : null}
                             </div>
@@ -2324,9 +2295,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     title="No transactions yet"
                     description="Add your first credit card transaction to start tracking your spending and payment due dates."
                     action={
-                      <button className="btn btn-primary" onClick={openModal}>
+                      <Button className="btn btn-primary" onClick={openModal}>
                         + Add Transaction
-                      </button>
+                      </Button>
                     }
                   />
                 </td>
@@ -2338,7 +2309,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
 
       {/* Add Transaction Modal */}
       {isModalOpen && (
-        <div className="cct-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeModal)}>
+        <Dialog open onClose={closeModal} title="Credit card transaction" surface="custom" overlayClassName="cct-modal-overlay">
           <div className="cct-modal cct-modal-wide" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>{editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}</h3>
@@ -2348,17 +2319,17 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               <div className="cct-form-grid">
                 <div className="form-group cct-span-2">
                   <label className="label">Credit Card</label>
-                  <select className="input" value={formCardId} onChange={(e) => setFormCardId(e.target.value)} required>
+                  <Select className="input" value={formCardId} onChange={(e) => setFormCardId(e.target.value)} required>
                     {sortedCards.map((card) => (
                       <option key={card.id} value={card.id}>
                         {card.cardName} ••{card.last4Digit}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group">
                   <label className="label">Transaction Date</label>
-                  <input
+                  <Input
                     type="date"
                     className="input"
                     value={formDate}
@@ -2368,12 +2339,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group">
                   <label className="label">Payment Due Date</label>
-                  <input type="date" className="input" value={formPaymentDue} onChange={(e) => setFormPaymentDue(e.target.value)} />
+                  <Input type="date" className="input" value={formPaymentDue} onChange={(e) => setFormPaymentDue(e.target.value)} />
                 </div>
                 <div className="cct-statement-period">
                   <div className="form-group">
                     <label className="label">Statement Month</label>
-                    <select
+                    <Select
                       className="input"
                       value={formStatementMonth}
                       onChange={(e) => setFormStatementMonth(e.target.value)}
@@ -2384,7 +2355,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                           {month}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                   <div className="form-group">
                     <label className="label">Statement Year</label>
@@ -2400,7 +2371,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group cct-span-2">
                   <label className="label">Subject</label>
-                  <input
+                  <Input
                     type="text"
                     className="input"
                     placeholder="e.g., Grocery shopping"
@@ -2423,19 +2394,19 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
               </div>
               <div className="cct-modal-actions">
                 {editingTransactionId ? (
-                  <button
+                  <Button
                     type="button"
                     className="btn btn-danger cct-modal-delete"
                     onClick={() => confirmDeleteTransaction(editingTransactionId)}
                     disabled={deleteTransaction.isPending || updateTransaction.isPending}
                   >
                     {deletingTransactionIds.includes(editingTransactionId) ? "Deleting..." : "Delete"}
-                  </button>
+                  </Button>
                 ) : null}
-                <button type="button" className="btn btn-ghost" onClick={closeModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeModal}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   className="btn btn-primary"
                   disabled={createTransaction.isPending || updateTransaction.isPending}
@@ -2447,15 +2418,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     : createTransaction.isPending
                       ? "Adding..."
                       : "Add Transaction"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {isAccountingModalOpen && accountingTarget && (
-        <div className="cct-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeAccountingModal)}>
+        <Dialog open onClose={closeAccountingModal} title="Account for transaction" surface="custom" overlayClassName="cct-modal-overlay">
           <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Deduct Credit Transaction</h3>
@@ -2471,7 +2442,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group cct-span-2">
                   <label className="label">Bank Account</label>
-                  <select
+                  <Select
                     className="input"
                     value={deductAccountId}
                     onChange={(e) => {
@@ -2488,11 +2459,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                         {account.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group cct-span-2">
                   <label className="label">Sub Account</label>
-                  <select
+                  <Select
                     className="input"
                     value={deductBudgetId}
                     onChange={(e) => setDeductBudgetId(e.target.value)}
@@ -2504,7 +2475,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                         {budget.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="cct-accounting-flow-label cct-span-2">
                   <span>Optional destination</span>
@@ -2512,7 +2483,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group cct-span-2">
                   <label className="label">Destination Account</label>
-                  <select
+                  <Select
                     className="input"
                     value={deductDestinationAccountId}
                     onChange={(event) => {
@@ -2527,12 +2498,12 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     {(bankAccounts.data ?? []).map((account) => (
                       <option key={account.id} value={account.id}>{account.name}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 {deductDestinationAccountId ? (
                   <div className="form-group cct-span-2">
                     <label className="label">Destination Sub Account</label>
-                    <select
+                    <Select
                       className="input"
                       value={deductDestinationBudgetId}
                       onChange={(event) => setDeductDestinationBudgetId(event.target.value)}
@@ -2542,25 +2513,25 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                       {filteredDestinationBudgets.map((budget) => (
                         <option key={budget.id} value={budget.id}>{budget.name}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 ) : null}
               </div>
               <div className="cct-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeAccountingModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeAccountingModal}>
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={accountCreditTxn.isPending}>
+                </Button>
+                <Button type="submit" className="btn btn-primary" disabled={accountCreditTxn.isPending}>
                   {accountCreditTxn.isPending ? "Saving..." : "Deduct"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {isReceivableModalOpen && receivableTarget && (
-        <div className="cct-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeReceivableModal)}>
+        <Dialog open onClose={closeReceivableModal} title="Create receivable" surface="custom" overlayClassName="cct-modal-overlay">
           <div className="cct-modal cct-receivable-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cct-modal-header">
               <h3>Create Receivable</h3>
@@ -2576,7 +2547,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group cct-receivable-title">
                   <label className="label">Title</label>
-                  <input className="input" type="text" value={receivableTitle} onChange={(e) => setReceivableTitle(e.target.value)} required />
+                  <Input className="input" type="text" value={receivableTitle} onChange={(e) => setReceivableTitle(e.target.value)} required />
                 </div>
                 <div className="form-group cct-receivable-amount">
                   <label className="label">Amount ($)</label>
@@ -2584,14 +2555,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 </div>
                 <div className="form-group cct-receivable-date">
                   <label className="label">Receivable Date</label>
-                  <input className="input" type="date" value={receivableDate} onChange={(e) => setReceivableDate(e.target.value)} required />
+                  <Input className="input" type="date" value={receivableDate} onChange={(e) => setReceivableDate(e.target.value)} required />
                 </div>
                 <div className="form-group cct-receivable-txn-date">
                   <label className="label">Txn Date</label>
-                  <input className="input" type="date" value={receivableTxnDate} onChange={(e) => setReceivableTxnDate(e.target.value)} />
+                  <Input className="input" type="date" value={receivableTxnDate} onChange={(e) => setReceivableTxnDate(e.target.value)} />
                 </div>
                 <label className="form-group cct-cross-workspace-toggle">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={useCrossWorkspaceReceivableSource}
                     onChange={(e) => {
@@ -2610,7 +2581,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                   <>
                     <div className="form-group cct-receivable-source-workspace">
                       <label className="label">Deduction Workspace</label>
-                      <select
+                      <Select
                         className="input"
                         value={receivableSourceWorkspaceId}
                         onChange={(e) => {
@@ -2626,11 +2597,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                             {workspace.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                     <div className="form-group cct-receivable-source-account">
                       <label className="label">Bank Account</label>
-                      <select
+                      <Select
                         className="input"
                         value={receivableSourceAccountId}
                         onChange={(e) => {
@@ -2649,11 +2620,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                             {account.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                     <div className="form-group cct-receivable-source-budget">
                       <label className="label">Sub Account</label>
-                      <select
+                      <Select
                         className="input"
                         value={receivableSourceBudgetId}
                         onChange={(e) => {
@@ -2677,7 +2648,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                             {budget.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   </>
                 )}
@@ -2691,16 +2662,16 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                 />
               </div>
               <div className="cct-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeReceivableModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeReceivableModal}>
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={accountCreditTxn.isPending}>
+                </Button>
+                <Button type="submit" className="btn btn-primary" disabled={accountCreditTxn.isPending}>
                   {accountCreditTxn.isPending ? "Saving..." : "Create Receivable"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

@@ -14,6 +14,19 @@ const eslintConfig = defineConfig([
       "@next/next/no-page-custom-font": "off",
     },
   },
+  {
+    files: ["app/**/*.tsx", "components/**/*.tsx"],
+    ignores: ["components/ui/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        { selector: "JSXOpeningElement[name.name='button']", message: "Use the shared Button primitive." },
+        { selector: "JSXOpeningElement[name.name='input']", message: "Use the shared Input or field primitive." },
+        { selector: "JSXOpeningElement[name.name='select']", message: "Use the shared SelectField or Select primitive." },
+        { selector: "JSXOpeningElement[name.name='textarea']", message: "Use the shared TextAreaField or Textarea primitive." }
+      ]
+    }
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

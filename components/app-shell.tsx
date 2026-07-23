@@ -38,6 +38,10 @@ import { purgePrivateServiceWorkerCaches } from "@/lib/service-worker-cache";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import { workspaceFetch } from "@/lib/workspace-client";
 import { useWorkspaceId } from "@/components/workspace-provider";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import type { AppShellContext } from "@/components/app-shell-context";
+import { WorkspaceSetupGuideBoundary } from "@/components/onboarding/workspace-setup-guide-boundary";
 
 const SCROLL_TO_TOP_MIN_OFFSET = 480;
 
@@ -76,17 +80,6 @@ function getInitials(name: string) {
     .slice(0, 2)
     .toUpperCase();
 }
-
-export type AppShellContext = {
-  workspaceId?: string | null;
-  isShared?: boolean;
-  isCollaborative?: boolean;
-  workspaceName?: string | null;
-  memberCount?: number;
-  pendingInviteCount?: number;
-  sidebarMoneyPages?: Record<string, boolean>;
-  isAdmin?: boolean;
-};
 
 export function AppShell({
   title,
@@ -152,7 +145,7 @@ export function AppShell({
   const workspaceHref = (path: string) =>
     navigationWorkspaceId ? buildWorkspacePath(navigationWorkspaceId, path) : path;
   const workspacesQuery = useQuery({
-    queryKey: ["workspaces"],
+    queryKey: queryKeys.key(["workspaces"]),
     queryFn: async () => {
       const response = await workspaceFetch("/api/workspaces");
       if (!response.ok) throw new Error("Failed to load workspaces");
@@ -162,7 +155,7 @@ export function AppShell({
     staleTime: 60_000,
   });
   const receivablesSummary = useQuery({
-    queryKey: ["receivables-summary", navigationWorkspaceId],
+    queryKey: queryKeys.key(["receivables-summary", navigationWorkspaceId]),
     queryFn: async () => {
       const response = await workspaceFetch(`/api/receivables/summary?workspaceId=${navigationWorkspaceId}`);
       if (!response.ok) throw new Error("Failed to load receivables summary");
@@ -344,9 +337,9 @@ export function AppShell({
       <main ref={mainRef} className="main" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div className="tb-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
+            <Button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
               <Menu size={20} aria-hidden="true" />
-            </button>
+            </Button>
             <div className="mobile-topbar-title">{title}</div>
             <div className="desktop-topbar-content">
               {topbarTitle || (currentPath === "/" ? (
@@ -380,7 +373,7 @@ export function AppShell({
         <div ref={bodyScrollRef} className="body">{children}</div>
       </main>
 
-      <button
+      <Button
         type="button"
         className={`scroll-to-top-button${showScrollToTop ? " is-visible" : ""}`}
         onClick={scrollToTop}
@@ -390,7 +383,7 @@ export function AppShell({
         tabIndex={showScrollToTop ? 0 : -1}
       >
         <ArrowUp size={20} aria-hidden="true" />
-      </button>
+      </Button>
 
       {mobileMoreOpen ? (
         <>
@@ -441,7 +434,7 @@ export function AppShell({
               ) : null}
             </nav>
             <div className="mobile-more-workspace-switcher">
-              <button
+              <Button
                 className={`mobile-more-link mobile-more-workspace-trigger${workspaceChooserOpen ? " is-active" : ""}`}
                 type="button"
                 onClick={() => setWorkspaceChooserOpen((open) => !open)}
@@ -454,7 +447,7 @@ export function AppShell({
                   <small>Switch workspace in this tab</small>
                 </span>
                 <ChevronDown className="mobile-more-workspace-chevron" size={17} aria-hidden="true" />
-              </button>
+              </Button>
               {workspaceChooserOpen ? (
                 <div id="mobile-more-workspace-options" className="mobile-more-workspace-options" role="listbox" aria-label="Workspaces">
                   {workspacesQuery.isLoading ? (
@@ -465,7 +458,7 @@ export function AppShell({
                     const isCurrent = workspace.id === navigationWorkspaceId;
                     const isSwitching = workspace.id === switchingWorkspaceId;
                     return (
-                      <button
+                      <Button
                         className={`mobile-more-workspace-option${isCurrent ? " is-current" : ""}`}
                         type="button"
                         role="option"
@@ -478,20 +471,20 @@ export function AppShell({
                           {isSwitching ? <span className="sb-workspace-spinner" /> : isCurrent ? <Check size={15} aria-hidden="true" /> : null}
                         </span>
                         <span><strong>{workspace.name}</strong><small>{workspace.baseCurrency}</small></span>
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
               ) : null}
             </div>
-            <button
+            <Button
               className="mobile-more-logout"
               type="button"
               onClick={() => void confirmLogout()}
             >
               <LogOut size={19} aria-hidden="true" />
               <span><strong>Log out</strong><small>Sign out of Nest on this device</small></span>
-            </button>
+            </Button>
             <div className="mobile-more-account-row">
               <Link className="mobile-more-account" href={workspaceHref("/profile")} onClick={closeMobileNavigation}>
                 {userImage ? (
@@ -501,7 +494,7 @@ export function AppShell({
                 )}
                 <span><strong>{userName || "Account"}</strong><small>View profile</small></span>
               </Link>
-              <button
+              <Button
                 className="mobile-more-theme-toggle"
                 type="button"
                 onClick={toggleTheme}
@@ -509,11 +502,13 @@ export function AppShell({
                 title={theme === "light" ? "Dark mode" : "Light mode"}
               >
                 {theme === "light" ? <Moon size={19} aria-hidden="true" /> : <Sun size={19} aria-hidden="true" />}
-              </button>
+              </Button>
             </div>
           </section>
         </>
       ) : null}
+
+      <WorkspaceSetupGuideBoundary workspaceId={navigationWorkspaceId} context={contextData} />
 
       <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
         <Link className={`mobile-bottom-nav-item${currentPath === "/" ? " is-active" : ""}`} href={workspaceHref("/")} onClick={closeMobileNavigation} aria-current={currentPath === "/" ? "page" : undefined}>
@@ -538,7 +533,7 @@ export function AppShell({
             <span>Investments</span>
           </Link>
         ) : null}
-        <button
+        <Button
           ref={mobileMoreButtonRef}
           type="button"
           className={`mobile-bottom-nav-item${mobileMoreOpen || moreRouteActive ? " is-active" : ""}`}
@@ -552,7 +547,7 @@ export function AppShell({
         >
           <Ellipsis size={22} aria-hidden="true" />
           <span>More</span>
-        </button>
+        </Button>
         {mobileWorkspaceName || mobileCurrentDate ? (
           <div className="mobile-bottom-nav-workspace">
             {mobileWorkspaceName ? (

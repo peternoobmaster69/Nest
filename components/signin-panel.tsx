@@ -11,6 +11,7 @@ import {
   DATABASE_UNAVAILABLE_MESSAGE,
 } from "@/lib/database-errors";
 import { rememberPostSignInDestination } from "@/lib/session-limit-client";
+import { Button } from "@/components/ui/button";
 
 type ProviderMap = Record<
   string,
@@ -152,14 +153,14 @@ export function SignInPanel({
         )}
 
         {!loading && !isBlockingError && passkeySupported ? (
-          <button className="signin-provider-btn is-passkey" type="button" onClick={signInWithPasskey} disabled={passkeyLoading}>
+          <Button className="signin-provider-btn is-passkey" type="button" onClick={signInWithPasskey} disabled={passkeyLoading}>
             <span className="signin-provider-icon"><KeyRound size={19} aria-hidden="true" /></span>
             <span className="signin-provider-text">{passkeyLoading ? "Checking passkey…" : "Continue with a passkey"}</span>
-          </button>
+          </Button>
         ) : null}
 
         {!isBlockingError && providerList.map((provider) => (
-          <button
+          <Button
             key={provider.id}
             className="signin-provider-btn is-oauth"
             type="button"
@@ -175,7 +176,7 @@ export function SignInPanel({
             <span className="signin-provider-text">
               Continue with {provider.name}
             </span>
-          </button>
+          </Button>
         ))}
       </div>
 

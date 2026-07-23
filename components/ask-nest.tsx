@@ -31,6 +31,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { Textarea } from "@/components/ui/controls";
 
 type AskNestTurn = {
   id: string;
@@ -660,7 +661,7 @@ export function AskNest({
 
   const panel = open ? (
     <div className="ask-nest-layer">
-      <button type="button" className="ask-nest-backdrop" onClick={close} aria-label="Close Ask Nest" />
+      <Button type="button" className="ask-nest-backdrop" onClick={close} aria-label="Close Ask Nest" />
       <section
         id="ask-nest-panel"
         ref={panelRef}
@@ -676,7 +677,7 @@ export function AskNest({
             <h2 id="ask-nest-title">Ask Nest</h2>
             <p id="ask-nest-description">Answers from {workspaceName || "this workspace"}</p>
           </div>
-          <button
+          <Button
             type="button"
             className={`ask-nest-memory-toggle${memoryOpen ? " is-active" : ""}`}
             onClick={() => memoryOpen ? setMemoryOpen(false) : showMemory()}
@@ -685,16 +686,16 @@ export function AskNest({
           >
             <Brain size={15} aria-hidden="true" />
             <span>{memoryOpen ? "Chat" : "Memory"}</span>
-          </button>
+          </Button>
           {!memoryOpen && turns.length ? (
-            <button
+            <Button
               type="button"
               className="ask-nest-clear"
               onClick={() => void clearHistory()}
               disabled={isPending || historyLoading}
             >
               Clear
-            </button>
+            </Button>
           ) : null}
           <ModalCloseButton onClick={close} label="Close Ask Nest" />
         </header>
@@ -724,7 +725,7 @@ export function AskNest({
                           <time dateTime={memory.updatedAt}>Updated {formatAsOf(memory.updatedAt)}</time>
                         </div>
                         <label htmlFor={`ask-nest-memory-${memory.id}`} className="sr-only">Edit saved {memory.kind.toLocaleLowerCase()}</label>
-                        <textarea
+                        <Textarea
                           id={`ask-nest-memory-${memory.id}`}
                           value={draft}
                           rows={3}
@@ -733,19 +734,19 @@ export function AskNest({
                           onChange={(event) => setMemoryDrafts((current) => ({ ...current, [memory.id]: event.target.value }))}
                         />
                         <div className="ask-nest-memory-actions">
-                          <button type="button" onClick={() => void forgetMemory(memory)} disabled={memoryLoading}>
+                          <Button type="button" onClick={() => void forgetMemory(memory)} disabled={memoryLoading}>
                             <Trash2 size={14} aria-hidden="true" /> Forget
-                          </button>
-                          <button type="button" className="is-save" onClick={() => void saveMemory(memory)} disabled={memoryLoading || !changed || draft.trim().length < 3}>
+                          </Button>
+                          <Button type="button" className="is-save" onClick={() => void saveMemory(memory)} disabled={memoryLoading || !changed || draft.trim().length < 3}>
                             <Save size={14} aria-hidden="true" /> Save
-                          </button>
+                          </Button>
                         </div>
                       </article>
                     );
                   })}
-                  <button type="button" className="ask-nest-memory-clear" onClick={() => void clearMemories()} disabled={memoryLoading}>
+                  <Button type="button" className="ask-nest-memory-clear" onClick={() => void clearMemories()} disabled={memoryLoading}>
                     Forget everything
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="ask-nest-memory-empty">
@@ -772,19 +773,19 @@ export function AskNest({
               </p>
               <div className="ask-nest-prompts" aria-label="Suggested questions">
                 {prompts.map((prompt) => (
-                  <button key={prompt} type="button" onClick={() => void ask(prompt)}>
+                  <Button key={prompt} type="button" onClick={() => void ask(prompt)}>
                     <span>{prompt}</span>
                     <ArrowUpRight size={15} aria-hidden="true" />
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
           ) : (
             <div className="ask-nest-thread">
               {nextCursor ? (
-                <button className="ask-nest-load-older" type="button" onClick={() => void loadOlder()} disabled={historyLoading}>
+                <Button className="ask-nest-load-older" type="button" onClick={() => void loadOlder()} disabled={historyLoading}>
                   {historyLoading ? "Loading…" : "Load older conversations"}
-                </button>
+                </Button>
               ) : null}
               {turns.map((turn) => (
                 <article key={turn.id} className="ask-nest-turn">
@@ -802,17 +803,17 @@ export function AskNest({
                         <strong>{askNestErrorLabel(turn.errorCode)}</strong>
                         <p>{turn.error}</p>
                         {turn.errorCode === "AI_WORKSPACE_UNAVAILABLE" ? (
-                          <button type="button" onClick={() => window.location.reload()}>
+                          <Button type="button" onClick={() => window.location.reload()}>
                             <RotateCcw size={14} aria-hidden="true" /> Refresh page
-                          </button>
+                          </Button>
                         ) : EDITABLE_ASK_NEST_ERRORS.has(turn.errorCode ?? "") ? (
-                          <button type="button" onClick={() => editFailedQuestion(turn)}>
+                          <Button type="button" onClick={() => editFailedQuestion(turn)}>
                             <PencilLine size={14} aria-hidden="true" /> Edit question
-                          </button>
+                          </Button>
                         ) : (
-                          <button type="button" onClick={() => retry(turn)}>
+                          <Button type="button" onClick={() => retry(turn)}>
                             <RotateCcw size={14} aria-hidden="true" /> Retry same question
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -870,35 +871,35 @@ export function AskNest({
                         ) : (
                           <>
                             <span>Was this useful?</span>
-                            <button
+                            <Button
                               type="button"
                               onClick={() => void submitFeedback(turn, "HELPFUL", null)}
                               disabled={turn.feedbackPending}
                               aria-label="Mark this answer as helpful"
                             >
                               <ThumbsUp size={14} aria-hidden="true" /> Helpful
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
                               onClick={() => setTurns((current) => current.map((item) => item.id === turn.id ? { ...item, feedbackPrompt: !item.feedbackPrompt, feedbackError: "" } : item))}
                               disabled={turn.feedbackPending}
                               aria-expanded={Boolean(turn.feedbackPrompt)}
                             >
                               <ThumbsDown size={14} aria-hidden="true" /> Not useful
-                            </button>
+                            </Button>
                           </>
                         )}
                         {turn.feedbackPrompt && !turn.feedbackRating ? (
                           <div className="ask-nest-feedback-reasons" aria-label="Why was this answer not useful?">
                             {NOT_USEFUL_REASONS.map((reason) => (
-                              <button
+                              <Button
                                 key={reason.value}
                                 type="button"
                                 onClick={() => void submitFeedback(turn, "NOT_HELPFUL", reason.value)}
                                 disabled={turn.feedbackPending}
                               >
                                 {reason.label}
-                              </button>
+                              </Button>
                             ))}
                           </div>
                         ) : null}
@@ -912,7 +913,7 @@ export function AskNest({
                           </div>
                           <div className="ask-nest-followups-list">
                             {turn.answer.followUpQuestions.map((followUp) => (
-                              <button
+                              <Button
                                 key={followUp}
                                 type="button"
                                 onClick={() => chooseFollowUp(followUp)}
@@ -921,7 +922,7 @@ export function AskNest({
                               >
                                 <span>{followUp}</span>
                                 <i aria-hidden="true">+</i>
-                              </button>
+                              </Button>
                             ))}
                           </div>
                         </div>
@@ -940,7 +941,7 @@ export function AskNest({
           <form className="ask-nest-form" onSubmit={onSubmit}>
             <div className="ask-nest-input-shell">
               <label htmlFor="ask-nest-input" className="sr-only">Ask a question about your Nest data</label>
-              <textarea
+              <Textarea
                 ref={inputRef}
                 id="ask-nest-input"
                 value={question}

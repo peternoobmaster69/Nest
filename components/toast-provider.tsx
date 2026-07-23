@@ -2,6 +2,7 @@
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type ToastTone = "success" | "error" | "info";
 type ToastRecord = { id: number; tone: ToastTone; message: string };
@@ -58,9 +59,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div key={toast.id} className={`toast toast-${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}>
               <Icon size={18} aria-hidden="true" />
               <span>{toast.message}</span>
-              <button type="button" onClick={() => dismiss(toast.id)} aria-label="Dismiss notification">
+              <Button type="button" onClick={() => dismiss(toast.id)} aria-label="Dismiss notification">
                 <X size={15} aria-hidden="true" />
-              </button>
+              </Button>
             </div>
           );
         })}

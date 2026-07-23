@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { z } from "zod";
+import { readAppStyles } from "./read-app-styles.mjs";
 import {
   decryptCredential,
   encryptCredential,
@@ -218,7 +219,7 @@ test("Gmail credentials are encrypted, revoked, rate-limited, and errors are red
 test("security headers, no-store API policy, CSP-safe assets, and CI scanners are configured", async () => {
   const proxy = await source("proxy.ts");
   const layout = await source("app/layout.tsx");
-  const css = await source("app/globals.css");
+  const css = await readAppStyles();
   const securityWorkflow = await source(".github/workflows/security.yml");
   const codeqlWorkflow = await source(".github/workflows/codeql.yml");
   for (const header of [

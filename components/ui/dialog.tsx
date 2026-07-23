@@ -1,6 +1,15 @@
 "use client";
 
-import { ReactNode, useEffect, useId, useRef } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  ReactElement,
+  ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 import { ModalCloseButton } from "./modal-close-button";
 
@@ -13,6 +22,59 @@ const FOCUSABLE = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+let viewportLockCount = 0;
+let lockedScrollY = 0;
+let previousBodyStyles: Partial<CSSStyleDeclaration> = {};
+let previousHtmlOverflow = "";
+
+function lockViewport() {
+  viewportLockCount += 1;
+  if (viewportLockCount > 1) return;
+  lockedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  previousHtmlOverflow = document.documentElement.style.overflow;
+  previousBodyStyles = {
+    position: document.body.style.position,
+    top: document.body.style.top,
+    left: document.body.style.left,
+    right: document.body.style.right,
+    width: document.body.style.width,
+    overflow: document.body.style.overflow,
+  };
+  document.documentElement.dataset.modalScrollLock = "true";
+  document.body.dataset.modalScrollLock = "true";
+  document.documentElement.style.overflow = "hidden";
+  Object.assign(document.body.style, {
+    position: "fixed",
+    top: `-${lockedScrollY}px`,
+    left: "0",
+    right: "0",
+    width: "100%",
+    overflow: "hidden",
+  });
+}
+
+function unlockViewport() {
+  viewportLockCount = Math.max(0, viewportLockCount - 1);
+  if (viewportLockCount > 0) return;
+  delete document.documentElement.dataset.modalScrollLock;
+  delete document.body.dataset.modalScrollLock;
+  document.documentElement.style.overflow = previousHtmlOverflow;
+  Object.assign(document.body.style, previousBodyStyles);
+  window.scrollTo(0, lockedScrollY);
+}
+
+function syncVisualViewport() {
+  const viewport = window.visualViewport;
+  document.documentElement.style.setProperty(
+    "--visual-viewport-height",
+    `${Math.round(viewport?.height ?? window.innerHeight)}px`,
+  );
+  document.documentElement.style.setProperty(
+    "--visual-viewport-offset-top",
+    `${Math.round(viewport?.offsetTop ?? 0)}px`,
+  );
+}
+
 export function Dialog({
   open,
   onClose,
@@ -22,6 +84,10 @@ export function Dialog({
   footer,
   size = "md",
   closeDisabled = false,
+  overlayClassName = "",
+  contentClassName = "",
+  surface = "standard",
+  labelledBy,
 }: {
   open: boolean;
   onClose: () => void;
@@ -31,22 +97,58 @@ export function Dialog({
   footer?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
   closeDisabled?: boolean;
+  overlayClassName?: string;
+  contentClassName?: string;
+  surface?: "standard" | "custom";
+  labelledBy?: string;
 }) {
   const titleId = useId();
   const descriptionId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
+
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled, onClose]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    lockViewport();
+    syncVisualViewport();
+    window.addEventListener("resize", syncVisualViewport);
+    window.visualViewport?.addEventListener("resize", syncVisualViewport);
+    window.visualViewport?.addEventListener("scroll", syncVisualViewport);
+    return () => {
+      window.removeEventListener("resize", syncVisualViewport);
+      window.visualViewport?.removeEventListener("resize", syncVisualViewport);
+      window.visualViewport?.removeEventListener("scroll", syncVisualViewport);
+      unlockViewport();
+      if (viewportLockCount === 0) {
+        document.documentElement.style.removeProperty("--visual-viewport-height");
+        document.documentElement.style.removeProperty("--visual-viewport-offset-top");
+      }
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const container = containerRef.current;
+    const container = surface === "custom"
+      ? overlayRef.current?.firstElementChild as HTMLElement | null
+      : containerRef.current;
+    const preferredInitialFocus = container?.querySelector<HTMLElement>(
+      "[data-dialog-initial-focus], [autofocus]",
+    );
     const firstFocusable = container?.querySelector<HTMLElement>(FOCUSABLE);
-    (firstFocusable || container)?.focus();
+    (preferredInitialFocus || firstFocusable || container)?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !closeDisabled) {
+      if (event.key === "Escape" && !closeDisabledRef.current) {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !container) return;
@@ -72,20 +174,31 @@ export function Dialog({
       document.removeEventListener("keydown", onKeyDown);
       previousFocus?.focus();
     };
-  }, [closeDisabled, onClose, open]);
+  }, [open, surface]);
 
   if (!open || typeof document === "undefined") return null;
 
+  const customSurface = surface === "custom" && isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        role: "dialog",
+        "aria-modal": true,
+        "aria-label": labelledBy ? undefined : title,
+        "aria-labelledby": labelledBy,
+        tabIndex: -1,
+      })
+    : null;
+
   return createPortal(
     <div
-      className="modal-overlay"
+      ref={overlayRef}
+      className={`${surface === "standard" ? "modal-overlay" : ""} ${overlayClassName}`.trim()}
       onMouseDown={(event) => {
         if (!closeDisabled && event.target === event.currentTarget) onClose();
       }}
     >
-      <div
+      {customSurface || <div
         ref={containerRef}
-        className={`modal-container modal-${size}`}
+        className={`modal-container modal-${size} ${contentClassName}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -101,7 +214,7 @@ export function Dialog({
         </div>
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}
-      </div>
+      </div>}
     </div>,
     document.body,
   );

@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
       { source: "/login", destination: "/?login=1", permanent: false },
       { source: "/signin", destination: "/?login=1", permanent: false },
       { source: "/register", destination: "/?login=1", permanent: false },
-      { source: "/accounts/:path*", destination: "/settings", permanent: true },
+      { source: "/accounts/:path*", destination: "/settings?tab=workspaces#bank-accounts", permanent: true },
     ];
   },
   turbopack: {

@@ -4,6 +4,7 @@ import { Download, WifiOff, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { notifyToast } from "@/components/toast-provider";
 import { clearInstallPrompt, rememberInstallPrompt, type InstallPromptEvent } from "@/lib/install-prompt";
+import { Button } from "@/components/ui/button";
 
 function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches ||
@@ -116,8 +117,8 @@ export function DeviceIntegration() {
         <aside className="install-prompt" aria-label="Install Nest">
           <Download size={20} aria-hidden="true" />
           <div><strong>Install Nest</strong><span>Open faster from your home screen.</span></div>
-          <button className="btn btn-primary btn-sm" type="button" onClick={install}>Install</button>
-          <button className="modal-close" type="button" onClick={dismissInstall} aria-label="Dismiss install prompt"><X size={18} /></button>
+          <Button className="btn btn-primary btn-sm" type="button" onClick={install}>Install</Button>
+          <Button className="modal-close" type="button" onClick={dismissInstall} aria-label="Dismiss install prompt"><X size={18} /></Button>
         </aside>
       ) : null}
     </>

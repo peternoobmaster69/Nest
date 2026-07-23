@@ -1,6 +1,8 @@
 "use client";
 
 import { InputHTMLAttributes } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/controls";
 
 type NumericCalculatorInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange"> & {
   value: string | number;
@@ -142,7 +144,7 @@ export function NumericCalculatorInput({
 
   return (
     <div className="calc-input-wrap">
-      <input
+      <Input
         {...inputProps}
         type="text"
         inputMode={allowDecimal ? "text" : "numeric"}
@@ -152,7 +154,7 @@ export function NumericCalculatorInput({
         disabled={disabled}
       />
       {canCalculate ? (
-        <button
+        <Button
           type="button"
           className="btn btn-ghost btn-icon calc-input-btn"
           disabled={disabled}
@@ -170,7 +172,7 @@ export function NumericCalculatorInput({
             <circle cx="12" cy="16" r="1.1" fill="currentColor" />
             <circle cx="15" cy="16" r="1.1" fill="currentColor" />
           </svg>
-        </button>
+        </Button>
       ) : null}
     </div>
   );

@@ -11,17 +11,10 @@ import {
   DATABASE_UNAVAILABLE_MESSAGE,
 } from "@/lib/database-errors";
 import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import type { AppShellContext } from "@/components/app-shell-context";
 
-type AppContext = {
-  workspaceId?: string | null;
-  isShared?: boolean;
-  isCollaborative?: boolean;
-  workspaceName?: string | null;
-  memberCount?: number;
-  pendingInviteCount?: number;
-  sidebarMoneyPages?: Record<string, boolean>;
-  isAdmin?: boolean;
-};
+type AppContext = AppShellContext;
 
 export function PageFrame({
   title,
@@ -72,9 +65,9 @@ export function PageFrame({
               <p className="service-state-copy">
                 {contextError.message || DATABASE_UNAVAILABLE_MESSAGE}
               </p>
-              <button className="btn btn-primary" onClick={() => contextQuery.refetch()}>
+              <Button className="btn btn-primary" onClick={() => contextQuery.refetch()}>
                 Retry
-              </button>
+              </Button>
             </section>
           ) : (
             children

@@ -6,6 +6,7 @@ import { useWorkspaceId } from "@/components/workspace-provider";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
 
 type AppContext = {
   workspaceId: string | null;
@@ -65,7 +66,7 @@ export function CollaborationBanner() {
           </span>
         </div>
       </div>
-      <button
+      <Button
         className="collab-banner-dismiss"
         onClick={handleDismiss}
         aria-label="Dismiss shared workspace notice"
@@ -73,7 +74,7 @@ export function CollaborationBanner() {
       >
         <span>Got it</span>
         <span className="collab-banner-close-icon" aria-hidden="true">✕</span>
-      </button>
+      </Button>
     </div>
   );
 }

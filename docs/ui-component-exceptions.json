@@ -1,0 +1,18 @@
+{
+  "components/transactions-page.tsx": { "maxLines": 3019, "owner": "frontend", "reason": "Controller migration in progress; month-list and dialog primitives extracted in Phase 7." },
+  "components/credit-transactions-page.tsx": { "maxLines": 2694, "owner": "frontend", "reason": "Controller migration in progress; summary and shared dialogs extracted in Phase 7." },
+  "components/rewards-page.tsx": { "maxLines": 2226, "owner": "frontend", "reason": "Controller migration in progress; overview and shared dialogs extracted in Phase 7." },
+  "components/settings-page.tsx": { "maxLines": 1642, "owner": "frontend", "reason": "Controller migration in progress; notices, rule editor, and optional tools extracted in Phase 7." },
+  "components/dashboard-shell.tsx": { "maxLines": 1667, "owner": "frontend", "reason": "Controller migration in progress; chart and transaction row extracted in Phase 7." },
+  "components/budget-plan-page.tsx": { "maxLines": 1183, "owner": "frontend", "reason": "Existing budget-plan controller; modal shell already migrated." },
+  "components/investments-page.tsx": { "maxLines": 1168, "owner": "frontend", "reason": "Existing investment controller; dialogs already migrated." },
+  "components/ask-nest.tsx": { "maxLines": 995, "owner": "frontend", "reason": "Existing assistant controller and presentation." },
+  "components/receivables-page.tsx": { "maxLines": 817, "owner": "frontend", "reason": "Existing receivables controller; dialog already migrated." },
+  "components/credit-cards-page.tsx": { "maxLines": 754, "owner": "frontend", "reason": "Existing card controller; dialog already migrated." },
+  "components/data-import-section.tsx": { "maxLines": 712, "owner": "frontend", "reason": "Heavy import workflow is now route-lazy and isolated." },
+  "components/app-shell.tsx": { "maxLines": 587, "owner": "frontend", "reason": "Shared responsive application shell." },
+  "components/collaborators-page.tsx": { "maxLines": 562, "owner": "frontend", "reason": "Existing workspace collaboration controller." },
+  "components/settings-app-access.tsx": { "maxLines": 551, "owner": "frontend", "reason": "Optional app-access workflow is now route-lazy and isolated." },
+  "components/app-sidebar.tsx": { "maxLines": 432, "owner": "frontend", "reason": "Shared desktop navigation shell." },
+  "components/ui-skeleton.tsx": { "maxLines": 429, "owner": "frontend", "reason": "Compatibility export for existing skeleton primitives." }
+}

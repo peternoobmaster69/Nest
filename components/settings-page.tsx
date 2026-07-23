@@ -11,37 +11,49 @@ import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import {
   ArrowRight,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  CircleAlert,
   Copy,
-  Info,
   LoaderCircle,
   Pencil,
   Play,
   Plus,
   RotateCcw,
-  Save,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
-import { DataImportSection } from "@/components/data-import-section";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
-import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
-import { SettingsAppAccess } from "@/components/settings-app-access";
 import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
 import type { SettingsTab } from "@/lib/settings-tabs";
 import {
   ActionableAuthenticationMessage,
   isRecentAuthenticationRequired,
-  ReauthenticateButton,
 } from "@/components/reauthentication-message";
+import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
+import { SettingsOperationNotice, type SettingsOperationNoticeData } from "@/components/settings/operation-notice";
+import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
+import type { AutoRule } from "@/components/settings/auto-rule-editor-dialog";
+
+const DataImportSection = dynamic(
+  () => import("@/components/data-import-section").then((module) => module.DataImportSection),
+  { ssr: false, loading: () => <div className="settings-lazy-placeholder" aria-busy="true">Loading import tools…</div> },
+);
+
+const SettingsAppAccess = dynamic(
+  () => import("@/components/settings-app-access").then((module) => module.SettingsAppAccess),
+  { ssr: false, loading: () => <div className="settings-lazy-placeholder" aria-busy="true">Loading app access…</div> },
+);
+
+const AutoRuleEditorDialog = dynamic(
+  () => import("@/components/settings/auto-rule-editor-dialog").then((module) => module.AutoRuleEditorDialog),
+  { ssr: false },
+);
 
 type Context = {
   workspaceId: string | null;
@@ -65,18 +77,6 @@ type GmailStatus = {
   } | null;
 };
 
-type BankAccount = {
-  id: string;
-  name: string;
-  bankName: string | null;
-  startingCents: number;
-  description: string | null;
-  isActive: boolean;
-  currentBalanceCents: number;
-  linkedBudgetTotalCents: number;
-  discrepancyCents: number;
-};
-
 type Budget = {
   id: string;
   accountId: string;
@@ -84,28 +84,6 @@ type Budget = {
   isActive: boolean;
   receivableReservedCents?: number;
 };
-
-type AutoRule =
-  | {
-      id: string;
-      name: string;
-      enabled: boolean;
-      action: "DEDUCT_SAME_WORKSPACE";
-      filters: string[];
-      sourceBudgetId: string;
-      destinationAccountId?: string;
-      destinationBudgetId: string;
-    }
-  | {
-      id: string;
-      name: string;
-      enabled: boolean;
-      action: "RECEIVABLE_OTHER_WORKSPACE";
-      filters: string[];
-      sourceWorkspaceId: string;
-      sourceAccountId: string;
-      sourceBudgetId: string;
-    };
 
 type GmailSyncProgress = {
   phase: "idle" | "queued" | "reading" | "writing" | "complete" | "error" | "cancelled";
@@ -122,45 +100,6 @@ type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
   jobId?: string;
   message?: string;
 };
-
-type SettingsOperationNoticeData = {
-  title: string;
-  detail: string | null;
-  tone: "success" | "info" | "warning" | "error";
-};
-
-function SettingsOperationNotice({
-  notice,
-  className = "",
-  requiresReauthentication = false,
-}: {
-  notice: SettingsOperationNoticeData | null;
-  className?: string;
-  requiresReauthentication?: boolean;
-}) {
-  if (!notice) return null;
-
-  const NoticeIcon = notice.tone === "success"
-    ? CheckCircle2
-    : notice.tone === "info"
-      ? Info
-      : CircleAlert;
-
-  return (
-    <div
-      className={`settings-operation-notice is-${notice.tone}${className ? ` ${className}` : ""}`}
-      role={notice.tone === "error" ? "alert" : "status"}
-      aria-live="polite"
-    >
-      <NoticeIcon size={18} aria-hidden="true" />
-      <div className="settings-operation-notice-copy">
-        <strong>{notice.title}</strong>
-        {notice.detail ? <span>{notice.detail}</span> : null}
-      </div>
-      {requiresReauthentication ? <ReauthenticateButton /> : null}
-    </div>
-  );
-}
 
 function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSummary {
   return (
@@ -370,7 +309,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
   }, []);
 
   const context = useQuery({
-    queryKey: ["app-context", routeWorkspaceId],
+    queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<Context>("/api/context"),
   });
 
@@ -390,26 +329,22 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       ? `${publicOrigin}/api/public/cards-due/${publicNetWorthToken}`
       : "";
 
-  const accounts = useQuery({
-    queryKey: ["bank-accounts", workspaceId],
-    queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${workspaceId}`),
-    enabled: Boolean(workspaceId),
-  });
+  const accounts = useQuery(bankAccountsQueryOptions(workspaceId));
 
   const gmailStatus = useQuery({
-    queryKey: ["gmail-status", workspaceId],
+    queryKey: queryKeys.key(["gmail-status", workspaceId]),
     queryFn: () => fetchJson<GmailStatus>("/api/gmail/status"),
     enabled: context.data?.role === "OWNER",
   });
 
   const budgets = useQuery({
-    queryKey: ["budgets", workspaceId],
+    queryKey: queryKeys.key(["budgets", workspaceId]),
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
 
   const autoRules = useQuery({
-    queryKey: ["credit-txn-auto-rules", workspaceId],
+    queryKey: queryKeys.key(["credit-txn-auto-rules", workspaceId]),
     queryFn: () => fetchJson<{ workspaceId: string; rules: AutoRule[] }>(`/api/credit-transactions/auto-rules?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
@@ -434,13 +369,9 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
 
   const crossWorkspaceData = useQueries({
     queries: sourceWorkspaceIds.flatMap((targetWorkspaceId) => ([
+      bankAccountsQueryOptions(targetWorkspaceId),
       {
-        queryKey: ["rule-bank-accounts", targetWorkspaceId],
-        queryFn: () => fetchJson<BankAccount[]>(`/api/accounts?workspaceId=${targetWorkspaceId}`),
-        enabled: Boolean(targetWorkspaceId),
-      },
-      {
-        queryKey: ["rule-budgets", targetWorkspaceId],
+        queryKey: queryKeys.key(["rule-budgets", targetWorkspaceId]),
         queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${targetWorkspaceId}`),
         enabled: Boolean(targetWorkspaceId),
       },
@@ -539,9 +470,9 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             }
           : current,
       );
-      queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
-      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["gmail-status"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-transactions"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : "Gmail sync failed.";
@@ -590,9 +521,9 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             setGmailMessage(progress.message);
             setIsGmailSyncPolling(false);
             if (progress.phase === "complete") {
-              queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
-              queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
-              queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+              queryClient.invalidateQueries({ queryKey: queryKeys.key(["gmail-status"]) });
+              queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-transactions"]) });
+              queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
             }
           }
         }
@@ -617,7 +548,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       }),
     onSuccess: () => {
       setGmailMessage("Gmail disconnected.");
-      queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["gmail-status"]) });
     },
     onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Failed to disconnect Gmail."),
   });
@@ -634,7 +565,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       }),
     onSuccess: (data) => {
       setCurrencyMessage(`Currency updated to ${data.baseCurrency}.`);
-      queryClient.invalidateQueries({ queryKey: ["app-context"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
     },
     onError: (error) => setCurrencyMessage(error instanceof Error ? error.message : "Failed to update currency."),
   });
@@ -652,7 +583,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       }),
     onSuccess: () => {
       setReceivableAccountMessage("Default receivable account updated.");
-      queryClient.invalidateQueries({ queryKey: ["app-context"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
     },
     onError: (error) =>
       setReceivableAccountMessage(error instanceof Error ? error.message : "Failed to update default receivable account."),
@@ -682,7 +613,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       );
       setOptimisticPublicNetWorthEnabled(null);
       setPublicNetWorthMessage(data.publicNetWorthEnabled ? "Public API URLs enabled." : "Public API URLs disabled.");
-      queryClient.invalidateQueries({ queryKey: ["app-context"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
     },
     onError: (error) => {
       setOptimisticPublicNetWorthEnabled(null);
@@ -742,7 +673,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
         payload.message ||
           `Rules saved. Auto-accounting runs through ${CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL}.`,
       );
-      queryClient.invalidateQueries({ queryKey: ["credit-txn-auto-rules", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-txn-auto-rules", workspaceId]) });
     },
     onError: (error) => {
       setAutoRuleMessage(error instanceof Error ? error.message : "Failed to save auto-accounting rules.");
@@ -760,13 +691,13 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       setAutoRuleMessage(
         `Auto-accounted ${data.accounted} transaction${data.accounted === 1 ? "" : "s"} from ${data.matched} matched rule hits.`,
       );
-      queryClient.invalidateQueries({ queryKey: ["credit-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["receivables"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["receivables-summary"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-transactions"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["receivables"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["receivables-summary"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
     },
     onError: (error) => {
       setAutoRuleMessage(error instanceof Error ? error.message : "Failed to run auto-accounting.");
@@ -788,10 +719,10 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       }),
     onSuccess: () => {
       closeAddModal();
-      queryClient.invalidateQueries({ queryKey: ["app-context"] });
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["app-context"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
     },
   });
 
@@ -817,9 +748,9 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       }),
     onSuccess: () => {
       closeEditModal();
-      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets"]) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
     },
   });
 
@@ -1071,17 +1002,17 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
           </div>
           {gmailStatus.data?.connected ? (
             <div className="gmail-alerts-actions">
-              <button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending || isGmailSyncPolling}>
+              <Button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending || isGmailSyncPolling}>
                 {syncGmail.isPending || isGmailSyncPolling ? "Syncing..." : "Sync Inbox"}
-              </button>
-              <button className="btn btn-ghost btn-xs" onClick={() => disconnectGmail.mutate()} disabled={disconnectGmail.isPending}>
+              </Button>
+              <Button className="btn btn-ghost btn-xs" onClick={() => disconnectGmail.mutate()} disabled={disconnectGmail.isPending}>
                 Disconnect
-              </button>
+              </Button>
             </div>
           ) : (
-            <button className="btn btn-primary btn-xs" onClick={() => connectGmail.mutate()} disabled={connectGmail.isPending}>
+            <Button className="btn btn-primary btn-xs" onClick={() => connectGmail.mutate()} disabled={connectGmail.isPending}>
               {connectGmail.isPending ? "Redirecting..." : "Connect Gmail"}
-            </button>
+            </Button>
           )}
         </div>
         {gmailStatus.data?.connected && gmailStatus.data.integration ? (
@@ -1127,7 +1058,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               Set currency display across your workspace. Default is SGD.
             </div>
           </div>
-          <select
+          <Select
             className="input settings-select-sm"
             value={baseCurrency}
             onChange={(event) => updateCurrency.mutate(event.target.value)}
@@ -1138,7 +1069,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                 {currency}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <ActionableAuthenticationMessage message={currencyMessage} className="settings-message" />
       </div>
@@ -1152,7 +1083,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             </div>
           </div>
           <label className="auto-rule-switch" aria-label="Public APIs enabled">
-            <input
+            <Input
               type="checkbox"
               checked={publicNetWorthEnabled}
               onChange={(event) => onTogglePublicNetWorth(event.target.checked)}
@@ -1170,8 +1101,8 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               </div>
             </div>
             <div className="settings-public-url-row">
-              <input className="input" value={publicNetWorthUrl || "Generating URL..."} readOnly />
-              <button
+              <Input className="input" value={publicNetWorthUrl || "Generating URL..."} readOnly />
+              <Button
                 className="btn btn-ghost btn-xs"
                 type="button"
                 onClick={copyPublicNetWorthUrl}
@@ -1179,8 +1110,8 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               >
                 <Copy size={14} aria-hidden="true" />
                 Copy
-              </button>
-              <button
+              </Button>
+              <Button
                 className="btn btn-ghost btn-xs"
                 type="button"
                 onClick={rotatePublicNetWorth}
@@ -1188,7 +1119,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               >
                 <RotateCcw size={14} aria-hidden="true" />
                 Rotate links
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
@@ -1201,8 +1132,8 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               </div>
             </div>
             <div className="settings-public-url-row">
-              <input className="input" value={publicCardsDueUrl || "Generating URL..."} readOnly />
-              <button
+              <Input className="input" value={publicCardsDueUrl || "Generating URL..."} readOnly />
+              <Button
                 className="btn btn-ghost btn-xs"
                 type="button"
                 onClick={copyPublicCardsDueUrl}
@@ -1210,7 +1141,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               >
                 <Copy size={14} aria-hidden="true" />
                 Copy
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
@@ -1225,7 +1156,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               Closed receivables are credited into this account automatically.
             </div>
           </div>
-          <select
+          <Select
             className="input settings-select-md"
             value={defaultReceivableAccountId ?? ""}
             onChange={(event) =>
@@ -1242,7 +1173,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                 {account.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="settings-row settings-row-spaced">
           <div>
@@ -1251,7 +1182,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               Closed receivables are posted into this subaccount under the default account.
             </div>
           </div>
-          <select
+          <Select
             className="input settings-select-md"
             value={defaultReceivableBudgetId ?? ""}
             onChange={(event) =>
@@ -1270,7 +1201,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                   {budget.name}
                 </option>
               ))}
-          </select>
+          </Select>
         </div>
         <ActionableAuthenticationMessage message={receivableAccountMessage} className="settings-message" />
           </div>
@@ -1289,7 +1220,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             </div>
           </div>
           <div className="settings-auto-actions">
-            <button
+            <Button
               className="btn btn-ghost btn-xs"
               type="button"
               onClick={() => {
@@ -1301,11 +1232,11 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             >
               <RotateCcw size={14} aria-hidden="true" />
               Reset
-            </button>
-            <button className="btn btn-ghost btn-xs" type="button" onClick={() => runAutoRules.mutate()} disabled={!workspaceId || runAutoRules.isPending}>
+            </Button>
+            <Button className="btn btn-ghost btn-xs" type="button" onClick={() => runAutoRules.mutate()} disabled={!workspaceId || runAutoRules.isPending}>
               <Play size={14} aria-hidden="true" />
               {runAutoRules.isPending ? "Running..." : "Run Now"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -1328,7 +1259,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
             <div className="auto-rules-stack">
               {ruleDrafts.map((rule, index) => (
                 <div key={rule.id} className={`auto-rule-card ${rule.enabled ? "" : "is-disabled"}`}>
-                  <button className="auto-rule-summary" type="button" onClick={() => openRuleEditor(rule)}>
+                  <Button className="auto-rule-summary" type="button" onClick={() => openRuleEditor(rule)}>
                     <span className="auto-rule-number">{index + 1}</span>
                     <span className="auto-rule-main">
                       <span className="auto-rule-title-row">
@@ -1350,7 +1281,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                     </span>
                     <span className="auto-rule-summary-actions" onClick={(event) => event.stopPropagation()}>
                       <label className="auto-rule-switch" aria-label={`${rule.name} enabled`}>
-                        <input
+                        <Input
                           type="checkbox"
                           checked={rule.enabled}
                           onChange={(event) => toggleRuleEnabled(rule.id, event.target.checked)}
@@ -1358,16 +1289,16 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                         <span />
                       </label>
                     </span>
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
 
             <div className="auto-rule-footer">
-              <button className="btn btn-ghost btn-xs" type="button" onClick={addRule}>
+              <Button className="btn btn-ghost btn-xs" type="button" onClick={addRule}>
                 <Plus size={14} aria-hidden="true" />
                 Add Rule
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -1375,310 +1306,40 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       </div>
 
       {editingAutoRule && (
-        <div className="auto-rule-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeRuleEditor)}>
-          <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title" onClick={(event) => event.stopPropagation()}>
-            <div className="auto-rule-modal-header">
-              <div className="auto-rule-modal-title-wrap">
-                <span className="auto-rule-number">{editingAutoRuleDisplayIndex}</span>
-                <div>
-                  <h3 id="auto-rule-modal-title">Edit Auto Accounting Rule</h3>
-                  <p>{editingAutoRule.name || `Rule ${editingAutoRuleDisplayIndex}`}</p>
-                </div>
-              </div>
-              <ModalCloseButton onClick={closeRuleEditor} label="Close Edit Auto Accounting Rule" />
-            </div>
+        <AutoRuleEditorDialog
+          rule={editingAutoRule}
+          displayIndex={editingAutoRuleDisplayIndex}
+          ruleIndex={editingAutoRuleIndex}
+          ruleCount={ruleDrafts.length}
+          workspaceId={workspaceId}
+          baseCurrency={baseCurrency}
+          workspaces={workspaces}
+          sameWorkspaceBudgets={editingSameWorkspaceBudgets}
+          sourceAccounts={editingSourceAccounts}
+          sourceBudgets={editingSourceBudgets}
+          defaultDestination={defaultSameWorkspaceDestination}
+          keywordInput={ruleKeywordInputs[editingAutoRule.id] ?? ""}
+          actionLabel={getRuleActionLabel(editingAutoRule)}
+          targetLabel={getRuleTargetLabel(editingAutoRule)}
+          isSaving={saveAutoRules.isPending}
+          onUpdate={updateEditingRule}
+          onKeywordInputChange={(value) =>
+            setRuleKeywordInputs((current) => ({ ...current, [editingAutoRule.id]: value }))
+          }
+          onAddFilter={() => addRuleFilter(editingAutoRule.id)}
+          onRemoveFilter={(index) => removeRuleFilter(editingAutoRule.id, index)}
+          onMove={(direction) => moveRule(editingAutoRule.id, direction)}
+          onDelete={() => removeRule(editingAutoRule.id)}
+          onClose={closeRuleEditor}
+          onSave={saveEditingRule}
+          getDefaultSourceBudgetId={(sourceWorkspaceId, accountId) =>
+            (crossWorkspaceBudgetsById.get(sourceWorkspaceId) ?? []).find(
+              (budget) => budget.isActive && budget.accountId === accountId,
+            )?.id ?? ""
+          }
+        />
+      )}
 
-            <div className="auto-rule-modal-body">
-              <div className="auto-rule-editor-hero">
-                <div className="auto-rule-hero-step">
-                  <span>Subject</span>
-                  <strong>{editingAutoRule.filters[0] || "Add keyword"}</strong>
-                </div>
-                <ArrowRight className="auto-rule-hero-arrow" size={22} aria-hidden="true" />
-                <div className="auto-rule-hero-step">
-                  <span>Action</span>
-                  <strong>{getRuleActionLabel(editingAutoRule)}</strong>
-                </div>
-                <ArrowRight className="auto-rule-hero-arrow" size={22} aria-hidden="true" />
-                <div className="auto-rule-hero-step">
-                  <span>Posting</span>
-                  <strong>{getRuleTargetLabel(editingAutoRule)}</strong>
-                </div>
-              </div>
-
-              <div className="auto-rule-editor-grid">
-                <section className="auto-rule-edit-section">
-                  <div className="auto-rule-section-label">Rule Name</div>
-                  <input
-                    className="input"
-                    type="text"
-                    value={editingAutoRule.name}
-                    onChange={(event) => updateEditingRule((current) => ({ ...current, name: event.target.value }))}
-                  />
-                </section>
-
-                <section className="auto-rule-edit-section">
-                  <div className="auto-rule-section-label">Status</div>
-                  <label className="auto-rule-enable-row">
-                    <span>Rule is active</span>
-                    <span className="auto-rule-switch">
-                      <input
-                        type="checkbox"
-                        checked={editingAutoRule.enabled}
-                        onChange={(event) => updateEditingRule((current) => ({ ...current, enabled: event.target.checked }))}
-                      />
-                      <span />
-                    </span>
-                  </label>
-                </section>
-
-                <section className="auto-rule-edit-section auto-rule-span">
-                  <div className="auto-rule-section-label">Action</div>
-                  <div className="auto-rule-action-row">
-                    <span className="auto-rule-action-cue">
-                      <ArrowRight size={17} aria-hidden="true" />
-                      When matched
-                      <ArrowRight size={17} aria-hidden="true" />
-                    </span>
-                    <select
-                      className="input"
-                      value={editingAutoRule.action}
-                      onChange={(event) =>
-                        updateEditingRule((current) =>
-                          event.target.value === "DEDUCT_SAME_WORKSPACE"
-                            ? {
-                                id: current.id,
-                                name: current.name,
-                                enabled: current.enabled,
-                                action: "DEDUCT_SAME_WORKSPACE",
-                                filters: current.filters,
-                                sourceBudgetId: defaultSameWorkspaceDestination.sourceBudgetId,
-                                destinationBudgetId: defaultSameWorkspaceDestination.destinationBudgetId,
-                              }
-                            : {
-                                id: current.id,
-                                name: current.name,
-                                enabled: current.enabled,
-                                action: "RECEIVABLE_OTHER_WORKSPACE",
-                                filters: current.filters,
-                                sourceWorkspaceId: workspaces.find((workspace) => workspace.id !== workspaceId)?.id ?? "",
-                                sourceAccountId: "",
-                                sourceBudgetId: "",
-                              },
-                        )
-                      }
-                    >
-                      <option value="DEDUCT_SAME_WORKSPACE">Transfer between same-workspace sub accounts</option>
-                      <option value="RECEIVABLE_OTHER_WORKSPACE">Create receivable from another workspace</option>
-                    </select>
-                  </div>
-                </section>
-
-                <section className="auto-rule-edit-section auto-rule-span">
-                  <div className="auto-rule-section-divider">
-                    <span>Subject Filters</span>
-                  </div>
-                  <div className="auto-rule-keyword-box">
-                    <div className="auto-rule-keywords">
-                      {editingAutoRule.filters.map((filter, index) => (
-                        <span key={`${filter}-${index}`} className="auto-rule-keyword">
-                          {filter}
-                          <button type="button" onClick={() => removeRuleFilter(editingAutoRule.id, index)} aria-label={`Remove ${filter}`}>
-                            <X size={14} aria-hidden="true" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="auto-rule-add-keyword">
-                      <input
-                        className="input"
-                        type="text"
-                        value={ruleKeywordInputs[editingAutoRule.id] ?? ""}
-                        onChange={(event) => setRuleKeywordInputs((current) => ({ ...current, [editingAutoRule.id]: event.target.value }))}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter") return;
-                          event.preventDefault();
-                          addRuleFilter(editingAutoRule.id);
-                        }}
-                        placeholder="Add keyword..."
-                      />
-                      <button className="btn btn-ghost" type="button" onClick={() => addRuleFilter(editingAutoRule.id)}>
-                        <Plus size={15} aria-hidden="true" />
-                        Add
-                      </button>
-                    </div>
-                    <div className="auto-rule-helper">Any line can match · case-insensitive</div>
-                  </div>
-                </section>
-
-                {editingAutoRule.action === "DEDUCT_SAME_WORKSPACE" ? (
-                  <section className="auto-rule-edit-section auto-rule-span">
-                    <div className="auto-rule-section-divider">
-                      <span>Source and Destination</span>
-                    </div>
-                    <div className="auto-rule-field-grid">
-                      <label>
-                        <span>Source Sub Account</span>
-                        <select
-                          className="input"
-                          value={editingAutoRule.sourceBudgetId}
-                          onChange={(event) =>
-                            updateEditingRule((current) =>
-                              current.action === "DEDUCT_SAME_WORKSPACE"
-                                ? { ...current, sourceBudgetId: event.target.value }
-                                : current,
-                            )
-                          }
-                        >
-                          <option value="">Select source sub account</option>
-                          {editingSameWorkspaceBudgets.map((budget) => (
-                            <option key={budget.id} value={budget.id}>
-                              {budget.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>Destination Sub Account</span>
-                        <select
-                          className="input"
-                          value={editingAutoRule.destinationBudgetId}
-                          onChange={(event) =>
-                            updateEditingRule((current) =>
-                              current.action === "DEDUCT_SAME_WORKSPACE"
-                                ? { ...current, destinationBudgetId: event.target.value }
-                                : current,
-                            )
-                          }
-                        >
-                          <option value="">Select sub account</option>
-                          {editingSameWorkspaceBudgets.map((budget) => (
-                            <option key={budget.id} value={budget.id}>
-                              {budget.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  </section>
-                ) : (
-                  <section className="auto-rule-edit-section auto-rule-span">
-                    <div className="auto-rule-section-divider">
-                      <span>Source</span>
-                    </div>
-                    <div className="auto-rule-field-grid auto-rule-field-grid-three">
-                      <label>
-                        <span>Workspace</span>
-                        <select
-                          className="input"
-                          value={editingAutoRule.sourceWorkspaceId}
-                          onChange={(event) =>
-                            updateEditingRule((current) =>
-                              current.action === "RECEIVABLE_OTHER_WORKSPACE"
-                                ? {
-                                    ...current,
-                                    sourceWorkspaceId: event.target.value,
-                                    sourceAccountId: "",
-                                    sourceBudgetId: "",
-                                  }
-                                : current,
-                            )
-                          }
-                        >
-                          <option value="">Select workspace</option>
-                          {workspaces.filter((workspace) => workspace.id !== workspaceId).map((workspace) => (
-                            <option key={workspace.id} value={workspace.id}>
-                              {workspace.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>Bank Account</span>
-                        <select
-                          className="input"
-                          value={editingAutoRule.sourceAccountId}
-                          onChange={(event) =>
-                            updateEditingRule((current) => {
-                              if (current.action !== "RECEIVABLE_OTHER_WORKSPACE") return current;
-                              const nextAccountId = event.target.value;
-                              const nextBudgetId =
-                                (crossWorkspaceBudgetsById.get(current.sourceWorkspaceId) ?? []).find(
-                                  (budget) => budget.isActive && budget.accountId === nextAccountId,
-                                )?.id ?? "";
-                              return {
-                                ...current,
-                                sourceAccountId: nextAccountId,
-                                sourceBudgetId: nextBudgetId,
-                              };
-                            })
-                          }
-                        >
-                          <option value="">Select bank account</option>
-                          {editingSourceAccounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>Sub Account</span>
-                        <select
-                          className="input"
-                          value={editingAutoRule.sourceBudgetId}
-                          onChange={(event) =>
-                            updateEditingRule((current) =>
-                              current.action === "RECEIVABLE_OTHER_WORKSPACE"
-                                ? { ...current, sourceBudgetId: event.target.value }
-                                : current,
-                            )
-                          }
-                        >
-                          <option value="">Select sub account</option>
-                          {editingSourceBudgets.map((budget) => (
-                            <option key={budget.id} value={budget.id}>
-                              {budget.name}
-                              {budget.receivableReservedCents ? ` (${formatMoney(budget.receivableReservedCents, baseCurrency)})` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="auto-rule-helper">Open receivables earmarked against the selected source sub account are shown in brackets.</div>
-                  </section>
-                )}
-              </div>
-            </div>
-
-            <div className="auto-rule-modal-footer">
-              <div className="auto-rule-order-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, -1)} disabled={editingAutoRuleIndex <= 0 || saveAutoRules.isPending}>
-                  <ChevronUp size={15} aria-hidden="true" />
-                  Move up
-                </button>
-                <button className="btn btn-ghost" type="button" onClick={() => moveRule(editingAutoRule.id, 1)} disabled={editingAutoRuleIndex < 0 || editingAutoRuleIndex >= ruleDrafts.length - 1 || saveAutoRules.isPending}>
-                  <ChevronDown size={15} aria-hidden="true" />
-                  Move down
-                </button>
-                <button className="btn btn-ghost" type="button" onClick={() => removeRule(editingAutoRule.id)} disabled={saveAutoRules.isPending}>
-                  <Trash2 size={15} aria-hidden="true" />
-                  Delete rule
-                </button>
-              </div>
-              <div className="auto-rule-modal-actions">
-                <button className="btn btn-ghost" type="button" onClick={closeRuleEditor}>
-                  Cancel
-                </button>
-                <button className="btn btn-primary" type="button" onClick={saveEditingRule} disabled={!workspaceId || saveAutoRules.isPending}>
-                  <Save size={15} aria-hidden="true" />
-                  {saveAutoRules.isPending ? "Saving..." : "Save Rule"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-          )}
         </>
       ) : null}
 
@@ -1690,15 +1351,15 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
 
       {section === "workspaces" ? (
         <>
-          <div className="st-header settings-accounts-header">
+          <div className="st-header settings-accounts-header" id="bank-accounts">
         <div className="settings-accounts-heading">
           <h2>Bank accounts</h2>
           <p>Manage balances, account visibility, and reconciliation.</p>
         </div>
-        <button className="btn btn-primary" onClick={openAddModal}>
+        <Button className="btn btn-primary" onClick={openAddModal}>
           <Plus size={16} aria-hidden="true" />
           Add Account
-        </button>
+        </Button>
       </div>
 
       {/* Accounts Grid */}
@@ -1709,9 +1370,9 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
           <div className="st-empty">
             <div className="st-empty-icon">⚠️</div>
             <p>Failed to load accounts</p>
-            <button className="btn btn-primary" onClick={() => accounts.refetch()}>
+            <Button className="btn btn-primary" onClick={() => accounts.refetch()}>
               Retry
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1746,9 +1407,9 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                   )}
                 </div>
                 <div className="st-card-actions">
-                  <button className="btn btn-ghost btn-xs" onClick={() => openEditModal(account)}>
+                  <Button className="btn btn-ghost btn-xs" onClick={() => openEditModal(account)}>
                     Edit
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1792,11 +1453,11 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
 
         {/* Add New Card Placeholder - only show when data loaded and has accounts */}
         {!accounts.isLoading && !accounts.isError && accounts.data && accounts.data.length > 0 && (
-          <button className="st-add-card" onClick={openAddModal}>
+          <Button className="st-add-card" onClick={openAddModal}>
             <div className="st-add-icon">+</div>
             <span>Add Bank Account</span>
             <p className="st-add-hint">Connect a new bank to track your finances</p>
-          </button>
+          </Button>
         )}
 
         {/* Empty State */}
@@ -1807,10 +1468,10 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               title="No bank accounts yet"
               description="Connect your first bank account to start tracking your finances and managing budgets."
               action={
-                <button className="btn btn-primary" onClick={openAddModal}>
+                <Button className="btn btn-primary" onClick={openAddModal}>
                   <Plus size={16} aria-hidden="true" />
                   Add your first account
-                </button>
+                </Button>
               }
             />
           </div>
@@ -1819,7 +1480,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
 
       {/* Add Account Modal */}
       {isAddModalOpen && (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeAddModal)}>
+        <Dialog open onClose={closeAddModal} title="Add bank account" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Add Bank Account</h3>
@@ -1829,7 +1490,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
                   <label className="label">Bank</label>
-                  <select
+                  <Select
                     className="input"
                     value={selectedBankName}
                     onChange={(e) => setSelectedBankName(e.target.value)}
@@ -1839,11 +1500,11 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                         {bank.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Account Name</label>
-                  <input
+                  <Input
                     className="input"
                     placeholder="e.g., DBS Savings"
                     value={name}
@@ -1863,7 +1524,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                 </div>
                 <div className="form-group">
                   <label className="label">Description</label>
-                  <input
+                  <Input
                     className="input"
                     placeholder="Optional"
                     value={description}
@@ -1877,21 +1538,21 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeAddModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeAddModal}>
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={createAccount.isPending}>
+                </Button>
+                <Button type="submit" className="btn btn-primary" disabled={createAccount.isPending}>
                   {createAccount.isPending ? "Adding..." : "Add Account"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Edit Account Modal */}
       {isEditModalOpen && editingAccountId && (
-        <div className="st-modal-overlay" onMouseDown={(event) => closeOnBackdropClick(event, closeEditModal)}>
+        <Dialog open onClose={closeEditModal} title="Edit bank account" surface="custom" overlayClassName="st-modal-overlay">
           <div className="st-modal" onClick={(e) => e.stopPropagation()}>
             <div className="st-modal-header">
               <h3>Edit Bank Account</h3>
@@ -1901,7 +1562,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
                   <label className="label">Bank</label>
-                  <select
+                  <Select
                     className="input"
                     value={editingBankName}
                     onChange={(e) => setEditingBankName(e.target.value)}
@@ -1911,11 +1572,11 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                         {bank.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Account Name</label>
-                  <input
+                  <Input
                     className="input"
                     placeholder="Account name"
                     value={editingName}
@@ -1933,18 +1594,18 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                 </div>
                 <div className="form-group">
                   <label className="label">Status</label>
-                  <select
+                  <Select
                     className="input"
                     value={editingIsActive ? "ACTIVE" : "INACTIVE"}
                     onChange={(e) => setEditingIsActive(e.target.value === "ACTIVE")}
                   >
                     <option value="ACTIVE">Active</option>
                     <option value="INACTIVE">Inactive</option>
-                  </select>
+                  </Select>
                 </div>
                 <div className="form-group st-span-2">
                   <label className="label">Description</label>
-                  <input
+                  <Input
                     className="input"
                     placeholder="Optional"
                     value={editingDescription}
@@ -1958,16 +1619,16 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                 </div>
               )}
               <div className="st-modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeEditModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeEditModal}>
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={updateAccount.isPending}>
+                </Button>
+                <Button type="submit" className="btn btn-primary" disabled={updateAccount.isPending}>
                   {updateAccount.isPending ? "Saving..." : "Save Changes"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
           )}
         </>
       ) : null}

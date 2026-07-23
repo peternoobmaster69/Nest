@@ -3,6 +3,8 @@
 import { cancelJobAction, retryJobAction } from "@/app/admin/job-actions";
 import { AdminPagination, useAdminPagination } from "@/components/admin-pagination";
 import type { getAdminOverview } from "@/lib/admin-overview";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/controls";
 
 type AdminOverview = Awaited<ReturnType<typeof getAdminOverview>>;
 
@@ -82,8 +84,8 @@ export function AdminBackgroundJobsTable({
                 <td data-label="Updated"><time dateTime={job.updatedAt.toISOString()}>{DATE_FORMAT.format(job.updatedAt)}</time></td>
                 <td data-label="Actions">
                   <div className="admin-job-actions">
-                    {["FAILED", "DEAD_LETTER", "CANCELLED"].includes(job.status) ? <form action={retryJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="btn btn-ghost btn-xs" type="submit">Retry</button></form> : null}
-                    {["PENDING", "RUNNING"].includes(job.status) ? <form action={cancelJobAction}><input type="hidden" name="jobId" value={job.id} /><button className="btn btn-ghost btn-xs" type="submit">Cancel</button></form> : null}
+                    {["FAILED", "DEAD_LETTER", "CANCELLED"].includes(job.status) ? <form action={retryJobAction}><Input type="hidden" name="jobId" value={job.id} /><Button className="btn btn-ghost btn-xs" type="submit">Retry</Button></form> : null}
+                    {["PENDING", "RUNNING"].includes(job.status) ? <form action={cancelJobAction}><Input type="hidden" name="jobId" value={job.id} /><Button className="btn btn-ghost btn-xs" type="submit">Cancel</Button></form> : null}
                   </div>
                 </td>
               </tr>
