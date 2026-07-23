@@ -16,6 +16,7 @@ import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cu
 import { Droplet, Lock, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
+import { compareInvestmentEntries, getLatestInvestmentEntry } from "@/lib/investment-entry-order";
 
 type AppContext = {
   workspaceId: string | null;
@@ -28,6 +29,7 @@ type InvestmentEntry = {
   investedCents: number;
   currentValueCents: number;
   createdAt: string;
+  updatedAt: string;
 };
 
 type InvestmentAccount = {
@@ -91,13 +93,6 @@ function formatInceptionBadge(value: string) {
   };
 }
 
-function getLatestInvestmentEntry(entries: InvestmentEntry[]) {
-  return entries.reduce<InvestmentEntry | null>((latest, entry) => {
-    if (!latest) return entry;
-    return new Date(entry.date).getTime() > new Date(latest.date).getTime() ? entry : latest;
-  }, null);
-}
-
 function buildLinePath(points: Array<{ x: number; y: number }>) {
   if (!points.length) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -151,11 +146,12 @@ export function InvestmentsPage() {
   const workspaceId = context.data?.workspaceId;
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
   const formatCents = (value: number) => formatMoney(value, baseCurrency);
+  const investmentsQueryKey = ["investments", workspaceId] as const;
 
   const accounts = useQuery({
-    queryKey: ["investments", workspaceId],
+    queryKey: investmentsQueryKey,
     enabled: Boolean(workspaceId),
-    queryFn: () => fetchJson<InvestmentAccount[]>(`/api/investments?workspaceId=${workspaceId}`),
+    queryFn: () => fetchJson<InvestmentAccount[]>(`/api/investments?workspaceId=${workspaceId}`, { cache: "no-store" }),
   });
   const { isLoading: accountsLoading, isError: accountsError, refetch } = accounts;
 
@@ -187,35 +183,27 @@ export function InvestmentsPage() {
         } as InvestmentEntry & { accountName: string; accountId: string });
       }
     }
-    return allEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return allEntries.sort(compareInvestmentEntries);
   }, [accounts.data]);
 
   const selectedEntries = useMemo(
-    () =>
-      [...(selectedAccount?.entries ?? [])].sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-      ),
+    () => [...(selectedAccount?.entries ?? [])].sort(compareInvestmentEntries),
     [selectedAccount?.entries],
   );
 
-  const latestSelectedEntry = selectedEntries[selectedEntries.length - 1] ?? null;
   const entryAccount = useMemo(
     () => (accounts.data ?? []).find((a) => a.id === entryAccountId) ?? null,
     [accounts.data, entryAccountId],
   );
-  const latestEntryAccountEntry = useMemo(() => {
-    const entries = [...(entryAccount?.entries ?? [])].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
-    return entries[entries.length - 1] ?? null;
-  }, [entryAccount?.entries]);
+  const latestEntryAccountEntry = useMemo(
+    () => getLatestInvestmentEntry(entryAccount?.entries ?? []),
+    [entryAccount?.entries],
+  );
 
   const totalInvestedAcrossAll = useMemo(() => {
     let total = 0;
     for (const account of accounts.data ?? []) {
-      const latest = [...(account.entries ?? [])]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .at(-1);
+      const latest = getLatestInvestmentEntry(account.entries ?? []);
       total += latest?.investedCents ?? 0;
     }
     return total;
@@ -223,9 +211,7 @@ export function InvestmentsPage() {
   const totalCurrentAcrossAll = useMemo(() => {
     let total = 0;
     for (const account of accounts.data ?? []) {
-      const latest = [...(account.entries ?? [])]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .at(-1);
+      const latest = getLatestInvestmentEntry(account.entries ?? []);
       total += latest?.currentValueCents ?? 0;
     }
     return total;
@@ -234,9 +220,7 @@ export function InvestmentsPage() {
     let total = 0;
     for (const account of accounts.data ?? []) {
       if (!account.isLiquid) continue;
-      const latest = [...(account.entries ?? [])]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .at(-1);
+      const latest = getLatestInvestmentEntry(account.entries ?? []);
       total += latest?.currentValueCents ?? 0;
     }
     return total;
@@ -249,9 +233,13 @@ export function InvestmentsPage() {
     : 0;
   const isProfit = totalGainCents >= 0;
 
+  const reconcileInvestments = () => {
+    void queryClient.invalidateQueries({ queryKey: investmentsQueryKey, refetchType: "active" });
+  };
+
   const createAccount = useMutation({
     mutationFn: () =>
-      fetchJson<InvestmentAccount>("/api/investments", {
+      fetchJson<Omit<InvestmentAccount, "entries">>("/api/investments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -266,7 +254,11 @@ export function InvestmentsPage() {
       }),
     onSuccess: (created) => {
       setAccountError("");
-      queryClient.invalidateQueries({ queryKey: ["investments", workspaceId] });
+      queryClient.setQueryData<InvestmentAccount[]>(investmentsQueryKey, (current) => [
+        ...(current ?? []),
+        { ...created, entries: [] },
+      ]);
+      reconcileInvestments();
       setSelectedAccountId(created.id);
       closeAccountModal();
     },
@@ -277,7 +269,7 @@ export function InvestmentsPage() {
 
   const updateAccount = useMutation({
     mutationFn: (id: string) =>
-      fetchJson(`/api/investments/${id}`, {
+      fetchJson<Omit<InvestmentAccount, "entries">>(`/api/investments/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -289,9 +281,14 @@ export function InvestmentsPage() {
           isLiquid,
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       setAccountError("");
-      queryClient.invalidateQueries({ queryKey: ["investments", workspaceId] });
+      queryClient.setQueryData<InvestmentAccount[]>(investmentsQueryKey, (current) =>
+        current?.map((account) => account.id === updated.id
+          ? { ...account, ...updated, entries: account.entries }
+          : account),
+      );
+      reconcileInvestments();
       closeAccountModal();
     },
     onError: (error) => {
@@ -306,7 +303,10 @@ export function InvestmentsPage() {
       }),
     onSuccess: (_data, deletedId) => {
       setAccountError("");
-      queryClient.invalidateQueries({ queryKey: ["investments", workspaceId] });
+      queryClient.setQueryData<InvestmentAccount[]>(investmentsQueryKey, (current) =>
+        current?.filter((account) => account.id !== deletedId),
+      );
+      reconcileInvestments();
       if (selectedAccountId === deletedId) {
         setSelectedAccountId(null);
       }
@@ -319,7 +319,7 @@ export function InvestmentsPage() {
 
   const createEntry = useMutation({
     mutationFn: (accountId: string) =>
-      fetchJson(`/api/investments/${accountId}/entries`, {
+      fetchJson<InvestmentEntry>(`/api/investments/${accountId}/entries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -328,9 +328,14 @@ export function InvestmentsPage() {
           currentValueCents: Math.round(Number(entryCurrentValue || "0") * 100),
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (created, accountId) => {
       setEntryError("");
-      queryClient.invalidateQueries({ queryKey: ["investments", workspaceId] });
+      queryClient.setQueryData<InvestmentAccount[]>(investmentsQueryKey, (current) =>
+        current?.map((account) => account.id === accountId
+          ? { ...account, entries: [...account.entries, created] }
+          : account),
+      );
+      reconcileInvestments();
       closeEntryModal();
     },
     onError: (error) => {
@@ -340,7 +345,7 @@ export function InvestmentsPage() {
 
   const updateEntry = useMutation({
     mutationFn: (entryId: string) =>
-      fetchJson(`/api/investments/entries/${entryId}`, {
+      fetchJson<InvestmentEntry>(`/api/investments/entries/${entryId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -349,9 +354,15 @@ export function InvestmentsPage() {
           currentValueCents: Math.round(Number(entryCurrentValue || "0") * 100),
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       setEntryError("");
-      queryClient.invalidateQueries({ queryKey: ["investments", workspaceId] });
+      queryClient.setQueryData<InvestmentAccount[]>(investmentsQueryKey, (current) =>
+        current?.map((account) => ({
+          ...account,
+          entries: account.entries.map((entry) => entry.id === updated.id ? updated : entry),
+        })),
+      );
+      reconcileInvestments();
       closeEntryModal();
     },
     onError: (error) => {
@@ -364,9 +375,15 @@ export function InvestmentsPage() {
       fetchJson(`/api/investments/entries/${entryId}`, {
         method: "DELETE",
       }),
-    onSuccess: () => {
+    onSuccess: (_data, deletedEntryId) => {
       setEntryError("");
-      queryClient.invalidateQueries({ queryKey: ["investments", workspaceId] });
+      queryClient.setQueryData<InvestmentAccount[]>(investmentsQueryKey, (current) =>
+        current?.map((account) => ({
+          ...account,
+          entries: account.entries.filter((entry) => entry.id !== deletedEntryId),
+        })),
+      );
+      reconcileInvestments();
       closeEntryModal();
     },
     onError: (error) => {
@@ -406,10 +423,7 @@ export function InvestmentsPage() {
   };
 
   const openCreateEntryModal = (account: InvestmentAccount) => {
-    const accountEntries = [...account.entries].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
-    const latestAccountEntry = accountEntries[accountEntries.length - 1] ?? null;
+    const latestAccountEntry = getLatestInvestmentEntry(account.entries);
     const lastInvested = latestAccountEntry?.investedCents ?? 0;
     setEntryModalMode("create");
     setEntryAccountId(account.id);
@@ -462,16 +476,24 @@ export function InvestmentsPage() {
   const aggregatedAllAccountsData = useMemo(() => {
     // Collect all entries from all accounts with running totals per account
     const allDates = new Set<string>();
-    const accountEntries = new Map<string, Array<{ date: string; invested: number; current: number }>>();
+    const accountEntries = new Map<string, Array<{
+      id: string;
+      date: string;
+      createdAt: string;
+      invested: number;
+      current: number;
+    }>>();
 
     for (const account of accounts.data ?? []) {
       const entries = (account.entries ?? [])
         .map((e) => ({
+          id: e.id,
           date: e.date.slice(0, 10),
+          createdAt: e.createdAt,
           invested: e.investedCents,
           current: e.currentValueCents,
         }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+        .sort(compareInvestmentEntries);
 
       if (entries.length > 0) {
         accountEntries.set(account.id, entries);
@@ -737,7 +759,7 @@ export function InvestmentsPage() {
               (a.account.displayName || a.account.productName).localeCompare(b.account.displayName || b.account.productName);
           })
           .map(({ account, latest }) => {
-          const recentlyUpdated = account.entries.some((entry) => isWithinLastDay(entry.createdAt));
+          const recentlyUpdated = account.entries.some((entry) => isWithinLastDay(entry.updatedAt || entry.createdAt));
           const selected = !showAllAccounts && account.id === selectedAccountId;
           const investedCents = latest?.investedCents ?? 0;
           const currentCents = latest?.currentValueCents ?? 0;

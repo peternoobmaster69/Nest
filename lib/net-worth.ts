@@ -31,7 +31,7 @@ export async function getWorkspaceNetWorthPayload(
       select: {
         isLiquid: true,
         entries: {
-          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
           take: 1,
           select: { currentValueCents: true },
         },

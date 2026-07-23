@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       where: { workspaceId },
       include: {
         entries: {
-          orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+          orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         },
       },
       orderBy: [{ inceptionDate: "asc" }, { createdAt: "asc" }],

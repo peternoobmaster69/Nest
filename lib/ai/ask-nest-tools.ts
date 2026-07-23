@@ -1877,7 +1877,7 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
       isLiquid: true,
       entries: {
         where: { date: { lt: endExclusive } },
-        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         take: 1,
         select: { date: true, investedCents: true, currentValueCents: true },
       },

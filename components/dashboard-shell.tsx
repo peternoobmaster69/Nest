@@ -37,6 +37,7 @@ import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cu
 import { useToast } from "@/components/toast-provider";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { buildCreditCardStatementPath, buildWorkspacePath } from "@/lib/workspace-entry";
+import { getLatestInvestmentEntry } from "@/lib/investment-entry-order";
 
 const ALL_BANKS_FILTER = "ALL";
 const RECENT_TRANSACTION_LIMIT = 5;
@@ -192,6 +193,7 @@ type InvestmentAccountSummary = {
   entries: Array<{
     id: string;
     date: string;
+    createdAt: string;
     investedCents: number;
     currentValueCents: number;
   }>;
@@ -805,7 +807,7 @@ export function DashboardShell({
 
   const investmentsQuery = useQuery({
     queryKey: ["investments", workspaceId],
-    queryFn: () => fetchJson<InvestmentAccountSummary[]>(`/api/investments?workspaceId=${workspaceId}`),
+    queryFn: () => fetchJson<InvestmentAccountSummary[]>(`/api/investments?workspaceId=${workspaceId}`, { cache: "no-store" }),
     enabled: Boolean(workspaceId),
   });
   const firstBankAccountId = bankAccountOptions[0]?.id;
@@ -1337,9 +1339,7 @@ export function DashboardShell({
     let invested = 0;
     let current = 0;
     for (const account of investmentsQuery.data ?? []) {
-      const latest = [...(account.entries ?? [])]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .at(-1);
+      const latest = getLatestInvestmentEntry(account.entries ?? []);
       invested += latest?.investedCents ?? 0;
       current += latest?.currentValueCents ?? 0;
     }
