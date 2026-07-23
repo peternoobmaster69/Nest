@@ -727,8 +727,7 @@ export function CreditCardsPage() {
                 {editingCardId ? (
                   <button
                     type="button"
-                    className="btn btn-ghost cc-delete"
-                    style={{ marginRight: "auto" }}
+                    className="btn btn-ghost cc-delete modal-action-destructive"
                     disabled={deleteCard.isPending}
                     onClick={() => confirmDeleteCard(editingCardId)}
                   >

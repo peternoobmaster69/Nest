@@ -1916,7 +1916,7 @@ export function DashboardShell({
                 </div>
                 <div className="profile-actions">
                   <button
-                    className="btn btn-ghost btn-xs"
+                    className="btn btn-ghost btn-xs modal-action-destructive"
                     onClick={() => {
                       if (editingBudgetId) confirmDeleteBudget(editingBudgetId);
                     }}

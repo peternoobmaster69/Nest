@@ -1089,14 +1089,14 @@ export function InvestmentsPage() {
                 {accountModalMode === "edit" && editingAccountId ? (
                   <button
                     type="button"
-                    className="btn btn-ghost btn-xs"
+                    className="btn btn-ghost btn-xs modal-action-destructive"
                     onClick={() => confirmDeleteAccount(editingAccountId)}
                     disabled={deleteAccount.isPending}
                   >
                     {deleteAccount.isPending ? "Deleting..." : "Delete"}
                   </button>
                 ) : <span />}
-                <div className="inv-modal-primary-actions">
+                <div className="inv-modal-primary-actions modal-action-group">
                   <button type="button" className="btn btn-ghost btn-xs" onClick={closeAccountModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary btn-xs" disabled={createAccount.isPending || updateAccount.isPending}>
                     {accountModalMode === "edit" ? (updateAccount.isPending ? "Saving..." : "Save") : (createAccount.isPending ? "Adding..." : "Add")}
@@ -1153,14 +1153,14 @@ export function InvestmentsPage() {
                 {entryModalMode === "edit" && editingEntryId ? (
                   <button
                     type="button"
-                    className="btn btn-ghost btn-xs"
+                    className="btn btn-ghost btn-xs modal-action-destructive"
                     onClick={() => confirmDeleteEntry(editingEntryId)}
                     disabled={deleteEntry.isPending}
                   >
                     {deleteEntry.isPending ? "Deleting..." : "Delete"}
                   </button>
                 ) : <span />}
-                <div className="inv-modal-primary-actions">
+                <div className="inv-modal-primary-actions modal-action-group">
                   <button type="button" className="btn btn-ghost btn-xs" onClick={closeEntryModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary btn-xs" disabled={createEntry.isPending || updateEntry.isPending}>
                     {entryModalMode === "edit" ? (updateEntry.isPending ? "Saving..." : "Save") : (createEntry.isPending ? "Adding..." : "Add")}

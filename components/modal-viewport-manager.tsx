@@ -9,6 +9,7 @@ const MODAL_OVERLAY_SELECTOR = [
   ".cct-modal-overlay",
   ".st-modal-overlay",
   ".auto-rule-modal-overlay",
+  ".tx-popover-overlay",
 ].join(",");
 
 const LEGACY_MODAL_SELECTOR = [
@@ -18,6 +19,7 @@ const LEGACY_MODAL_SELECTOR = [
   ".st-modal",
   ".auto-rule-modal",
   ".inv-modal",
+  ".tx-month-popover",
 ].join(",");
 
 const FOCUSABLE_SELECTOR = "button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])";
@@ -36,6 +38,14 @@ export function ModalViewportManager() {
     let previousHtmlOverflow = "";
     let previouslyFocused: HTMLElement | null = null;
     let generatedTitleId = 0;
+
+    const syncVisualViewport = () => {
+      const viewport = window.visualViewport;
+      const height = Math.round(viewport?.height ?? window.innerHeight);
+      const offsetTop = Math.round(viewport?.offsetTop ?? 0);
+      document.documentElement.style.setProperty("--visual-viewport-height", `${height}px`);
+      document.documentElement.style.setProperty("--visual-viewport-offset-top", `${offsetTop}px`);
+    };
 
     const lockViewport = () => {
       if (isLocked) return;
@@ -125,6 +135,10 @@ export function ModalViewportManager() {
       childList: true,
       subtree: true,
     });
+    syncVisualViewport();
+    window.addEventListener("resize", syncVisualViewport);
+    window.visualViewport?.addEventListener("resize", syncVisualViewport);
+    window.visualViewport?.addEventListener("scroll", syncVisualViewport);
     syncViewportLock();
 
     const manageLegacyModalKeyboard = (event: KeyboardEvent) => {
@@ -164,6 +178,11 @@ export function ModalViewportManager() {
     return () => {
       observer.disconnect();
       document.removeEventListener("keydown", manageLegacyModalKeyboard);
+      window.removeEventListener("resize", syncVisualViewport);
+      window.visualViewport?.removeEventListener("resize", syncVisualViewport);
+      window.visualViewport?.removeEventListener("scroll", syncVisualViewport);
+      document.documentElement.style.removeProperty("--visual-viewport-height");
+      document.documentElement.style.removeProperty("--visual-viewport-offset-top");
       if (animationFrame) {
         window.cancelAnimationFrame(animationFrame);
       }

@@ -392,6 +392,49 @@ test("modal action bars remain outside independently scrolling content", async (
   assert.match(receivables, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body recv-modal-body">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
 });
 
+test("compact dialog and form contract is keyboard-aware and uniform", async () => {
+  const [styles, manager, layout, transactions] = await Promise.all([
+    readFile(path.join(root, "app/globals.css"), "utf8"),
+    readFile(path.join(root, "components/modal-viewport-manager.tsx"), "utf8"),
+    readFile(path.join(root, "app/layout.tsx"), "utf8"),
+    readFile(path.join(root, "components/transactions-page.tsx"), "utf8"),
+  ]);
+  const start = styles.indexOf("COMPACT FORM + DIALOG CONTRACT");
+  assert.notEqual(start, -1);
+  const contract = styles.slice(start);
+
+  for (const selector of [
+    ".modal-overlay",
+    ".profile-modal-overlay",
+    ".cc-modal-overlay",
+    ".cct-modal-overlay",
+    ".st-modal-overlay",
+    ".auto-rule-modal-overlay",
+    ".tx-popover-overlay",
+  ]) {
+    assert.match(contract, new RegExp(selector.replace(".", "\\.")));
+  }
+
+  assert.match(contract, /height:\s*var\(--visual-viewport-height, 100dvh\)\s*!important/);
+  assert.match(contract, /\.modal-form-shell,[\s\S]*?\.st-modal-form\s*\{[^}]*overflow:\s*hidden\s*!important/s);
+  assert.match(contract, /\.cc-modal-scroll,[\s\S]*?\.cct-form-grid,[\s\S]*?\.tx-popover-body[\s\S]*?overflow-y:\s*auto\s*!important/s);
+  assert.match(contract, /font-size:\s*16px\s*!important/);
+  assert.match(contract, /\.calc-input-btn\s*\{[^}]*width:\s*44px\s*!important[^}]*height:\s*44px\s*!important/s);
+  assert.match(contract, /@media \(min-width: 390px\) and \(max-width: 820px\)[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)\s*!important/s);
+  assert.match(contract, /\.modal-action-group\s*\{[^}]*justify-content:\s*flex-end[^}]*margin-inline-start:\s*auto/s);
+  assert.match(contract, /\.workspace-create-form,[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto\s*!important/s);
+  assert.match(contract, /\.ask-nest-layer\s*\{[^}]*--visual-viewport-offset-top/s);
+  assert.match(contract, /\.lp-signin-overlay\s*\{[^}]*--visual-viewport-offset-top/s);
+  assert.match(contract, /\.notification-popover\s*\{[^}]*--visual-viewport-height/s);
+  assert.match(contract, /\.cookie-overlay\s*\{[^}]*safe-area-inset-bottom/s);
+
+  assert.match(manager, /"\.tx-popover-overlay"/);
+  assert.match(manager, /"\.tx-month-popover"/);
+  assert.match(manager, /window\.visualViewport\?\.addEventListener\("resize", syncVisualViewport\)/);
+  assert.match(layout, /interactiveWidget:\s*"resizes-content"/);
+  assert.match(transactions, /className="tx-popover-overlay"[\s\S]*?className="tx-month-popover"/);
+});
+
 test("Create Receivable uses its compact responsive modal layout", async () => {
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
   const styles = await readFile(path.join(root, "app/globals.css"), "utf8");

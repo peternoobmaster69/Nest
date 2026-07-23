@@ -2177,9 +2177,8 @@ export function TransactionsPage() {
 
         {/* Custom Month Popover */}
         {isCustomMonthOpen && typeof document !== "undefined" && createPortal(
-          <>
-            <div className="tx-popover-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsCustomMonthOpen(false))} />
-            <div className="tx-month-popover">
+          <div className="tx-popover-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsCustomMonthOpen(false))}>
+            <div className="tx-month-popover" onMouseDown={(event) => event.stopPropagation()}>
               <div className="tx-popover-header">
                 <div>
                   <h4>Select months</h4>
@@ -2233,7 +2232,7 @@ export function TransactionsPage() {
                 </button>
               </div>
             </div>
-          </>,
+          </div>,
           document.body
         )}
       </div>
@@ -2538,8 +2537,8 @@ export function TransactionsPage() {
                 {deleteTransactionGroup.isError ? <div className="form-error">{deleteTransactionGroup.error.message}</div> : null}
               </div>
               <div className="txn-modal-actions tx-group-edit-actions">
-                <button type="button" className="btn btn-danger" onClick={confirmDeleteGroup} disabled={deleteTransactionGroup.isPending}>Delete group</button>
-                <div>
+                <button type="button" className="btn btn-danger modal-action-destructive" onClick={confirmDeleteGroup} disabled={deleteTransactionGroup.isPending}>Delete group</button>
+                <div className="modal-action-group">
                   <button type="button" className="btn btn-ghost" onClick={closeEditingGroupModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary" disabled={updateTransactionGroup.isPending || !editingGroupName.trim()}>
                     {updateTransactionGroup.isPending ? "Saving…" : "Save"}
@@ -2771,9 +2770,9 @@ export function TransactionsPage() {
                 </div>
               ) : null}
               </div>
-              <div className="txn-modal-actions" style={{ justifyContent: "space-between" }}>
+              <div className="txn-modal-actions">
                 <button
-                  className="btn btn-ghost"
+                  className="btn btn-ghost modal-action-destructive"
                   type="button"
                   onClick={confirmDeleteEditingTx}
                   disabled={deleteTx.isPending || !editingTxId}
@@ -2781,7 +2780,7 @@ export function TransactionsPage() {
                 >
                   {deleteTx.isPending && editingTxId && deletingTransactionIds.includes(editingTxId) ? "Deleting..." : "Delete"}
                 </button>
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                <div className="modal-action-group">
                   <button className="btn btn-ghost" type="button" onClick={closeEditModal}>
                     Cancel
                   </button>
@@ -3048,11 +3047,11 @@ export function TransactionsPage() {
                 </>
               ) : null}
             </div>
-            <div className="txn-modal-actions" style={{ justifyContent: "space-between" }}>
+            <div className="txn-modal-actions">
               {editingBudgetId ? (
                 <button
                   type="button"
-                  className="btn btn-ghost"
+                  className="btn btn-ghost modal-action-destructive"
                   onClick={confirmDeleteBudget}
                   disabled={deleteBudget.isPending}
                 >
@@ -3061,7 +3060,7 @@ export function TransactionsPage() {
               ) : (
                 <span />
               )}
-              <div style={{ display: "flex", gap: "8px" }}>
+              <div className="modal-action-group">
                 <button type="button" className="btn btn-ghost" onClick={closeBudgetModal}>
                   Cancel
                 </button>

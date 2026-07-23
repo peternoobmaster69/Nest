@@ -1108,7 +1108,7 @@ export function BudgetPlanPage() {
             <div className="st-modal-actions">
               {itemModal.id && (
                 <button
-                  className="btn btn-danger"
+                  className="btn btn-danger modal-action-destructive"
                   type="button"
                   onClick={() => removeEntity(itemModal.id!, itemModal.scope === "template" ? "templateItem" : "monthlyItem", "this budget item")}
                   disabled={itemSaving || deleteEntity.isPending}
@@ -1116,7 +1116,6 @@ export function BudgetPlanPage() {
                   <Trash2 size={15} /> {deleteEntity.isPending ? "Deleting..." : "Delete"}
                 </button>
               )}
-              <div style={{ flex: 1 }} />
               <button className="btn btn-ghost" type="button" onClick={closeItemModal} disabled={itemSaving || deleteEntity.isPending}>Cancel</button>
               <button className="btn btn-primary" type="submit" disabled={itemSaving || deleteEntity.isPending}>
                 {itemSaving ? "Saving..." : itemModal.id ? "Save Changes" : "Add Item"}
@@ -1154,7 +1153,7 @@ export function BudgetPlanPage() {
             <div className="st-modal-actions">
               {sourceModal.id && (
                 <button
-                  className="btn btn-danger"
+                  className="btn btn-danger modal-action-destructive"
                   type="button"
                   onClick={() => removeEntity(sourceModal.id!, sourceModal.scope === "template" ? "templateSource" : "monthlySource", "this budget source")}
                   disabled={sourceSaving || deleteEntity.isPending}
@@ -1162,7 +1161,6 @@ export function BudgetPlanPage() {
                   <Trash2 size={15} /> {deleteEntity.isPending ? "Deleting..." : "Delete"}
                 </button>
               )}
-              <div style={{ flex: 1 }} />
               <button className="btn btn-ghost" type="button" onClick={closeSourceModal} disabled={sourceSaving || deleteEntity.isPending}>Cancel</button>
               <button className="btn btn-primary" type="submit" disabled={sourceSaving || deleteEntity.isPending || !sourceOwnerId}>
                 {sourceSaving ? "Saving..." : sourceModal.id ? "Save Changes" : "Add Source"}
