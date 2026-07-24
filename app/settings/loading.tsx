@@ -1,6 +1,10 @@
 import { PageFrame } from "@/components/page-frame";
-import { RouteLoadingState } from "@/components/ui/route-state";
+import { GenericPageSkeleton } from "@/components/skeletons/GenericPageSkeleton";
 
 export default function Loading() {
-  return <PageFrame title="Settings" current="/settings" userName="User" userImage={null}><RouteLoadingState label="Loading settings" /></PageFrame>;
+  return (
+    <PageFrame title="Settings" current="/settings" userName="User" userImage={null}>
+      <GenericPageSkeleton />
+    </PageFrame>
+  );
 }

@@ -1,5 +1,5 @@
-import { RouteLoadingState } from "@/components/ui/route-state";
+import { AppShellSkeleton } from "@/components/ui-skeleton";
 
 export default function Loading() {
-  return <RouteLoadingState />;
+  return <AppShellSkeleton title="Nest" />;
 }
