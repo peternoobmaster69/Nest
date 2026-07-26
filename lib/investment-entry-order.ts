@@ -2,6 +2,7 @@ export type OrderableInvestmentEntry = {
   id: string;
   date: string | Date;
   createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
 };
 
 function timestamp(value: string | Date | null | undefined) {
@@ -18,12 +19,16 @@ function compareTimestamps(a: string | Date | null | undefined, b: string | Date
 }
 
 /**
- * Orders snapshots from oldest to newest. Creation time and id make same-day
- * entries deterministic, matching the ordering used by the investments API.
+ * Orders snapshots from oldest to newest. Snapshot date remains the primary
+ * ordering signal, while update time lets edited same-day entries refresh
+ * account cards immediately. Creation time and id keep ties deterministic.
  */
 export function compareInvestmentEntries<T extends OrderableInvestmentEntry>(a: T, b: T) {
   const dateDifference = compareTimestamps(a.date, b.date);
   if (dateDifference !== 0) return dateDifference;
+
+  const updateDifference = compareTimestamps(a.updatedAt, b.updatedAt);
+  if (updateDifference !== 0) return updateDifference;
 
   const creationDifference = compareTimestamps(a.createdAt, b.createdAt);
   if (creationDifference !== 0) return creationDifference;
