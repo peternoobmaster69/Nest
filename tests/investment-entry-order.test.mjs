@@ -6,7 +6,7 @@ import {
   getLatestInvestmentEntry,
 } from "../lib/investment-entry-order.ts";
 
-const entry = (id, date, createdAt) => ({ id, date, createdAt });
+const entry = (id, date, createdAt, updatedAt = createdAt) => ({ id, date, createdAt, updatedAt });
 
 test("latest investment snapshot uses creation order for entries on the same date", () => {
   const first = entry("first", "2026-07-23T00:00:00.000Z", "2026-07-23T02:00:00.000Z");
@@ -14,6 +14,19 @@ test("latest investment snapshot uses creation order for entries on the same dat
 
   assert.equal(getLatestInvestmentEntry([second, first]), second);
   assert.deepEqual([second, first].sort(compareInvestmentEntries), [first, second]);
+});
+
+test("same-day edited investment snapshots use the most recent update", () => {
+  const first = entry(
+    "first",
+    "2026-07-23T00:00:00.000Z",
+    "2026-07-23T02:00:00.000Z",
+    "2026-07-23T06:00:00.000Z",
+  );
+  const second = entry("second", "2026-07-23T00:00:00.000Z", "2026-07-23T04:00:00.000Z");
+
+  assert.equal(getLatestInvestmentEntry([second, first]), first);
+  assert.deepEqual([second, first].sort(compareInvestmentEntries), [second, first]);
 });
 
 test("snapshot date takes precedence over creation time", () => {
