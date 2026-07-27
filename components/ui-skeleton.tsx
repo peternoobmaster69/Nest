@@ -201,28 +201,6 @@ export const DashboardSkeleton = React.memo(function DashboardSkeleton() {
         </SkeletonPulse>
       </div>
 
-      {/* Net Worth strip */}
-      <SkeletonPulse className="skeleton-dashboard-strip">
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", width: "100%" }}>
-          <div style={{ flex: 1 }}>
-            <div className="skeleton-block" style={{ height: "11px", width: "70px", marginBottom: "2px" }} />
-            <div className="skeleton-block" style={{ height: "22px", width: "140px", marginBottom: "4px" }} />
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "12px" }}>📈</span>
-              <div className="skeleton-block" style={{ height: "13px", width: "80px" }} />
-              <span style={{ color: "var(--text-tertiary)" }}>+</span>
-              <span style={{ fontSize: "12px" }}>🐷</span>
-              <div className="skeleton-block" style={{ height: "13px", width: "60px" }} />
-            </div>
-          </div>
-          <div style={{ paddingLeft: "16px", borderLeft: "1px solid var(--border-subtle)", textAlign: "center", minWidth: "80px" }}>
-            <div className="skeleton-block" style={{ height: "11px", width: "60px", marginBottom: "2px" }} />
-            <div className="skeleton-block" style={{ height: "16px", width: "70px", marginBottom: "2px" }} />
-            <div className="skeleton-block" style={{ height: "11px", width: "40px" }} />
-          </div>
-        </div>
-      </SkeletonPulse>
-
       {/* Hero Card */}
       <SkeletonPulse className="skeleton-hero-card">
         <SkeletonText lines={2} />

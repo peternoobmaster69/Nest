@@ -4483,7 +4483,7 @@ body .profile-modal.txn-modal.txn-entry-modal[class] {
 :where(.modal-action-destructive, .cc-delete, .cct-modal-delete) {
   flex: 0 0 auto !important;
   margin-inline-end: auto !important;
-  color: var(--danger) !important;
+  background-color: var(--danger) !important;
 }
 
 .auto-rule-modal-footer {
