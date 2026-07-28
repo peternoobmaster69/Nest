@@ -1,0 +1,25 @@
+%% title: Authentication and session admission sequence
+%% last_updated: 2026-07-28
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Auth as NextAuth route
+    participant Provider as OAuth / Passkey
+    participant DB as Azure SQL
+
+    User->>Browser: Choose provider or passkey
+    Browser->>Auth: Start sign-in
+    Auth->>Provider: Verify provider claim / credential
+    Provider-->>Auth: Verified identity
+    Auth->>DB: Create or load User
+    Auth->>DB: Lock User and count ACTIVE sessions
+    alt Fewer than five active sessions
+        Auth->>DB: Create ACTIVE LoginSession
+        Auth-->>Browser: Signed JWT session cookie
+    else Session limit reached
+        Auth->>DB: Create short-lived PENDING LoginSession
+        Auth-->>Browser: Session-selection required
+        Browser->>Auth: Select sessions to keep
+        Auth->>DB: Revoke others and activate pending session
+        Auth-->>Browser: Active session
+    end

@@ -1,0 +1,12 @@
+%% title: Workspace-scoped request data flow
+%% last_updated: 2026-07-28
+flowchart LR
+    URL[/w/{workspaceId}/path] --> Proxy[proxy.ts]
+    Proxy -->|X-Workspace-Id| Page[Page / client]
+    Page -->|workspaceFetch| Route[API route]
+    Route --> Guard[requireWorkspaceAccess]
+    Guard --> Membership[(WorkspaceMember)]
+    Guard --> Service[Domain service]
+    Service --> ScopedQuery[workspaceId-scoped query]
+    ScopedQuery --> DB[(Azure SQL)]
+    DB --> Response[Private no-store response]

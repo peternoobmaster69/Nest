@@ -1,0 +1,24 @@
+%% title: Nest runtime containers
+%% last_updated: 2026-07-28
+flowchart TD
+    Browser[React 19 browser client]
+    Proxy[Next.js proxy boundary]
+    RSC[App Router server components]
+    API[Route handlers]
+    Domain[Domain and platform services]
+    Queue[SQL-backed job workers]
+    Prisma[Prisma client]
+    DB[(Azure SQL)]
+    Providers[External providers]
+
+    Browser -->|pages, fetch, React Query| Proxy
+    Proxy --> RSC
+    Proxy --> API
+    RSC --> Domain
+    API --> Domain
+    Domain --> Queue
+    Domain --> Prisma
+    Queue --> Prisma
+    Prisma --> DB
+    Domain --> Providers
+    Queue --> Providers

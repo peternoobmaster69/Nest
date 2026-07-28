@@ -1,0 +1,28 @@
+%% title: Idempotent financial posting sequence
+%% last_updated: 2026-07-28
+sequenceDiagram
+    actor User
+    participant UI
+    participant Route
+    participant Guard as Workspace guard
+    participant Posting as executePosting
+    participant DB as Azure SQL transaction
+
+    User->>UI: Submit money-changing action
+    UI->>Route: Request + Idempotency-Key
+    Route->>Guard: Require EDITOR membership
+    Guard-->>Route: userId + workspaceId
+    Route->>Posting: operation, request hash, actor, callback
+    Posting->>DB: Acquire scoped idempotency/journal claim
+    alt Existing matching completed request
+        DB-->>Posting: Stored result
+        Posting-->>Route: Replay result
+    else Key reused with different request
+        Posting-->>Route: Conflict
+    else New request
+        Posting->>DB: Create PostingGroup and ledger rows
+        Posting->>DB: Apply budget deltas and complete record
+        DB-->>Posting: Commit result
+        Posting-->>Route: New result
+    end
+    Route-->>UI: Result + X-Request-Id

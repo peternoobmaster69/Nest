@@ -1,0 +1,18 @@
+%% title: Engineering knowledge traceability
+%% last_updated: 2026-07-28
+flowchart TD
+    Requirement[Business requirement]
+    Rule[Documented business rule]
+    API[HTTP API route]
+    Service[Domain / platform service]
+    Model[Prisma model and SQL constraint]
+    Test[Contract / integration test]
+    Doc[Knowledge-base page]
+
+    Requirement --> Rule
+    Rule --> API
+    API --> Service
+    Service --> Model
+    Model --> Test
+    Test --> Doc
+    Doc -. change guidance .-> Rule

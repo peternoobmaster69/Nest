@@ -1,0 +1,27 @@
+%% title: Nest database domain relationships
+%% last_updated: 2026-07-28
+erDiagram
+    User ||--o{ WorkspaceMember : joins
+    Workspace ||--o{ WorkspaceMember : has
+    Workspace ||--o{ FinancialAccount : owns
+    FinancialAccount ||--o{ BudgetEnvelope : contains
+    Workspace ||--o{ Transaction : records
+    FinancialAccount ||--o{ Transaction : controls
+    BudgetEnvelope o|--o{ Transaction : allocates
+    PostingGroup o|--o{ Transaction : journals
+    Workspace ||--o{ CreditCardAccount : owns
+    CreditCardAccount ||--o{ CreditCardTransaction : records
+    CreditCardTransaction o|--o{ Transaction : accounts
+    Workspace ||--o{ Receivable : tracks
+    Receivable o|--o{ Transaction : settles
+    Workspace ||--o{ MonthlyBudgetPlan : plans
+    MonthlyBudgetPlan ||--o{ MonthlyBudgetPlanSource : funds
+    MonthlyBudgetPlan ||--o{ MonthlyBudgetPlanItem : allocates
+    Workspace ||--o{ InvestmentAccount : owns
+    InvestmentAccount ||--o{ InvestmentEntry : values
+    Workspace ||--o{ FrequentFlyerAccount : owns
+    FrequentFlyerAccount ||--o{ MileProgram : earns
+    FrequentFlyerAccount ||--o{ MileRedemption : redeems
+    User ||--o{ LoginSession : authenticates
+    User ||--o{ PasskeyCredential : owns
+    Workspace ||--o{ BackgroundJob : scopes

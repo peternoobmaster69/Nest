@@ -58,7 +58,7 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
-For a new empty SQL Server database, use `npm run db:bootstrap`. Shared and production environments use `npm run prisma:migrate:deploy`, never `migrate dev` or `db push`. See [the database operations runbook](docs/database-operations.md).
+For a new empty SQL Server database, use `npm run db:bootstrap`. Shared and production environments use `npm run prisma:migrate:deploy`, never `migrate dev` or `db push`. See [the database operations runbook](docs/database/operations.md).
 
 5. Start the app:
 
@@ -233,7 +233,7 @@ INTEGRATION_ENCRYPTION_KEY_VERSION="v1"
 INTEGRATION_ENCRYPTION_PREVIOUS_KEYS="{}"
 ```
 
-The Phase 3 security migration clears legacy plaintext Gmail grants, so existing users reconnect once after deployment. It also removes legacy full-card fields; Nest retains only card name/bank, last four digits, and expiry. See [the Phase 3 threat model](docs/phase-3-threat-model.md) for rotation and deployment guidance.
+The Phase 3 security migration clears legacy plaintext Gmail grants, so existing users reconnect once after deployment. It also removes legacy full-card fields; Nest retains only card name/bank, last four digits, and expiry. See [the security architecture](docs/architecture/security.md) for credential rotation and deployment guidance.
 
 ### Passkeys and Web Push
 

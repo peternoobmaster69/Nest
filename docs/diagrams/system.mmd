@@ -1,0 +1,27 @@
+%% title: Nest system context
+%% last_updated: 2026-07-28
+flowchart LR
+    User[Authenticated user]
+    ShareViewer[Public-link viewer]
+    Vercel[Vercel / Next.js runtime]
+    SQL[(Azure SQL)]
+    OAuth[Google / Apple / Facebook OAuth]
+    Gmail[Gmail API]
+    AOAI[Azure OpenAI]
+    Search[Azure AI Search]
+    Market[Massive market data]
+    News[SerpApi news]
+    Email[Azure Communication Email]
+    Push[Web Push service]
+
+    User -->|HTTPS + session cookie| Vercel
+    ShareViewer -->|unguessable revocable token| Vercel
+    Vercel --> SQL
+    Vercel <--> OAuth
+    Vercel <--> Gmail
+    Vercel --> AOAI
+    Vercel --> Search
+    Vercel --> Market
+    Vercel --> News
+    Vercel --> Email
+    Vercel --> Push

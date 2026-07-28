@@ -1,0 +1,27 @@
+%% title: Gmail alert synchronization job sequence
+%% last_updated: 2026-07-28
+sequenceDiagram
+    participant Trigger as User / Vercel cron
+    participant API as Gmail sync route
+    participant Queue as BackgroundJob
+    participant Worker as Gmail sync worker
+    participant Gmail as Gmail API
+    participant DB as Azure SQL
+
+    Trigger->>API: Request sync
+    API->>Queue: Enqueue scoped GMAIL_SYNC job
+    Queue-->>API: Created or deduplicated job
+    API->>Worker: Process bounded slice
+    Worker->>Queue: Claim lease
+    Worker->>Gmail: Read history or bounded query page
+    Gmail-->>Worker: Message IDs and cursor
+    loop Relevant messages
+        Worker->>Gmail: Fetch message metadata/body
+        Worker->>DB: Parse, deduplicate, stage card alert
+    end
+    alt More pages
+        Worker->>Queue: Save checkpoint and continue later
+    else Complete
+        Worker->>DB: Persist Gmail history cursor
+        Worker->>Queue: Mark completed
+    end

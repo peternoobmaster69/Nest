@@ -14,7 +14,7 @@ The order is deliberate: contain security and double-posting risks before expand
 - `npm run lint` and the TypeScript check pass.
 - `npx next build` passes on Next.js 16.2.10 and produces 80 routes. The normal `npm run build` wrapper is blocked locally by a Windows lock on the already-generated Prisma engine DLL; no user-owned process was stopped.
 - The current test baseline is 38/38 passing, including the focused Phase 0 containment suite and UI contracts.
-- `npm audit --omit=dev` reports 0 high/critical and 4 moderate production findings. The residual Next.js/PostCSS and NextAuth/UUID chains are documented in `docs/phase-0-security-containment.md`; npm currently proposes unsupported or regressive major downgrades rather than compatible fixes.
+- At this plan's 2026-07-14 snapshot, `npm audit --omit=dev` reported 0 high/critical and 4 moderate production findings. See the current [security review](docs/reviews/security-review.md) for the later audit status rather than treating this historical result as current.
 - Live database verification is blocked because the configured Azure SQL database is paused after exhausting its July 2026 free allowance. The attempted connection also reported certificate validation being bypassed, which must be corrected for production.
 - No interactive browser was available, so responsive layout, contrast, screen-reader behavior, and complete keyboard navigation have not been visually validated. These are explicit release gates below.
 
@@ -85,7 +85,7 @@ Target: 1–3 days. Owner: backend/security. Status: Complete.
 - [x] Stop returning raw exception/provider/database messages from public responses on the affected P0 paths.
 - [x] Add focused regression tests for unauthenticated cron calls, cross-workspace manual jobs, cache cleanup, and card-detail responses.
 
-Implementation verification (2026-07-14): focused Phase 0 tests, the full test suite, lint, TypeScript, and `npx next build` pass. `npm audit --omit=dev` reports 0 high/critical and 4 moderate findings, documented in `docs/phase-0-security-containment.md`. The CVV purge migration is checked in for the next database deployment; it has not been applied to the currently paused live database. The `npm run build` wrapper remains locally blocked by the known Windows Prisma engine DLL lock, so the established non-destructive `npx next build` verification path was used.
+Implementation verification (2026-07-14): focused Phase 0 tests, the full test suite, lint, TypeScript, and `npx next build` pass. At that historical snapshot, `npm audit --omit=dev` reported 0 high/critical and 4 moderate findings; see the current [security review](docs/reviews/security-review.md) for later results. The CVV purge migration is checked in for the next database deployment; it has not been applied to the currently paused live database. The `npm run build` wrapper remains locally blocked by the known Windows Prisma engine DLL lock, so the established non-destructive `npx next build` verification path was used.
 
 Exit criteria:
 
