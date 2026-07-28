@@ -4484,6 +4484,7 @@ body .profile-modal.txn-modal.txn-entry-modal[class] {
   flex: 0 0 auto !important;
   margin-inline-end: auto !important;
   background-color: var(--danger) !important;
+  color: white !important;
 }
 
 .auto-rule-modal-footer {

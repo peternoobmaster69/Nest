@@ -2691,7 +2691,6 @@ export function TransactionsPage() {
                   type="button"
                   onClick={confirmDeleteEditingTx}
                   disabled={deleteTx.isPending || !editingTxId}
-                  style={{ color: "var(--danger)" }}
                 >
                   {deleteTx.isPending && editingTxId && deletingTransactionIds.includes(editingTxId) ? "Deleting..." : "Delete"}
                 </Button>
