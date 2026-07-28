@@ -14,5 +14,5 @@
   "components/collaborators-page.tsx": { "maxLines": 562, "owner": "frontend", "reason": "Existing workspace collaboration controller." },
   "components/settings-app-access.tsx": { "maxLines": 551, "owner": "frontend", "reason": "Optional app-access workflow is now route-lazy and isolated." },
   "components/app-sidebar.tsx": { "maxLines": 432, "owner": "frontend", "reason": "Shared desktop navigation shell." },
-  "components/ui-skeleton.tsx": { "maxLines": 429, "owner": "frontend", "reason": "Compatibility export for existing skeleton primitives." }
+  "components/ui-skeleton.tsx": { "maxLines": 189, "owner": "frontend", "reason": "Shared loading shell and state primitives." }
 }

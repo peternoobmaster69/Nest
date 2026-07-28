@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { CreditTransactionSummary as CreditTransactionSummaryView } from "@/components/credit-transactions/credit-transaction-summary";
-import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
+import { bankAccountsQueryOptions } from "@/lib/accounts";
 
 type CreditCard = {
   id: string;
@@ -858,7 +858,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         },
         body: JSON.stringify(payload),
       }),
-    onSuccess: (result, payload) => {
+    onSuccess: (result) => {
       setImportMessage(
         `Maybank CSV imported: ${result.imported} added, ${result.skippedDuplicates} duplicates skipped, ${result.skippedPayments} payment rows skipped.`,
       );

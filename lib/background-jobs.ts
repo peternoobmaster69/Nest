@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
-export type BackgroundJobPhase = "idle" | "queued" | "reading" | "writing" | "complete" | "error" | "cancelled";
+type BackgroundJobPhase = "idle" | "queued" | "reading" | "writing" | "complete" | "error" | "cancelled";
 
 export type BackgroundJobProgress = {
   phase: BackgroundJobPhase;
@@ -57,7 +57,7 @@ function statusToPhase(status: string): BackgroundJobPhase {
   return "idle";
 }
 
-export function sanitizeBackgroundJobError(error: unknown): JobFailure {
+function sanitizeBackgroundJobError(error: unknown): JobFailure {
   if (error instanceof BackgroundJobError) {
     return { code: error.code, message: error.message, retryable: error.retryable };
   }
@@ -181,7 +181,7 @@ async function expireAbandonedJob(jobId: string, now: Date) {
   });
 }
 
-export async function recoverExpiredBackgroundJobs(type?: string) {
+async function recoverExpiredBackgroundJobs(type?: string) {
   const now = new Date();
   const expired = await prisma.backgroundJob.findMany({
     where: { type, status: "RUNNING", leaseExpiresAt: { lte: now } },

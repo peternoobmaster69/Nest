@@ -1,6 +1,4 @@
-import type { WorkspaceRole } from "@/lib/workspace-roles";
-
-export const API_ERROR_CODES = {
+const API_ERROR_CODES = {
   400: "INVALID_REQUEST",
   401: "UNAUTHENTICATED",
   403: "FORBIDDEN",
@@ -35,7 +33,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-export type PageInfo = {
+type PageInfo = {
   hasMore: boolean;
   nextCursor: string | null;
   limit: number;
@@ -51,12 +49,6 @@ export const CACHE_POLICIES = {
   privateShort: "private, max-age=60, stale-while-revalidate=300",
   publicImmutable: "public, max-age=31536000, immutable",
 } as const;
-
-export const ROLE_REQUIREMENTS = {
-  read: "VIEWER",
-  write: "EDITOR",
-  administer: "OWNER",
-} as const satisfies Record<string, WorkspaceRole>;
 
 export function apiErrorCodeForStatus(status: number): ApiErrorCode {
   return API_ERROR_CODES[status as keyof typeof API_ERROR_CODES] ?? "INTERNAL_ERROR";

@@ -30,8 +30,8 @@ type RunnerOptions = {
   workspaceId?: string;
 };
 
-export const CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE = "CREDIT_TXN_AUTO_ACCOUNT";
-export const CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY = "global";
+const CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE = "CREDIT_TXN_AUTO_ACCOUNT";
+const CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY = "global";
 
 function formatAutoReceivableGroupTitle(ruleName: string, transactionDate: Date) {
   const monthLabel = transactionDate.toLocaleString("en-US", {
@@ -393,4 +393,3 @@ export async function runCreditTxnAutoAccounting(
     throw error;
   }
 }
-

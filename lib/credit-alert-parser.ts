@@ -111,7 +111,7 @@ function parseDateTime(rawBody: string) {
   return new Date(utcMillis);
 }
 
-export function parseDbsTransactionAlert(rawBody: string): ParsedAlert {
+function parseDbsTransactionAlert(rawBody: string): ParsedAlert {
   const transactionRef = rawBody.match(/Transaction Ref:\s*([A-Z0-9]+)/i)?.[1];
   const amountMatch = rawBody.match(/Amount:\s*([A-Z]{3})\s*([0-9,]+\.[0-9]{2})/i);
   const fromLine = rawBody.match(/From:\s*([^\n\r]+)/i)?.[1] ?? "";
@@ -134,7 +134,7 @@ export function parseDbsTransactionAlert(rawBody: string): ParsedAlert {
   };
 }
 
-export function parseUobTransactionAlert(rawBody: string): ParsedAlert {
+function parseUobTransactionAlert(rawBody: string): ParsedAlert {
   const transitMatch = rawBody.match(
     /Your accumulated transit transactions of\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+has been billed to your UOB card ending\s*(\d{4})\s+on\s+(\d{2}\/\d{2}\/\d{2})/i,
   );
@@ -188,7 +188,7 @@ export function parseUobTransactionAlert(rawBody: string): ParsedAlert {
   };
 }
 
-export function parseOcbcTransactionAlert(rawBody: string): ParsedAlert {
+function parseOcbcTransactionAlert(rawBody: string): ParsedAlert {
   const match = rawBody.match(
     /We wish to inform you that\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+was charged at\s+(\d{2}:\d{2})\s+on\s+(\d{2}-[A-Z]{3}-\d{2})\s+to your card\s+\(-(\d{4})\)\s+at\s+(.+?)(?:\.|$)/i,
   );
@@ -211,7 +211,7 @@ export function parseOcbcTransactionAlert(rawBody: string): ParsedAlert {
   };
 }
 
-export function parseCitiTransactionAlert(rawBody: string): ParsedAlert {
+function parseCitiTransactionAlert(rawBody: string): ParsedAlert {
   const cardLast4 = rawBody.match(/Account\s+Number\s*:\s*X{4}-X{4}-X{4}-(\d{4})/i)?.[1];
   const dateRaw = rawBody.match(/Transaction\s+date\s*:\s*(\d{2}\/\d{2}\/\d{2})/i)?.[1];
   const timeRaw = rawBody.match(/Transaction\s+time\s*:\s*(\d{2}:\d{2}:\d{2})/i)?.[1];

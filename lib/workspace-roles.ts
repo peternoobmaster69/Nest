@@ -1,4 +1,4 @@
-export const WORKSPACE_ROLES = ["VIEWER", "EDITOR", "OWNER"] as const;
+const WORKSPACE_ROLES = ["VIEWER", "EDITOR", "OWNER"] as const;
 export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
 
 const ROLE_RANK: Record<WorkspaceRole, number> = {

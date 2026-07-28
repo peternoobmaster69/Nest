@@ -29,7 +29,6 @@ import {
   DashboardOverviewSkeleton,
   DashboardRecentTransactionsSkeleton,
 } from "@/components/skeletons/DashboardSkeleton";
-import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { useToast } from "@/components/toast-provider";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { buildCreditCardStatementPath, buildWorkspacePath } from "@/lib/workspace-entry";
@@ -177,10 +176,6 @@ type TransactionsSummaryResponse = {
 };
 
 type Receivable = {
-  id: string;
-  title: string;
-  amountCents: number;
-  date: string;
   status: string;
 };
 
@@ -247,19 +242,6 @@ const budgetEmojis: Record<string, string> = {
   hospital: "🏥",
   default: "💰",
 };
-const budgetIconOptions = [
-  "💰", "🏠", "🛡️", "✈️", "🍔", "🥬", "🚌", "🛍️", "💪", "💊", "🎬", "💡", "📚", "📈", "🚗", "📱", "🎯",
-  "🧾", "🏦", "💳", "🧮", "👶", "🎓", "🐶", "🎁", "🛠️", "💼", "🏥", "🚴", "🍜", "☕",
-  // Family/Parents & Religious
-  "👴", "👵", "👪", "👨‍👩‍👧‍👦", "⛪",
-  // Home & Cleaning
-  "🧹", "🧽", "🧼", "🪣", "🧺", "🛋️", "🛏️", "🚿", "🚽", "🪟", "🪴",
-  // Nature
-  "🍃", "🌿", "🌱",
-  // Globe/World
-  "🌍", "🗺️", "🧭",
-];
-
 function getBudgetEmoji(name: string) {
   const lower = name.toLowerCase();
   for (const [key, emoji] of Object.entries(budgetEmojis)) {
@@ -271,23 +253,6 @@ function getBudgetEmoji(name: string) {
 function getBudgetIcon(name: string, icon?: string | null) {
   return icon || getBudgetEmoji(name);
 }
-
-// Transaction emoji mapping
-const txEmojis: Record<string, string> = {
-  grocery: "🛒",
-  groceries: "🛒",
-  grab: "🚗",
-  uber: "🚗",
-  taxi: "🚗",
-  transport: "🚗",
-  starbucks: "☕",
-  coffee: "☕",
-  gym: "🏋️",
-  fitness: "🏋️",
-  received: "💵",
-  payment: "💵",
-  default: "💳",
-};
 
 function getDaysUntil(dateStr: string) {
   const now = new Date();
@@ -393,21 +358,6 @@ export function DashboardShell({
   const [budgetTarget, setBudgetTarget] = useState("");
   const [budgetAccountId, setBudgetAccountId] = useState("");
   const [createBudgetOpen, setCreateBudgetOpen] = useState(false);
-  const [txSubject, setTxSubject] = useState("");
-  const [txAmount, setTxAmount] = useState("");
-  const [txAccountId, setTxAccountId] = useState("");
-  const [txBudgetId, setTxBudgetId] = useState("");
-  const [txBudgetOperation, setTxBudgetOperation] = useState<"DEDUCT" | "ADD">("DEDUCT");
-  const [recvTitle, setRecvTitle] = useState("");
-  const [recvAmount, setRecvAmount] = useState("");
-  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
-  const [editingBudgetName, setEditingBudgetName] = useState("");
-  const [editingBudgetIcon, setEditingBudgetIcon] = useState("");
-  const [editingBudgetIsSavings, setEditingBudgetIsSavings] = useState(false);
-  const [editingBudgetTarget, setEditingBudgetTarget] = useState("");
-  const [editingReceivableId, setEditingReceivableId] = useState<string | null>(null);
-  const [editingReceivableTitle, setEditingReceivableTitle] = useState("");
-  const [editingReceivableAmount, setEditingReceivableAmount] = useState("");
   const [selectedBankFilterId, setSelectedBankFilterId] = useState<string>(ALL_BANKS_FILTER);
   const [selectedCashFlowAccountId, setSelectedCashFlowAccountId] = useState<string>(CASH_FLOW_ALL_ACCOUNTS);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
@@ -437,7 +387,7 @@ export function DashboardShell({
 
   const baseCurrency = normalizeCurrency(contextQuery.data?.baseCurrency);
   const formatCents = useCallback((value: number) => formatMoney(value, baseCurrency), [baseCurrency]);
-  const formatCentsShort = useCallback((value: number) => formatMoneyShort(value, baseCurrency), [baseCurrency]);
+  const formatCentsShort = useCallback((value: number) => formatMoneyShort(value), []);
   const defaultUserId = contextQuery.data?.defaultUserId;
   const dashboardBankStorageKey = workspaceId ? `nest:selectedBank:${workspaceId}` : null;
   const sidebarMoneyPages = contextQuery.data?.sidebarMoneyPages;
@@ -486,13 +436,14 @@ export function DashboardShell({
     queryFn: () => fetchJson<InvestmentAccountSummary[]>(`/api/investments?workspaceId=${workspaceId}`, { cache: "no-store" }),
     enabled: Boolean(workspaceId),
   });
-  const firstBankAccountId = bankAccountOptions[0]?.id;
-
   const updateBankBalance = useMutation({
     mutationFn: ({ id, startingCents }: { id: string; startingCents: number }) =>
       fetchJson(`/api/accounts/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": `account-balance:${id}:${crypto.randomUUID()}`,
+        },
         body: JSON.stringify({ startingCents }),
       }),
     onSuccess: async () => {
@@ -512,16 +463,12 @@ export function DashboardShell({
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary", workspaceId]) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions", workspaceId]) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.key(["receivables", workspaceId]) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]) }),
       ]),
     [queryClient, workspaceId]
   );
 
   const budgetsKey = ["budgets", workspaceId] as const;
-  const transactionsKey = ["transactions", workspaceId] as const;
-  const receivablesKey = ["receivables", workspaceId] as const;
 
   const pushToast = (kind: "success" | "error" | "info", message: string) => toast.notify(message, kind);
 
@@ -548,7 +495,10 @@ export function DashboardShell({
     mutationFn: (payload: { name: string; targetCents: number; accountId: string; icon?: string }) =>
       fetchJson("/api/budgets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": `budget-create:${crypto.randomUUID()}`,
+        },
         body: JSON.stringify({
           workspaceId,
           accountId: payload.accountId,
@@ -587,297 +537,12 @@ export function DashboardShell({
     onSettled: refreshAll,
   });
 
-  const createTransaction = useMutation({
-    mutationFn: (payload: {
-      subject: string;
-      amountCents: number;
-      accountId: string;
-      operation: "DEDUCT" | "ADD";
-      budgetId?: string;
-      budgetOperation?: "DEDUCT" | "ADD";
-    }) =>
-      fetchJson("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({
-          workspaceId,
-          accountId: payload.accountId,
-          subject: payload.subject,
-          amountCents: payload.amountCents,
-          direction: payload.operation === "ADD" ? "CREDIT" : "DEBIT",
-          kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
-          date: new Date().toISOString(),
-          budgetId: payload.budgetId,
-          budgetOperation: payload.budgetOperation,
-        }),
-      }),
-    onMutate: async (payload) => {
-      await queryClient.cancelQueries({ queryKey: transactionsKey });
-      const previousTransactions = queryClient.getQueryData<Transaction[]>(transactionsKey);
-      const previousBudgets = queryClient.getQueryData<Budget[]>(budgetsKey);
-      const optimistic: Transaction = {
-        id: `temp-tx-${Date.now()}`,
-        accountId: payload.accountId,
-        subject: payload.subject,
-        amountCents: payload.amountCents,
-        direction: "DEBIT",
-        date: new Date().toISOString(),
-        kind: "EXPENSE",
-      };
-      queryClient.setQueryData<Transaction[]>(transactionsKey, (old) => [optimistic, ...(old ?? [])]);
-      if (payload.budgetId && payload.budgetOperation) {
-        const delta = payload.budgetOperation === "DEDUCT" ? -payload.amountCents : payload.amountCents;
-        queryClient.setQueryData<Budget[]>(budgetsKey, (old) =>
-          (old ?? []).map((b) => (b.id === payload.budgetId ? { ...b, availableCents: b.availableCents + delta } : b)),
-        );
-      }
-      return { previousTransactions, previousBudgets };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousTransactions) {
-        queryClient.setQueryData(transactionsKey, context.previousTransactions);
-      }
-      if (context?.previousBudgets) {
-        queryClient.setQueryData(budgetsKey, context.previousBudgets);
-      }
-      pushToast("error", "Transaction creation failed.");
-    },
-    onSuccess: () => pushToast("success", "Transaction added."),
-    onSettled: refreshAll,
-  });
-
-  const createReceivable = useMutation({
-    mutationFn: (payload: { title: string; amountCents: number }) =>
-      fetchJson("/api/receivables", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          accountId: firstBankAccountId,
-          fromUserId: defaultUserId || undefined,
-          title: payload.title,
-          amountCents: payload.amountCents,
-          date: new Date().toISOString(),
-          status: "OPEN",
-        }),
-      }),
-    onMutate: async (payload) => {
-      await queryClient.cancelQueries({ queryKey: receivablesKey });
-      const previousReceivables = queryClient.getQueryData<Receivable[]>(receivablesKey);
-      const optimistic: Receivable = {
-        id: `temp-recv-${Date.now()}`,
-        title: payload.title,
-        amountCents: payload.amountCents,
-        date: new Date().toISOString(),
-        status: "OPEN",
-      };
-      queryClient.setQueryData<Receivable[]>(receivablesKey, (old) => [optimistic, ...(old ?? [])]);
-      return { previousReceivables };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousReceivables) {
-        queryClient.setQueryData(receivablesKey, context.previousReceivables);
-      }
-      pushToast("error", "Receivable creation failed.");
-    },
-    onSuccess: () => pushToast("success", "Receivable added."),
-    onSettled: refreshAll,
-  });
-
-  const updateBudget = useMutation({
-    mutationFn: ({ id, name, icon, targetCents }: { id: string; name: string; icon?: string; targetCents: number }) =>
-      fetchJson(`/api/budgets/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, icon, targetCents }),
-      }),
-    onMutate: async ({ id, name, icon, targetCents }) => {
-      await queryClient.cancelQueries({ queryKey: budgetsKey });
-      const previousBudgets = queryClient.getQueryData<Budget[]>(budgetsKey);
-      queryClient.setQueryData<Budget[]>(budgetsKey, (old) =>
-        (old ?? []).map((b) => (b.id === id ? { ...b, name, icon: icon ?? b.icon, targetCents } : b))
-      );
-      return { previousBudgets };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousBudgets) {
-        queryClient.setQueryData(budgetsKey, context.previousBudgets);
-      }
-      pushToast("error", "Budget edit failed.");
-    },
-    onSuccess: () => pushToast("success", "Budget updated."),
-    onSettled: refreshAll,
-  });
-
-  const deleteBudget = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/budgets/${id}`, { method: "DELETE" }),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: budgetsKey });
-      const previousBudgets = queryClient.getQueryData<Budget[]>(budgetsKey);
-      queryClient.setQueryData<Budget[]>(budgetsKey, (old) => (old ?? []).filter((b) => b.id !== id));
-      return { previousBudgets };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousBudgets) {
-        queryClient.setQueryData(budgetsKey, context.previousBudgets);
-      }
-      pushToast("error", "Budget delete failed.");
-    },
-    onSuccess: () => pushToast("success", "Budget deleted."),
-    onSettled: refreshAll,
-  });
-
-  const markReceivablePaid = useMutation({
-    mutationFn: (id: string) =>
-      fetchJson(`/api/receivables/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "PAID" }),
-      }),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: receivablesKey });
-      const previousReceivables = queryClient.getQueryData<Receivable[]>(receivablesKey);
-      queryClient.setQueryData<Receivable[]>(receivablesKey, (old) =>
-        (old ?? []).map((r) => (r.id === id ? { ...r, status: "PAID" } : r))
-      );
-      return { previousReceivables };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousReceivables) {
-        queryClient.setQueryData(receivablesKey, context.previousReceivables);
-      }
-      pushToast("error", "Receivable update failed.");
-    },
-    onSuccess: () => pushToast("success", "Receivable marked paid."),
-    onSettled: refreshAll,
-  });
-
-  const updateReceivable = useMutation({
-    mutationFn: ({ id, title, amountCents }: { id: string; title: string; amountCents: number }) =>
-      fetchJson(`/api/receivables/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, amountCents }),
-      }),
-    onMutate: async ({ id, title, amountCents }) => {
-      await queryClient.cancelQueries({ queryKey: receivablesKey });
-      const previousReceivables = queryClient.getQueryData<Receivable[]>(receivablesKey);
-      queryClient.setQueryData<Receivable[]>(receivablesKey, (old) =>
-        (old ?? []).map((r) => (r.id === id ? { ...r, title, amountCents } : r))
-      );
-      return { previousReceivables };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousReceivables) {
-        queryClient.setQueryData(receivablesKey, context.previousReceivables);
-      }
-      pushToast("error", "Receivable edit failed.");
-    },
-    onSuccess: () => pushToast("success", "Receivable updated."),
-    onSettled: refreshAll,
-  });
-
-  const deleteReceivable = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/receivables/${id}`, { method: "DELETE" }),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: receivablesKey });
-      const previousReceivables = queryClient.getQueryData<Receivable[]>(receivablesKey);
-      queryClient.setQueryData<Receivable[]>(receivablesKey, (old) => (old ?? []).filter((r) => r.id !== id));
-      return { previousReceivables };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousReceivables) {
-        queryClient.setQueryData(receivablesKey, context.previousReceivables);
-      }
-      pushToast("error", "Receivable delete failed.");
-    },
-    onSuccess: () => pushToast("success", "Receivable deleted."),
-    onSettled: refreshAll,
-  });
-
   const onCreateBudget = (event: FormEvent) => {
     event.preventDefault();
     if (!workspaceId || !budgetAccountId || !defaultUserId || !budgetName.trim()) return;
     const parsedTarget = budgetTarget.trim() ? Number(budgetTarget) : 0;
     if (Number.isNaN(parsedTarget) || parsedTarget < 0) return;
     createBudget.mutate({ name: budgetName.trim(), targetCents: Math.round(parsedTarget * 100), accountId: budgetAccountId });
-  };
-
-  const onCreateTx = (event: FormEvent) => {
-    event.preventDefault();
-    const selectedBudget = budgetsQuery.data?.find((b) => b.id === txBudgetId);
-    const accountId = selectedBudget?.accountId || txAccountId;
-    if (!workspaceId || !accountId || !txSubject || !txAmount) return;
-    createTransaction.mutate({
-      subject: txSubject,
-      amountCents: Math.round(Number(txAmount) * 100),
-      accountId,
-      operation: txBudgetOperation,
-      budgetId: txBudgetId || undefined,
-      budgetOperation: txBudgetId ? txBudgetOperation : undefined,
-    });
-    setTxSubject("");
-    setTxAmount("");
-    setTxAccountId("");
-  };
-
-  const onCreateReceivable = (event: FormEvent) => {
-    event.preventDefault();
-    if (!workspaceId || !recvTitle || !recvAmount) return;
-    createReceivable.mutate({ title: recvTitle, amountCents: Math.round(Number(recvAmount) * 100) });
-    setRecvTitle("");
-    setRecvAmount("");
-  };
-
-  const startBudgetEdit = (budget: Budget) => {
-    const resolvedIcon = getBudgetIcon(budget.name, budget.icon);
-    setEditingBudgetId(budget.id);
-    setEditingBudgetName(budget.name);
-    setEditingBudgetIcon(resolvedIcon);
-    setEditingBudgetIsSavings(resolvedIcon === "🛡️");
-    setEditingBudgetTarget(String((budget.targetCents / 100).toFixed(2)));
-  };
-
-  const saveBudgetEdit = () => {
-    if (!editingBudgetId || !editingBudgetName.trim()) return;
-    const parsedTarget = editingBudgetTarget.trim() ? Number(editingBudgetTarget) : 0;
-    if (Number.isNaN(parsedTarget) || parsedTarget < 0) return;
-    updateBudget.mutate({
-      id: editingBudgetId,
-      name: editingBudgetName.trim(),
-      icon: editingBudgetIsSavings ? "🛡️" : editingBudgetIcon || undefined,
-      targetCents: Math.round(parsedTarget * 100),
-    });
-    setEditingBudgetId(null);
-    setEditingBudgetName("");
-    setEditingBudgetIcon("");
-    setEditingBudgetIsSavings(false);
-    setEditingBudgetTarget("");
-  };
-
-  const startReceivableEdit = (recv: Receivable) => {
-    setEditingReceivableId(recv.id);
-    setEditingReceivableTitle(recv.title);
-    setEditingReceivableAmount(String((recv.amountCents / 100).toFixed(2)));
-  };
-
-  const saveReceivableEdit = () => {
-    if (!editingReceivableId || !editingReceivableTitle || !editingReceivableAmount) return;
-    updateReceivable.mutate({
-      id: editingReceivableId,
-      title: editingReceivableTitle,
-      amountCents: Math.round(Number(editingReceivableAmount) * 100),
-    });
-    setEditingReceivableId(null);
-    setEditingReceivableTitle("");
-    setEditingReceivableAmount("");
-  };
-
-  const confirmDeleteBudget = async (budgetId: string) => {
-    if (!(await confirmDestructiveAction("Delete this sub-account?"))) return;
-    deleteBudget.mutate(budgetId);
-    setEditingBudgetId(null);
-    setEditingBudgetIcon("");
   };
 
   const summary = data ?? {
@@ -1530,90 +1195,6 @@ export function DashboardShell({
                   </Button>
                 </div>
               </form>
-            </div>
-          </Dialog>
-        )}
-
-        {editingBudgetId && (
-          <Dialog open onClose={() => setEditingBudgetId(null)} title="Edit sub-account" surface="custom" overlayClassName="profile-modal-overlay">
-            <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="profile-modal-head">
-                <h3>Edit Account</h3>
-                <ModalCloseButton onClick={() => setEditingBudgetId(null)} label="Close Edit Account" />
-              </div>
-              <div className="modal-form-shell">
-                <div className="profile-modal-body">
-                <div className="profile-field">
-                  <span>Name</span>
-                  <Input className="input" value={editingBudgetName} onChange={(e) => setEditingBudgetName(e.target.value)} />
-                </div>
-                <div className="profile-field">
-                  <span>Monthly limit (optional)</span>
-                  <NumericCalculatorInput
-                    min="0"
-                    step="0.01"
-                    value={editingBudgetTarget}
-                    onValueChange={setEditingBudgetTarget}
-                  />
-                </div>
-                <label className="profile-field" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Input
-                    type="checkbox"
-                    checked={editingBudgetIsSavings}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setEditingBudgetIsSavings(checked);
-                      if (checked) {
-                        setEditingBudgetIcon("🛡️");
-                      }
-                    }}
-                  />
-                  <span>Is this a savings sub-account?</span>
-                </label>
-                <div className="profile-field">
-                  <span>Icon</span>
-                  <div className="icon-picker">
-                    {budgetIconOptions.map((icon) => (
-                      <Button
-                        key={icon}
-                        className={`icon-chip${editingBudgetIcon === icon ? " on" : ""}`}
-                        onClick={() => {
-                          setEditingBudgetIcon(icon);
-                          setEditingBudgetIsSavings(icon === "🛡️");
-                        }}
-                        type="button"
-                        aria-label={`Use ${icon} icon`}
-                      >
-                        {icon}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                </div>
-                <div className="profile-actions">
-                  <Button
-                    className="btn btn-ghost btn-xs modal-action-destructive"
-                    onClick={() => {
-                      if (editingBudgetId) confirmDeleteBudget(editingBudgetId);
-                    }}
-                    disabled={deleteBudget.isPending}
-                  >
-                    Delete
-                  </Button>
-                  <Button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => {
-                      setEditingBudgetId(null);
-                      setEditingBudgetIcon("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button className="btn btn-primary btn-xs" onClick={saveBudgetEdit} disabled={updateBudget.isPending}>
-                    Save
-                  </Button>
-                </div>
-              </div>
             </div>
           </Dialog>
         )}

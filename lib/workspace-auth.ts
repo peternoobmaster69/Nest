@@ -9,7 +9,7 @@ import {
   type WorkspaceRole,
 } from "@/lib/workspace-roles";
 
-export { normalizeWorkspaceRole, WORKSPACE_ROLES, type WorkspaceRole } from "@/lib/workspace-roles";
+export { normalizeWorkspaceRole, type WorkspaceRole } from "@/lib/workspace-roles";
 
 function assertMinimumRole(role: WorkspaceRole, minimumRole: WorkspaceRole) {
   if (!hasMinimumWorkspaceRole(role, minimumRole)) {

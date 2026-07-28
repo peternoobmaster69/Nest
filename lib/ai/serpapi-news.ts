@@ -9,7 +9,7 @@ const SERPAPI_MAX_MONTHLY_LIMIT = 250;
 const SERPAPI_MAX_RESULTS = 8;
 const SERPAPI_MAX_PARSED_RESULTS = 50;
 
-export type SerpApiNewsArticle = {
+type SerpApiNewsArticle = {
   title: string;
   source: string | null;
   publishedAt: string | null;

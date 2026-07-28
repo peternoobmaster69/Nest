@@ -9,7 +9,7 @@ import { Upload, AlertCircle, CheckCircle, XCircle, Calculator } from "lucide-re
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/controls";
-import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
+import { bankAccountsQueryOptions } from "@/lib/accounts";
 
 interface DataImportSectionProps {
   workspaceId: string | null;

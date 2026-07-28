@@ -29,7 +29,7 @@ const MassiveAggregateResponseSchema = z.object({
   ticker: z.string().optional(),
 }).passthrough();
 
-export type MassiveDailyBar = z.infer<typeof MassiveBarSchema>;
+type MassiveDailyBar = z.infer<typeof MassiveBarSchema>;
 
 export type MassiveMarketHistoryResult = {
   ticker: string;

@@ -1,4 +1,4 @@
-import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 
 export type QueryRoot =
   | "app-context"
@@ -96,8 +96,4 @@ export function removeWorkspaceQueries(client: QueryClient, workspaceId?: Worksp
   for (const root of workspaceDataRoots) {
     client.removeQueries({ queryKey: workspaceId ? [root, workspaceId] : [root] });
   }
-}
-
-export function isTypedQueryKey(value: QueryKey): value is TypedQueryKey {
-  return typeof value[0] === "string" && (workspaceDataRoots as readonly string[]).includes(value[0]);
 }

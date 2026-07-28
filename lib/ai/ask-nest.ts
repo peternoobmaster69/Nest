@@ -211,7 +211,7 @@ export type AskNestResult = {
   diagnostics: AskNestDiagnostics;
 };
 
-export type AskNestToolDiagnostic = {
+type AskNestToolDiagnostic = {
   name: string;
   arguments: Record<string, unknown>;
   status: "SUCCESS" | "INVALID_ARGUMENTS" | "UNAVAILABLE";
@@ -220,7 +220,7 @@ export type AskNestToolDiagnostic = {
   emptyResult: boolean;
 };
 
-export type AskNestDiagnostics = {
+type AskNestDiagnostics = {
   promptVersion: string;
   intentVersion: string;
   intent: string;
@@ -235,7 +235,7 @@ export type AskNestDiagnostics = {
   durationMs: number;
 };
 
-export type AskNestTokenUsage = {
+type AskNestTokenUsage = {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;

@@ -136,7 +136,6 @@ function getAmountToneClass(valueCents: number) {
 
 function formatTransactionDate(dateString: string): string {
   const date = new Date(dateString);
-  const hours = date.getHours();
   const minutes = date.getMinutes();
   const seconds = date.getSeconds();
   // Hide time if time is midnight (00:00:00) or top of any hour (XX:00:00)

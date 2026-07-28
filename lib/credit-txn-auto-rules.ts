@@ -25,7 +25,7 @@ const CrossWorkspaceReceivableRuleSchema = z.object({
   sourceBudgetId: z.string().min(1),
 });
 
-export const CreditTxnAutoRuleSchema = z.discriminatedUnion("action", [
+const CreditTxnAutoRuleSchema = z.discriminatedUnion("action", [
   SameWorkspaceDeductRuleSchema,
   CrossWorkspaceReceivableRuleSchema,
 ]);
@@ -68,7 +68,7 @@ export function stringifyCreditTxnAutoRules(rules: CreditTxnAutoRule[]) {
   return JSON.stringify(rules);
 }
 
-export function normalizeSubjectFilter(value: string) {
+function normalizeSubjectFilter(value: string) {
   return value.trim().toLowerCase();
 }
 

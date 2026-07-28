@@ -21,7 +21,7 @@ export function formatMoney(cents: number, currency?: string | null) {
   }).format(cents / 100);
 }
 
-export function formatMoneyShort(cents: number, currency?: string | null) {
+export function formatMoneyShort(cents: number) {
   const dollars = cents / 100;
   if (Math.abs(dollars) >= 1000) {
     return `$${(dollars / 1000).toFixed(1)}k`;

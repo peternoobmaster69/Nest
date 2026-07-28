@@ -160,22 +160,6 @@ export function InvestmentsPage() {
     [accounts.data, selectedAccountId],
   );
 
-  // Combined entries from all accounts for the "All Accounts" view
-  const allAccountsEntries = useMemo(() => {
-    const allEntries: InvestmentEntry[] = [];
-    for (const account of accounts.data ?? []) {
-      for (const entry of account.entries ?? []) {
-        allEntries.push({
-          ...entry,
-          // Tag entry with account info for display
-          accountName: account.displayName || account.productName,
-          accountId: account.id,
-        } as InvestmentEntry & { accountName: string; accountId: string });
-      }
-    }
-    return allEntries.sort(compareInvestmentEntries);
-  }, [accounts.data]);
-
   const selectedEntries = useMemo(
     () => [...(selectedAccount?.entries ?? [])].sort(compareInvestmentEntries),
     [selectedAccount?.entries],

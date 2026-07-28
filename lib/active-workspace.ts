@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-export const ACTIVE_WORKSPACE_COOKIE = "nest-active-workspace";
+const ACTIVE_WORKSPACE_COOKIE = "nest-active-workspace";
 const ACTIVE_WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export async function getActiveWorkspaceCookie() {

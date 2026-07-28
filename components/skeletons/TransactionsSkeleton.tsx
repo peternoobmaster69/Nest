@@ -28,11 +28,11 @@ export function TransactionsInitialSkeleton() {
   );
 }
 
-export function TransactionsBankSelectorSkeleton() {
+function TransactionsBankSelectorSkeleton() {
   return <BankSelectorSkeleton />;
 }
 
-export function TransactionsAccountGridSkeleton() {
+function TransactionsAccountGridSkeleton() {
   return (
     <div className="account-cards-grid tx-account-grid">
       {Array.from({ length: 6 }).map((_, index) => (
@@ -77,7 +77,7 @@ export function TransactionsAccountGridSkeleton() {
   );
 }
 
-export function TransactionsFilterBarSkeleton() {
+function TransactionsFilterBarSkeleton() {
   return (
     <div className="tx-filter-bar">
       <div className="tx-filter-controls">

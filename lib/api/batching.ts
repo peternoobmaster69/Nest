@@ -1,4 +1,4 @@
-export const SQL_SERVER_SAFE_BATCH_SIZE = 50;
+const SQL_SERVER_SAFE_BATCH_SIZE = 50;
 
 export function chunkValues<T>(values: readonly T[], size = SQL_SERVER_SAFE_BATCH_SIZE): T[][] {
   if (!Number.isInteger(size) || size < 1 || size > 500) {
@@ -10,4 +10,3 @@ export function chunkValues<T>(values: readonly T[], size = SQL_SERVER_SAFE_BATC
   }
   return chunks;
 }
-

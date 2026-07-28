@@ -3,7 +3,7 @@ export type AskNestHistoryMessage = {
   content: string;
 };
 
-export type AskNestHighlight = {
+type AskNestHighlight = {
   label: string;
   value: string;
   tone: "neutral" | "positive" | "warning";
@@ -16,7 +16,7 @@ export type AskNestEvidence = {
   href: string;
 };
 
-export type AskNestScope = {
+type AskNestScope = {
   workspaceName: string;
   currency: string;
   asOf: string;

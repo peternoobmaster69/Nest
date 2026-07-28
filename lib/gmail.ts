@@ -77,7 +77,7 @@ function getGoogleClientSecret() {
   return clientSecret;
 }
 
-export function getGmailRedirectUri(origin?: string) {
+function getGmailRedirectUri(origin?: string) {
   if (process.env.GMAIL_REDIRECT_URI) return process.env.GMAIL_REDIRECT_URI;
   const base = process.env.NEXTAUTH_URL || origin;
   if (!base) throw new Error("NEXTAUTH_URL or request origin is required for Gmail OAuth.");
@@ -333,21 +333,6 @@ export async function listGmailMessagePage(params: {
     nextPageToken: data.nextPageToken ?? null,
     resultSizeEstimate: data.resultSizeEstimate ?? 0,
   };
-}
-
-export async function listGmailMessageIds(accessToken: string, q: string) {
-  const allMessages: Array<{ id: string }> = [];
-  let pageToken: string | null = null;
-  let pageCount = 0;
-
-  do {
-    const page = await listGmailMessagePage({ accessToken, q, pageToken, maxResults: 100 });
-    allMessages.push(...page.messages);
-    pageToken = page.nextPageToken;
-    pageCount += 1;
-  } while (pageToken && pageCount < 5);
-
-  return allMessages;
 }
 
 export async function getGmailProfile(accessToken: string) {

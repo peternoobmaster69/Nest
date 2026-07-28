@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export const ADMIN_PAGE_SIZE = 10;
+const ADMIN_PAGE_SIZE = 10;
 
 export function useAdminPagination(totalItems: number, pageSize = ADMIN_PAGE_SIZE) {
   const [requestedPage, setRequestedPage] = useState(1);

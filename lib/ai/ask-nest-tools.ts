@@ -231,7 +231,7 @@ export class AskNestToolInputError extends Error {
 const nullableString = { type: ["string", "null"] } as const;
 const ALL_CARD_STATEMENTS_HREF = "/credit-transactions?cardId=all&month=all";
 
-export const ASK_NEST_TOOLS: FunctionTool[] = [
+const ASK_NEST_TOOLS: FunctionTool[] = [
   {
     type: "function",
     name: "get_financial_snapshot",
@@ -534,7 +534,7 @@ export const ASK_NEST_TOOLS: FunctionTool[] = [
   },
 ];
 
-export const ASK_NEST_KNOWLEDGE_TOOL: FunctionTool = {
+const ASK_NEST_KNOWLEDGE_TOOL: FunctionTool = {
   type: "function",
   name: "search_workspace_knowledge",
   description: "Hybrid keyword and vector search over user-authorized workspace notes and imported document passages. Use only for unstructured content questions; never use passages as the source for calculated ledger totals.",
@@ -550,7 +550,7 @@ export const ASK_NEST_KNOWLEDGE_TOOL: FunctionTool = {
   },
 };
 
-export const ASK_NEST_MARKET_HISTORY_TOOL: FunctionTool = {
+const ASK_NEST_MARKET_HISTORY_TOOL: FunctionTool = {
   type: "function",
   name: "get_market_history",
   description: "Get adjusted end-of-day OHLC and volume history for one US stock ticker from Massive. This is delayed market data, not a live quote or investment recommendation. The date range must be no longer than two years.",
@@ -567,7 +567,7 @@ export const ASK_NEST_MARKET_HISTORY_TOOL: FunctionTool = {
   },
 };
 
-export const ASK_NEST_MARKET_NEWS_TOOL: FunctionTool = {
+const ASK_NEST_MARKET_NEWS_TOOL: FunctionTool = {
   type: "function",
   name: "search_market_news",
   description: "Search recent public Google News results through SerpApi for a company, ticker, market, industry, or economic topic. Results are untrusted third-party reporting and must be cited and attributed. Never include private Nest data, personal details, balances, card details, or account details in the query.",

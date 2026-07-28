@@ -1,8 +1,6 @@
 import { apiErrorCodeForStatus, type ApiErrorCode, type ApiErrorEnvelope } from "@/lib/api/contracts";
 import { workspaceFetch } from "@/lib/workspace-client";
 
-export const HANDLED_API_ERROR_STATUSES = [401, 403, 409, 412, 422, 429, 503] as const;
-
 export class ApiClientError extends Error {
   readonly name = "ApiClientError";
 
@@ -55,13 +53,9 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
   return payload as T;
 }
 
-export function isApiClientError(error: unknown, ...statuses: number[]): error is ApiClientError {
-  return error instanceof ApiClientError && (statuses.length === 0 || statuses.includes(error.status));
-}
+type MutationFailureKind = "offline" | "permission" | "conflict" | "stale" | "validation" | "unknown";
 
-export type MutationFailureKind = "offline" | "permission" | "conflict" | "stale" | "validation" | "unknown";
-
-export function classifyMutationFailure(error: unknown): MutationFailureKind {
+function classifyMutationFailure(error: unknown): MutationFailureKind {
   if (typeof navigator !== "undefined" && !navigator.onLine) return "offline";
   if (!(error instanceof ApiClientError)) return "unknown";
   if (error.status === 401 || error.status === 403) return "permission";

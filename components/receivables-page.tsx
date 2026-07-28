@@ -19,7 +19,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
-import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
+import { bankAccountsQueryOptions } from "@/lib/accounts";
 
 type AppContext = {
   workspaceId: string | null;
@@ -173,11 +173,6 @@ export function ReceivablesPage() {
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
   });
-
-  const deductionAccountNames = useMemo(
-    () => new Map((deductionAccounts.data ?? []).map((account) => [account.id, account.name])),
-    [deductionAccounts.data],
-  );
 
   const deductionBudgetById = useMemo(
     () => new Map((deductionBudgets.data ?? []).map((budget) => [budget.id, budget])),

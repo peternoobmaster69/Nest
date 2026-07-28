@@ -124,7 +124,7 @@ async function loadIntegrationFromJob(payloadJson: string | null) {
   return integration;
 }
 
-export async function processGmailSyncJob(jobId: string, origin?: string) {
+async function processGmailSyncJob(jobId: string, origin?: string) {
   const claimed = await claimBackgroundJob({ jobId, type: GMAIL_SYNC_JOB_TYPE, leaseMs: 5 * 60_000 });
   if (!claimed) return null;
   const { job, leaseToken } = claimed;
@@ -276,18 +276,6 @@ export async function processGmailSyncQueue(params: { jobId?: string; origin?: s
     if (requestedJobId && !result) break;
   }
   return { processedSlices };
-}
-
-// Compatibility entry point for callers that expect to request and immediately work one bounded slice.
-export async function runGmailSyncForIntegration(integration: GmailIntegrationRecord, origin?: string) {
-  const queued = await queueGmailSyncForIntegration(integration);
-  if (queued.created) await processGmailSyncQueue({ jobId: queued.job.id, origin, maxSlices: 1 });
-  const latest = await prisma.backgroundJob.findUnique({ where: { id: queued.job.id } });
-  let summary: GmailSyncSummary = { scannedMessages: 0, processed: 0, duplicates: 0, ignored: 0, failed: 0 };
-  try {
-    summary = JSON.parse(latest?.resultJson ?? latest?.checkpointJson ?? "{}") as GmailSyncSummary;
-  } catch {}
-  return { ...summary, jobId: queued.job.id, queued: latest?.status === "PENDING" };
 }
 
 export async function runScheduledGmailSyncs() {

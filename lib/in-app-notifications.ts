@@ -36,17 +36,6 @@ type DueCardRow = {
   outstandingCents: number | bigint;
 };
 
-export type InAppNotification = {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  href: string | null;
-  readAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 function formatMoney(cents: number) {
   return new Intl.NumberFormat("en-SG", {
     style: "currency",

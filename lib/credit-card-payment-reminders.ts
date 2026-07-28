@@ -406,7 +406,7 @@ export async function processReminderEmailDeliveryJob(jobId: string, preparedEma
   }
 }
 
-export async function sendCreditCardPaymentReminders({ dryRun = false } = {}): Promise<ReminderResult> {
+async function sendCreditCardPaymentReminders({ dryRun = false } = {}): Promise<ReminderResult> {
   const today = startOfUtcDay(new Date());
   if (!dryRun) {
     await syncCreditCardDueNotificationsForAllUsers();

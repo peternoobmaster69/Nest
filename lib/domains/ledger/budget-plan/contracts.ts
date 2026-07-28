@@ -92,7 +92,3 @@ export const BudgetPlanPatchSchema = z.union([
   UpdateMonthlyItemSchema,
   UpdateMonthlySourceSchema,
 ]);
-
-export type BudgetPlanPostRequest = z.infer<typeof BudgetPlanPostSchema>;
-export type BudgetPlanPatchRequest = z.infer<typeof BudgetPlanPatchSchema>;
-

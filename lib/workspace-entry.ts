@@ -1,6 +1,6 @@
-export const DEFAULT_APP_DESTINATION = "/";
-export const WORKSPACE_ENTRY_PATH = "/entry";
-export const WORKSPACE_PATH_PREFIX = "/w";
+const DEFAULT_APP_DESTINATION = "/";
+const WORKSPACE_ENTRY_PATH = "/entry";
+const WORKSPACE_PATH_PREFIX = "/w";
 
 export function normalizeInternalAppPath(value: string | null | undefined) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {

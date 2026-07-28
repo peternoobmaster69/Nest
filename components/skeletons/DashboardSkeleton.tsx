@@ -38,10 +38,6 @@ export function DashboardSkeleton() {
   );
 }
 
-/*
-Structural inventory: Dashboard bank selector
-Maps to .bank-selector-row > .bank-selector-summary with the same flex/gap/padding. Replaces logo, balance, and action buttons only.
-*/
 export function DashboardBankSelectorSkeleton() {
   return <BankSelectorSkeleton />;
 }
@@ -96,66 +92,10 @@ export function DashboardOverviewSkeleton() {
 }
 
 /*
-Structural inventory: Dashboard net worth strip
-Maps to .bank-selector-row.dashboard-mini-card; two-column metric structure preserves the loaded strip height and internal flex spacing.
-*/
-export function DashboardNetWorthSkeleton() {
-  return (
-    <div style={{ marginBottom: "10px" }}>
-      <div className="bank-selector-row dashboard-mini-card">
-        <div className="dashboard-mini-card-stack dashboard-mini-card-strip">
-          <div className="dashboard-mini-card-primary">
-            <Skeleton width={70} height={17} borderRadius="4px" />
-            <Skeleton width={126} height={33} borderRadius="6px" />
-            <div className="dashboard-mini-card-breakdown">
-              <Skeleton width={96} height={17} borderRadius="4px" />
-              <Skeleton width={7} height={17} borderRadius="4px" />
-              <Skeleton width={76} height={17} borderRadius="4px" />
-            </div>
-          </div>
-          <div className="dashboard-mini-card-metric dashboard-mini-card-gain">
-            <Skeleton width={30} height={17} borderRadius="4px" />
-            <Skeleton width={86} height={24} borderRadius="5px" />
-            <Skeleton width={42} height={17} borderRadius="4px" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/*
-Structural inventory: Dashboard hero
-Maps to .hero-card > .hero-content and .hero-chips. The hero surface itself stays real so color, radius, and padding match the loaded card.
-*/
-export function DashboardHeroSkeleton() {
-  return (
-    <div className="hero-card">
-      <div className="hero-content">
-        <div className="hero-main">
-          <Skeleton width={118} height={18} borderRadius="4px" />
-          <Skeleton width={148} height={28} borderRadius="8px" />
-          <Skeleton width={124} height={18} borderRadius="4px" />
-        </div>
-      </div>
-      <div className="hero-chips">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div className="hero-chip" key={index}>
-            <Skeleton width={8} height={8} borderRadius="999px" />
-            {index === 5 ? null : <Skeleton width={index % 2 ? 66 : 78} height={11} borderRadius="4px" />}
-            <Skeleton width={index === 5 ? 96 : index % 2 ? 34 : 42} height={11} borderRadius="4px" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/*
 Structural inventory: Dashboard credit-card panel
 Maps to .card.cc-home-panel: heading/action are static chrome; dynamic stats and due groups are skeletonized.
 */
-export function DashboardCreditCardPanelSkeleton() {
+function DashboardCreditCardPanelSkeleton() {
   return (
     <section className="card cc-home-panel dashboard-payments-panel">
       <div className="cc-home-header">

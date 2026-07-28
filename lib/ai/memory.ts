@@ -31,7 +31,7 @@ function normalizeTokens(value: string) {
   );
 }
 
-export function acceptsExplicitMemory(question: string, candidate: AskNestMemoryCandidate) {
+function acceptsExplicitMemory(question: string, candidate: AskNestMemoryCandidate) {
   if (!EXPLICIT_MEMORY_PATTERN.test(question)) return false;
   return isSafeAskNestMemoryContent(candidate.content);
 }

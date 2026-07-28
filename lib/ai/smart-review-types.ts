@@ -1,6 +1,6 @@
-export type SmartReviewConfidence = "STRONG_MATCH" | "NEEDS_REVIEW" | "NO_RELIABLE_MATCH";
+type SmartReviewConfidence = "STRONG_MATCH" | "NEEDS_REVIEW" | "NO_RELIABLE_MATCH";
 
-export type SmartReviewState =
+type SmartReviewState =
   | "UNACCOUNTED"
   | "POSSIBLE_DUPLICATE"
   | "POSSIBLE_REVERSAL";
@@ -36,7 +36,7 @@ export type SmartReviewCurrentAccounting = {
   action?: SmartReviewAction;
 };
 
-export type SmartReviewRelatedTransaction = {
+type SmartReviewRelatedTransaction = {
   id: string;
   subject: string;
   transactionDate: string;

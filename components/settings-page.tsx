@@ -16,12 +16,9 @@ import {
   ArrowRight,
   Copy,
   LoaderCircle,
-  Pencil,
   Play,
   Plus,
   RotateCcw,
-  Trash2,
-  Upload,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";

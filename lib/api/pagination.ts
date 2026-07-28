@@ -2,23 +2,17 @@ import { z } from "zod";
 import type { ListEnvelope } from "@/lib/api/contracts";
 import { ApiRequestError } from "@/lib/api/contracts";
 
-export const DEFAULT_PAGE_SIZE = 25;
-export const MAX_PAGE_SIZE = 100;
-export const MAX_SEARCH_LENGTH = 100;
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+const MAX_SEARCH_LENGTH = 100;
 export const MAX_CURSOR_LENGTH = 512;
-
-export const ListQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
-  cursor: z.string().trim().min(1).max(MAX_CURSOR_LENGTH).optional(),
-  search: z.string().trim().max(MAX_SEARCH_LENGTH).optional(),
-});
 
 export type CursorValue = {
   id: string;
   sortValue: string;
 };
 
-export function encodeCursor(value: CursorValue) {
+function encodeCursor(value: CursorValue) {
   return Buffer.from(JSON.stringify({ v: 1, ...value }), "utf8").toString("base64url");
 }
 

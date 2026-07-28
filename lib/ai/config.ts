@@ -13,7 +13,7 @@ export type AiWorkloadConfig = {
   model: string;
 };
 
-export function normalizeAiWorkloadBaseUrl(value: string) {
+function normalizeAiWorkloadBaseUrl(value: string) {
   const input = value.trim();
   if (!input) {
     throw new AiConfigurationError("AI_WORKLOAD_ENDPOINT is required.");
@@ -49,7 +49,7 @@ export function normalizeAiWorkloadBaseUrl(value: string) {
   return endpoint.toString();
 }
 
-export function getAiWorkloadConfig(): AiWorkloadConfig {
+function getAiWorkloadConfig(): AiWorkloadConfig {
   const apiKey = process.env.AI_WORKLOAD_API_KEY?.trim();
   const model = process.env.AI_WORKLOAD_MODEL?.trim();
   if (!apiKey) {

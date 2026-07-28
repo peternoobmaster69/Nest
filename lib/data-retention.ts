@@ -47,7 +47,7 @@ function retentionDays(policy: RetentionPolicy) {
   return boundedInteger(process.env[policy.env], policy.defaultDays, policy.minimumDays, policy.maximumDays);
 }
 
-export function getDataRetentionConfig() {
+function getDataRetentionConfig() {
   return {
     batchSize: boundedInteger(process.env.DATA_RETENTION_BATCH_SIZE, DEFAULT_BATCH_SIZE, 1, MAX_BATCH_SIZE),
     jobPayloadDays: retentionDays(POLICIES.jobPayloads),

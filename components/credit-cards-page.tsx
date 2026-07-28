@@ -24,7 +24,6 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  WalletCards,
 } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";

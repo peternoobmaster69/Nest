@@ -20,7 +20,6 @@ import {
   PiggyBank,
   ReceiptText,
   RefreshCw,
-  ShieldCheck,
   TrendingUp,
   WalletCards,
 } from "lucide-react";

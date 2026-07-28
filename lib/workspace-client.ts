@@ -1,7 +1,7 @@
 import { WORKSPACE_ID_HEADER } from "@/lib/workspace-request";
 import { getWorkspaceIdFromPathname } from "@/lib/workspace-entry";
 
-export function getCurrentWorkspaceId() {
+function getCurrentWorkspaceId() {
   if (typeof window === "undefined") return null;
   return getWorkspaceIdFromPathname(window.location.pathname);
 }
@@ -19,4 +19,3 @@ export function workspaceFetch(input: RequestInfo | URL, init?: RequestInit) {
   headers.set(WORKSPACE_ID_HEADER, workspaceId);
   return fetch(input, { ...init, headers });
 }
-
