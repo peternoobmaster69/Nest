@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getBankConsistency } from "@/lib/bank-consistency";
 import { prisma } from "@/lib/prisma";
 import type { AskNestEvidence } from "@/lib/ai/ask-nest-types";
+import { executeCioAskNestTool, getCioAskNestTools } from "@/lib/ai/tools/cio-tools";
 import {
   buildAskNestSearchTerms,
   canonicalizeMerchant,
@@ -585,6 +586,7 @@ const ASK_NEST_MARKET_NEWS_TOOL: FunctionTool = {
 export function getAskNestTools(includeKnowledgeSearch: boolean) {
   return [
     ...ASK_NEST_TOOLS,
+    ...getCioAskNestTools(),
     ...(includeKnowledgeSearch ? [ASK_NEST_KNOWLEDGE_TOOL] : []),
     ...(isMassiveMarketDataConfigured() ? [ASK_NEST_MARKET_HISTORY_TOOL] : []),
     ...(isSerpApiNewsConfigured() ? [ASK_NEST_MARKET_NEWS_TOOL] : []),
@@ -2820,6 +2822,9 @@ export async function executeAskNestTool(
   rawArgs: unknown,
   context: AskNestToolContext,
 ): Promise<AskNestToolResult> {
+  const cioResult = await executeCioAskNestTool(name, rawArgs, context);
+  if (cioResult) return cioResult;
+
   switch (name) {
     case "get_financial_snapshot":
       return getFinancialSnapshot(rawArgs, context);

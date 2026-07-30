@@ -35,6 +35,7 @@ Ask Nest request/response, deterministic intent/category/entity logic, 18+ read 
 | --- | --- | --- |
 | `lib/ai/ask-nest.ts` | `answerAskNest`, result/error types | Responses API orchestration/grounding |
 | `lib/ai/ask-nest-tools.ts` | tool schema/execution | Bounded finance read surface |
+| `lib/ai/tools/cio-tools.ts` | CIO tool registry | Bounded reads over deterministic CIO services |
 | `lib/ai/ask-nest-intent.mjs` | classify/hint | Deterministic routing |
 | `lib/ai/entity-resolution.ts` | resolve/canonicalize helpers | Workspace entity matching |
 | `lib/ai/transaction-categories.mjs` | category keys/labels/classifier | Deterministic spending rules |

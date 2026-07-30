@@ -667,7 +667,10 @@ export function ReceivablesPage() {
                     className="btn btn-ghost btn-icon"
                     style={{ width: "32px", height: "32px", color: "var(--danger)" }}
                     onClick={async () => {
-                      if (await confirmDestructiveAction("Delete this receivable?")) {
+                      if (await confirmDestructiveAction("Delete this receivable?", "Delete receivable?", {
+                        workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+                        reversal: "This cannot be undone. Close the receivable instead if you need an auditable paid record.",
+                      })) {
                         if (deletingReceivableIds.includes(r.id)) return;
                         setDeletingReceivableIds((current) => [...current, r.id]);
                         window.setTimeout(() => {

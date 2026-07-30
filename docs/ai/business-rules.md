@@ -36,6 +36,13 @@ Summary only. The [canonical rule catalog](../business/business-rules.md) contai
 | BR-013 | Public shares expose restricted projections using purpose-scoped tokens. |
 | BR-014 | Imported/provider data is untrusted and size-limited. |
 | BR-015 | Manual bank control balance semantics remain isolated from ordinary posting totals. |
+| BR-070 | Nest CIO is read-only decision support with no trading or posting authority. |
+| BR-071 | Structured Nest data and deterministic CIO services are authoritative. |
+| BR-072 | Planning net worth stays separate from dashboard/public net worth. |
+| BR-073 | CIO classifications, policies, and assumptions are explicit and reviewable. |
+| BR-074 | Internal reallocations are not new contributions. |
+| BR-075 | CIO projections show their data date and assumptions. |
+| BR-076 | Unknown, missing, and stale data is surfaced rather than silently excluded. |
 
 ## Change Protocol
 

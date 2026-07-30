@@ -30,6 +30,7 @@ The application is one private npm package. There are no workspaces or separatel
 | `components/skeletons/` | Route-specific loading geometry | Prevents layout shifts and maintains predictable loading states | Imported from `loading.tsx` files and feature boundaries |
 | `lib/` | Server services, cross-cutting utilities, auth, posting, jobs, integration clients, shared client helpers | Keeps reusable logic outside filesystem routes | Must respect server-only versus browser-safe imports |
 | `lib/domains/` | Extracted domain services and contracts | Reduces route-handler and controller coupling incrementally | Domain code may depend on Prisma and cross-cutting `lib` services |
+| `lib/domains/cio/` | Deterministic household planning snapshot and engines | Keeps allocation, flow, policy, quality, and projection logic shared by UI and AI | Prisma reads stay in the repository/service boundary; pure engines remain browser-independent |
 | `lib/ai/` | Ask Nest, Smart Review, deterministic classification, and external retrieval | Isolates model prompts/tools and evaluation-sensitive logic | Financial tools are read-only and workspace-scoped |
 | `lib/api/` | Shared API envelopes, client errors, pagination, SQL batching | Defines cross-route transport conventions | Used by routes and client controllers |
 | `lib/observability/` | Query duration and row-count telemetry | Measures expensive dashboard/context reads without caching them | Emits structured logs/performance observations |

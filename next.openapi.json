@@ -1,22 +1,27 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "API Documentation",
+    "title": "Nest API",
     "version": "1.0.0",
-    "description": "This is the OpenAPI specification for the Nest project."
+    "description": "Generated API inventory for Nest. User authentication uses HttpOnly NextAuth session cookies; bearer JWTs are not accepted."
   },
   "servers": [
     {
-      "url": "http://localhost:3000/api",
+      "url": "http://localhost:3000",
       "description": "Local development server"
     }
   ],
   "components": {
     "securitySchemes": {
-      "BearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT"
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "next-auth.session-token"
+      },
+      "secureSessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Secure-next-auth.session-token"
       }
     }
   },
@@ -100,11 +105,11 @@
   "schemaDir": "./src",
   "schemaType": "typescript",
   "schemaFiles": [],
-  "docsUrl": "/api/docs",
+  "docsUrl": "/api-docs",
   "ui": "swagger",
   "outputFile": "openapi.json",
-  "outputDir": "./public",
-  "includeOpenApiRoutes": false,
+  "outputDir": "./generated",
+  "includeOpenApiRoutes": true,
   "ignoreRoutes": [],
   "debug": false
 }

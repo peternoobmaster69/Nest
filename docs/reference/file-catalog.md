@@ -51,6 +51,7 @@ Important root, route, platform, domain, database, operational, generated, and p
 | `lib/credit-txn-auto-account-runner.ts` | Rule-driven card accounting | `runCreditTxnAutoAccounting` | Incorrect automated posting |
 | `lib/domains/ledger/budget-plan/` | Budget plan schemas and services | handlers, draft/template/confirm services | Draft/confirmed state corruption |
 | `lib/domains/receivables/` | Receivable projections | summary functions | Over/under settlement |
+| `lib/domains/cio/` | Canonical CIO snapshot and deterministic planning engines | snapshot, contracts, allocation, cash flow, policy, retirement | Double counting, rounding, inferred assumptions |
 
 ## Integrations, Jobs, and AI
 
@@ -63,6 +64,7 @@ Important root, route, platform, domain, database, operational, generated, and p
 | `lib/maybank-csv.ts` | Statement parsing | parse/normalize/skip | Bad imported transaction data |
 | `lib/ai/ask-nest.ts` | Model orchestration and response shaping | `answerAskNest` | Privacy/hallucination/cost |
 | `lib/ai/ask-nest-tools.ts` | Read-only data tools | tool registry and executor | Data leakage/oversized coupling |
+| `lib/ai/tools/cio-tools.ts` | Bounded CIO read-tool registry | tool definitions/executor | Ungrounded advice or workspace leakage |
 | `lib/ai/smart-review.ts` | Card transaction suggestions | fingerprint/freshness/review | Stale/unsafe suggestions |
 | `lib/ai/knowledge-search.ts` | Optional Azure Search retrieval | gate/search | Ungrounded external content |
 | `lib/ai/massive-market-data.ts` | Market history provider | configured check/history | Provider/quote correctness |

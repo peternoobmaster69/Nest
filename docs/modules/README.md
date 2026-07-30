@@ -25,6 +25,7 @@ Define the cohesive modules used by this knowledge base. Nest is one npm package
 | [Cards](cards.md) | Card metadata, statement activity, allocation/payment | Cards, reminders, receivables |
 | [Receivables](receivables.md) | Expected repayment and settlement | Dashboard, cards, ledger |
 | [Investments](investments.md) | Dated valuation snapshots and liquidity | Investments, net worth |
+| [CIO](cio.md) | Deterministic allocation, liquidity, policy, and retirement planning | CIO page and Ask Nest |
 | [Rewards](rewards.md) | Miles, points, expiry, conversions | Rewards UI |
 | [AI](ai.md) | Ask Nest, Smart Review, deterministic/entity/provider reads | Assistant and card review |
 | [Integrations](integrations.md) | Gmail alerts, Maybank imports, provider credentials | Cards and jobs |

@@ -32,6 +32,9 @@ Workspace context, money, posting, sessions, jobs, integrations, AI, and UI.
 | Assuming a cron runs once | Schedulers retry/overlap | Make work leased, bounded, idempotent |
 | Logging provider/import/AI payloads | May expose financial or credential data | Log identifiers/counts/categories only |
 | Adding an AI mutation tool | Breaks read-only safety decision | Keep AI tools read-only |
+| Adding planning positions to public/dashboard net worth | Changes BR-054 and can double count assets | Keep CIO planning net worth separate |
+| Inferring exposure from a product label | Turns an unverified guess into portfolio truth | Require explicit user-confirmed weights; allocate missing data to `UNKNOWN` |
+| Counting internal reallocation as contribution | Inflates projected new wealth | Report it separately and exclude it from contribution totals |
 | Importing server code into client component | Leaks/builds server dependencies | Add a browser-safe adapter |
 | Raising UI line budget | Institutionalizes large controllers | Extract and lower the ceiling |
 | Assuming OpenAPI is complete | Body schemas are partial | Inspect route validation and tests |

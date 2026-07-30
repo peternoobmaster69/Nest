@@ -4,7 +4,7 @@ description: Maintainer reference for important exported functions, classes, sid
 audience: [engineers, maintainers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 ---
 
 # Core service and function contracts
@@ -15,7 +15,7 @@ Document high-impact callable surfaces without repeating obvious syntax or unsta
 
 ## Scope
 
-Authorization, posting, jobs, AI, providers, parsing, navigation, formatting, and exported error classes. Route handlers are documented by endpoint in [API documentation](../api/README.md).
+Authorization, posting, jobs, CIO planning, AI, providers, parsing, navigation, formatting, and exported error classes. Route handlers are documented by endpoint in [API documentation](../api/README.md).
 
 ## Contract Reading Rules
 
@@ -74,6 +74,21 @@ The route must still validate that any referenced account/card/budget belongs to
 | `throwIfBackgroundJobCancelled(id, token)` | Stop a worker at safe checkpoints | claim identity → void | Throws cancellation/lost-lease error | O(1) |
 
 Workers must be idempotent because leases, scheduler retries, and process crashes allow repeated execution attempts.
+
+## CIO Planning Functions
+
+| Function | Purpose and business context | Parameters → return | Side effects/failures | Complexity |
+| --- | --- | --- | --- | --- |
+| `buildCioSnapshot(params)` | Build the authoritative workspace CIO read model from bank controls, latest valuations, explicit planning metadata, policy, and assumptions | authorized workspace/data date/optional temporary projection overrides → `CioSnapshot` | Bounded SQL reads; validation/calculation failure; no writes | O(a+i+e+p+f), loaded accounts, investments, exposures, positions, and flows |
+| `runWorkspaceRetirementProjection(params)` | Rebuild the snapshot with validated temporary scenario overrides and return projection/data-quality evidence | workspace plus `CioRetirementProjectionInput` → projection result | Bounded SQL reads; typed 422-style validation failure; no writes | Snapshot cost plus O(3y), three scenarios over at most 100 years |
+| `calculateAllocation(sources)` | Allocate every source cent across weighted dimensions with deterministic largest-remainder rounding | valued sources/exposures → exact buckets | Pure; rejects invalid or unsafe numeric input | O(s log s) per dimension in the largest-remainder step |
+| `summarizeRecurringFlows(flows, asOfDate)` | Annualize active flows and keep external wealth changes separate from internal reallocations | bounded flows/date → active and retirement-eligible totals | Pure; rejects invalid dates, amounts, or account-reference combinations | O(f) |
+| `evaluateCioPolicy(params)` | Compare allocation, liquidity, data quality, concentration, and retirement output with explicit policy constraints | snapshot-derived inputs → ordered review exceptions | Pure; produces no order, transfer, or mutation | O(b+g+a+s), bands, geography limits, accounts, and securities |
+| `getCioAskNestTools()` | Return the four bounded read-only CIO tool definitions | none → function-tool definitions | None; no model-visible workspace argument | O(1) |
+| `executeCioAskNestTool(name, args, context)` | Validate a CIO tool request and execute it in already-authorized workspace context | tool name/model args/private context → bounded output/evidence or `null` | CIO SQL reads and validation failures; no writes or public-provider calls | Tool-specific snapshot/projection cost |
+
+CIO money uses integer cents and rates/weights use integer basis points. Planning net worth remains separate from dashboard/public net worth; missing valuations and unknown exposure are returned explicitly.
+Retirement projections apply contributions at completed year ends. A final partial period prorates return and inflation by its UTC-day fraction in basis points and does not apply a full annual contribution; the echoed assumptions expose that fraction.
 
 ## AI and Retrieval Functions
 
@@ -168,4 +183,4 @@ These classes are composed rather than inherited into domain hierarchies. They h
 
 ## Last Updated
 
-2026-07-28
+2026-07-30

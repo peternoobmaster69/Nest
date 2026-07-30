@@ -107,6 +107,8 @@ type BudgetPlanData = {
 
 type AppContext = {
   workspaceId: string | null;
+  workspaceName?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
   baseCurrency?: string | null;
 };
 
@@ -576,13 +578,19 @@ export function BudgetPlanPage() {
   };
 
   const removeEntity = async (id: string, type: DeleteType, label: string) => {
-    if (!(await confirmDestructiveAction(`Delete ${label}?`))) return;
+    if (!(await confirmDestructiveAction(`Delete ${label}?`, `Delete ${label}?`, {
+      workspace: { name: contextQuery.data?.workspaceName || "Current workspace", role: contextQuery.data?.role || "EDITOR" },
+      reversal: "This setup record cannot be restored automatically.",
+    }))) return;
     deleteEntity.mutate({ id, type });
   };
 
   const handleDiscardDraft = async () => {
     if (!monthlyPlan || !isDraft) return;
-    if (!(await confirmDestructiveAction(`Discard the draft for ${MONTHS[selectedMonth - 1]} ${selectedYear}?`))) return;
+    if (!(await confirmDestructiveAction(`Discard the draft for ${MONTHS[selectedMonth - 1]} ${selectedYear}?`, "Discard monthly draft?", {
+      workspace: { name: contextQuery.data?.workspaceName || "Current workspace", role: contextQuery.data?.role || "EDITOR" },
+      reversal: "You can start a new draft, but the discarded draft values will not be restored.",
+    }))) return;
     discardDraft.mutate({ planId: monthlyPlan.id });
   };
 

@@ -131,6 +131,8 @@ type AvailableCard = {
 
 type AppContext = {
   workspaceId: string | null;
+  workspaceName?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
   baseCurrency?: string | null;
 };
 
@@ -853,22 +855,34 @@ export function RewardsPage({
   };
 
   const confirmDeleteCardReward = async (id: string) => {
-    if (!(await confirmDestructiveAction("Delete this credit card rewards record?"))) return;
+    if (!(await confirmDestructiveAction("Delete this credit card rewards record?", "Delete rewards record?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "This rewards balance cannot be restored automatically.",
+    }))) return;
     deleteCardReward.mutate(id);
   };
 
   const confirmDeleteFrequentFlyer = async (id: string) => {
-    if (!(await confirmDestructiveAction("Delete this frequent flyer account?"))) return;
+    if (!(await confirmDestructiveAction("Delete this frequent flyer account?", "Delete frequent flyer account?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "This account and its tracked miles cannot be restored automatically.",
+    }))) return;
     deleteFrequentFlyer.mutate(id);
   };
 
   const confirmDeleteHotelReward = async (id: string) => {
-    if (!(await confirmDestructiveAction("Delete this hotel rewards account?"))) return;
+    if (!(await confirmDestructiveAction("Delete this hotel rewards account?", "Delete hotel rewards account?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "This account cannot be restored automatically.",
+    }))) return;
     deleteHotelReward.mutate(id);
   };
 
   const confirmDeleteConversion = async (id: string) => {
-    if (!(await confirmDestructiveAction("Delete this conversion rate?"))) return;
+    if (!(await confirmDestructiveAction("Delete this conversion rate?", "Delete conversion rate?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "You can add the conversion again later, but this saved rate will be removed.",
+    }))) return;
     deleteConversion.mutate(id);
   };
 

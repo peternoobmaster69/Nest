@@ -28,6 +28,7 @@ Primary product features and their canonical documentation.
 | Cards | [cards](../modules/cards.md) | [cards](../api/cards.md) | CreditCard/CreditCardTransaction/*Due |
 | Receivables | [receivables](../modules/receivables.md) | [receivables](../api/receivables.md) | Receivable/ReceivableClose |
 | Investments | [investments](../modules/investments.md) | [assets/rewards](../api/assets-rewards.md) | Investment*/MarketDataCache |
+| Nest CIO | [CIO](../modules/cio.md) | [CIO](../api/cio.md) | Cio* planning models; CIO domain/API/UI/AI tests |
 | Rewards | [rewards](../modules/rewards.md) | [assets/rewards](../api/assets-rewards.md) | Reward*/Kf* |
 | Ask Nest/Smart Review | [AI](../modules/ai.md) | [AI](../api/ai.md) | AskNest*/smart-review tests |
 | Gmail/imports | [integrations](../modules/integrations.md) | [integrations](../api/integrations.md) | Gmail*/CreditCardAlert |

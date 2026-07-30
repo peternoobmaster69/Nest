@@ -39,6 +39,7 @@ Provide deterministic navigation to every maintained knowledge-base topic.
   - [ADR-004: SQL-backed reliable jobs](architecture/adr/ADR-004-background-jobs.md)
   - [ADR-005: Read-only grounded AI](architecture/adr/ADR-005-read-only-ai.md)
   - [ADR-006: Manual bank control balances](architecture/adr/ADR-006-bank-control-balances.md)
+  - [ADR-007: Read-only CIO decision support](architecture/adr/ADR-007-read-only-cio-decision-support.md)
 
 ### Business and domain
 
@@ -58,6 +59,7 @@ Provide deterministic navigation to every maintained knowledge-base topic.
 - [Cards and card transactions](modules/cards.md)
 - [Receivables](modules/receivables.md)
 - [Investments](modules/investments.md)
+- [Nest CIO](modules/cio.md)
 - [Rewards](modules/rewards.md)
 - [Ask Nest and Smart Review](modules/ai.md)
 - [Gmail and imports](modules/integrations.md)
@@ -73,6 +75,7 @@ Provide deterministic navigation to every maintained knowledge-base topic.
 - [Cards, card transactions, and alerts](api/cards.md)
 - [Receivables](api/receivables.md)
 - [Investments and rewards](api/assets-rewards.md)
+- [Nest CIO](api/cio.md)
 - [Ask Nest and Smart Review](api/ai.md)
 - [Gmail, notifications, and push](api/integrations.md)
 - [Dashboard, administration, public links, and cron](api/operations-public.md)

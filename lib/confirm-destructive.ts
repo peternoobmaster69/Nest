@@ -20,13 +20,18 @@ export function registerConfirmHandler(handler: ConfirmHandler | null) {
   activeConfirmHandler = handler;
 }
 
-export function confirmDestructiveAction(message: string, title = "Confirm action") {
+export function confirmDestructiveAction(
+  message: string,
+  title = "Confirm action",
+  options: Omit<ConfirmOptions, "title" | "message" | "destructive"> = {},
+) {
   if (!activeConfirmHandler) return Promise.resolve(false);
   return activeConfirmHandler({
+    ...options,
     title,
     message,
-    confirmLabel: "Confirm",
-    cancelLabel: "Cancel",
+    confirmLabel: options.confirmLabel ?? "Confirm",
+    cancelLabel: options.cancelLabel ?? "Cancel",
     destructive: true,
   });
 }

@@ -24,6 +24,7 @@ Investment account CRUD, entry CRUD, ordering, gain/return/liquid totals, dashbo
 - Select latest entry deterministically.
 - Calculate invested/current/gain/return.
 - Include only liquid latest values in liquid projections.
+- Keep optional CIO profiles/exposures additive; legacy `isLiquid` behavior remains unchanged outside CIO.
 
 ## Public APIs and important files
 

@@ -88,5 +88,14 @@
   { "id": "search-07", "question": "Where in my notes did I mention the renovation quote?", "pagePath": "/", "expectedTool": "search_workspace_knowledge", "retrieval": true },
   { "id": "search-08", "question": "Explain what the uploaded statement says about interest", "pagePath": "/transactions", "expectedTool": "search_workspace_knowledge", "retrieval": true },
   { "id": "search-09", "question": "Show the receipt containing the serial number", "pagePath": "/transactions", "expectedTool": "search_workspace_knowledge", "retrieval": true },
-  { "id": "search-10", "question": "Find the email that mentions an annual fee waiver", "pagePath": "/credit-alerts", "expectedTool": "search_workspace_knowledge", "retrieval": true }
+  { "id": "search-10", "question": "Find the email that mentions an annual fee waiver", "pagePath": "/credit-alerts", "expectedTool": "search_workspace_knowledge", "retrieval": true },
+
+  { "id": "cio-allocation-01", "question": "What is my true asset allocation?", "pagePath": "/cio", "expectedTool": "get_cio_overview", "retrieval": false },
+  { "id": "cio-liquidity-01", "question": "How much of my portfolio is liquid?", "pagePath": "/cio", "expectedTool": "get_cio_overview", "retrieval": false },
+  { "id": "cio-retirement-01", "question": "Am I on track to retire at 60?", "pagePath": "/cio", "expectedTool": "run_cio_retirement_projection", "retrieval": false },
+  { "id": "cio-contribution-01", "question": "What happens if I invest an extra $10,000 per year?", "pagePath": "/cio", "expectedTool": "compare_cio_contribution_scenarios", "retrieval": false },
+  { "id": "cio-policy-01", "question": "Is my emergency fund below policy?", "pagePath": "/cio", "expectedTool": "get_cio_policy_status", "retrieval": false },
+  { "id": "cio-quality-01", "question": "Which investments are stale or unclassified?", "pagePath": "/cio", "expectedTool": "get_cio_overview", "retrieval": false },
+  { "id": "cio-policy-02", "question": "Should I reduce my fixed-income allocation?", "pagePath": "/cio", "expectedTool": "get_cio_policy_status", "retrieval": false },
+  { "id": "cio-terms-01", "question": "What is today's money and nominal?", "pagePath": "/cio", "expectedTool": null, "expectedIntent": "cio_projection_terms", "retrieval": false }
 ]

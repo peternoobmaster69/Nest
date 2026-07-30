@@ -15,8 +15,7 @@ import { workspaceFetch } from "@/lib/workspace-client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import {
-  ChartNoAxesCombined,
-  ChartPie,
+  ChartNoAxesCombined, ChartPie, Compass,
   CreditCard,
   Gift,
   Home,
@@ -284,6 +283,7 @@ export function AppSidebar({
         <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href={workspaceHref("/")} onClick={handleNavClick} aria-current={currentPath === "/" ? "page" : undefined}>
           <Home className="sb-ic" size={18} aria-hidden="true" />Dashboard
         </Link>
+        <Link className={`sb-item${currentPath === "/cio" ? " on" : ""}`} href={workspaceHref("/cio")} onClick={handleNavClick} aria-current={currentPath === "/cio" ? "page" : undefined}><Compass className="sb-ic" size={18} aria-hidden="true" />Nest CIO</Link>
 
         <div className="sb-sec">Money</div>
         {sidebarMoneyPages.transactions !== false && (

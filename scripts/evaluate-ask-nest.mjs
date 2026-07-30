@@ -4,12 +4,15 @@ import { classifyAskNestIntent } from "../lib/ai/ask-nest-intent.mjs";
 const cases = JSON.parse(await readFile(new URL("../evals/ask-nest/golden.json", import.meta.url), "utf8"));
 const results = cases.map((testCase) => {
   const actual = classifyAskNestIntent(testCase.question, testCase.pagePath);
+  const toolPassed = testCase.expectedTool === null
+    ? actual.recommendedTools.length === 0 && actual.intent === testCase.expectedIntent
+    : actual.recommendedTools.includes(testCase.expectedTool);
   return {
     id: testCase.id,
-    toolPassed: actual.recommendedTools.includes(testCase.expectedTool),
+    toolPassed,
     retrievalPassed: actual.needsHybridRetrieval === testCase.retrieval,
     expectedTool: testCase.expectedTool,
-    actualTool: actual.recommendedTools[0],
+    actualTool: actual.recommendedTools[0] ?? null,
     expectedRetrieval: testCase.retrieval,
     actualRetrieval: actual.needsHybridRetrieval,
   };

@@ -23,6 +23,7 @@ Preserve decisions whose rationale is easy to lose but whose consequences affect
 | [ADR-004](ADR-004-background-jobs.md) | Reliable work uses SQL-backed leased jobs | Accepted |
 | [ADR-005](ADR-005-read-only-ai.md) | AI remains read-only and evidence-grounded | Accepted |
 | [ADR-006](ADR-006-bank-control-balances.md) | Bank balances are manually maintained control totals | Accepted |
+| [ADR-007](ADR-007-read-only-cio-decision-support.md) | CIO is deterministic read-only decision support | Accepted |
 
 These records reconstruct decisions from code, tests, migrations, and checked-in guides. Options not evidenced by source are marked unknown.
 

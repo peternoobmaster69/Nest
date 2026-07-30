@@ -141,6 +141,14 @@ model Workspace {
   cardAlertStagings          CardAlertStaging[]
   gmailIntegrations          GmailIntegration[]
   investmentAccounts         InvestmentAccount[]
+  cioHouseholdProfile        CioHouseholdProfile?
+  cioInvestmentPolicy       CioInvestmentPolicy?
+  cioInvestmentProfiles     CioInvestmentProfile[]
+  cioInvestmentExposures    CioInvestmentExposure[]
+  cioPolicyAssetClassBands  CioPolicyAssetClassBand[]
+  cioPolicyGeographyLimits  CioPolicyGeographyLimit[]
+  cioPlanningPositions      CioPlanningPosition[]
+  cioRecurringFlows         CioRecurringFlow[]
   invites                    WorkspaceInvite[]
   auditLogs                  WorkspaceAuditLog[]
   budgetItems                BudgetItem[]
@@ -205,6 +213,10 @@ model InvestmentAccount {
   updatedAt       DateTime          @updatedAt
   workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   entries         InvestmentEntry[]
+  cioProfile      CioInvestmentProfile?
+  cioExposures    CioInvestmentExposure[]
+  cioSourceFlows  CioRecurringFlow[]       @relation("CioFlowSourceInvestment")
+  cioTargetFlows  CioRecurringFlow[]       @relation("CioFlowTargetInvestment")
 
   @@unique([workspaceId, id])
   @@index([workspaceId, createdAt])
@@ -310,9 +322,181 @@ model FinancialAccount {
   transactions                   Transaction[]
   budgets                        BudgetEnvelope[]
   receivables                    Receivable[]
+  cioSourceFlows                 CioRecurringFlow[] @relation("CioFlowSourceFinancialAccount")
 
   @@unique([workspaceId, id])
   @@index([workspaceId, kind])
+}
+
+model CioHouseholdProfile {
+  id                                      String    @id @default(cuid())
+  workspaceId                             String    @unique
+  planningScope                           String    @default("INDIVIDUAL") @db.VarChar(16)
+  primaryBirthDate                        DateTime?
+  primaryCurrentAge                       Int?
+  primaryAgeAsOfDate                      DateTime?
+  partnerBirthDate                        DateTime?
+  targetRetirementAge                     Int?
+  targetRetirementDate                    DateTime?
+  targetMonthlyRetirementSpendingCents    Int?
+  essentialMonthlySpendingCents           Int?
+  minimumImmediateBankCashCents           Int?
+  inflationRateBps                        Int?
+  bearReturnBps                           Int?
+  baseReturnBps                           Int?
+  bullReturnBps                           Int?
+  sustainableWithdrawalRateBps            Int?
+  annualExternalContributionOverrideCents Int?
+  contributionGrowthRateBps               Int?
+  createdAt                               DateTime  @default(now())
+  updatedAt                               DateTime  @updatedAt
+  workspace                               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, updatedAt])
+}
+
+model CioInvestmentPolicy {
+  id                                  String                       @id @default(cuid())
+  workspaceId                         String                       @unique
+  minimumLiquidityReserveCents        Int?
+  minimumLiquidityMonths              Int?
+  maximumAccountConcentrationBps      Int?
+  maximumSingleSecurityConcentrationBps Int?
+  maximumSatelliteAllocationBps       Int?
+  valuationStaleAfterDays             Int                          @default(90)
+  allowsOptions                       Boolean?
+  allowsMargin                        Boolean?
+  allowsLeverage                      Boolean?
+  allowsAdditionalIlpTopUps           Boolean?
+  confirmedAt                         DateTime?
+  createdAt                           DateTime                     @default(now())
+  updatedAt                           DateTime                     @updatedAt
+  workspace                           Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assetClassBands                     CioPolicyAssetClassBand[]
+  geographyLimits                     CioPolicyGeographyLimit[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, updatedAt])
+}
+
+model CioPolicyAssetClassBand {
+  id         String              @id @default(cuid())
+  workspaceId String
+  policyId   String
+  assetClass String              @db.VarChar(32)
+  minimumBps Int
+  targetBps  Int
+  maximumBps Int
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  policy     CioInvestmentPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, assetClass])
+  @@index([workspaceId, assetClass])
+}
+
+model CioPolicyGeographyLimit {
+  id          String              @id @default(cuid())
+  workspaceId String
+  policyId    String
+  geography   String              @db.VarChar(32)
+  maximumBps  Int
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  policy      CioInvestmentPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, geography])
+  @@index([workspaceId, geography])
+}
+
+model CioInvestmentProfile {
+  id                            String            @id @default(cuid())
+  workspaceId                   String
+  investmentAccountId           String            @unique
+  liquidityClass                String            @db.VarChar(24)
+  portfolioRole                 String            @db.VarChar(24)
+  riskLevel                     String            @db.VarChar(24)
+  includeInRetirementProjection Boolean           @default(false)
+  lockUntil                     DateTime?
+  classificationStatus          String            @db.VarChar(24)
+  classificationSource          String            @db.VarChar(32)
+  notes                          String?           @db.NVarChar(1000)
+  createdAt                      DateTime          @default(now())
+  updatedAt                      DateTime          @updatedAt
+  workspace                      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  investmentAccount              InvestmentAccount @relation(fields: [investmentAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, investmentAccountId])
+  @@index([workspaceId, updatedAt])
+}
+
+model CioInvestmentExposure {
+  id                  String            @id @default(cuid())
+  workspaceId         String
+  investmentAccountId String
+  dimension           String            @db.VarChar(24)
+  exposureKey         String            @db.VarChar(64)
+  weightBps           Int
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  workspace            Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  investmentAccount    InvestmentAccount @relation(fields: [investmentAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([investmentAccountId, dimension, exposureKey])
+  @@index([workspaceId, investmentAccountId])
+  @@index([workspaceId, dimension, exposureKey])
+}
+
+model CioPlanningPosition {
+  id                            String    @id @default(cuid())
+  workspaceId                   String
+  side                          String    @db.VarChar(16)
+  category                      String    @db.VarChar(48)
+  label                         String    @db.NVarChar(160)
+  currentValueCents             Int
+  asOfDate                      DateTime
+  liquidityClass                String    @db.VarChar(24)
+  includeInInvestableAllocation Boolean   @default(false)
+  includeInRetirementProjection Boolean   @default(false)
+  notes                          String?   @db.NVarChar(1000)
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
+  workspace                      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, asOfDate])
+  @@index([workspaceId, side, category])
+}
+
+model CioRecurringFlow {
+  id                            String             @id @default(cuid())
+  workspaceId                   String
+  type                          String             @db.VarChar(32)
+  sourceFinancialAccountId      String?
+  sourceInvestmentAccountId     String?
+  destinationInvestmentAccountId String?
+  amountCents                   Int
+  cadence                       String             @db.VarChar(16)
+  startsOn                      DateTime
+  endsOn                        DateTime?
+  includeInRetirementProjection Boolean            @default(false)
+  label                         String             @db.NVarChar(160)
+  notes                         String?            @db.NVarChar(1000)
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @updatedAt
+  workspace                     Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceFinancialAccount        FinancialAccount?  @relation("CioFlowSourceFinancialAccount", fields: [sourceFinancialAccountId], references: [id], onDelete: Cascade)
+  sourceInvestmentAccount       InvestmentAccount? @relation("CioFlowSourceInvestment", fields: [sourceInvestmentAccountId], references: [id], onDelete: Cascade)
+  destinationInvestmentAccount  InvestmentAccount? @relation("CioFlowTargetInvestment", fields: [destinationInvestmentAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, startsOn, endsOn])
+  @@index([workspaceId, type, cadence])
+  @@index([sourceFinancialAccountId])
+  @@index([sourceInvestmentAccountId])
+  @@index([destinationInvestmentAccountId])
 }
 
 model BudgetEnvelope {

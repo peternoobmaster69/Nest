@@ -4,7 +4,7 @@ description: Authentication, workspace scope, headers, envelopes, errors, limits
 audience: [engineers, API-consumers, testers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 ---
 
 # API conventions and route index
@@ -15,7 +15,7 @@ Define cross-route behavior and provide a complete map to detailed endpoint docu
 
 ## Scope
 
-The Next.js application exports 83 API paths. `generated/openapi.json` is generated from route-handler exports and checked for drift; it is the authoritative machine-readable method inventory. Route source remains authoritative for payload details.
+The Next.js application exports 94 API paths. `generated/openapi.json` is generated from route-handler exports and checked for drift; it is the authoritative machine-readable method inventory. Route source remains authoritative for payload details.
 
 ## Base URL and content type
 
@@ -241,6 +241,21 @@ All examples use fictitious identifiers and values.
 | `/api/rewards/frequent-flyer/history` | GET, POST, PATCH, DELETE | [Assets and rewards](assets-rewards.md) |
 | `/api/rewards/hotel-rewards` | POST, PATCH, DELETE | [Assets and rewards](assets-rewards.md) |
 
+### Nest CIO
+
+| Path | Methods | Detailed documentation |
+| --- | --- | --- |
+| `/api/cio/overview` | GET | [CIO](cio.md) |
+| `/api/cio/profile` | GET, PATCH | [CIO](cio.md) |
+| `/api/cio/policy` | GET, PATCH | [CIO](cio.md) |
+| `/api/cio/investments/{investmentId}/profile` | GET, PUT | [CIO](cio.md) |
+| `/api/cio/investments/{investmentId}/exposures` | GET, PUT | [CIO](cio.md) |
+| `/api/cio/recurring-flows` | GET, POST | [CIO](cio.md) |
+| `/api/cio/recurring-flows/{id}` | PATCH, DELETE | [CIO](cio.md) |
+| `/api/cio/planning-positions` | GET, POST | [CIO](cio.md) |
+| `/api/cio/planning-positions/{id}` | PATCH, DELETE | [CIO](cio.md) |
+| `/api/cio/retirement-projection` | POST | [CIO](cio.md) |
+
 ### AI
 
 | Path | Methods | Detailed documentation |
@@ -304,4 +319,4 @@ All examples use fictitious identifiers and values.
 
 ## Last Updated
 
-2026-07-28
+2026-07-30

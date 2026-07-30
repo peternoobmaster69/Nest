@@ -6,6 +6,7 @@ export type QueryRoot =
   | "budget-plan"
   | "budgets"
   | "collaborators"
+  | "cio"
   | "credit-cards"
   | "credit-transactions"
   | "credit-transaction-payment-due-months"
@@ -42,6 +43,7 @@ const workspaceDataRoots = [
   "budget-plan",
   "budgets",
   "collaborators",
+  "cio",
   "credit-cards",
   "credit-transactions",
   "credit-txn-auto-rules",
@@ -71,6 +73,17 @@ export const queryKeys = {
   dashboard: (workspaceId?: WorkspaceId) => ["dashboard-summary", workspaceId] as const,
   collaboratorsAll: ["collaborators"] as const,
   collaborators: (workspaceId?: WorkspaceId) => ["collaborators", workspaceId] as const,
+  cioAll: ["cio"] as const,
+  cio: (workspaceId?: WorkspaceId) => ["cio", workspaceId] as const,
+  cioOverview: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "overview"] as const,
+  cioProfile: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "profile"] as const,
+  cioPolicy: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "policy"] as const,
+  cioFlows: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "recurring-flows"] as const,
+  cioPositions: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "planning-positions"] as const,
+  cioInvestmentProfile: (workspaceId: WorkspaceId, investmentId: string) =>
+    ["cio", workspaceId, "investments", investmentId, "profile"] as const,
+  cioInvestmentExposures: (workspaceId: WorkspaceId, investmentId: string) =>
+    ["cio", workspaceId, "investments", investmentId, "exposures"] as const,
   notificationsAll: ["in-app-notifications"] as const,
   notifications: (workspaceId?: WorkspaceId) => ["in-app-notifications", workspaceId] as const,
   investments: (workspaceId?: WorkspaceId) => ["investments", workspaceId] as const,

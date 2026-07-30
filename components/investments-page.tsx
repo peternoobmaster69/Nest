@@ -25,6 +25,8 @@ import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 
 type AppContext = {
   workspaceId: string | null;
+  workspaceName?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
   baseCurrency?: string | null;
 };
 
@@ -465,12 +467,18 @@ export function InvestmentsPage() {
   };
 
   const confirmDeleteAccount = async (accountId: string) => {
-    if (!(await confirmDestructiveAction("Delete this investment account and its history?"))) return;
+    if (!(await confirmDestructiveAction("Delete this investment account and its history?", "Delete investment account?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "This cannot be undone; all snapshots for the account are removed.",
+    }))) return;
     deleteAccount.mutate(accountId);
   };
 
   const confirmDeleteEntry = async (entryId: string) => {
-    if (!(await confirmDestructiveAction("Delete this investment entry?"))) return;
+    if (!(await confirmDestructiveAction("Delete this investment entry?", "Delete investment snapshot?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "This snapshot cannot be restored automatically.",
+    }))) return;
     deleteEntry.mutate(entryId);
   };
 

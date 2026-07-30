@@ -97,6 +97,18 @@ test("Ask Nest validates structured answers and grounds displayed currency value
   assert.match(orchestration, /evidenceById\.get\(id\)/);
 });
 
+test("Ask Nest rewrites an unsupported illustrative value once before blocking it", async () => {
+  const orchestration = await source("lib/ai/ask-nest.ts");
+
+  assert.match(orchestration, /conceptual definition that does not ask about the user's records/);
+  assert.match(orchestration, /today's money[\s\S]*?expressed in current purchasing power/);
+  assert.match(orchestration, /const groundingFailure = findAskNestGroundingFailure/);
+  assert.match(orchestration, /requestItems\.push\(\{ role: "developer", content: GROUNDING_REPAIR_INSTRUCTION \}\)/);
+  assert.equal([...orchestration.matchAll(/response = await createResponse\("none"\)/g)].length, 1);
+  assert.match(orchestration, /generated = parseGeneratedResponse\(response\);[\s\S]*?assertGroundedCurrencyValues\(generated, toolOutputs\)/);
+  assert.match(orchestration, /findUnsupportedCioValue\(generated, successfulToolOutputs\)/);
+});
+
 test("Ask Nest distinguishes outstanding statements from distinct credit cards", async () => {
   const [orchestration, tools] = await Promise.all([
     source("lib/ai/ask-nest.ts"),

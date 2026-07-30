@@ -53,6 +53,8 @@ X-Workspace-Id: ws_123
 
 The exact structured answer union is in `lib/ai/ask-nest-types.ts`.
 
+For CIO questions, deterministic routing may select `get_cio_overview`, `get_cio_policy_status`, `run_cio_retirement_projection`, or `compare_cio_contribution_scenarios`. Those tools accept no workspace override, return an `asOfDate`, assumptions, warnings, and evidence, and never expose configuration writes or trading actions.
+
 ## Example: approve Smart Review safely
 
 Smart Review itself does not mutate:

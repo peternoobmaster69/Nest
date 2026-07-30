@@ -4,7 +4,7 @@ description: Product purpose, users, features, stack, runtime, deployment, depen
 audience: [engineers, operators, reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 ---
 
 # Architecture overview
@@ -52,6 +52,7 @@ Target users are individuals and invited collaborators managing finances in one 
 | Gmail card alerts | Import supported card alerts through OAuth | Gmail integration and SQL-backed jobs |
 | Notifications | In-app, push, and email payment reminders | notification and job services |
 | Ask Nest | Answer read-only grounded finance questions | `lib/ai/` |
+| Nest CIO | Deterministic household allocation, liquidity, policy, and retirement planning | `lib/domains/cio/`, CIO page/API |
 | Public sharing | Share minimal net-worth or card-due projections | revocable token endpoints |
 | Administration | Inspect users, storage, jobs, AI usage, and sanitized health | admin page and services |
 | PWA shell | Installability and static-only offline shell | manifest, service worker, offline assets |
@@ -157,6 +158,7 @@ See [security architecture](security.md).
 - [`proxy.ts`](../../proxy.ts)
 - [`prisma/schema.prisma`](../../prisma/schema.prisma)
 - [System design](system-design.md)
+- [ADR-007: Read-only CIO decision support](adr/ADR-007-read-only-cio-decision-support.md)
 
 ## Dependencies
 
@@ -181,4 +183,4 @@ See [security architecture](security.md).
 
 ## Last Updated
 
-2026-07-28
+2026-07-30

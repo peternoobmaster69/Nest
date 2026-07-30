@@ -4,7 +4,7 @@ description: Complete catalog of Prisma models, fields, relationships, persisten
 audience: [engineers, database-operators, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 ---
 
 # Database schema
@@ -15,7 +15,7 @@ Explain the business meaning and maintenance hazards of every persisted model wi
 
 ## Scope
 
-Nest uses Prisma's `sqlserver` provider with `relationMode = "prisma"`. `prisma/schema.prisma` defines 61 models. SQL migrations add constraints, indexes, triggers, and filtered uniqueness that Prisma cannot fully express.
+Nest uses Prisma's `sqlserver` provider with `relationMode = "prisma"`. `prisma/schema.prisma` defines 69 models. SQL migrations add constraints, indexes, triggers, and filtered uniqueness that Prisma cannot fully express.
 
 ## Global conventions
 
@@ -335,6 +335,33 @@ Money is not converted across currencies automatically. Rates use `Decimal`; led
 - **Fields:** source identity, target identity, timestamp/checksum, optional unique transaction relation.
 - **Constraint:** Unique `(system, sourceTable, sourceId)`.
 
+## CIO planning models
+
+### `CioHouseholdProfile` and `CioInvestmentPolicy`
+
+- **Business meaning:** One optional profile and policy per workspace, containing explicit individual-or-household planning assumptions and confirmed constraints.
+- **Representation:** Money is nullable integer cents; returns, inflation, withdrawal rates, and concentration limits are integer basis points. Opinionated values remain null until configured.
+- **Planning scope:** `planningScope` is `INDIVIDUAL` or `HOUSEHOLD`. Individual rows cannot retain a partner birth date; existing rows were backfilled from whether that date was present.
+- **Spending:** Retirement spending drives the retirement target. Essential spending drives emergency-runway and months-based liquidity checks; zero is an explicit configured value, while null is unknown.
+- **Children:** Asset-class bands and geographic limits are normalized rows with stable per-policy keys.
+
+### `CioInvestmentProfile` and `CioInvestmentExposure`
+
+- **Business meaning:** Additive classification metadata for an existing `InvestmentAccount`; it does not replace legacy liquidity or valuation fields.
+- **Constraints:** One profile per investment. Exposure keys are unique by investment/dimension/key; the service transaction requires every configured dimension to total 10,000 bps.
+- **Lifecycle:** Profile and exposure rows follow investment deletion. Product names are never used as authoritative exposure.
+
+### `CioPlanningPosition`
+
+- **Business meaning:** Planning-only external asset or liability with its own value date, liquidity, and inclusion flags.
+- **Rule:** It contributes only to CIO planning totals and never to BR-054 dashboard/public net worth.
+
+### `CioRecurringFlow`
+
+- **Business meaning:** Bounded recurring contribution, internal reallocation, or withdrawal metadata with optional scoped account/investment references.
+- **Rule:** Only external contribution/withdrawal flows affect projected new wealth; internal reallocations remain separate.
+- **Lifecycle:** A flow is deleted when a referenced financial or investment account is deleted, avoiding an invalid source-less internal reallocation.
+
 ## AI and operational models
 
 ### `AskNestTurn`
@@ -415,4 +442,4 @@ Money is not converted across currencies automatically. Rates use `Decimal`; led
 
 ## Last Updated
 
-2026-07-28
+2026-07-30

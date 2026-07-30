@@ -82,6 +82,7 @@ Reusable source: [runtime-containers.mmd](../diagrams/runtime-containers.mmd).
 | Cards | Card metadata, statement transactions, allocation, payment, reminders, alert staging |
 | Receivables | Expected repayments, source references, close/settlement posting |
 | Assets/rewards | Investment snapshots, miles, points, conversions |
+| CIO decision support | Planning metadata, canonical snapshot, allocation, policy, data quality, and retirement projection |
 | AI | Intent routing, read-only tools, grounded response, history/memory/usage |
 | Integrations | Gmail OAuth/sync, Maybank imports, market/news/search providers |
 | Jobs/notifications | Durable leases, retry/dead-letter, email/push/in-app dedupe |
@@ -126,6 +127,7 @@ Routes written before the shared secure wrapper do not all emit identical envelo
 - New workspace domain: add `workspaceId`, guard every route, index dominant scoped queries.
 - New integration: encrypt credentials, bind OAuth state, enforce limits, isolate provider payloads, and use jobs for long work.
 - New AI tool: read-only, bounded, deterministic where possible, evidence-producing, and included in the golden evaluation.
+- New CIO consumer: reuse the canonical `lib/domains/cio` snapshot; do not recalculate portfolio values in the UI or model layer.
 - New public view: random revocable token, minimal projection, no-store, audit, and distributed rate limiting.
 
 ## Related Files

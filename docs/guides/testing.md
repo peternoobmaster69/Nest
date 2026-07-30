@@ -44,6 +44,7 @@ Unit-like contract tests, source-structure tests, database integration tests, UI
 | UI controller/component | UI contract, UI check, performance check, build |
 | Job/cron | Background job and schedule tests; verify idempotency and lease recovery |
 | AI tools/prompts | Ask Nest contracts, entity resolution, evaluation where credentials exist |
+| CIO domain/API/UI | CIO pure-domain and API contracts, Ask Nest routing/tools, UI contract/accessibility, Prisma migration, build |
 | Public share/provider | Purpose-token and provider contract tests |
 
 ## Database Integration Tests

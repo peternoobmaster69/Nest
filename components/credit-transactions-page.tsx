@@ -14,7 +14,6 @@ import Link from "next/link";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditTransactionsTableRowsSkeleton } from "@/components/skeletons/CreditTransactionsSkeleton";
-import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { useSearchParams } from "next/navigation";
 import { useSessionState } from "@/lib/use-session-state";
@@ -1375,7 +1374,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   };
 
   const confirmDeleteTransaction = async (transactionId: string) => {
-    if (!(await confirmDestructiveAction("Delete this credit card transaction permanently? This cannot be undone."))) return;
+    const transaction = getCachedCreditTransaction(transactionId);
+    if (!(await confirm({
+      title: "Delete credit card transaction?",
+      message: "This permanently removes the imported card record. Any separate ledger entries remain auditable.",
+      confirmLabel: "Delete permanently",
+      destructive: true,
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: transaction ? [
+        { label: "Transaction", value: transaction.subject },
+        { label: "Amount", value: formatCurrency(transaction.amountCents), tone: "negative" },
+        { label: "Date", value: new Date(transaction.transactionDate).toLocaleDateString("en-SG") },
+      ] : undefined,
+      reversal: "This imported record cannot be restored automatically.",
+    }))) return;
     if (deletingTransactionIds.includes(transactionId)) return;
     setDeletingTransactionIds((current) => [...current, transactionId]);
     window.setTimeout(() => {

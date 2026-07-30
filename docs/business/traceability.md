@@ -4,7 +4,7 @@ description: Mapping from requirements and rules through API, services, database
 audience: [engineers, reviewers, auditors, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 ---
 
 # Business-to-code traceability
@@ -32,6 +32,7 @@ The repository has no external requirement IDs, so this matrix uses stable busin
 | Import card activity reliably | BR-065–067 | Gmail, credit alerts/import, cron | Gmail runner, alert ingest, jobs | GmailIntegration, AlertStaging, BackgroundJob | Gmail/phase3/phase5 | [Integrations](../modules/integrations.md) |
 | Notify users without duplicates | BR-036, BR-066 | reminders, notifications, push | reminder and notification services | BackgroundJob, Notification, PushSubscription | reminder/phase5 | [Jobs and notifications](../modules/jobs-notifications.md) |
 | Support safe offline shell | BR-068 | manifest/offline assets | service worker cache purge | None | phase0/phase3 contracts | [Web UI](../modules/web-ui.md) |
+| Provide household CIO decision support | BR-070 through BR-076 | cio routes, ai/ask | CIO snapshot/allocation/cashflow/policy/projection services | Cio* profile, policy, exposure, flow, position models | CIO domain/API/UI/Ask Nest tests | [CIO](../modules/cio.md) |
 
 ## Change impact method
 
@@ -69,4 +70,4 @@ For a changed rule:
 
 ## Last Updated
 
-2026-07-28
+2026-07-30

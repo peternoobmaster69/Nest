@@ -52,6 +52,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/credit-alerts": "Credit Alert Staging",
   "/credit-cards": "Credit Cards",
   "/credit-transactions": "Credit Card Transactions",
+  "/cio": "Nest CIO",
   "/investments": "Investments",
   "/receivables": "Receivables",
   "/rewards": "Rewards",

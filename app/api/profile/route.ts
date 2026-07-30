@@ -47,10 +47,25 @@ export async function DELETE(request: Request) {
       take: 500,
       select: { workspaceId: true, role: true, workspace: { select: { name: true } } },
     });
-    const membershipWorkspaceIds = memberships.map((membership) => membership.workspaceId);
-    const otherMembers = membershipWorkspaceIds.length
+    const [createdBudgets, ownedBudgetSources, ownedMonthlySources, ownedPlanSources] = await Promise.all([
+      prisma.budgetEnvelope.findMany({ where: { createdById: userId }, take: 5000, select: { workspaceId: true } }),
+      prisma.budgetSource.findMany({ where: { ownerId: userId }, take: 5000, select: { workspaceId: true } }),
+      prisma.monthlyBudgetSource.findMany({ where: { ownerId: userId }, take: 5000, select: { workspaceId: true } }),
+      prisma.monthlyBudgetPlanSource.findMany({ where: { ownerId: userId }, take: 5000, select: { plan: { select: { workspaceId: true } } } }),
+    ]);
+    const recordOwnershipWorkspaceIds = new Set([
+      ...createdBudgets.map((record) => record.workspaceId),
+      ...ownedBudgetSources.map((record) => record.workspaceId),
+      ...ownedMonthlySources.map((record) => record.workspaceId),
+      ...ownedPlanSources.map((record) => record.plan.workspaceId),
+    ]);
+    const affectedWorkspaceIds = [...new Set([
+      ...memberships.map((membership) => membership.workspaceId),
+      ...recordOwnershipWorkspaceIds,
+    ])];
+    const otherMembers = affectedWorkspaceIds.length
       ? await prisma.workspaceMember.findMany({
-          where: { workspaceId: { in: membershipWorkspaceIds }, userId: { not: userId } },
+          where: { workspaceId: { in: affectedWorkspaceIds }, userId: { not: userId } },
           orderBy: { createdAt: "asc" },
           take: 5000,
           select: { workspaceId: true, userId: true, role: true },
@@ -77,6 +92,21 @@ export async function DELETE(request: Request) {
         workspaces: soleOwnedWorkspaces.map((membership) => ({ id: membership.workspaceId, name: membership.workspace.name })),
       }, { status: 409 });
     }
+    const unassignedRecordWorkspaces = [...recordOwnershipWorkspaceIds].filter(
+      (workspaceId) => !replacementMemberByWorkspace.has(workspaceId),
+    );
+    if (unassignedRecordWorkspaces.length) {
+      const workspaces = await prisma.workspace.findMany({
+        where: { id: { in: unassignedRecordWorkspaces } },
+        take: 500,
+        select: { id: true, name: true },
+      });
+      return Response.json({
+        error: "Shared records need another workspace member before your account can be deleted.",
+        code: "RECORD_OWNERSHIP_TRANSFER_REQUIRED",
+        workspaces,
+      }, { status: 409 });
+    }
 
     await prisma.$transaction(async (db) => {
       for (const [workspaceId, replacementUserId] of replacementMemberByWorkspace) {
@@ -97,14 +127,16 @@ export async function DELETE(request: Request) {
           data: { ownerId: replacementUserId },
         });
       }
-      await db.workspaceAuditLog.createMany({
-        data: memberships.map((membership) => ({
-          workspaceId: membership.workspaceId,
-          actorUserId: userId,
-          action: "ACCOUNT_DELETED",
-          details: "Member account deleted; retained financial records were anonymized.",
-        })),
-      });
+      if (memberships.length) {
+        await db.workspaceAuditLog.createMany({
+          data: memberships.map((membership) => ({
+            workspaceId: membership.workspaceId,
+            actorUserId: userId,
+            action: "ACCOUNT_DELETED",
+            details: "Member account deleted; retained financial records were anonymized.",
+          })),
+        });
+      }
       await db.workspaceInvite.deleteMany({ where: { invitedById: userId } });
       await db.workspaceInvite.updateMany({ where: { invitedUserId: userId }, data: { invitedUserId: null } });
       await db.workspaceAuditLog.updateMany({ where: { actorUserId: userId }, data: { actorUserId: null } });

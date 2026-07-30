@@ -31,6 +31,7 @@ Authorization, posting, jobs, integrations, public tokens, client data, and AI t
 | Provider adapter | Bound timeout/quota/error translation | Massive, SerpApi, Gmail modules |
 | React Query hook | Cache/invalidate shared server state | `hooks/` |
 | Read-only AI tool | Workspace-scoped evidence projection | `lib/ask-nest-tools.ts` |
+| Deterministic planning snapshot | One scoped domain result shared by page/API/AI | `lib/domains/cio/snapshot-service.ts`, `lib/ai/tools/cio-tools.ts` |
 | Generated contract check | Detect route/OpenAPI drift | `scripts/generate-openapi.mjs`, generated artifact |
 
 ## Pattern Selection Rules
@@ -40,6 +41,7 @@ Authorization, posting, jobs, integrations, public tokens, client data, and AI t
 - Use a job when work can exceed an interactive request or needs durable retry.
 - Use public purpose tokens only for deliberately restricted unauthenticated views.
 - Do not turn a convenience helper into an implicit authorization decision.
+- Keep authoritative CIO arithmetic in pure domain engines; the UI and model may only present or explain returned values.
 
 ## Related Files
 

@@ -59,6 +59,7 @@ Ask Nest → read-only tool registry → workspace-filtered domain reads
 - [Reliable SQL jobs](../architecture/adr/ADR-004-background-jobs.md)
 - [Read-only AI](../architecture/adr/ADR-005-read-only-ai.md)
 - [Bank control balance](../architecture/adr/ADR-006-bank-control-balances.md)
+- [Read-only CIO decision support](../architecture/adr/ADR-007-read-only-cio-decision-support.md)
 
 ## Related Files
 

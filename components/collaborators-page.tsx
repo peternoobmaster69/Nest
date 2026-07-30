@@ -281,7 +281,10 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
   };
 
   const confirmRemoveMember = async (memberId: string) => {
-    if (!(await confirmDestructiveAction("Remove this collaborator from the workspace?"))) return;
+    if (!(await confirmDestructiveAction("Remove this collaborator from the workspace?", "Remove collaborator?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "OWNER" },
+      reversal: "You can invite this person again later; their access ends immediately.",
+    }))) return;
     removeMember.mutate(memberId);
   };
 

@@ -12,6 +12,7 @@ import {
   ChartPie,
   Check,
   ChevronDown,
+  Compass,
   CreditCard,
   Ellipsis,
   Gift,
@@ -140,6 +141,7 @@ export function AppShell({
     "/settings",
     "/profile",
     "/admin",
+    "/cio",
   ].some((path) => currentPath === path || currentPath.startsWith(`${path}/`));
   const navigationWorkspaceId = contextData?.workspaceId ?? routeWorkspaceId;
   const workspaceHref = (path: string) =>
@@ -399,6 +401,10 @@ export function AppShell({
               <ModalCloseButton onClick={() => setMobileMoreOpen(false)} label="Close More navigation" />
             </div>
             <nav className="mobile-more-links" aria-label="More navigation">
+              <Link className={`mobile-more-link${currentPath === "/cio" ? " is-active" : ""}`} href={workspaceHref("/cio")} onClick={closeMobileNavigation} aria-current={currentPath === "/cio" ? "page" : undefined}>
+                <Compass size={20} aria-hidden="true" />
+                <span><strong>Nest CIO</strong><small>Portfolio health and long-term planning</small></span>
+              </Link>
               {showCreditTransactions ? (
                 <Link className={`mobile-more-link${currentPath === "/credit-cards" ? " is-active" : ""}`} href={workspaceHref("/credit-cards")} onClick={closeMobileNavigation}>
                   <CreditCard size={20} aria-hidden="true" />

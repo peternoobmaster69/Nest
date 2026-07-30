@@ -4,7 +4,7 @@ description: Frozen baseline, forward migrations, historical themes, legacy mapp
 audience: [engineers, database-operators, reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 ---
 
 # Migration history
@@ -15,7 +15,7 @@ Preserve why the schema evolved and define how future changes are applied withou
 
 ## Scope
 
-The repository contains a frozen baseline plus 34 historical/forward migration directories. Directory names are not uniformly timestamped; ordering is preserved by Prisma migration records and the baseline manifest.
+The repository contains a frozen baseline plus 36 historical/forward migration directories. Directory names are not uniformly timestamped; ordering is preserved by Prisma migration records and the baseline manifest.
 
 ## Baseline model
 
@@ -48,6 +48,8 @@ The repository contains a frozen baseline plus 34 historical/forward migration d
 | `20260721000000_phase_4_database_integrity` | Reconcile drift, add domain checks/scoped references/retention integrity |
 | `20260722000000_login_session_audit` | Add session audit records |
 | `20260722120000_multi_device_sessions` | Expand to five active device sessions with status/expiry |
+| `20260730000000_nest_cio` | Add workspace-scoped CIO profiles, policies, classifications, exposures, planning positions, recurring flows, checks, indexes, and tenant-safe keys |
+| `20260730070000_cio_flow_reference_invariants` | Forward-harden recurring-flow source/destination rules after the initial CIO migration reached a shared database |
 | `sync_receivable_close_transaction_content` | Backfill close postings from source title/notes |
 | `remove_unique_card_alert_staging_credit_transaction_id` | Allow non-unique alert staging link with lookup index |
 | `widen_credit_card_auto_rules` | Allow large ordered-rule JSON |

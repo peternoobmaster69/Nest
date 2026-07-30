@@ -32,6 +32,8 @@ import { Dialog } from "@/components/ui/dialog";
 
 type AppContext = {
   workspaceId: string | null;
+  workspaceName?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
 };
 
 type CreditCard = {
@@ -322,7 +324,10 @@ export function CreditCardsPage() {
   };
 
   const confirmDeleteCard = async (cardId: string) => {
-    if (!(await confirmDestructiveAction("Delete this credit card?"))) return;
+    if (!(await confirmDestructiveAction("Delete this credit card?", "Delete credit card?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "This cannot be undone. Transactions already posted to the ledger remain in financial history.",
+    }))) return;
     deleteCard.mutate(cardId, {
       onSuccess: () => {
         closeModal();

@@ -32,6 +32,7 @@ Nest uses contract-heavy tests. Many suites inspect source structure and exporte
 | Budget planning | `monthly-budget-plan` | Monthly allocation semantics |
 | Cards/receivables | reminder, public dues, close, visibility suites | Due/settlement and visibility rules |
 | Investments/providers | entry-order, Massive, SerpApi suites | Ordering and third-party contract drift |
+| Nest CIO | CIO domain/API/UI and Ask Nest contracts | Exact rounding, workspace isolation, incomplete data, projection/policy safety |
 | Gmail/import | Gmail query/summary, bulk import notes | Bounded ingestion and traceability |
 | Jobs | `background-jobs`, `phase5-reliable-jobs` | Lease, retry, deduplication |
 | Ask Nest | contracts, evaluation, entity resolution, category suites | Read-only grounding and interpretation |

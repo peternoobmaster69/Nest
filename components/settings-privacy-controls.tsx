@@ -94,7 +94,8 @@ export function SettingsPrivacyControls() {
       } catch {
         // Server-side deletion has already succeeded; browser storage is best effort.
       }
-      await signOut({ callbackUrl: "/" });
+      await signOut({ redirect: false }).catch(() => undefined);
+      window.location.assign("/");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Your account could not be deleted.");
       setDeleteDialogOpen(false);
@@ -190,4 +191,3 @@ export function SettingsPrivacyControls() {
     </>
   );
 }
-

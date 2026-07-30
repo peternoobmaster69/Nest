@@ -1589,7 +1589,10 @@ export function TransactionsPage() {
 
   const confirmDeleteBudget = async () => {
     if (!editingBudgetId) return;
-    if (!(await confirmDestructiveAction(`This will delete the sub-account and remove all transaction links. Continue?`))) return;
+    if (!(await confirmDestructiveAction("This will delete the sub-account and remove all transaction links.", "Delete sub-account?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "The sub-account cannot be restored automatically. Ledger entries remain in financial history.",
+    }))) return;
     deleteBudget.mutate(editingBudgetId);
   };
 
@@ -1692,7 +1695,10 @@ export function TransactionsPage() {
 
   const confirmDeleteGroup = async () => {
     if (!editingGroup) return;
-    if (!(await confirmDestructiveAction(`Delete “${editingGroup.name}”? Its transactions will remain in the sub-account.`))) return;
+    if (!(await confirmDestructiveAction(`Delete “${editingGroup.name}”? Its transactions will remain in the sub-account.`, "Delete transaction group?", {
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      reversal: "The group cannot be restored automatically; its transactions are not deleted.",
+    }))) return;
     deleteTransactionGroup.mutate(editingGroup.id);
   };
 

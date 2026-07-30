@@ -104,6 +104,18 @@ Rules are derived from `guide.md`, source, migrations, and tests. Regulatory req
 | BR-067 | Cron routes fail closed without a matching secret. | Prevent forged scheduler work. | cron guard tests |
 | BR-068 | Service worker caches static assets only and never queues finance mutations. | Avoid cross-user/offline replay. | service-worker contract |
 
+## Nest CIO decision support
+
+| ID | Rule | Why | Evidence |
+| --- | --- | --- | --- |
+| BR-070 | Nest CIO remains read-only decision support and never executes trades, transfers, postings, or autonomous actions. | Keep planning separate from financial authority. | ADR-007, CIO tool/API tests |
+| BR-071 | Existing structured Nest records and deterministic CIO services are authoritative for CIO calculations. | Prevent model-created balances and assumptions. | snapshot service, Ask Nest CIO tools |
+| BR-072 | CIO planning net worth is separate from BR-054 dashboard/public net worth. | Planning-only positions must not change published accounting semantics. | snapshot/public net-worth tests |
+| BR-073 | CIO classifications, policy constraints, and projection assumptions are explicit and reviewable. | Never present inferred product exposure or invented targets as household policy. | CIO profile/policy contracts |
+| BR-074 | Internal reallocations are reported separately and never counted as new household contributions. | Moving existing wealth does not create wealth. | cash-flow engine tests |
+| BR-075 | Every CIO projection shows its data date, contribution timing, and configured assumptions. | Make deterministic output reproducible and interpretable. | retirement projection contract |
+| BR-076 | Missing, unknown, and stale CIO data remains visible and reduces completeness rather than disappearing from totals. | Avoid false precision and biased allocation. | data-quality/allocation tests |
+
 ## Related Files
 
 - [`guide.md`](../../guide.md)
