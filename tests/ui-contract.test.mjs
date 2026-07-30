@@ -692,8 +692,8 @@ test("settings sections share accessible cookie-backed tabs", async () => {
   assert.match(route, /parseSettingsTab\(params\.tab\)[\s\S]*?cookieStore\.get\(SETTINGS_TAB_COOKIE\)/);
   assert.match(route, /activeTab === "workspaces"[\s\S]*?<CollaboratorsPage workspaceSettings={<SettingsPage section={activeTab} \/>} \/>/);
   assert.match(tabs, /role="tablist"[\s\S]*?role="tab"[\s\S]*?role="tabpanel"/);
-  assert.match(tabs, /id: "settings"[\s\S]*?label: "General"/);
-  assert.match(tabs, /mobileLabel: "General"[\s\S]*?mobileLabel: "Automation"[\s\S]*?mobileLabel: "Workspace"[\s\S]*?mobileLabel: "Data"/);
+  assert.match(tabs, /id: "settings"[\s\S]*?label: "Privacy & Security"/);
+  assert.match(tabs, /mobileLabel: "Privacy"[\s\S]*?mobileLabel: "Automation"[\s\S]*?mobileLabel: "Workspace"[\s\S]*?mobileLabel: "Data"/);
   assert.match(tabs, /id: "automation"[\s\S]*?id: "workspaces"[\s\S]*?id: "data"/);
   assert.match(tabs, /event\.key === "ArrowRight"[\s\S]*?event\.key === "ArrowLeft"[\s\S]*?router\.push\(settingsHref\(nextTab\)\)/);
   assert.match(tabs, /document\.cookie = `\$\{SETTINGS_TAB_COOKIE\}=\$\{tab\}; Path=\/; Max-Age=\$\{ONE_YEAR_SECONDS\}; SameSite=Lax/);
@@ -815,6 +815,7 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   const investments = await readFile(path.join(root, "components/investments-page.tsx"), "utf8");
   const motion = await readFile(path.join(root, "lib/motion.ts"), "utf8");
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
+  const providers = await readFile(path.join(root, "app/providers.tsx"), "utf8");
   const settings = await readFile(path.join(root, "components/settings-page.tsx"), "utf8");
 
   assert.match(styles, /--touch-target-min:\s*44px/);
@@ -860,7 +861,8 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.doesNotMatch(styles, /\.inv-liquid-chip\s*\{/);
   assert.match(motion, /prefers-reduced-motion:\s*reduce/);
   assert.doesNotMatch(`${transactions}\n${creditTransactions}`, /behavior:\s*"smooth"/);
-  assert.match(layout, /<SpeedInsights\s*\/>/);
+  assert.doesNotMatch(layout, /<SpeedInsights\s*\/>/);
+  assert.match(providers, /PrivacyConsentProvider/);
   assert.match(settings, /credit-txn-auto-rules-config/);
   assert.doesNotMatch(settings, /from "@\/lib\/credit-txn-auto-rules"/);
 });

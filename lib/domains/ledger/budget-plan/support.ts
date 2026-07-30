@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 export const ownerSelect = { id: true, name: true, email: true } as const;
-export const destinationSelect = { id: true, name: true } as const;
+export const destinationSelect = { id: true, name: true, availableCents: true } as const;
 
 export class BudgetPlanRequestError extends Error {
   constructor(
@@ -91,4 +91,3 @@ export async function nextMonthlySourceSortOrder(db: Prisma.TransactionClient, p
   });
   return (result._max.sortOrder ?? -1) + 1;
 }
-

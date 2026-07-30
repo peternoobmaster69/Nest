@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { RewardsOverview } from "@/components/rewards/rewards-overview";
+import { useSearchParams } from "next/navigation";
+import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 
 type CreditCardReward = {
   id: string;
@@ -195,7 +197,21 @@ export function RewardsPage({
 }) {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const rewardsUrlKey = searchParams.toString();
   const [activeTab, setActiveTab] = useState<"credit-cards" | "frequent-flyers" | "hotel-rewards" | "conversions">("credit-cards");
+  const [hydratedRewardsUrlKey, setHydratedRewardsUrlKey] = useState<string | null>(null);
+  const urlTabReady = hydratedRewardsUrlKey === rewardsUrlKey;
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "credit-cards" || tab === "frequent-flyers" || tab === "hotel-rewards" || tab === "conversions") {
+      setActiveTab(tab);
+    }
+    setHydratedRewardsUrlKey(rewardsUrlKey);
+  }, [rewardsUrlKey, searchParams]);
+
+  useUrlFilterSync({ tab: activeTab }, urlTabReady);
 
   // Forms state
   const [newCardId, setNewCardId] = useState("");

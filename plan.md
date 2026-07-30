@@ -252,16 +252,16 @@ Suggested UI engineering budgets:
 
 ### Phase 8 — Product UX, accessibility, and privacy controls
 
-Target: 2–3 weeks, parallel with Phase 7. Owner: product/design/frontend. Status: Not started.
+Target: 2–3 weeks, parallel with Phase 7. Owner: product/design/frontend. Status: Code complete; manual UX, assistive-technology, and visual validation pending.
 
 - [ ] Run task-based UX tests for first workspace, first account/sub-account, first transaction, transfer, receivable close, card payment, Gmail connection, collaboration, and public sharing.
-- [ ] Make money-changing confirmations show source, destination, amount, date, resulting balance, and whether an immutable reversal is available.
-- [ ] Add visible workspace/role context to destructive or cross-workspace workflows; explain why a control is unavailable to viewers.
-- [ ] Add concurrent-edit conflict UI using version/`updatedAt` preconditions instead of silent last-write-wins behavior.
-- [ ] Put share-link rotation/revocation, Gmail data scope/last sync/revoke, passkeys, notification devices, offline storage, data export, and account deletion in a clear Privacy & Security area.
-- [ ] Replace the current accept-only cookie overlay: either gate optional analytics behind granular accept/reject controls or remove consent UI when only essential storage is used.
-- [ ] Make filters/sort/month selections URL-addressable where sharing/deep links matter; use session storage only for ephemeral presentation state.
-- [ ] Add table captions/scope, error summaries, `aria-invalid`/descriptions, explicit raw-button types, non-color status cues, and consistent live-region behavior.
+- [x] Make money-changing confirmations show source, destination, amount, date, resulting balance, and whether an immutable reversal is available.
+- [x] Add visible workspace/role context to destructive or cross-workspace workflows; explain why a control is unavailable to viewers.
+- [x] Add concurrent-edit conflict UI using version/`updatedAt` preconditions instead of silent last-write-wins behavior.
+- [x] Put share-link rotation/revocation, Gmail data scope/last sync/revoke, passkeys, notification devices, offline storage, data export, and account deletion in a clear Privacy & Security area.
+- [x] Replace the current accept-only cookie overlay: either gate optional analytics behind granular accept/reject controls or remove consent UI when only essential storage is used.
+- [x] Make filters/sort/month selections URL-addressable where sharing/deep links matter; use session storage only for ephemeral presentation state.
+- [x] Add table captions/scope, error summaries, `aria-invalid`/descriptions, explicit raw-button types, non-color status cues, and consistent live-region behavior.
 - [ ] Test keyboard-only navigation, focus order/return, zoom/reflow at 200–400%, reduced motion, high contrast, VoiceOver, NVDA, and TalkBack.
 - [ ] Complete visual/responsive passes at 360, 390, 430, 768, 1024, 1280, and phone landscape sizes in light/dark themes.
 

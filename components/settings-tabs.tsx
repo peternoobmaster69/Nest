@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, type ReactNode, useEffect } from "react";
-import { Bot, HardDrive, Settings, UsersRound } from "lucide-react";
+import { Bot, HardDrive, ShieldCheck, UsersRound } from "lucide-react";
 import { SETTINGS_TAB_COOKIE, type SettingsTab } from "@/lib/settings-tabs";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
@@ -14,13 +14,13 @@ const tabs: Array<{
   id: SettingsTab;
   label: string;
   mobileLabel: string;
-  icon: typeof Settings;
+  icon: typeof ShieldCheck;
 }> = [
   {
     id: "settings",
-    label: "General",
-    mobileLabel: "General",
-    icon: Settings,
+    label: "Privacy & Security",
+    mobileLabel: "Privacy",
+    icon: ShieldCheck,
   },
   {
     id: "automation",

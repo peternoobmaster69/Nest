@@ -30,6 +30,12 @@ type PushStatus = {
   configured: boolean;
   publicKey: string;
   subscribed: boolean;
+  subscriptions: Array<{
+    id: string;
+    provider: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
 };
 
 type AuthProvider = { id: string; name: string; type: string };
@@ -272,6 +278,7 @@ export function SettingsAppAccess() {
     mutationFn: async () => {
       const registration = await navigator.serviceWorker.getRegistration("/");
       const subscription = await registration?.pushManager.getSubscription();
+      if (!subscription) throw new Error("Notifications are not enabled in this browser. Revoke an older notification device below instead.");
       await jsonRequest("/api/push-subscriptions", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -283,6 +290,19 @@ export function SettingsAppAccess() {
       setMessage("Notifications disabled.");
       await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
     },
+  });
+
+  const revokeNotificationDevice = useMutation({
+    mutationFn: (subscriptionId: string) => jsonRequest("/api/push-subscriptions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscriptionId }),
+    }),
+    onSuccess: async () => {
+      setMessage("Notification device revoked.");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "The notification device could not be revoked."),
   });
 
   const installDescription = capabilities.standalone
@@ -336,6 +356,28 @@ export function SettingsAppAccess() {
             </Button>
           )}
         </div>
+        {pushStatus.data?.subscriptions.length ? (
+          <div className="settings-passkey-list settings-message-spaced" aria-label="Notification devices">
+            {pushStatus.data.subscriptions.map((subscription) => (
+              <div className="settings-passkey-item" key={subscription.id}>
+                <div className="settings-passkey-copy">
+                  <strong>{subscription.provider}</strong>
+                  <span>
+                    Registered {new Date(subscription.createdAt).toLocaleDateString("en-SG")} · Last refreshed {new Date(subscription.updatedAt).toLocaleDateString("en-SG")}
+                  </span>
+                </div>
+                <Button
+                  className="btn btn-ghost btn-xs"
+                  type="button"
+                  onClick={() => revokeNotificationDevice.mutate(subscription.id)}
+                  disabled={revokeNotificationDevice.isPending}
+                >
+                  {revokeNotificationDevice.isPending && revokeNotificationDevice.variables === subscription.id ? "Revoking..." : "Revoke"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="card settings-card-block settings-passkeys-card">

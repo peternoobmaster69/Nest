@@ -39,6 +39,7 @@ import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { DashboardTransactionRow } from "@/components/dashboard/dashboard-transaction-row";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
+import { confirmMoneyChange } from "@/lib/confirm-destructive";
 
 const CashFlowChart = dynamic(
   () => import("@/components/dashboard/cash-flow-chart").then((module) => module.CashFlowChart),
@@ -437,14 +438,14 @@ export function DashboardShell({
     enabled: Boolean(workspaceId),
   });
   const updateBankBalance = useMutation({
-    mutationFn: ({ id, startingCents }: { id: string; startingCents: number }) =>
+    mutationFn: ({ id, startingCents, expectedUpdatedAt }: { id: string; startingCents: number; expectedUpdatedAt: string }) =>
       fetchJson(`/api/accounts/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": `account-balance:${id}:${crypto.randomUUID()}`,
         },
-        body: JSON.stringify({ startingCents }),
+        body: JSON.stringify({ startingCents, expectedUpdatedAt }),
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]) });
@@ -482,12 +483,29 @@ export function DashboardShell({
     setEditBankBalance("");
   };
 
-  const onSubmitBankBalance = (event: FormEvent) => {
+  const onSubmitBankBalance = async (event: FormEvent) => {
     event.preventDefault();
     if (!editingBankAccount || !editBankBalance) return;
+    const nextBalanceCents = Math.round(Number(editBankBalance) * 100);
+    const confirmed = await confirmMoneyChange({
+      title: "Confirm bank balance adjustment",
+      message: "This changes the starting balance used to reconcile this bank account.",
+      confirmLabel: "Update balance",
+      workspace: { name: contextQuery.data?.workspaceName || "Current workspace", role: contextQuery.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: editingBankAccount.name },
+        { label: "Destination", value: "Account reconciliation balance" },
+        { label: "Amount", value: formatCents(nextBalanceCents - editingBankAccount.currentBalanceCents) },
+        { label: "Date", value: new Date().toLocaleDateString("en-SG") },
+        { label: "Resulting account balance", value: formatCents(nextBalanceCents) },
+      ],
+      reversal: "Available by recording another reviewed balance adjustment.",
+    });
+    if (!confirmed) return;
     updateBankBalance.mutate({
       id: editingBankAccount.id,
-      startingCents: Math.round(Number(editBankBalance) * 100),
+      startingCents: nextBalanceCents,
+      expectedUpdatedAt: editingBankAccount.updatedAt,
     });
   };
 

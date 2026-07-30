@@ -17,7 +17,7 @@ import { getMotionSafeScrollBehavior } from "@/lib/motion";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
-import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { confirmDestructiveAction, confirmMoneyChange } from "@/lib/confirm-destructive";
 import { AlertTriangle, ArrowLeftRight, Check, Layers3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { queryKeys } from "@/lib/query-keys";
@@ -26,6 +26,7 @@ import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { TransactionMonthList } from "@/components/transactions/transaction-month-list";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
+import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 
 const ALL_BANKS_FILTER = "ALL";
 const GROUP_ICON_OPTIONS = [
@@ -36,6 +37,8 @@ const GROUP_ICON_OPTIONS = [
 
 type AppContext = {
   workspaceId: string | null;
+  workspaceName?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
   baseCurrency?: string | null;
   defaultBudgetId?: string | null;
 };
@@ -707,7 +710,17 @@ export function TransactionsPage() {
     const requestedSearch = searchParams.get("search")?.trim().slice(0, 120) ?? "";
     const isAskNestView = searchParams.get("view") === "ask-nest";
 
-    if (!isAskNestView && !requestedAccountId && !requestedBudgetId && !requestedTransactionId) {
+    if (
+      !isAskNestView &&
+      !requestedAccountId &&
+      !requestedBudgetId &&
+      !requestedGroupId &&
+      !requestedTransactionId &&
+      !requestedFrom &&
+      !requestedTo &&
+      !requestedMonths &&
+      !requestedSearch
+    ) {
       setHydratedUrlFilterKey(urlFilterKey);
       return;
     }
@@ -763,6 +776,16 @@ export function TransactionsPage() {
 
     setHydratedUrlFilterKey(urlFilterKey);
   }, [urlFilterHydrated, urlFilterKey, bankAccounts.data, budgets.data, searchParams]);
+
+  useUrlFilterSync({
+    accountId: effectiveSelectedBankId || null,
+    budgetId: activeBudgetFilterId === "ALL" ? null : activeBudgetFilterId,
+    groupId: activeGroupFilterId === "ALL" ? null : activeGroupFilterId,
+    months: customMonthsFilter || null,
+    from: customMonthsFilter ? null : dateFilter.from,
+    to: customMonthsFilter ? null : dateFilter.to,
+    search: debouncedSearchQuery || null,
+  }, urlFilterHydrated && bankFilterHydrated);
 
   useEffect(() => {
     if (!targetTransactionId) focusedTransactionIdRef.current = null;
@@ -1110,11 +1133,11 @@ export function TransactionsPage() {
   });
 
   const updateBankBalance = useMutation({
-    mutationFn: ({ id, startingCents }: { id: string; startingCents: number }) =>
+    mutationFn: ({ id, startingCents, expectedUpdatedAt }: { id: string; startingCents: number; expectedUpdatedAt: string }) =>
       fetchJson(`/api/accounts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startingCents }),
+        body: JSON.stringify({ startingCents, expectedUpdatedAt }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]) });
@@ -1134,15 +1157,32 @@ export function TransactionsPage() {
     }
   };
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const selectedBudget = budgets.data?.find((b) => b.id === budgetId);
     const accountId = selectedBudget?.accountId || effectiveSelectedBankId;
     if (!workspaceId || !accountId || !subject || !amount || !transactionDate || !budgetId) return;
+    const selectedAccount = bankAccounts.data?.find((account) => account.id === accountId);
+    const amountCents = Math.round(Number(amount) * 100);
+    const confirmed = await confirmMoneyChange({
+      title: operation === "ADD" ? "Confirm money added" : "Confirm money deducted",
+      message: "Review the ledger impact before posting. The resulting transaction is retained as financial history.",
+      confirmLabel: operation === "ADD" ? "Add money" : "Deduct money",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: operation === "ADD" ? "External or untracked source" : `${selectedAccount?.name || "Bank account"} · ${selectedBudget?.name || "Sub-account"}` },
+        { label: "Destination", value: operation === "ADD" ? `${selectedAccount?.name || "Bank account"} · ${selectedBudget?.name || "Sub-account"}` : "Expense or external destination" },
+        { label: "Amount", value: formatMoney(amountCents, baseCurrency), tone: operation === "ADD" ? "positive" : "negative" },
+        { label: "Date", value: new Date(`${transactionDate}T00:00:00`).toLocaleDateString("en-SG") },
+        { label: "Resulting sub-account balance", value: formatMoney((selectedBudget?.availableCents ?? 0) + (operation === "ADD" ? amountCents : -amountCents), baseCurrency) },
+      ],
+      reversal: "Available from Transactions as an immutable compensating entry.",
+    });
+    if (!confirmed) return;
     createTx.mutate({
       subject,
       notes: notes || undefined,
-      amountCents: Math.round(Number(amount) * 100),
+      amountCents,
       accountId,
       operation,
       date: transactionDate,
@@ -1371,7 +1411,24 @@ export function TransactionsPage() {
   };
 
   const confirmDeleteTx = async (transactionId: string) => {
-    if (!(await confirmDestructiveAction("Delete this transaction?"))) return;
+    const transaction = transactionList.find((item) => item.id === transactionId);
+    if (!transaction) return;
+    const transactionBudget = budgets.data?.find((budget) => budget.id === transaction.budgetId);
+    const confirmed = await confirmMoneyChange({
+      title: "Reverse transaction?",
+      message: "The original entry will remain in history and a compensating entry will restore its ledger effect.",
+      confirmLabel: "Create reversal",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Entry", value: transaction.subject },
+        { label: "Sub-account", value: transactionBudget?.name || "Unassigned" },
+        { label: "Amount", value: formatMoney(transaction.amountCents, baseCurrency), tone: transaction.direction === "DEBIT" ? "negative" : "positive" },
+        { label: "Date", value: new Date(transaction.date).toLocaleDateString("en-SG") },
+        { label: "Resulting sub-account balance", value: formatMoney((transactionBudget?.availableCents ?? 0) + (transaction.direction === "DEBIT" ? transaction.amountCents : -transaction.amountCents), baseCurrency) },
+      ],
+      reversal: "This action is itself the immutable reversal; it cannot erase the original entry.",
+    });
+    if (!confirmed) return;
     if (deletingTransactionIds.includes(transactionId)) return;
     setDeletingTransactionIds((current) => [...current, transactionId]);
     window.setTimeout(() => {
@@ -1396,21 +1453,57 @@ export function TransactionsPage() {
     setEditBankBalance("");
   };
 
-  const onSubmitBankBalance = (event: FormEvent) => {
+  const onSubmitBankBalance = async (event: FormEvent) => {
     event.preventDefault();
     if (!editingBankAccount || !editBankBalance) return;
+    const nextBalanceCents = Math.round(Number(editBankBalance) * 100);
+    const confirmed = await confirmMoneyChange({
+      title: "Confirm bank balance adjustment",
+      message: "This changes the account starting balance used by reconciliation.",
+      confirmLabel: "Update balance",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: editingBankAccount.name },
+        { label: "Destination", value: "Account reconciliation balance" },
+        { label: "Amount", value: formatMoney(nextBalanceCents - editingBankAccount.currentBalanceCents, baseCurrency) },
+        { label: "Date", value: new Date().toLocaleDateString("en-SG") },
+        { label: "Resulting account balance", value: formatMoney(nextBalanceCents, baseCurrency) },
+      ],
+      reversal: "Available by recording another reviewed balance adjustment.",
+    });
+    if (!confirmed) return;
     updateBankBalance.mutate({
       id: editingBankAccount.id,
-      startingCents: Math.round(Number(editBankBalance) * 100),
+      startingCents: nextBalanceCents,
+      expectedUpdatedAt: editingBankAccount.updatedAt,
     });
   };
 
-  const onSubmitTransfer = (event: FormEvent) => {
+  const onSubmitTransfer = async (event: FormEvent) => {
     event.preventDefault();
     if (!workspaceId || !transferTitle || !transferAmount || !transferSourceBudgetId || !transferDestinationBudgetId) return;
+    const sourceBudget = budgets.data?.find((budget) => budget.id === transferSourceBudgetId);
+    const destinationBudget = budgets.data?.find((budget) => budget.id === transferDestinationBudgetId);
+    const amountCents = Math.round(Number(transferAmount) * 100);
+    const confirmed = await confirmMoneyChange({
+      title: "Confirm sub-account transfer",
+      message: "Review both sides of this transfer before posting.",
+      confirmLabel: "Transfer",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: sourceBudget?.name || "Source sub-account" },
+        { label: "Destination", value: destinationBudget?.name || "Destination sub-account" },
+        { label: "Amount", value: formatMoney(amountCents, baseCurrency) },
+        { label: "Date", value: new Date().toLocaleDateString("en-SG") },
+        { label: "Resulting source balance", value: formatMoney((sourceBudget?.availableCents ?? 0) - amountCents, baseCurrency), tone: "negative" },
+        { label: "Resulting destination balance", value: formatMoney((destinationBudget?.availableCents ?? 0) + amountCents, baseCurrency), tone: "positive" },
+      ],
+      reversal: "Available from Transactions as an immutable compensating transfer.",
+    });
+    if (!confirmed) return;
     transferBetweenBudgets.mutate({
       title: transferTitle,
-      amountCents: Math.round(Number(transferAmount) * 100),
+      amountCents,
       sourceBudgetId: transferSourceBudgetId,
       destinationBudgetId: transferDestinationBudgetId,
     });
@@ -1418,10 +1511,25 @@ export function TransactionsPage() {
 
   const syncSelectedBankBalance = async () => {
     if (!selectedBank) return;
-    if (!(await confirmDestructiveAction(`Update ${selectedBank.name} balance to match the sub-account total?`))) return;
+    const confirmed = await confirmMoneyChange({
+      title: "Confirm reconciliation adjustment",
+      message: "This updates the bank account balance to match the total currently allocated across its sub-accounts.",
+      confirmLabel: "Match balance",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: selectedBank.name },
+        { label: "Destination", value: "Sub-account reconciliation total" },
+        { label: "Amount", value: formatMoney(displayedLinkedBudgetCents - selectedBank.currentBalanceCents, baseCurrency) },
+        { label: "Date", value: new Date().toLocaleDateString("en-SG") },
+        { label: "Resulting account balance", value: formatMoney(displayedLinkedBudgetCents, baseCurrency) },
+      ],
+      reversal: "Available by recording another reviewed balance adjustment.",
+    });
+    if (!confirmed) return;
     updateBankBalance.mutate({
       id: selectedBank.id,
       startingCents: displayedLinkedBudgetCents,
+      expectedUpdatedAt: selectedBank.updatedAt,
     });
   };
 

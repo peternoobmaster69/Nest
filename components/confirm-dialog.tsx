@@ -27,6 +27,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
     confirmLabel: "Confirm",
     cancelLabel: "Cancel",
     destructive: false,
+    details: [],
   });
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
 
@@ -44,6 +45,9 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
       confirmLabel: options.confirmLabel ?? "Confirm",
       cancelLabel: options.cancelLabel ?? "Cancel",
       destructive: options.destructive ?? false,
+      workspace: options.workspace,
+      details: options.details ?? [],
+      reversal: options.reversal,
     });
 
     return new Promise<boolean>((resolve) => {
@@ -75,7 +79,32 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
           </>
         }
       >
-        <p className="confirm-dialog-message">{dialog.message}</p>
+        <div className="confirm-dialog-content">
+          <p className="confirm-dialog-message">{dialog.message}</p>
+          {dialog.workspace ? (
+            <div className="confirm-dialog-workspace" role="note">
+              <span>Workspace</span>
+              <strong>{dialog.workspace.name}</strong>
+              <span className="confirm-dialog-role">{dialog.workspace.role}</span>
+            </div>
+          ) : null}
+          {dialog.details?.length ? (
+            <dl className="confirm-dialog-details">
+              {dialog.details.map((detail, index) => (
+                <div key={`${detail.label}-${index}`}>
+                  <dt>{detail.label}</dt>
+                  <dd className={detail.tone && detail.tone !== "default" ? `is-${detail.tone}` : undefined}>{detail.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {dialog.reversal ? (
+            <div className="confirm-dialog-reversal">
+              <strong>Reversal</strong>
+              <span>{dialog.reversal}</span>
+            </div>
+          ) : null}
+        </div>
       </Dialog>
     </ConfirmDialogContext.Provider>
   );

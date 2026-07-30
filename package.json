@@ -12,6 +12,7 @@
     "ai:eval": "node scripts/evaluate-ask-nest.mjs",
     "test:ui": "node --test tests/ui-contract.test.mjs",
     "ui:check": "node scripts/check-phase7-ui.mjs",
+    "ux:check": "node --test tests/phase8-product-ux.test.mjs",
     "ui:metrics": "node scripts/report-ui-performance.mjs",
     "ui:metrics:check": "node scripts/report-ui-performance.mjs --check",
     "ui:metrics:baseline": "node scripts/report-ui-performance.mjs --write-baseline",

@@ -71,6 +71,7 @@ export function AdminDirectories({
             <>
               <div className="admin-table-wrap admin-directory-table-wrap">
                 <table className="admin-table admin-directory-table admin-users-table">
+                  <caption className="sr-only">User directory and workspace access</caption>
                   <colgroup>
                     <col className="admin-user-column" />
                     <col className="admin-joined-column" />
@@ -78,7 +79,7 @@ export function AdminDirectories({
                     <col className="admin-access-column" />
                     <col className="admin-ask-column" />
                   </colgroup>
-                  <thead><tr><th>User</th><th>Joined</th><th>Last signed in</th><th>Workspace access</th><th>Ask Nest</th></tr></thead>
+                  <thead><tr><th scope="col">User</th><th scope="col">Joined</th><th scope="col">Last signed in</th><th scope="col">Workspace access</th><th scope="col">Ask Nest</th></tr></thead>
                   <tbody>
                     {visibleUsers.map((user) => (
                       <tr key={user.id}>

@@ -3,8 +3,10 @@ import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { staleWriteResponse } from "@/lib/concurrency";
 
 const UpdateTransactionSchema = z.object({
+  expectedUpdatedAt: z.string().datetime(),
   creditCardId: z.string().optional(),
   transactionDate: z.string().datetime().optional(),
   paymentDueDate: z.string().datetime().optional().nullable(),
@@ -30,7 +32,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const existing = await prisma.creditCardTransaction.findUnique({
       where: { id },
-      select: { workspaceId: true },
+      select: { workspaceId: true, updatedAt: true },
     });
     if (!existing) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
@@ -38,7 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
     const updatePayload = parsed.data;
-    const data: Prisma.CreditCardTransactionUpdateInput = {};
+    const data: Prisma.CreditCardTransactionUncheckedUpdateManyInput = {};
     if (updatePayload.creditCardId !== undefined) {
       const card = await prisma.creditCardAccount.findFirst({
         where: { id: updatePayload.creditCardId, workspaceId: existing.workspaceId },
@@ -47,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!card) {
         return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
       }
-      data.creditCard = { connect: { id: card.id } };
+      data.creditCardId = card.id;
     }
     if (updatePayload.transactionDate) {
       data.transactionDate = new Date(updatePayload.transactionDate);
@@ -74,11 +76,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.installmentNo = null;
     data.totalInstallments = null;
 
-    const transaction = await prisma.creditCardTransaction.update({
-      where: { id },
+    const result = await prisma.creditCardTransaction.updateMany({
+      where: { id, updatedAt: new Date(updatePayload.expectedUpdatedAt) },
       data,
-      include: { creditCard: true },
     });
+    if (result.count !== 1) {
+      const current = await prisma.creditCardTransaction.findUnique({ where: { id }, select: { updatedAt: true } });
+      return staleWriteResponse(current?.updatedAt);
+    }
+    const transaction = await prisma.creditCardTransaction.findUniqueOrThrow({ where: { id }, include: { creditCard: true } });
 
     return NextResponse.json(transaction);
   } catch (error) {

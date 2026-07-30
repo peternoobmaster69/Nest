@@ -33,6 +33,8 @@ import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { CreditTransactionSummary as CreditTransactionSummaryView } from "@/components/credit-transactions/credit-transaction-summary";
 import { bankAccountsQueryOptions } from "@/lib/accounts";
+import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
+import { MutationErrorSummary } from "@/components/ui/mutation-error-summary";
 
 type CreditCard = {
   id: string;
@@ -43,6 +45,7 @@ type CreditCard = {
 
 type CreditCardTransaction = {
   id: string;
+  updatedAt: string;
   creditCardId: string;
   transactionDate: string;
   paymentDueDate: string | null;
@@ -70,6 +73,8 @@ type CreditTransactionSummary = {
 
 type AppContext = {
   workspaceId: string | null;
+  workspaceName?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
   baseCurrency?: string | null;
   defaultAccountId?: string | null;
   defaultBudgetId?: string | null;
@@ -199,6 +204,7 @@ function scrollSelectedFilterIntoView(container: HTMLDivElement | null, selected
 export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
   const routeWorkspaceId = useWorkspaceId();
   const searchParams = useSearchParams();
+  const creditTransactionsUrlKey = searchParams.toString();
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
   const sortedCards = useMemo(() => {
@@ -267,12 +273,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   const [formStatementYear, setFormStatementYear] = useState("");
   const [formSubject, setFormSubject] = useState("");
   const [formAmount, setFormAmount] = useState("");
-  const [filtersReady, setFiltersReady] = useState(false);
+  const [hydratedFiltersUrlKey, setHydratedFiltersUrlKey] = useState<string | null>(null);
+  const filtersReady = hydratedFiltersUrlKey === creditTransactionsUrlKey;
 
   useEffect(() => {
     const queryCardId = searchParams.get("cardId");
     const queryMonth = searchParams.get("month");
     const queryYear = searchParams.get("year");
+    const queryUnaccounted = searchParams.get("unaccounted");
     const savedMonth = readCookie(CREDIT_TX_MONTH_COOKIE);
     const savedCard = readCookie(CREDIT_TX_CARD_COOKIE);
 
@@ -305,8 +313,19 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       setSelectedCardId(savedCard);
     }
 
-    setFiltersReady(true);
-  }, [searchParams]);
+    if (queryUnaccounted !== null) {
+      setShowUnaccountedOnly(queryUnaccounted === "1" || queryUnaccounted === "true");
+    }
+
+    setHydratedFiltersUrlKey(creditTransactionsUrlKey);
+  }, [creditTransactionsUrlKey, searchParams]);
+
+  useUrlFilterSync({
+    cardId: selectedCardId,
+    month: selectedMonth === -1 ? "all" : selectedMonth + 1,
+    year: selectedYear,
+    unaccounted: showUnaccountedOnly ? "1" : "0",
+  }, filtersReady);
 
   useEffect(() => {
     if (!filtersReady) return;
@@ -797,6 +816,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
         statementYear: number;
         amountCents: number;
         subject: string;
+        expectedUpdatedAt: string;
       };
     }) =>
       fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
@@ -830,12 +850,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   });
 
   const toggleAllocated = useMutation({
-    mutationFn: ({ id, isAllocated }: { id: string; isAllocated: boolean }) =>
-      fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
+    mutationFn: ({ id, isAllocated }: { id: string; isAllocated: boolean }) => {
+      const current = getCachedCreditTransaction(id);
+      if (!current) throw new Error("Reload this transaction before changing its status.");
+      return fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isAllocated }),
-      }),
+        body: JSON.stringify({ isAllocated, expectedUpdatedAt: current.updatedAt }),
+      });
+    },
     onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
     onSuccess: (transaction: CreditCardTransaction, _variables, context) => {
       syncCreditTransactionCaches({ previousTx: context?.previousTx ?? null, nextTx: transaction });
@@ -942,12 +965,15 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   });
 
   const updateSmartReviewName = useMutation({
-    mutationFn: ({ id, subject }: { id: string; subject: string }) =>
-      fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
+    mutationFn: ({ id, subject }: { id: string; subject: string }) => {
+      const current = getCachedCreditTransaction(id);
+      if (!current) throw new Error("Reload this transaction before changing its name.");
+      return fetchJson<CreditCardTransaction>(`/api/credit-transactions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject }),
-      }),
+        body: JSON.stringify({ subject, expectedUpdatedAt: current.updatedAt }),
+      });
+    },
     onMutate: ({ id }) => ({ previousTx: getCachedCreditTransaction(id) }),
     onSuccess: (transaction: CreditCardTransaction, _variables, mutationContext) => {
       syncCreditTransactionCaches({ previousTx: mutationContext?.previousTx ?? null, nextTx: transaction });
@@ -1195,9 +1221,29 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     [budgets.data, deductDestinationAccountId],
   );
 
-  const onSubmitDeduct = (event: FormEvent) => {
+  const onSubmitDeduct = async (event: FormEvent) => {
     event.preventDefault();
     if (!accountingTarget || !deductAccountId || !deductBudgetId) return;
+    const sourceAccount = bankAccounts.data?.find((account) => account.id === deductAccountId);
+    const sourceBudget = budgets.data?.find((budget) => budget.id === deductBudgetId);
+    const destinationAccount = bankAccounts.data?.find((account) => account.id === deductDestinationAccountId);
+    const destinationBudget = budgets.data?.find((budget) => budget.id === deductDestinationBudgetId);
+    const confirmed = await confirm({
+      title: "Confirm card accounting",
+      message: "This posts the card charge into the ledger and marks the imported card transaction as accounted.",
+      confirmLabel: "Post accounting entry",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: `${sourceAccount?.name || "Bank account"} · ${sourceBudget?.name || "Sub-account"}` },
+        { label: "Destination", value: destinationBudget ? `${destinationAccount?.name || "Bank account"} · ${destinationBudget.name}` : accountingTarget.creditCard.cardName },
+        { label: "Amount", value: formatCurrency(accountingTarget.amountCents), tone: "negative" },
+        { label: "Date", value: new Date(accountingTarget.transactionDate).toLocaleDateString("en-SG") },
+        { label: "Resulting source balance", value: formatCurrency((sourceBudget?.availableCents ?? 0) - accountingTarget.amountCents), tone: "negative" },
+        ...(destinationBudget ? [{ label: "Resulting destination balance", value: formatCurrency(destinationBudget.availableCents + accountingTarget.amountCents), tone: "positive" as const }] : []),
+      ],
+      reversal: "Available from Transactions as an immutable compensating entry.",
+    });
+    if (!confirmed) return;
     accountCreditTxn.mutate({
       id: accountingTarget.id,
       action: "DEDUCT",
@@ -1275,9 +1321,11 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     };
 
     if (editingTransactionId) {
+      const currentTransaction = getCachedCreditTransaction(editingTransactionId);
+      if (!currentTransaction) return;
       updateTransaction.mutate({
         id: editingTransactionId,
-        payload,
+        payload: { ...payload, expectedUpdatedAt: currentTransaction.updatedAt },
       });
       return;
     }
@@ -1386,11 +1434,23 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
   };
   const submitPayment = async () => {
     if (!selectedCard || selectedMonth < 0 || payableAmountCents <= 0) return;
+    const sourceAccount = bankAccounts.data?.find((account) => account.id === defaultReceivableAccountId);
+    const sourceBudget = budgets.data?.find((budget) => budget.id === defaultReceivableBudgetId);
     const confirmed = await confirm({
-      title: "Confirm Payment",
-      message: `Make payment for ${selectedCard.cardName} (${MONTHS[selectedMonth]} ${selectedYear}) for ${formatCurrency(payableAmountCents)}? This will deduct the amount from the Receivable Default Subaccount and create an offsetting payment entry for this credit card statement.`,
-      confirmLabel: "Make Payment",
+      title: "Confirm card payment",
+      message: "This creates a bank-ledger deduction and an offsetting entry against the selected card statement.",
+      confirmLabel: "Make payment",
       cancelLabel: "Cancel",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: `${sourceAccount?.name || "Default receivable account"} · ${sourceBudget?.name || "Default receivable sub-account"}` },
+        { label: "Destination", value: `${selectedCard.cardName} · ${MONTHS[selectedMonth]} ${selectedYear}` },
+        { label: "Amount", value: formatCurrency(payableAmountCents), tone: "negative" },
+        { label: "Date", value: new Date().toLocaleDateString("en-SG") },
+        { label: "Resulting source balance", value: formatCurrency((sourceBudget?.availableCents ?? 0) - payableAmountCents), tone: "negative" },
+        { label: "Resulting statement balance", value: formatCurrency(0), tone: "positive" },
+      ],
+      reversal: "Available from Transactions as an immutable compensating entry; the card statement entry remains auditable.",
     });
     if (!confirmed) {
       return;
@@ -2041,13 +2101,14 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       {/* Transactions Table */}
       <div className="cct-table-wrapper">
         <table className="cct-table responsive-data-table">
+          <caption className="sr-only">Credit card transactions for the selected card and statement period</caption>
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Subject</th>
-              <th>Amount</th>
-              <th>Card</th>
-              <th>Actions</th>
+              <th scope="col">Date</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Amount</th>
+              <th scope="col">Card</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -2391,6 +2452,13 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
                     required
                   />
                 </div>
+                <MutationErrorSummary
+                  error={createTransaction.error || updateTransaction.error}
+                  onReload={async () => {
+                    closeModal();
+                    await refetch();
+                  }}
+                />
               </div>
               <div className="cct-modal-actions">
                 {editingTransactionId ? (

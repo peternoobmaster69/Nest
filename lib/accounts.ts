@@ -10,6 +10,7 @@ export type BankAccount = {
   startingCents: number;
   description: string | null;
   isActive: boolean;
+  updatedAt: string;
   currentBalanceCents: number;
   linkedBudgetTotalCents: number;
   discrepancyCents: number;

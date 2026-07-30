@@ -36,6 +36,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { SettingsOperationNotice, type SettingsOperationNoticeData } from "@/components/settings/operation-notice";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
 import type { AutoRule } from "@/components/settings/auto-rule-editor-dialog";
+import { SettingsPrivacyControls } from "@/components/settings-privacy-controls";
+import { MutationErrorSummary } from "@/components/ui/mutation-error-summary";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 const DataImportSection = dynamic(
   () => import("@/components/data-import-section").then((module) => module.DataImportSection),
@@ -54,6 +57,7 @@ const AutoRuleEditorDialog = dynamic(
 
 type Context = {
   workspaceId: string | null;
+  workspaceName?: string | null;
   defaultAccountId: string | null;
   defaultBudgetId: string | null;
   baseCurrency?: string | null;
@@ -105,6 +109,15 @@ function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSum
     typeof data.duplicates === "number" &&
     typeof data.failed === "number"
   );
+}
+
+function formatGmailScope(scope: string | null) {
+  if (!scope) return "Read-only access to card-alert email metadata and content";
+  const scopes = scope.split(/\s+/).filter(Boolean);
+  if (scopes.every((value) => value.endsWith("/gmail.readonly"))) {
+    return "Read-only Gmail messages (Nest cannot send, edit, or delete mail)";
+  }
+  return scopes.map((value) => value.split("/").at(-1)?.replaceAll(".", " ") || value).join(", ");
 }
 
 function getGmailNotice(message: string, phase?: GmailSyncProgress["phase"]): SettingsOperationNoticeData | null {
@@ -255,6 +268,7 @@ function createEmptyAutoRule(destination: { sourceBudgetId?: string; destination
 export function SettingsPage({ section }: { section: SettingsTab }) {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const { confirm } = useConfirmDialog();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   const [gmailMessage, setGmailMessage] = useState("");
@@ -298,6 +312,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
   const [editingBalance, setEditingBalance] = useState("");
   const [editingDescription, setEditingDescription] = useState("");
   const [editingIsActive, setEditingIsActive] = useState(true);
+  const [editingUpdatedAt, setEditingUpdatedAt] = useState("");
   const [publicOrigin, setPublicOrigin] = useState("");
 
   useEffect(() => {
@@ -618,15 +633,60 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
     },
   });
 
-  const onTogglePublicNetWorth = (enabled: boolean) => {
+  const onTogglePublicNetWorth = async (enabled: boolean) => {
+    if (!enabled) {
+      const approved = await confirm({
+        title: "Revoke public share links?",
+        message: "Anyone using the current net worth or cards-due URLs will lose access immediately.",
+        confirmLabel: "Revoke links",
+        destructive: true,
+        workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "OWNER" },
+        details: [
+          { label: "Access removed", value: "Net worth and cards due links" },
+          { label: "When", value: "Immediately" },
+        ],
+        reversal: "You can enable sharing again, but Nest will issue new URLs.",
+      });
+      if (!approved) return;
+    }
     setPublicNetWorthMessage("");
     setOptimisticPublicNetWorthEnabled(enabled);
     updatePublicNetWorth.mutate(enabled ? "enable" : "revoke");
   };
 
-  const rotatePublicNetWorth = () => {
+  const rotatePublicNetWorth = async () => {
+    const approved = await confirm({
+      title: "Rotate public share links?",
+      message: "The current URLs will stop working and be replaced with new ones.",
+      confirmLabel: "Rotate links",
+      destructive: true,
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "OWNER" },
+      details: [
+        { label: "Affected links", value: "Net worth and cards due" },
+        { label: "Old URLs", value: "Revoked immediately" },
+      ],
+      reversal: "Rotation cannot restore an old URL; you can copy and distribute the new URLs.",
+    });
+    if (!approved) return;
     setPublicNetWorthMessage("");
     updatePublicNetWorth.mutate("rotate");
+  };
+
+  const confirmDisconnectGmail = async () => {
+    const approved = await confirm({
+      title: "Disconnect Gmail?",
+      message: "Nest will revoke its stored Gmail authorization and stop importing card alerts.",
+      confirmLabel: "Disconnect Gmail",
+      destructive: true,
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "OWNER" },
+      details: [
+        { label: "Google account", value: gmailStatus.data?.integration?.email || "Connected account" },
+        { label: "Existing transactions", value: "Kept in Nest" },
+        { label: "Future inbox sync", value: "Stopped" },
+      ],
+      reversal: "You can reconnect Gmail later and grant read-only access again.",
+    });
+    if (approved) disconnectGmail.mutate();
   };
 
   const copyPublicNetWorthUrl = async () => {
@@ -731,6 +791,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       description?: string | null;
       startingCents: number;
       isActive: boolean;
+      expectedUpdatedAt: string;
     }) =>
       fetchJson(`/api/accounts/${payload.id}`, {
         method: "PATCH",
@@ -741,6 +802,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
           description: payload.description,
           startingCents: payload.startingCents,
           isActive: payload.isActive,
+          expectedUpdatedAt: payload.expectedUpdatedAt,
         }),
       }),
     onSuccess: () => {
@@ -774,6 +836,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
     setEditingBalance((account.startingCents / 100).toFixed(2));
     setEditingDescription(account.description || "");
     setEditingIsActive(account.isActive);
+    setEditingUpdatedAt(account.updatedAt);
     setIsEditModalOpen(true);
   };
 
@@ -785,6 +848,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
     setEditingBalance("");
     setEditingDescription("");
     setEditingIsActive(true);
+    setEditingUpdatedAt("");
   };
 
   const onSubmitAdd = (event: FormEvent) => {
@@ -803,6 +867,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
       description: editingDescription.trim() || null,
       startingCents: Math.round(Number(editingBalance || "0") * 100),
       isActive: editingIsActive,
+      expectedUpdatedAt: editingUpdatedAt,
     });
   };
 
@@ -967,16 +1032,78 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
   const gmailNotice = getGmailNotice(gmailMessage, gmailSyncProgress?.phase);
   const autoRuleRequiresReauthentication = isRecentAuthenticationRequired(autoRuleMessage);
   const autoRuleNotice = getAutoAccountingNotice(autoRuleMessage);
+  const publicShareSettings = context.data?.role === "OWNER" ? (
+    <div className="card settings-card-block">
+      <div className="settings-row settings-row-toggle">
+        <div>
+          <div className="settings-section-title">Public share links</div>
+          <div className="settings-section-copy">
+            Revocable, read-only links for the current workspace. Anyone with a link can read its limited response.
+          </div>
+        </div>
+        <label className="auto-rule-switch" aria-label="Public share links enabled">
+          <Input
+            type="checkbox"
+            checked={publicNetWorthEnabled}
+            onChange={(event) => void onTogglePublicNetWorth(event.target.checked)}
+            disabled={!workspaceId || updatePublicNetWorth.isPending}
+          />
+          <span />
+        </label>
+      </div>
+      {publicNetWorthEnabled ? (
+        <div className="settings-row settings-row-spaced">
+          <div>
+            <div className="settings-section-title">Net worth link</div>
+            <div className="settings-section-copy">Returns amount, base, and currency only.</div>
+          </div>
+          <div className="settings-public-url-row">
+            <Input className="input" value={publicNetWorthUrl || "Generating URL..."} readOnly aria-label="Public net worth URL" />
+            <Button className="btn btn-ghost btn-xs" type="button" onClick={copyPublicNetWorthUrl} disabled={!publicNetWorthUrl}>
+              <Copy size={14} aria-hidden="true" /> Copy
+            </Button>
+            <Button className="btn btn-ghost btn-xs" type="button" onClick={() => void rotatePublicNetWorth()} disabled={updatePublicNetWorth.isPending}>
+              <RotateCcw size={14} aria-hidden="true" /> Rotate links
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {publicNetWorthEnabled ? (
+        <div className="settings-row settings-row-spaced">
+          <div>
+            <div className="settings-section-title">Cards due link</div>
+            <div className="settings-section-copy">Returns bank, last four digits, and amount for cards due within seven days.</div>
+          </div>
+          <div className="settings-public-url-row">
+            <Input className="input" value={publicCardsDueUrl || "Generating URL..."} readOnly aria-label="Public cards due URL" />
+            <Button className="btn btn-ghost btn-xs" type="button" onClick={copyPublicCardsDueUrl} disabled={!publicCardsDueUrl}>
+              <Copy size={14} aria-hidden="true" /> Copy
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      <ActionableAuthenticationMessage message={publicNetWorthMessage} className="settings-message" />
+    </div>
+  ) : (
+    <div className="card settings-card-block settings-permission-note" role="note">
+      <div className="settings-section-title">Workspace security controls</div>
+      <div className="settings-section-copy">
+        Your {context.data?.role?.toLowerCase() ?? "member"} role can review personal security and privacy settings. Only a workspace owner can connect Gmail or create, rotate, and revoke public share links.
+      </div>
+    </div>
+  );
 
   return (
     <div className="st-container">
       {section === "settings" ? (
         <>
           <SettingsAppAccess />
+          <SettingsPrivacyControls />
+          {publicShareSettings}
         </>
       ) : null}
 
-      {section === "automation" ? (
+      {section === "settings" ? (
         <>
           {context.data?.role === "OWNER" ? <div className="card settings-card-block gmail-alerts-card">
         <div className="gmail-alerts-header">
@@ -1002,7 +1129,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
               <Button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending || isGmailSyncPolling}>
                 {syncGmail.isPending || isGmailSyncPolling ? "Syncing..." : "Sync Inbox"}
               </Button>
-              <Button className="btn btn-ghost btn-xs" onClick={() => disconnectGmail.mutate()} disabled={disconnectGmail.isPending}>
+              <Button className="btn btn-ghost btn-xs" onClick={() => void confirmDisconnectGmail()} disabled={disconnectGmail.isPending}>
                 Disconnect
               </Button>
             </div>
@@ -1013,11 +1140,14 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
           )}
         </div>
         {gmailStatus.data?.connected && gmailStatus.data.integration ? (
-          <div className="settings-message">
-            Connected: <strong>{gmailStatus.data.integration.email}</strong>
-            {gmailStatus.data.integration.lastSyncedAt
-              ? ` · Last sync: ${new Date(gmailStatus.data.integration.lastSyncedAt).toLocaleString()}`
-              : " · Never synced"}
+          <div className="settings-integration-details">
+            <div className="settings-message">
+              Connected: <strong>{gmailStatus.data.integration.email}</strong>
+              {gmailStatus.data.integration.lastSyncedAt
+                ? ` · Last sync: ${new Date(gmailStatus.data.integration.lastSyncedAt).toLocaleString()}`
+                : " · Never synced"}
+            </div>
+            <div className="settings-muted-message">Data scope: {formatGmailScope(gmailStatus.data.integration.scope)}</div>
           </div>
         ) : (
           <div className="settings-muted-message">Not connected.</div>
@@ -1071,79 +1201,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
         <ActionableAuthenticationMessage message={currencyMessage} className="settings-message" />
       </div>
 
-      <div className="card settings-card-block">
-        <div className="settings-row settings-row-toggle">
-          <div>
-            <div className="settings-section-title">Public APIs</div>
-            <div className="settings-section-copy">
-              Read-only JSON endpoints for the current workspace.
-            </div>
-          </div>
-          <label className="auto-rule-switch" aria-label="Public APIs enabled">
-            <Input
-              type="checkbox"
-              checked={publicNetWorthEnabled}
-              onChange={(event) => onTogglePublicNetWorth(event.target.checked)}
-              disabled={!workspaceId || updatePublicNetWorth.isPending}
-            />
-            <span />
-          </label>
-        </div>
-        {publicNetWorthEnabled ? (
-          <div className="settings-row settings-row-spaced">
-            <div>
-              <div className="settings-section-title">Net worth URL</div>
-              <div className="settings-section-copy">
-                Returns amount, base, and currency only.
-              </div>
-            </div>
-            <div className="settings-public-url-row">
-              <Input className="input" value={publicNetWorthUrl || "Generating URL..."} readOnly />
-              <Button
-                className="btn btn-ghost btn-xs"
-                type="button"
-                onClick={copyPublicNetWorthUrl}
-                disabled={!publicNetWorthUrl}
-              >
-                <Copy size={14} aria-hidden="true" />
-                Copy
-              </Button>
-              <Button
-                className="btn btn-ghost btn-xs"
-                type="button"
-                onClick={rotatePublicNetWorth}
-                disabled={updatePublicNetWorth.isPending}
-              >
-                <RotateCcw size={14} aria-hidden="true" />
-                Rotate links
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        {publicNetWorthEnabled ? (
-          <div className="settings-row settings-row-spaced">
-            <div>
-              <div className="settings-section-title">Cards due URL</div>
-              <div className="settings-section-copy">
-                Returns bank, last four digits, and amount for cards due within seven days.
-              </div>
-            </div>
-            <div className="settings-public-url-row">
-              <Input className="input" value={publicCardsDueUrl || "Generating URL..."} readOnly />
-              <Button
-                className="btn btn-ghost btn-xs"
-                type="button"
-                onClick={copyPublicCardsDueUrl}
-                disabled={!publicCardsDueUrl}
-              >
-                <Copy size={14} aria-hidden="true" />
-                Copy
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        <ActionableAuthenticationMessage message={publicNetWorthMessage} className="settings-message" />
-      </div></> : null}
+      </> : null}
 
       <div className="card settings-card-block">
         <div className="settings-row">
@@ -1610,11 +1668,13 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
                   />
                 </div>
               </div>
-              {updateAccount.isError && (
-                <div className="st-error">
-                  Failed to update: {(updateAccount.error as Error)?.message || "Unknown error"}
-                </div>
-              )}
+              <MutationErrorSummary
+                error={updateAccount.error}
+                onReload={async () => {
+                  closeEditModal();
+                  await accounts.refetch();
+                }}
+              />
               <div className="st-modal-actions">
                 <Button type="button" className="btn btn-ghost" onClick={closeEditModal}>
                   Cancel

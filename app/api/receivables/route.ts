@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
     }
 
-    await requireWorkspaceAccess(workspaceId);
+    const access = await requireWorkspaceAccess(workspaceId);
 
     const receivables = await prisma.receivable.findMany({
       where: { workspaceId },
@@ -45,18 +45,34 @@ export async function GET(request: Request) {
           select: {
             id: true,
             name: true,
+            availableCents: true,
           },
         },
       },
       orderBy: { date: "desc" },
       take: 100,
     });
-    const sourceAccountIds = [...new Set(receivables.map((item) => item.sourceAccountId).filter((value): value is string => Boolean(value)))];
-    const sourceBudgetIds = [...new Set(receivables.map((item) => item.sourceBudgetId).filter((value): value is string => Boolean(value)))];
+    const referencedSourceWorkspaceIds = [...new Set(receivables.map((item) => item.sourceWorkspaceId).filter((value): value is string => Boolean(value)))];
+    const sourceMemberships = referencedSourceWorkspaceIds.length
+      ? await prisma.workspaceMember.findMany({
+          where: { userId: access.userId, workspaceId: { in: referencedSourceWorkspaceIds } },
+          take: 500,
+          select: { workspaceId: true },
+        })
+      : [];
+    const allowedSourceWorkspaceIds = new Set([workspaceId, ...sourceMemberships.map((membership) => membership.workspaceId)]);
+    const sourceAccountIds = [...new Set(receivables
+      .filter((item) => item.sourceWorkspaceId && allowedSourceWorkspaceIds.has(item.sourceWorkspaceId))
+      .map((item) => item.sourceAccountId)
+      .filter((value): value is string => Boolean(value)))];
+    const sourceBudgetIds = [...new Set(receivables
+      .filter((item) => item.sourceWorkspaceId && allowedSourceWorkspaceIds.has(item.sourceWorkspaceId))
+      .map((item) => item.sourceBudgetId)
+      .filter((value): value is string => Boolean(value)))];
     const [sourceAccounts, sourceBudgets] = await Promise.all([
       sourceAccountIds.length
         ? prisma.financialAccount.findMany({
-            where: { id: { in: sourceAccountIds } },
+            where: { id: { in: sourceAccountIds }, workspaceId: { in: [...allowedSourceWorkspaceIds] } },
             take: 100,
             select: {
               id: true,
@@ -70,11 +86,12 @@ export async function GET(request: Request) {
         : Promise.resolve([]),
       sourceBudgetIds.length
         ? prisma.budgetEnvelope.findMany({
-            where: { id: { in: sourceBudgetIds } },
+            where: { id: { in: sourceBudgetIds }, workspaceId: { in: [...allowedSourceWorkspaceIds] } },
             take: 100,
             select: {
               id: true,
               name: true,
+              availableCents: true,
             },
           })
         : Promise.resolve([]),

@@ -24,18 +24,19 @@ export function CreditAlertsSkeleton() {
 
       <div className="cct-table-wrapper">
         <table className="cct-table">
+          <caption className="sr-only">Loading recent staged credit alerts</caption>
           <thead>
             <tr>
-              <th>Created</th>
-              <th>Status</th>
-              <th>Source</th>
-              <th>Subject</th>
-              <th>Bank</th>
-              <th>Card</th>
-              <th>Merchant</th>
-              <th>Amount</th>
-              <th>Txn Date</th>
-              <th>Failure</th>
+              <th scope="col">Created</th>
+              <th scope="col">Status</th>
+              <th scope="col">Source</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Bank</th>
+              <th scope="col">Card</th>
+              <th scope="col">Merchant</th>
+              <th scope="col">Amount</th>
+              <th scope="col">Txn Date</th>
+              <th scope="col">Failure</th>
             </tr>
           </thead>
           <tbody>

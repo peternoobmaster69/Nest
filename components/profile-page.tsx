@@ -125,10 +125,10 @@ export function ProfilePage({
         <span className="profile-page-security-icon"><ShieldCheck size={22} aria-hidden="true" /></span>
         <div>
           <h2 id="profile-security-heading">Sign-in &amp; security</h2>
-          <p>Review passkeys, linked sign-in providers, recent sessions, and app access.</p>
+          <p>Review passkeys, linked sign-in providers, sessions, privacy choices, integrations, and account data.</p>
         </div>
         <Link className="btn btn-ghost" href={workspaceId ? buildWorkspacePath(workspaceId, "/settings?tab=settings") : "/settings?tab=settings"}>
-          Manage security <ArrowRight size={16} aria-hidden="true" />
+          Privacy &amp; security <ArrowRight size={16} aria-hidden="true" />
         </Link>
       </section>
     </div>

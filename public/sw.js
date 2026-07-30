@@ -40,10 +40,10 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type !== "PURGE_PRIVATE_CACHES") return;
+  if (event.data?.type !== "PURGE_PRIVATE_CACHES" && event.data?.type !== "PURGE_ALL_CACHES") return;
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key.endsWith("-read")).map((key) => caches.delete(key)),
+      keys.filter((key) => event.data.type === "PURGE_ALL_CACHES" ? key.startsWith("nest-") : key.endsWith("-read")).map((key) => caches.delete(key)),
     )),
   );
 });

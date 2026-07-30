@@ -14,8 +14,24 @@ export async function GET() {
   const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const config = getPushConfiguration();
-  const count = await prisma.pushSubscription.count({ where: { userId: session.user.id } });
-  return NextResponse.json({ configured: config.configured, publicKey: config.publicKey, subscribed: count > 0 });
+  const subscriptions = await prisma.pushSubscription.findMany({
+    where: { userId: session.user.id },
+    orderBy: { updatedAt: "desc" },
+    take: 25,
+    select: { id: true, endpoint: true, createdAt: true, updatedAt: true },
+  });
+  return NextResponse.json({
+    configured: config.configured,
+    publicKey: config.publicKey,
+    subscribed: subscriptions.length > 0,
+    subscriptions: subscriptions.map((subscription) => {
+      let provider = "Push service";
+      try {
+        provider = new URL(subscription.endpoint).hostname;
+      } catch {}
+      return { id: subscription.id, provider, createdAt: subscription.createdAt, updatedAt: subscription.updatedAt };
+    }),
+  });
 }
 
 export async function POST(request: Request) {
@@ -46,11 +62,13 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const session = await getDatabaseReadyServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { endpoint } = await request.json().catch(() => ({}));
+  const { endpoint, subscriptionId } = await request.json().catch(() => ({}));
+  if (typeof subscriptionId === "string" && subscriptionId) {
+    await prisma.pushSubscription.deleteMany({ where: { id: subscriptionId, userId: session.user.id } });
+    return NextResponse.json({ ok: true });
+  }
   if (typeof endpoint === "string" && endpoint) {
     await prisma.pushSubscription.deleteMany({ where: { userId: session.user.id, endpoint } });
-  } else {
-    await prisma.pushSubscription.deleteMany({ where: { userId: session.user.id } });
   }
   return NextResponse.json({ ok: true });
 }

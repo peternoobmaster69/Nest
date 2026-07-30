@@ -775,3 +775,213 @@
     inset-block-end: calc(var(--mobile-nav-height) + var(--space-3));
   }
 }
+
+/* Phase 8: privacy, permission, conflict, and confirmation affordances. */
+.privacy-consent-banner {
+  display: grid;
+  gap: var(--space-3);
+  max-block-size: calc(100dvh - (var(--space-8) * 2));
+  overflow: auto;
+}
+
+.privacy-consent-copy,
+.privacy-consent-copy p {
+  margin: 0;
+}
+
+.privacy-consent-copy {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+
+.privacy-consent-copy a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: var(--space-1);
+}
+
+.privacy-consent-options {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-md);
+}
+
+.privacy-consent-options legend {
+  padding-inline: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.privacy-consent-options label,
+.privacy-preference-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.privacy-consent-options label > span,
+.privacy-preference-row > span {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.privacy-consent-options small,
+.privacy-preference-row small {
+  color: var(--text-secondary);
+  line-height: var(--leading-base);
+}
+
+.privacy-consent-options input,
+.privacy-preference-row input {
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  flex: 0 0 auto;
+}
+
+.privacy-consent-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.privacy-preference-list {
+  display: grid;
+  gap: var(--space-3);
+  padding-block-start: var(--space-3);
+}
+
+.privacy-preference-row {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-md);
+  background: var(--color-surface-subtle);
+}
+
+.privacy-danger-row {
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.confirm-dialog-content {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.confirm-dialog-workspace {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-md);
+  background: var(--color-surface-subtle);
+  font-size: var(--text-sm);
+}
+
+.confirm-dialog-workspace > span:first-child {
+  color: var(--text-tertiary);
+}
+
+.confirm-dialog-role {
+  margin-inline-start: auto;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.confirm-dialog-details {
+  display: grid;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.confirm-dialog-details > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.confirm-dialog-details > div + div {
+  border-block-start: 1px solid var(--color-border);
+}
+
+.confirm-dialog-details dt {
+  color: var(--text-secondary);
+}
+
+.confirm-dialog-details dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog-details dd.is-positive {
+  color: var(--amount-positive);
+}
+
+.confirm-dialog-details dd.is-negative {
+  color: var(--amount-negative);
+}
+
+.confirm-dialog-reversal {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-inline-start: var(--space-1) solid var(--color-primary);
+  background: var(--color-primary-subtle);
+  font-size: var(--text-sm);
+}
+
+.form-error-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--r-md);
+  color: var(--text-primary);
+  background: var(--danger-bg);
+}
+
+.form-error-summary > div {
+  flex: 1 1 12rem;
+}
+
+.form-error-summary p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+}
+
+@media (forced-colors: active) {
+  .privacy-consent-options,
+  .privacy-preference-row,
+  .confirm-dialog-workspace,
+  .confirm-dialog-details,
+  .form-error-summary {
+    border-color: CanvasText;
+  }
+
+  .privacy-preference-row,
+  .confirm-dialog-reversal,
+  .form-error-summary {
+    background: Canvas;
+  }
+
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: var(--focus-ring-width) solid Highlight;
+    outline-offset: var(--focus-ring-offset);
+  }
+}

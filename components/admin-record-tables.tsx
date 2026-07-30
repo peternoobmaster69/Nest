@@ -30,7 +30,8 @@ export function AdminRecentActivityTable({
     <>
       <div className="admin-table-wrap">
         <table className="admin-table admin-responsive-table admin-activity-table">
-          <thead><tr><th>Time</th><th>User / workspace</th><th>Question</th><th>Context</th><th>Tokens</th><th>Grounding</th><th>Feedback</th></tr></thead>
+          <caption className="sr-only">Recent Ask Nest activity</caption>
+          <thead><tr><th scope="col">Time</th><th scope="col">User / workspace</th><th scope="col">Question</th><th scope="col">Context</th><th scope="col">Tokens</th><th scope="col">Grounding</th><th scope="col">Feedback</th></tr></thead>
           <tbody>
             {visibleTurns.map((turn) => (
               <tr key={turn.id}>
@@ -72,7 +73,8 @@ export function AdminBackgroundJobsTable({
     <>
       <div className="admin-table-wrap">
         <table className="admin-table admin-responsive-table">
-          <thead><tr><th>Job</th><th>Scope</th><th>Status</th><th>Progress</th><th>Attempts</th><th>Updated</th><th>Actions</th></tr></thead>
+          <caption className="sr-only">Recent background jobs</caption>
+          <thead><tr><th scope="col">Job</th><th scope="col">Scope</th><th scope="col">Status</th><th scope="col">Progress</th><th scope="col">Attempts</th><th scope="col">Updated</th><th scope="col">Actions</th></tr></thead>
           <tbody>
             {visibleJobs.map((job) => (
               <tr key={job.id}>

@@ -20,6 +20,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { useSearchParams } from "next/navigation";
+import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 
 type AppContext = {
   workspaceId: string | null;
@@ -102,6 +104,8 @@ function buildAreaPath(points: Array<{ x: number; y: number }>, baselineY: numbe
 export function InvestmentsPage() {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const investmentsUrlKey = searchParams.toString();
   const chartWrapRef = useRef<HTMLDivElement>(null);
   const tooltip = useChartCursorTooltip<InvestmentChartPoint>(chartWrapRef);
   const [selectedAccountId, setSelectedAccountId] = useSessionState<string | null>("nest:view:investments:account", null);
@@ -109,6 +113,9 @@ export function InvestmentsPage() {
   const [showAllAccounts, setShowAllAccounts] = useSessionState("nest:view:investments:all", false);
   const [accountError, setAccountError] = useState("");
   const [entryError, setEntryError] = useState("");
+  const [hydratedInvestmentsUrlKey, setHydratedInvestmentsUrlKey] = useState<string | null>(null);
+  const urlFiltersReady = hydratedInvestmentsUrlKey === investmentsUrlKey;
+  const appliedInvestmentsUrlRef = useRef<string | null>(null);
 
   const [accountModalMode, setAccountModalMode] = useState<"create" | "edit">("create");
   const [accountModalOpen, setAccountModalOpen] = useState(false);
@@ -146,14 +153,43 @@ export function InvestmentsPage() {
   const { isLoading: accountsLoading, isError: accountsError, refetch } = accounts;
 
   useEffect(() => {
-    if (!accounts.data?.length) {
+    const requestedRange = searchParams.get("range");
+    if (requestedRange === "90D" || requestedRange === "180D" || requestedRange === "1Y" || requestedRange === "ALL") {
+      setTimeRange(requestedRange);
+    }
+    const requestedView = searchParams.get("view");
+    if (requestedView === "all" || requestedView === "single") setShowAllAccounts(requestedView === "all");
+  }, [investmentsUrlKey, searchParams, setShowAllAccounts, setTimeRange]);
+
+  useEffect(() => {
+    if (!accounts.data) return;
+    if (!accounts.data.length) {
       setSelectedAccountId(null);
+      appliedInvestmentsUrlRef.current = investmentsUrlKey;
+      setHydratedInvestmentsUrlKey(investmentsUrlKey);
       return;
     }
-    if (!selectedAccountId || !accounts.data.some((a) => a.id === selectedAccountId)) {
+    if (appliedInvestmentsUrlRef.current === investmentsUrlKey) {
+      if (!selectedAccountId || !accounts.data.some((account) => account.id === selectedAccountId)) {
+        setSelectedAccountId(accounts.data[0].id);
+      }
+      return;
+    }
+    const requestedAccountId = searchParams.get("accountId");
+    if (requestedAccountId && accounts.data.some((account) => account.id === requestedAccountId)) {
+      setSelectedAccountId(requestedAccountId);
+    } else if (!selectedAccountId || !accounts.data.some((a) => a.id === selectedAccountId)) {
       setSelectedAccountId(accounts.data[0].id);
     }
-  }, [accounts.data, selectedAccountId]);
+    appliedInvestmentsUrlRef.current = investmentsUrlKey;
+    setHydratedInvestmentsUrlKey(investmentsUrlKey);
+  }, [accounts.data, investmentsUrlKey, searchParams, selectedAccountId, setSelectedAccountId]);
+
+  useUrlFilterSync({
+    accountId: selectedAccountId,
+    range: timeRange,
+    view: showAllAccounts ? "all" : "single",
+  }, urlFiltersReady);
 
   const selectedAccount = useMemo(
     () => (accounts.data ?? []).find((a) => a.id === selectedAccountId) ?? null,

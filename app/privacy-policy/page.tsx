@@ -3,7 +3,7 @@ export default function PrivacyPolicyPage() {
     <main className="legal-shell">
       <section className="legal-card">
         <h1>Privacy Policy</h1>
-        <p>Last updated: July 22, 2026</p>
+        <p>Last updated: July 30, 2026</p>
 
         <h2>1. Who We Are</h2>
         <p>
@@ -69,7 +69,14 @@ export default function PrivacyPolicyPage() {
         <h2>11. Cookies and Similar Technologies</h2>
         <p>
           We use essential cookies/session technologies for authentication, product security, and remembered interface preferences,
-          such as the last-opened Settings tab. Where required, optional cookies or trackers are used only with consent.
+          such as the last-opened Settings tab. Product analytics and performance measurement are optional, remain off until you
+          choose them, and can be enabled or disabled independently in Privacy &amp; Security settings.
+        </p>
+
+        <h2>11A. Offline Storage</h2>
+        <p>
+          Nest may cache static application files, icons, and an offline shell on your device. Authenticated finance API responses
+          and offline finance mutations are not cached. You can inspect and clear Nest offline files in Privacy &amp; Security settings.
         </p>
 
         <h2>12. Automated Decision-Making</h2>
@@ -81,7 +88,9 @@ export default function PrivacyPolicyPage() {
         <h2>13. Your Rights</h2>
         <p>
           Depending on your location, you may have rights to access, correct, delete, port, restrict, or object to processing, and
-          to withdraw consent where processing is consent-based.
+          to withdraw consent where processing is consent-based. Privacy &amp; Security settings provide a machine-readable account
+          export and account deletion. Deletion requires a recent sign-in and cannot proceed while you are the only owner of a
+          workspace. Shared finance history may be retained in anonymized form so other workspace members keep an accurate ledger.
         </p>
 
         <h2>14. Children</h2>

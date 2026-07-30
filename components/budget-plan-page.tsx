@@ -42,6 +42,7 @@ type WorkspaceMember = {
 type SubAccount = {
   id: string;
   name: string;
+  availableCents: number;
 };
 
 type SetupItem = {
@@ -253,6 +254,23 @@ export function BudgetPlanPage() {
   const { sourceTotalCents, itemTotalCents, differenceCents } = planSummary;
   const canConfirm = isDraft && planSummary.canConfirm;
   const hasSetupSeed = setupSources.length > 0 || setupItems.some((item) => item.isMonthly);
+  const confirmationDestinations = useMemo(() => {
+    const amounts = new Map<string, number>();
+    for (const item of monthlyItems) {
+      if (!item.destinationSubAccountId) continue;
+      const unappliedCents = Math.max(0, item.amountCents - (item.appliedCents ?? 0));
+      amounts.set(item.destinationSubAccountId, (amounts.get(item.destinationSubAccountId) ?? 0) + unappliedCents);
+    }
+    return [...amounts].map(([id, amountCents]) => {
+      const destination = subAccounts.find((subAccount) => subAccount.id === id);
+      return {
+        id,
+        name: destination?.name || "Sub-account",
+        amountCents,
+        resultingBalanceCents: (destination?.availableCents ?? 0) + amountCents,
+      };
+    });
+  }, [monthlyItems, subAccounts]);
 
   const invalidateCurrentPlan = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.key(["budget-plan", workspaceId, selectedYear, selectedMonth]) });
@@ -1165,6 +1183,22 @@ export function BudgetPlanPage() {
                   <div className="bp-stat-label">Budget Items</div>
                   <div className="bp-item-amount" style={{ marginTop: "4px" }}>{formatCents(itemTotalCents)}</div>
                 </div>
+              </div>
+              <dl className="confirm-dialog-details" aria-label="Monthly budget posting impact">
+                <div><dt>Source</dt><dd>{monthlySources.map((source) => source.title).join(", ") || "No funding sources"}</dd></div>
+                <div><dt>Destination</dt><dd>{confirmationDestinations.map((destination) => destination.name).join(", ") || "No linked sub-accounts"}</dd></div>
+                <div><dt>Amount</dt><dd>{formatCents(itemTotalCents)}</dd></div>
+                <div><dt>Date</dt><dd>{MONTHS[selectedMonth - 1]} {selectedYear}</dd></div>
+                {confirmationDestinations.map((destination) => (
+                  <div key={destination.id}>
+                    <dt>Resulting {destination.name} balance</dt>
+                    <dd>{formatCents(destination.resultingBalanceCents)}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="confirm-dialog-reversal">
+                <strong>Reversal</strong>
+                <span>Applied ledger entries remain immutable and can be reversed from Transactions with compensating entries.</span>
               </div>
               {confirmPlan.error && <div role="alert" style={{ color: "var(--danger)", fontSize: "13px" }}>{confirmPlan.error.message}</div>}
             </div>

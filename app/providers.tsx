@@ -5,14 +5,13 @@ import { SessionProvider } from "next-auth/react";
 import { ReactNode, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CollaborationBanner } from "@/components/collaboration-banner";
-import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { NavigationLoader } from "@/components/navigation-loader";
 import { ConfirmDialogProvider } from "@/components/confirm-dialog";
 import { notifyToast, ToastProvider } from "@/components/toast-provider";
 import { MobileWorkflowManager } from "@/components/mobile-workflow-manager";
 import { DeviceIntegration } from "@/components/device-integration";
 import { mutationFailureMessage } from "@/lib/api/client";
-import { WebVitalsReporter } from "@/components/web-vitals-reporter";
+import { PrivacyConsentProvider } from "@/components/privacy-consent";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -58,6 +57,7 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
+    <PrivacyConsentProvider>
     <SessionProvider>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
@@ -65,15 +65,14 @@ export function Providers({ children }: { children: ReactNode }) {
             <ToastProvider>
               <MobileWorkflowManager />
               <DeviceIntegration />
-              <WebVitalsReporter />
               {children}
               <NavigationLoader />
               <CollaborationBanner />
-              <CookieConsentBanner />
             </ToastProvider>
           </ConfirmDialogProvider>
         </QueryClientProvider>
       </ThemeProvider>
     </SessionProvider>
+    </PrivacyConsentProvider>
   );
 }

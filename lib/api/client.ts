@@ -53,9 +53,9 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
   return payload as T;
 }
 
-type MutationFailureKind = "offline" | "permission" | "conflict" | "stale" | "validation" | "unknown";
+export type MutationFailureKind = "offline" | "permission" | "conflict" | "stale" | "validation" | "unknown";
 
-function classifyMutationFailure(error: unknown): MutationFailureKind {
+export function classifyMutationFailure(error: unknown): MutationFailureKind {
   if (typeof navigator !== "undefined" && !navigator.onLine) return "offline";
   if (!(error instanceof ApiClientError)) return "unknown";
   if (error.status === 401 || error.status === 403) return "permission";

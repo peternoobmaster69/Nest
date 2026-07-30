@@ -29,13 +29,14 @@ export function CreditTransactionsPageSkeleton() {
       </div>
       <div className="cct-table-wrapper">
         <table className="cct-table responsive-data-table">
+          <caption className="sr-only">Loading credit card transactions</caption>
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Subject</th>
-              <th>Amount</th>
-              <th>Card</th>
-              <th>Actions</th>
+              <th scope="col">Date</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Amount</th>
+              <th scope="col">Card</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody>

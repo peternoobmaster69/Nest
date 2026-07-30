@@ -4533,6 +4533,50 @@
         "x-source-handler": "app/api/passkeys/route.ts"
       }
     },
+    "/api/profile/export": {
+      "get": {
+        "operationId": "get_api_profile_export",
+        "tags": [
+          "profile"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/profile/export/route.ts"
+      }
+    },
     "/api/profile": {
       "patch": {
         "operationId": "patch_api_profile",
@@ -4576,6 +4620,7 @@
         },
         "x-source-handler": "app/api/profile/route.ts",
         "x-request-schemas": [
+          "DeleteProfileSchema",
           "UpdateProfileSchema"
         ],
         "requestBody": {
@@ -4588,6 +4633,52 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "delete_api_profile",
+        "tags": [
+          "profile"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/profile/route.ts",
+        "x-request-schemas": [
+          "DeleteProfileSchema",
+          "UpdateProfileSchema"
+        ]
       }
     },
     "/api/public-links/net-worth": {

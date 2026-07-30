@@ -2,8 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { staleWriteResponse } from "@/lib/concurrency";
 
 const UpdateReceivableSchema = z.object({
+  expectedUpdatedAt: z.string().datetime(),
   title: z.string().min(1).max(120).optional(),
   amountCents: z.number().int().positive().optional(),
   date: z.string().datetime().optional(),
@@ -27,7 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const existing = await prisma.receivable.findUnique({
       where: { id },
-      select: { workspaceId: true },
+      select: { workspaceId: true, updatedAt: true },
     });
     if (!existing) {
       return NextResponse.json({ error: "Receivable not found" }, { status: 404 });
@@ -68,8 +70,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    const updated = await prisma.receivable.update({
-      where: { id },
+    const result = await prisma.receivable.updateMany({
+      where: { id, updatedAt: new Date(parsed.data.expectedUpdatedAt) },
       data: {
         title: parsed.data.title,
         amountCents: parsed.data.amountCents,
@@ -102,6 +104,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         sourceBudgetId: parsed.data.budgetId,
       },
     });
+    if (result.count !== 1) {
+      const current = await prisma.receivable.findUnique({ where: { id }, select: { updatedAt: true } });
+      return staleWriteResponse(current?.updatedAt);
+    }
+    const updated = await prisma.receivable.findUniqueOrThrow({ where: { id } });
     return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof ApiAuthError) {

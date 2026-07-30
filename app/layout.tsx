@@ -1,6 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { DM_Mono, DM_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import { Providers } from "@/app/providers";
@@ -66,8 +64,6 @@ export default async function RootLayout({
       </head>
       <body className="antialiased">
         <Providers>{children}</Providers>
-        <Analytics />
-        <SpeedInsights />
       </body>
     </html>
   );

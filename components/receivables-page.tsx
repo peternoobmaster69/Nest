@@ -11,7 +11,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { ReceivablesListSkeleton, ReceivablesSummarySkeleton } from "@/components/skeletons/ReceivablesSkeleton";
-import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { confirmDestructiveAction, confirmMoneyChange } from "@/lib/confirm-destructive";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import { Plus } from "lucide-react";
@@ -20,9 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { bankAccountsQueryOptions } from "@/lib/accounts";
+import { MutationErrorSummary } from "@/components/ui/mutation-error-summary";
+import { useSearchParams } from "next/navigation";
+import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 
 type AppContext = {
   workspaceId: string | null;
+  workspaceName?: string | null;
+  role?: "OWNER" | "EDITOR" | "VIEWER";
   defaultAccountId: string | null;
   defaultBudgetId: string | null;
   baseCurrency?: string | null;
@@ -41,6 +46,7 @@ type DeductionAccount = {
 
 type Receivable = {
   id: string;
+  updatedAt: string;
   title: string;
   amountCents: number;
   date: string;
@@ -54,6 +60,7 @@ type Receivable = {
   budget?: {
     id: string;
     name: string;
+    availableCents: number;
   } | null;
   subaccount?: {
     id: string;
@@ -67,6 +74,7 @@ type DeductionBudget = {
   icon?: string | null;
   accountId: string;
   isActive: boolean;
+  availableCents: number;
 };
 
 function getAmountToneClass(valueCents: number) {
@@ -120,6 +128,8 @@ function formatDisplayDate(value: string) {
 export function ReceivablesPage() {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const receivableUrlKey = searchParams.toString();
   const [selectedMonth, setSelectedMonth] = useSessionState<number>("nest:view:receivables:month", () => new Date().getMonth() + 1);
   const [sortBy, setSortBy] = useSessionState<"amount" | "title" | "receivableDate" | "transactionDate">("nest:view:receivables:sort", "receivableDate");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">("nest:view:receivables:direction", "desc");
@@ -127,6 +137,8 @@ export function ReceivablesPage() {
   const [closeError, setCloseError] = useState<string | null>(null);
   const [closingReceivableId, setClosingReceivableId] = useState<string | null>(null);
   const [deletingReceivableIds, setDeletingReceivableIds] = useState<string[]>([]);
+  const [hydratedReceivableUrlKey, setHydratedReceivableUrlKey] = useState<string | null>(null);
+  const urlFiltersReady = hydratedReceivableUrlKey === receivableUrlKey;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -143,6 +155,25 @@ export function ReceivablesPage() {
   const [formDeductAccountId, setFormDeductAccountId] = useState("");
   const [formDeductBudgetId, setFormDeductBudgetId] = useState("");
 
+  useEffect(() => {
+    const month = Number(searchParams.get("month"));
+    const sort = searchParams.get("sort");
+    const direction = searchParams.get("direction");
+    const closed = searchParams.get("closed");
+    if (Number.isInteger(month) && month >= 1 && month <= 12) setSelectedMonth(month);
+    if (sort === "amount" || sort === "title" || sort === "receivableDate" || sort === "transactionDate") setSortBy(sort);
+    if (direction === "asc" || direction === "desc") setSortDir(direction);
+    if (closed !== null) setHideClosed(closed !== "include");
+    setHydratedReceivableUrlKey(receivableUrlKey);
+  }, [receivableUrlKey, searchParams, setHideClosed, setSelectedMonth, setSortBy, setSortDir]);
+
+  useUrlFilterSync({
+    month: selectedMonth,
+    sort: sortBy,
+    direction: sortDir,
+    closed: hideClosed ? "hide" : "include",
+  }, urlFiltersReady);
+
   const context = useQuery({
     queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<AppContext>("/api/context"),
@@ -156,6 +187,13 @@ export function ReceivablesPage() {
   const receivables = useQuery({
     queryKey: queryKeys.key(["receivables", workspaceId]),
     queryFn: () => fetchJson<Receivable[]>(`/api/receivables?workspaceId=${workspaceId}`),
+    enabled: Boolean(workspaceId),
+  });
+
+  const activeWorkspaceAccounts = useQuery(bankAccountsQueryOptions(workspaceId));
+  const activeWorkspaceBudgets = useQuery({
+    queryKey: queryKeys.key(["budgets", workspaceId]),
+    queryFn: () => fetchJson<DeductionBudget[]>(`/api/budgets?workspaceId=${workspaceId}`),
     enabled: Boolean(workspaceId),
   });
 
@@ -253,6 +291,7 @@ export function ReceivablesPage() {
       status: Receivable["status"];
       accountId?: string | null;
       budgetId?: string | null;
+      expectedUpdatedAt: string;
     }) =>
       fetchJson(`/api/receivables/${payload.id}`, {
         method: "PATCH",
@@ -266,6 +305,7 @@ export function ReceivablesPage() {
           status: payload.status,
           accountId: payload.accountId,
           budgetId: payload.budgetId,
+          expectedUpdatedAt: payload.expectedUpdatedAt,
         }),
       }),
     onSuccess: () => {
@@ -310,6 +350,31 @@ export function ReceivablesPage() {
     },
   });
   const isSavingReceivable = createReceivable.isPending || updateReceivable.isPending;
+
+  const confirmCloseReceivable = async (receivable: Receivable) => {
+    const targetAccount = activeWorkspaceAccounts.data?.find((account) => account.id === receivableDefaultAccountId);
+    const targetBudget = activeWorkspaceBudgets.data?.find((budget) => budget.id === receivableDefaultBudgetId);
+    const sourceIsTarget = receivable.budget?.id === targetBudget?.id;
+    const confirmed = await confirmMoneyChange({
+      title: "Confirm receivable close",
+      message: "Closing marks this receivable paid and posts its ledger entries. Review any cross-workspace deduction carefully.",
+      confirmLabel: "Close and post",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Source", value: receivable.account ? `${receivable.account.workspace.name} · ${receivable.account.name} · ${receivable.budget?.name || "Sub-account"}` : "External payer" },
+        { label: "Destination", value: `${context.data?.workspaceName || "Current workspace"} · ${targetAccount?.name || "Default receivable account"} · ${targetBudget?.name || "Default receivable sub-account"}` },
+        { label: "Amount", value: formatCents(receivable.amountCents), tone: "positive" },
+        { label: "Date", value: new Date().toLocaleDateString("en-SG") },
+        ...(!sourceIsTarget && receivable.budget ? [{ label: "Resulting source balance", value: formatCents(receivable.budget.availableCents - receivable.amountCents), tone: "negative" as const }] : []),
+        { label: "Resulting destination balance", value: formatCents((targetBudget?.availableCents ?? 0) + receivable.amountCents), tone: "positive" },
+      ],
+      reversal: "Available from Transactions as immutable compensating entries; the paid receivable remains auditable.",
+    });
+    if (!confirmed) return;
+    setCloseError(null);
+    setClosingReceivableId(receivable.id);
+    closeReceivable.mutate({ id: receivable.id });
+  };
 
   const pendingCount = useMemo(
     () => (receivables.data ?? []).filter((r) => r.status === "OPEN").length,
@@ -423,6 +488,8 @@ export function ReceivablesPage() {
     if (formUseCrossWorkspaceDeduction && !accountId) return;
 
     if (modalMode === "edit" && activeId) {
+      const currentReceivable = receivables.data?.find((receivable) => receivable.id === activeId);
+      if (!currentReceivable) return;
       updateReceivable.mutate({
         id: activeId,
         receivableDate: toIsoFromDateInput(formReceivableDate),
@@ -433,6 +500,7 @@ export function ReceivablesPage() {
         status: formStatus,
         accountId: formUseCrossWorkspaceDeduction ? accountId : null,
         budgetId: formUseCrossWorkspaceDeduction ? budgetId : null,
+        expectedUpdatedAt: currentReceivable.updatedAt,
       });
       return;
     }
@@ -574,12 +642,7 @@ export function ReceivablesPage() {
                   ) : r.status !== "PAID" ? (
                     <Button
                       className="btn btn-primary btn-xs"
-                      onClick={async () => {
-                        if (!(await confirmDestructiveAction("Close this receivable and mark it as paid?"))) return;
-                        setCloseError(null);
-                        setClosingReceivableId(r.id);
-                        closeReceivable.mutate({ id: r.id });
-                      }}
+                      onClick={() => void confirmCloseReceivable(r)}
                       disabled={Boolean(closingReceivableId) || !receivableDefaultAccountId || !receivableDefaultBudgetId}
                       title={
                         receivableDefaultAccountId && receivableDefaultBudgetId
@@ -769,11 +832,14 @@ export function ReceivablesPage() {
                     </div>
                   </div>
                 )}
-                {(createReceivable.isError || updateReceivable.isError || closeReceivable.isError || deleteReceivable.isError) && (
-                  <div className="modal-grid-span-2" style={{ fontSize: "12px", color: "var(--danger)" }}>
-                    {((createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error) as Error)?.message || "Action failed"}
-                  </div>
-                )}
+                <MutationErrorSummary
+                  className="modal-grid-span-2"
+                  error={createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error}
+                  onReload={async () => {
+                    closeModal();
+                    await receivables.refetch();
+                  }}
+                />
                 </div>
               </div>
               <div className="txn-modal-actions">
