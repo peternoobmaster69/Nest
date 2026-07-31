@@ -4,8 +4,13 @@ type GeneratedCioAnswer = {
 };
 
 const DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}\b/g;
+const YEAR_PATTERN = /\b(?:19|20|21)\d{2}\b/g;
 const PERCENTAGE_PATTERN = /(-?[\d,]+(?:\.\d+)?)\s*%/g;
 const CURRENCY_PATTERN = /(?<![A-Z0-9_-])(-?)(SGD|USD|EUR|GBP|AUD|JPY)\s+(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)(?![\d,]|\.\d)/g;
+const PERIODIC_AMOUNT_PATTERNS = [
+  /(?<![\d,])((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\s*(?:a|per|each|\/)\s*(?:month|year)\b/gi,
+  /\b(?:monthly|annual|yearly)\s+(?:spending|budget|income|contribution|amount|target|expenses?)\s*(?:of|is|at|=)?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/gi,
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -13,6 +18,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function successfulCioOutputs(outputs: readonly Record<string, unknown>[]) {
   return outputs.filter((output) => output.domain === "CIO" && output.ok === true);
+}
+
+function successfulFinancialGroundingOutputs(outputs: readonly Record<string, unknown>[]) {
+  return outputs.filter((output) => (
+    (output.domain === "CIO" || output.domain === "PUBLIC_FINANCIAL_RESEARCH") && output.ok === true
+  ));
 }
 
 function normalizedPercentages(value: string) {
@@ -55,6 +66,24 @@ function renderedAnswerText(generated: GeneratedCioAnswer) {
   ].join("\n");
 }
 
+export function isReferentialFinancialFollowUp(value: string) {
+  return [
+    /\b(?:compare|benchmark|test|model|use|apply|recalculate|explain|show)\s+(?:this|that|it|these|those)\b/i,
+    /\b(?:this|that|these|those)\s+(?:amount|figure|value|target|budget|scenario|projection|result|plan)\b/i,
+    /\b(?:above|previous|same)\s+(?:answer|amount|figure|value|target|budget|scenario|projection|result|plan)\b/i,
+  ].some((pattern) => pattern.test(value));
+}
+
+export function userSuppliedCurrencyGrounding(values: readonly string[], currency: string) {
+  const supported = new Set<string>();
+  for (const value of values) {
+    for (const pattern of PERIODIC_AMOUNT_PATTERNS) {
+      for (const match of value.matchAll(pattern)) supported.add(`${currency} ${match[1]}`);
+    }
+  }
+  return [...supported];
+}
+
 export function findUnsupportedCurrencyValue(
   generated: GeneratedCioAnswer,
   groundingText: readonly string[],
@@ -69,17 +98,21 @@ export function findUnsupportedCioValue(
   outputs: readonly Record<string, unknown>[],
   allowedContext: readonly string[] = [],
 ) {
-  const cioOutputs = successfulCioOutputs(outputs);
-  if (!cioOutputs.length) return null;
+  const groundingOutputs = successfulFinancialGroundingOutputs(outputs);
+  if (!groundingOutputs.length) return null;
 
   const rendered = renderedAnswerText(generated);
-  const corpus = [JSON.stringify(cioOutputs), ...allowedContext].join("\n");
+  const corpus = [JSON.stringify(groundingOutputs), ...allowedContext].join("\n");
   const unsupportedCurrency = findUnsupportedCurrencyValue(generated, [corpus]);
   if (unsupportedCurrency) return unsupportedCurrency;
 
   const supportedDates = new Set(corpus.match(DATE_PATTERN) ?? []);
   const unsupportedDate = (rendered.match(DATE_PATTERN) ?? []).find((date) => !supportedDates.has(date));
   if (unsupportedDate) return unsupportedDate;
+
+  const supportedYears = new Set(corpus.match(YEAR_PATTERN) ?? []);
+  const unsupportedYear = (rendered.match(YEAR_PATTERN) ?? []).find((year) => !supportedYears.has(year));
+  if (unsupportedYear) return unsupportedYear;
 
   const supportedPercentages = new Set(normalizedPercentages(corpus));
   const generatedPercentageMatches = [...rendered.matchAll(PERCENTAGE_PATTERN)];

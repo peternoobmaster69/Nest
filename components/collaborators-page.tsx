@@ -2,7 +2,6 @@
 
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
-
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, type ReactNode, useEffect, useState } from "react";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
@@ -16,8 +15,8 @@ import { invalidateWorkspaceQueries, queryKeys, removeWorkspaceQueries } from "@
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 
-// Default visibility for Money section pages
-const DEFAULT_MONEY_PAGES = {
+// Default visibility for configurable workspace navigation.
+const DEFAULT_NAVIGATION_PAGES = {
   creditCards: true,
   creditTransactions: true,
   receivables: true,
@@ -26,7 +25,9 @@ const DEFAULT_MONEY_PAGES = {
   investments: true,
 };
 
-const MONEY_PAGE_CONFIG = [
+const NAVIGATION_PAGE_CONFIG = [
+  { key: "cio", label: "Nest CIO", icon: "🧭" },
+  { key: "budget", label: "Budget Plan", icon: "🗓" },
   { key: "transactions", label: "Transactions", icon: "📑" },
   { key: "creditCards", label: "Credit Cards", icon: "💳" },
   { key: "creditTransactions", label: "Card Transactions", icon: "🧾" },
@@ -34,7 +35,6 @@ const MONEY_PAGE_CONFIG = [
   { key: "rewards", label: "Rewards", icon: "◎" },
   { key: "investments", label: "Investments", icon: "📈" },
 ];
-
 type AppContext = {
   workspaceId: string | null;
   workspaceName?: string | null;
@@ -79,7 +79,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
   const [inviteRole, setInviteRole] = useState<"EDITOR" | "VIEWER">("EDITOR");
   const [workspaceNameInput, setWorkspaceNameInput] = useState("");
   const [workspaceMode, setWorkspaceMode] = useState<"PRIVATE" | "SHARED">("PRIVATE");
-  const [sidebarMoneyPages, setSidebarMoneyPages] = useState<Record<string, boolean>>(DEFAULT_MONEY_PAGES);
+  const [sidebarMoneyPages, setSidebarMoneyPages] = useState<Record<string, boolean>>(DEFAULT_NAVIGATION_PAGES);
   const [switchingWorkspaceName, setSwitchingWorkspaceName] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
@@ -116,7 +116,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
     setWorkspaceNameInput(workspaceMeta.name);
     setWorkspaceMode(workspaceMeta.isShared ? "SHARED" : "PRIVATE");
     // Initialize sidebarMoneyPages from context or defaults
-    setSidebarMoneyPages(context.data?.sidebarMoneyPages ?? DEFAULT_MONEY_PAGES);
+    setSidebarMoneyPages(context.data?.sidebarMoneyPages ?? DEFAULT_NAVIGATION_PAGES);
   }, [workspaceMeta?.id, workspaceMeta?.name, workspaceMeta?.isShared, context.data?.sidebarMoneyPages]);
 
   const createWorkspace = useMutation({
@@ -348,7 +348,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
             <div className="settings-section-title">Workspace details</div>
             <div className="settings-section-copy">
               {isOwner
-                ? "Update its name, access mode, and visible Money navigation."
+                ? "Update its name, access mode, and visible navigation."
                 : "Review this workspace and its members."}
             </div>
           </div>
@@ -390,10 +390,10 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
 
             <div className="workspace-money-pages">
             <div className="workspace-money-pages-title">
-              Sidebar Navigation — Money Pages
+              Sidebar navigation
             </div>
             <div className="workspace-money-page-grid">
-              {MONEY_PAGE_CONFIG.map((page) => (
+              {NAVIGATION_PAGE_CONFIG.map((page) => (
                 <label
                   key={page.key}
                   className="workspace-money-page-option"
@@ -422,7 +422,7 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
               ))}
             </div>
             <div className="workspace-money-pages-help">
-              Changes save when you save Workspace details.
+              Uncheck pages that do not apply to this workspace. Changes save when you save Workspace details.
             </div>
             </div>
           </> : null}

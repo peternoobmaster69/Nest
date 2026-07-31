@@ -28,7 +28,9 @@ const UpdateContextSchema = z.object({
   receivableDefaultBudgetId: z.string().min(1).nullable().optional(),
 });
 
-const DEFAULT_SIDEBAR_MONEY_PAGES = {
+const DEFAULT_SIDEBAR_PAGES = {
+  cio: true,
+  budget: true,
   creditCards: true,
   creditTransactions: true,
   receivables: true,
@@ -62,7 +64,7 @@ function emptyContextResponse(workspaces: WorkspaceSummary[] = [], isAdmin = fal
       subAccountCount: 0,
       creditCardCount: 0,
     },
-    sidebarMoneyPages: DEFAULT_SIDEBAR_MONEY_PAGES,
+    sidebarMoneyPages: DEFAULT_SIDEBAR_PAGES,
     publicNetWorthEnabled: false,
     publicNetWorthToken: null,
     isAdmin,
@@ -70,11 +72,11 @@ function emptyContextResponse(workspaces: WorkspaceSummary[] = [], isAdmin = fal
 }
 
 function parseSidebarMoneyPages(value: string | null | undefined) {
-  if (!value) return DEFAULT_SIDEBAR_MONEY_PAGES;
+  if (!value) return DEFAULT_SIDEBAR_PAGES;
   try {
     return JSON.parse(value) as Record<string, boolean>;
   } catch {
-    return DEFAULT_SIDEBAR_MONEY_PAGES;
+    return DEFAULT_SIDEBAR_PAGES;
   }
 }
 

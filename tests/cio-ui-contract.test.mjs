@@ -19,6 +19,9 @@ test("CIO is reachable through the authenticated workspace shell and navigation"
   assert.match(route, /<CioPage \/>/);
   assert.match(workspaceRoute, /export \{ default \} from "@\/app\/cio\/page"/);
   assert.doesNotMatch(dispatcher, /@\/app\/cio\/page|case "cio"/);
+  assert.match(sidebar, /sidebarMoneyPages\.cio !== false[\s\S]*?workspaceHref\("\/cio"\)[\s\S]*?Nest CIO/);
+  assert.match(shell, /const showCio = sidebarMoneyPages\.cio !== false/);
+  assert.match(shell, /showCio \? <Link[\s\S]*?workspaceHref\("\/cio"\)[\s\S]*?Portfolio health and long-term planning/);
   assert.match(sidebar, /workspaceHref\("\/cio"\)[\s\S]*Nest CIO/);
   assert.match(shell, /workspaceHref\("\/cio"\)[\s\S]*Portfolio health and long-term planning/);
 });

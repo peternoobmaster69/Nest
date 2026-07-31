@@ -27,9 +27,9 @@ export function RewardsPageSkeleton() {
             <span className="rewards-tab-label">Conversions</span>
           </Button>
         </div>
-        <Skeleton className="rewards-tab-action-skeleton" width={168} height={44} borderRadius="var(--r-md)" />
+        <Skeleton className="rewards-tab-action-skeleton" width={168} height={34} borderRadius="var(--r-md)" />
       </div>
-      <div className="rewards-cc-grid" style={{ marginBottom: "20px" }}>
+      <div className="rewards-cc-grid">
         <RewardsCardGridSkeleton />
       </div>
     </div>
@@ -74,7 +74,7 @@ export function RewardsCardGridSkeleton({ variant = "standard" }: { variant?: "s
     return (
       <>
         {Array.from({ length: 2 }).map((_, index) => (
-          <div className="card" key={index}>
+          <div className="card rewards-item-card" key={index}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div style={{ display: "grid", gap: "4px" }}>
                 <Skeleton width={index === 0 ? 156 : 132} height={16} borderRadius="4px" />
@@ -99,7 +99,7 @@ export function RewardsCardGridSkeleton({ variant = "standard" }: { variant?: "s
   return (
     <>
       {Array.from({ length: 4 }).map((_, index) => (
-        <div className="card" key={index}>
+        <div className="card rewards-item-card" key={index}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div style={{ display: "grid", gap: "4px" }}>
               <Skeleton width={index % 2 ? 132 : 156} height={16} borderRadius="4px" />

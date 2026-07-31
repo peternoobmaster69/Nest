@@ -3015,8 +3015,9 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .rewards-cc-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   align-items: stretch;
+  margin-bottom: 12px;
 }
 
 .rewards-cc-grid > * {
@@ -3028,24 +3029,29 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .rewards-history-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px 16px;
   scroll-margin-top: 16px;
 }
 
 .rewards-overview {
   display: grid;
-  gap: 28px;
-  margin-bottom: 28px;
+  grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr);
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .rewards-overview-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 10px;
 }
 
 .rewards-overview-card {
   min-width: 0;
-  padding: 20px 24px;
+  padding: 11px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-md);
   background: var(--bg-surface);
@@ -3054,27 +3060,27 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .rewards-overview-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .rewards-overview-value {
-  margin-top: 8px;
+  margin-top: 4px;
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: 22px;
   font-weight: 800;
   line-height: 1.1;
 }
 
 .rewards-overview-sub,
 .rewards-overview-value-sub {
-  margin-top: 5px;
+  margin-top: 2px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -3086,9 +3092,9 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .rewards-total-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 32px;
+  gap: 14px;
   align-items: center;
-  padding: 28px 32px;
+  padding: 11px 16px;
   border: 1px solid var(--border-default);
   border-radius: var(--r-md);
   background: var(--bg-surface);
@@ -3096,28 +3102,28 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .rewards-total-divider {
   width: 1px;
-  height: 52px;
+  height: 38px;
   background: var(--border-subtle);
 }
 
 .rewards-total-label {
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .rewards-total-value {
-  margin-top: 4px;
+  margin-top: 2px;
   font-family: var(--font-display);
-  font-size: 32px;
+  font-size: 22px;
   font-weight: 800;
   line-height: 1.1;
 }
 
 .rewards-total-sub {
-  margin-top: 6px;
+  margin-top: 2px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -3125,8 +3131,8 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .rewards-tabs {
@@ -3138,13 +3144,13 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 7px 18px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 12px;
   border: 1px solid var(--border-default);
   border-radius: var(--r-md);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -3154,12 +3160,53 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .rewards-tab-action {
-  min-height: 44px;
-  padding-inline: 20px;
+  min-height: 34px;
+  padding-inline: 14px;
 }
 
 .rewards-tab-action-skeleton {
   flex: 0 0 auto;
+}
+
+.rewards-program-grid {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.rewards-item-card {
+  padding: 12px 14px;
+}
+
+.rewards-item-balance {
+  margin-top: 8px;
+}
+
+.rewards-item-value {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.rewards-item-accent {
+  margin-top: 1px;
+  color: var(--brand-500);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rewards-item-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.rewards-conversion-list {
+  margin-bottom: 12px;
+}
+
+.rewards-conversion-card {
+  margin-bottom: 6px;
+  padding: 10px 14px;
 }
 
 .rewards-program-card {
@@ -4415,15 +4462,15 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .rewards-overview-card {
-    padding: 18px 20px;
+    padding: 10px 12px;
   }
 
   .rewards-overview-value {
-    font-size: 26px;
+    font-size: 21px;
   }
 
   .rewards-total-panel {
-    padding: 24px;
+    padding: 10px 14px;
   }
 }
 
@@ -4454,6 +4501,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .rewards-overview {
+    grid-template-columns: 1fr;
     gap: 18px;
     margin-bottom: 20px;
   }
@@ -4501,27 +4549,29 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .rewards-total-panel {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding: 14px 16px;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 9px 10px;
   }
 
   .rewards-total-divider {
-    width: 100%;
-    height: 1px;
+    width: 1px;
+    height: 36px;
   }
 
   .rewards-total-label {
-    font-size: 12px;
+    font-size: 10px;
+    line-height: 1.15;
   }
 
   .rewards-total-value {
-    font-size: 24px;
+    font-size: 18px;
   }
 
   .rewards-total-sub {
-    margin-top: 3px;
-    font-size: 11px;
+    margin-top: 2px;
+    font-size: 9px;
+    line-height: 1.2;
   }
 
   .rewards-tabs-row {
@@ -4538,6 +4588,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
   .rewards-tabs .segmented-btn {
     min-width: 0;
+    min-height: 38px;
     padding: 9px 10px;
   }
 
@@ -4551,6 +4602,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
   .rewards-tab-action {
     justify-content: center;
+    min-height: 44px;
     width: 100%;
   }
 
@@ -4709,8 +4761,8 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .rewards-total-panel {
-    gap: 10px;
-    padding: 12px 14px;
+    gap: 7px;
+    padding: 8px 9px;
   }
 
   .rewards-overview-card {
@@ -4731,7 +4783,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .rewards-total-value {
-    font-size: 22px;
+    font-size: 17px;
   }
 
   .rewards-overview-sub,

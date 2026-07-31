@@ -283,7 +283,7 @@ export function AppSidebar({
         <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href={workspaceHref("/")} onClick={handleNavClick} aria-current={currentPath === "/" ? "page" : undefined}>
           <Home className="sb-ic" size={18} aria-hidden="true" />Dashboard
         </Link>
-        <Link className={`sb-item${currentPath === "/cio" ? " on" : ""}`} href={workspaceHref("/cio")} onClick={handleNavClick} aria-current={currentPath === "/cio" ? "page" : undefined}><Compass className="sb-ic" size={18} aria-hidden="true" />Nest CIO</Link>
+        {sidebarMoneyPages.cio !== false ? <Link className={`sb-item${currentPath === "/cio" ? " on" : ""}`} href={workspaceHref("/cio")} onClick={handleNavClick} aria-current={currentPath === "/cio" ? "page" : undefined}><Compass className="sb-ic" size={18} aria-hidden="true" />Nest CIO</Link> : null}
 
         <div className="sb-sec">Money</div>
         {sidebarMoneyPages.transactions !== false && (
@@ -317,9 +317,9 @@ export function AppSidebar({
             <ChartNoAxesCombined className="sb-ic" size={18} aria-hidden="true" />Investments
           </Link>
         )}
-        <Link className={`sb-item${currentPath === "/budgets/plan" ? " on" : ""}`} href={workspaceHref("/budgets/plan")} onClick={handleNavClick}>
+        {sidebarMoneyPages.budget !== false ? <Link className={`sb-item${currentPath === "/budgets/plan" ? " on" : ""}`} href={workspaceHref("/budgets/plan")} onClick={handleNavClick}>
           <ChartPie className="sb-ic" size={18} aria-hidden="true" />Budget Plan
-        </Link>
+        </Link> : null}
 
         <div className="sb-sec">Workspace</div>
         <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href={workspaceHref("/settings")} onClick={handleNavClick}>

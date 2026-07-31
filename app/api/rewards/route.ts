@@ -110,8 +110,14 @@ export async function GET() {
     return NextResponse.json({
       creditCards: creditCardRewards,
       frequentFlyers: frequentFlyersWithExpiry,
-      hotelRewards,
-      conversions,
+      hotelRewards: hotelRewards.map((hotel) => ({
+        ...hotel,
+        centsPerPoint: Number(hotel.centsPerPoint),
+      })),
+      conversions: conversions.map((conversion) => ({
+        ...conversion,
+        conversionRate: Number(conversion.conversionRate),
+      })),
       cardsWithoutRewards,
     });
   } catch (error) {

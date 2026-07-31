@@ -531,7 +531,10 @@ test("tablet and desktop card rails use stable explicit navigation", async () =>
 });
 
 test("phone layouts use the native-style mobile application shell", async () => {
-  const shell = await readFile(path.join(root, "components/app-shell.tsx"), "utf8");
+  const [shell, sidebar] = await Promise.all([
+    readFile(path.join(root, "components/app-shell.tsx"), "utf8"),
+    readFile(path.join(root, "components/app-sidebar.tsx"), "utf8"),
+  ]);
   const styles = await readAppStyles(root);
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
   const moreNavigationStart = shell.indexOf('<nav className="mobile-more-links"');
@@ -547,6 +550,8 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(bottomNavigation, /href=\{workspaceHref\("\/investments"\)\}[\s\S]*?<span>Investments<\/span>/);
   assert.doesNotMatch(bottomNavigation, /workspaceHref\("\/budgets\/plan"\)/);
   assert.match(moreNavigation, /href=\{workspaceHref\("\/budgets\/plan"\)\}[\s\S]*?<strong>Budget<\/strong>/);
+  assert.match(sidebar, /sidebarMoneyPages\.budget !== false \? <Link[\s\S]*?workspaceHref\("\/budgets\/plan"\)[\s\S]*?Budget Plan/);
+  assert.match(moreNavigation, /sidebarMoneyPages\.budget !== false \? <Link[\s\S]*?workspaceHref\("\/budgets\/plan"\)/);
   assert.doesNotMatch(moreNavigation, /badgeCounts\?\.budgets/);
   assert.doesNotMatch(moreNavigation, /workspaceHref\("\/profile"\)|<strong>Profile<\/strong>/);
   assert.doesNotMatch(moreNavigation, /workspaceHref\("\/investments"\)/);
@@ -650,8 +655,9 @@ test("settings uses the shared typography and layout contract", async () => {
 });
 
 test("settings groups related controls into focused tabs", async () => {
-  const [settings, styles] = await Promise.all([
+  const [settings, privacyControls, styles] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings-privacy-controls.tsx"), "utf8"),
     readAppStyles(root),
   ]);
 
@@ -661,7 +667,11 @@ test("settings groups related controls into focused tabs", async () => {
   assert.match(settings, /section === "automation"/);
   assert.match(settings, /Gmail Card Alerts/);
   assert.match(settings, /section === "automation"[\s\S]*?Credit Card Auto Accounting/);
-  const automationLayout = settings.slice(settings.indexOf('{section === "automation" ? ('));
+  const automationLayout = settings.slice(
+    settings.indexOf('{section === "automation" ? ('),
+    settings.indexOf('{section === "data" ? ('),
+  );
+  assert.ok(automationLayout.indexOf("Gmail Card Alerts") < automationLayout.indexOf("Credit Card Auto Accounting"));
   assert.ok(automationLayout.indexOf("Run Now") < automationLayout.indexOf("notice={autoRuleNotice}"));
   assert.ok(automationLayout.indexOf("notice={autoRuleNotice}") < automationLayout.indexOf("autoRules.isLoading"));
   assert.match(settings, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
@@ -670,6 +680,14 @@ test("settings groups related controls into focused tabs", async () => {
   assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display/);
   assert.match(settings, /section === "workspaces"[\s\S]*?Bank accounts/);
   assert.match(settings, /section === "data"[\s\S]*?<DataImportSection/);
+  const dataLayout = settings.slice(
+    settings.indexOf('{section === "data" ? ('),
+    settings.indexOf('{section === "workspaces" ? (', settings.indexOf('{section === "data" ? (')),
+  );
+  assert.ok(dataLayout.indexOf('<SettingsPrivacyControls view="data" />') < dataLayout.indexOf("{publicShareSettings}"));
+  assert.ok(dataLayout.indexOf("{publicShareSettings}") < dataLayout.indexOf("<DataImportSection"));
+  assert.match(privacyControls, /view === "privacy"[\s\S]*?Optional telemetry[\s\S]*?Offline storage/);
+  assert.match(privacyControls, /view === "privacy"[\s\S]*?: \([\s\S]*?Account data[\s\S]*?Delete Nest account/);
   assert.match(settings, /Bank accounts/);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-card-block \{\s*padding: 14px/s);
   assert.match(styles, /\.st-container \.st-grid[\s\S]*?gap: 10px/s);
@@ -728,6 +746,10 @@ test("workspace settings flow from selection through configuration and access", 
   assert.doesNotMatch(collaborators, /workspace-settings-card-(?:heading|title)/);
   assert.match(collaborators, /settings-section-title">Choose workspace/);
   assert.match(collaborators, /settings-section-title">Workspace details/);
+  assert.match(collaborators, /\{ key: "cio", label: "Nest CIO"/);
+  assert.match(collaborators, /\{ key: "budget", label: "Budget Plan"/);
+  assert.match(collaborators, /checked=\{sidebarMoneyPages\[page\.key\] \?\? true\}/);
+  assert.match(collaborators, /Sidebar navigation/);
   assert.match(collaborators, /settings-section-title">Members/);
   assert.match(collaborators, /workspace-details-card[\s\S]*?workspace-members-section[\s\S]*?settings-section-title">Members/);
   assert.match(styles, /\.workspace-details-form\s*\{[^}]*grid-template-columns:/s);

@@ -67,6 +67,8 @@ test("Ask Nest exposes only bounded read tools", async () => {
     "get_investment_summary",
     "get_market_history",
     "search_market_news",
+    "search_public_financial_sources",
+    "read_authoritative_financial_source",
     "get_trip_spending",
     "explain_cash_flow_change",
     "compare_income",
@@ -108,6 +110,9 @@ test("Ask Nest rewrites an unsupported illustrative value once before blocking i
   assert.match(orchestration, /generated = parseGeneratedResponse\(response\);[\s\S]*?assertGroundedCurrencyValues\(generated, groundingText\)/);
   assert.match(orchestration, /findUnsupportedCioValue\(generated, successfulToolOutputs, cioAllowedContext\)/);
   assert.match(orchestration, /message\.role === "user"/);
+  assert.match(orchestration, /isReferentialFinancialFollowUp\(input\.question\)/);
+  assert.match(orchestration, /input\.history\.slice\(-2\)/);
+  assert.match(orchestration, /userSuppliedCurrencyGrounding\(userSuppliedNumericContext, currency\)/);
 });
 
 test("Ask Nest distinguishes outstanding statements from distinct credit cards", async () => {
@@ -179,6 +184,7 @@ test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", as
   assert.match(panel, /ask-nest-trip-flag/);
   assert.match(panel, /Select one to add it to the message box/);
   assert.match(panel, /chooseFollowUp\(followUp\)/);
+  assert.match(panel, /followUpToUserPrompt\(followUp\)/);
   assert.doesNotMatch(panel, /onClick=\{\(\) => void ask\(followUp\)\}/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /\.ask-nest-panel/);

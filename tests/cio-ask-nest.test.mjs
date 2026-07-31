@@ -12,6 +12,8 @@ import {
   ensureCioDataDate,
   findUnsupportedCioValue,
   findUnsupportedCurrencyValue,
+  isReferentialFinancialFollowUp,
+  userSuppliedCurrencyGrounding,
 } from "../lib/ai/cio-grounding.ts";
 
 const root = process.cwd();
@@ -157,6 +159,50 @@ test("CIO grounding accepts equivalent money formatting and user-labelled scenar
   }, outputs, scenarioContext), "SGD 13,000");
 });
 
+test("CIO grounding accepts cited public financial research and preserves user-proposed amounts", () => {
+  const outputs = [{
+    ok: true,
+    domain: "PUBLIC_FINANCIAL_RESEARCH",
+    fetchedAt: "2026-07-31T10:00:00.000Z",
+    sources: [{
+      snippet: "Average monthly household expenditure was SGD 5,931 and rose 2.8%.",
+      normalizedFinancialValues: ["SGD 5,931"],
+    }],
+  }];
+  const userContext = ["Is SGD 8,000 a month too much or too little?"];
+
+  assert.equal(findUnsupportedCioValue({
+    answer: "Your proposed SGD 8,000 is above the cited SGD 5,931 benchmark, which the source says rose 2.8%.",
+    highlights: [],
+  }, outputs, userContext), null);
+  assert.equal(findUnsupportedCioValue({
+    answer: "A more suitable benchmark is SGD 6,000.",
+    highlights: [],
+  }, outputs, userContext), "SGD 6,000");
+  assert.equal(findUnsupportedCioValue({
+    answer: "The source says the benchmark rose 3.1%.",
+    highlights: [],
+  }, outputs, userContext), "3.1%");
+  assert.equal(findUnsupportedCioValue({
+    answer: "This was reported in the 2024 survey.",
+    highlights: [],
+  }, outputs, userContext), "2024");
+});
+
+test("referential follow-ups may reuse the immediately preceding grounded financial value", () => {
+  const outputs = [{ ok: true, domain: "PUBLIC_FINANCIAL_RESEARCH", sources: [{ title: "Public benchmark" }] }];
+  assert.equal(isReferentialFinancialFollowUp("Compare this against Singapore public retirement spending benchmarks."), true);
+  assert.equal(isReferentialFinancialFollowUp("Show spending this month."), false);
+  assert.deepEqual(
+    userSuppliedCurrencyGrounding(["Is 8000 a month too much or too little?"], "SGD"),
+    ["SGD 8000"],
+  );
+  assert.equal(findUnsupportedCioValue({
+    answer: "The comparison uses the previous proposed amount of SGD 8,000.",
+    highlights: [],
+  }, outputs, ["The previous grounded answer used SGD 8,000."]), null);
+});
+
 test("CIO answers may add qualitative judgment without inventing numerical targets", async () => {
   const orchestration = await source("lib/ai/ask-nest.ts");
 
@@ -180,6 +226,7 @@ test("CIO intent hints route representative planning questions deterministically
     ["How much is liquid for an emergency?", "get_cio_overview"],
     ["Should I divest Income+?", "get_cio_policy_status"],
     ["What household investment strategy do you recommend?", "get_cio_strategy_recommendations"],
+    ["Is 8000 a month too much or too little?", "search_public_financial_sources"],
   ];
 
   for (const [question, expectedTool] of cases) {
@@ -190,6 +237,10 @@ test("CIO intent hints route representative planning questions deterministically
   assert.ok(
     !classifyAskNestIntent("How much do I contribute each year?", "/cio")
       .recommendedTools.includes("compare_cio_contribution_scenarios"),
+  );
+  assert.deepEqual(
+    classifyAskNestIntent("Is 8000 a month too much or too little?", "/cio").recommendedTools,
+    ["run_cio_retirement_projection", "search_public_financial_sources"],
   );
 });
 

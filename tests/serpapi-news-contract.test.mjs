@@ -64,7 +64,7 @@ test("Ask Nest exposes cited public news without leaking private search terms", 
   assert.match(client, /PRIVATE_QUERY_REJECTED/);
   assert.match(client, /News searches cannot include private financial, card, or contact details/);
   assert.match(tools, /name: "search_market_news"/);
-  assert.match(tools, /isSerpApiNewsConfigured\(\) \? \[ASK_NEST_MARKET_NEWS_TOOL\]/);
+  assert.match(tools, /isSerpApiNewsConfigured\(\)[\s\S]*?ASK_NEST_MARKET_NEWS_TOOL/);
   assert.match(tools, /case "search_market_news":/);
   assert.match(tools, /articleEvidence/);
   assert.match(orchestration, /search_market_news: "SerpApi public news"/);

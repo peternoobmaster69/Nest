@@ -1086,10 +1086,8 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
     </div>
   ) : (
     <div className="card settings-card-block settings-permission-note" role="note">
-      <div className="settings-section-title">Workspace security controls</div>
-      <div className="settings-section-copy">
-        Your {context.data?.role?.toLowerCase() ?? "member"} role can review personal security and privacy settings. Only a workspace owner can connect Gmail or create, rotate, and revoke public share links.
-      </div>
+      <div className="settings-section-title">Public share links</div>
+      <div className="settings-section-copy">Only a workspace owner can create, rotate, or revoke public share links.</div>
     </div>
   );
 
@@ -1099,11 +1097,10 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
         <>
           <SettingsAppAccess />
           <SettingsPrivacyControls />
-          {publicShareSettings}
         </>
       ) : null}
 
-      {section === "settings" ? (
+      {section === "automation" ? (
         <>
           {context.data?.role === "OWNER" ? <div className="card settings-card-block gmail-alerts-card">
         <div className="gmail-alerts-header">
@@ -1400,6 +1397,8 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
 
       {section === "data" ? (
         <>
+          <SettingsPrivacyControls view="data" />
+          {publicShareSettings}
           <DataImportSection workspaceId={workspaceId} baseCurrency={baseCurrency} />
         </>
       ) : null}

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 const SERPAPI_PROVIDER = "serpapi-news";
 const SERPAPI_CACHE_TTL_MS = 60 * 60 * 1_000;
+const SERPAPI_WEB_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const SERPAPI_MIN_REQUEST_INTERVAL_MS = 5_000;
 const SERPAPI_DEFAULT_MONTHLY_LIMIT = 200;
 const SERPAPI_MAX_MONTHLY_LIMIT = 250;
@@ -20,6 +21,24 @@ type SerpApiNewsArticle = {
 export type SerpApiNewsResult = {
   query: string;
   articles: SerpApiNewsArticle[];
+  fetchedAt: Date;
+  fromCache: boolean;
+};
+
+export type SerpApiWebSource = {
+  title: string;
+  link: string;
+  domain: string;
+  snippet: string | null;
+  publishedLabel: string | null;
+  position: number | null;
+  authority: "OFFICIAL_GOVERNMENT" | "ACADEMIC_OR_MULTILATERAL" | "REGULATED_OR_PRIMARY" | "OTHER_PUBLIC_SOURCE";
+  normalizedFinancialValues: string[];
+};
+
+export type SerpApiWebResult = {
+  query: string;
+  sources: SerpApiWebSource[];
   fetchedAt: Date;
   fromCache: boolean;
 };
@@ -48,6 +67,7 @@ export class SerpApiNewsError extends Error {
 
 type SerpApiPayload = {
   news_results?: unknown;
+  organic_results?: unknown;
   error?: unknown;
   search_metadata?: unknown;
 };
@@ -119,8 +139,48 @@ function normalizePublicNewsQuery(value: string) {
   return query;
 }
 
+export function normalizePublicFinancialQuery(value: string) {
+  const query = value.normalize("NFKC").replace(/\s+/g, " ").trim();
+  if (query.length < 3 || query.length > 200) {
+    throw new SerpApiNewsError("NO_DATA", "Financial research queries must contain between 3 and 200 characters.");
+  }
+
+  const containsLikelyPersonalAmount = [...query.matchAll(/\b(?:[1-9]\d{0,2}(?:,\d{3})+|[1-9]\d{3,6})(?:\.\d+)?\b/g)]
+    .some((match) => {
+      const numeric = Number(match[0].replaceAll(",", ""));
+      return !Number.isInteger(numeric) || numeric < 1900 || numeric > 2100;
+    });
+  const containsPrivateFinancialData =
+    /\b(?:sgd|usd|eur|gbp|aud|jpy)\s*[-+]?\d/i.test(query) ||
+    /\b(?:s|us|a)\$\s*[-+]?\d/i.test(query) ||
+    /\b(?:account|card)\s+(?:ending\s+)?\d{3,}\b/i.test(query) ||
+    /\b\d{8,}\b/.test(query) ||
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(query) ||
+    containsLikelyPersonalAmount ||
+    /\b(?:my|our)\s+(?:account|balance|card|portfolio|salary|income|spending|budget)\b/i.test(query);
+  if (containsPrivateFinancialData) {
+    throw new SerpApiNewsError(
+      "PRIVATE_QUERY_REJECTED",
+      "Public financial searches cannot include personal amounts, balances, account details, card details, or contact details. Search for the public benchmark without the user's value.",
+    );
+  }
+
+  const isFinancialTopic = /\b(?:retir\w*|pension|cpf|provident|invest\w*|portfolio|asset|allocation|inflation|cost of living|household expenditure|household spending|living costs?|financial|finance|savings?|wealth|income|budget|spending|expenses?|healthcare costs?|insurance|tax(?:es|ation)?|interest rates?|mortgage|annuit\w*|market|stocks?|bonds?|funds?|etfs?|securit(?:y|ies)|exchange rates?|monetary policy)\b/i.test(query);
+  if (!isFinancialTopic) {
+    throw new SerpApiNewsError(
+      "NO_DATA",
+      "Public research is limited to financial, retirement, market, and cost-of-living topics.",
+    );
+  }
+  return query;
+}
+
 function cacheKeyForQuery(query: string) {
   return createHash("sha256").update(`google_news:sg:en:when7d:${query.toLocaleLowerCase()}`).digest("hex");
+}
+
+function cacheKeyForWebQuery(query: string) {
+  return createHash("sha256").update(`google_web:sg:en:${query.toLocaleLowerCase()}`).digest("hex");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -145,6 +205,45 @@ function safeArticleUrl(value: unknown) {
   } catch {
     return null;
   }
+}
+
+function sourceDomain(link: string) {
+  try {
+    return new URL(link).hostname.toLocaleLowerCase().replace(/^www\./, "");
+  } catch {
+    return "unknown";
+  }
+}
+
+function sourceAuthority(domain: string): SerpApiWebSource["authority"] {
+  if (domain === "gov.sg" || domain.endsWith(".gov.sg") || domain.endsWith(".go.jp") || domain.endsWith(".gov.uk") || domain.endsWith(".gov.au")) {
+    return "OFFICIAL_GOVERNMENT";
+  }
+  if (
+    domain.endsWith(".edu") || domain.endsWith(".edu.sg") || domain.endsWith(".ac.uk") ||
+    ["imf.org", "oecd.org", "worldbank.org", "bis.org"].some((value) => domain === value || domain.endsWith(`.${value}`))
+  ) {
+    return "ACADEMIC_OR_MULTILATERAL";
+  }
+  if (
+    domain === "sgx.com" || domain.endsWith(".sgx.com") ||
+    domain === "morningstar.com" || domain.endsWith(".morningstar.com")
+  ) {
+    return "REGULATED_OR_PRIMARY";
+  }
+  return "OTHER_PUBLIC_SOURCE";
+}
+
+export function extractNormalizedFinancialValues(value: string) {
+  const values = new Set<string>();
+  for (const match of value.matchAll(/\b(SGD|USD|EUR|GBP|AUD|JPY)\s*([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/gi)) {
+    values.add(`${match[1].toLocaleUpperCase()} ${match[2]}`);
+  }
+  for (const match of value.matchAll(/\b(S|US|A)\$\s*([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/gi)) {
+    const currency = match[1].toLocaleUpperCase() === "S" ? "SGD" : match[1].toLocaleUpperCase() === "US" ? "USD" : "AUD";
+    values.add(`${currency} ${match[2]}`);
+  }
+  return [...values].slice(0, 20);
 }
 
 function articleSource(value: unknown) {
@@ -203,6 +302,34 @@ function parsePayload(value: unknown) {
   };
 }
 
+export function parseSerpApiWebPayload(value: unknown) {
+  const payload = asRecord(value) as SerpApiPayload | null;
+  if (!payload) return null;
+  const rawResults = Array.isArray(payload.organic_results) ? payload.organic_results : [];
+  const sources: SerpApiWebSource[] = [];
+  for (const rawResult of rawResults) {
+    const item = asRecord(rawResult);
+    if (!item) continue;
+    const title = nonEmptyString(item.title);
+    const link = safeArticleUrl(item.link);
+    if (!title || !link || sources.some((source) => source.link === link)) continue;
+    const snippet = nonEmptyString(item.snippet)?.replace(/\s+/g, " ").slice(0, 1_200) ?? null;
+    const domain = sourceDomain(link);
+    sources.push({
+      title: title.slice(0, 300),
+      link,
+      domain,
+      snippet,
+      publishedLabel: nonEmptyString(item.date),
+      position: typeof item.position === "number" && Number.isFinite(item.position) ? item.position : null,
+      authority: sourceAuthority(domain),
+      normalizedFinancialValues: extractNormalizedFinancialValues(`${title} ${snippet ?? ""}`),
+    });
+    if (sources.length >= SERPAPI_MAX_RESULTS) break;
+  }
+  return { payload, sources };
+}
+
 async function readCachedNews(cacheKey: string, now: Date) {
   const cached = await prisma.serpApiNewsCache.findUnique({ where: { cacheKey } });
   if (!cached || cached.expiresAt <= now) return null;
@@ -212,6 +339,17 @@ async function readCachedNews(cacheKey: string, now: Date) {
     return null;
   }
   return { articles: parsed.articles, fetchedAt: cached.fetchedAt };
+}
+
+async function readCachedWeb(cacheKey: string, now: Date) {
+  const cached = await prisma.serpApiNewsCache.findUnique({ where: { cacheKey } });
+  if (!cached || cached.expiresAt <= now) return null;
+  const parsed = parseSerpApiWebPayload(JSON.parse(cached.payloadJson) as unknown);
+  if (!parsed || !parsed.sources.length) {
+    await prisma.serpApiNewsCache.delete({ where: { cacheKey } }).catch(() => undefined);
+    return null;
+  }
+  return { sources: parsed.sources, fetchedAt: cached.fetchedAt };
 }
 
 function utcMonthKey(date: Date) {
@@ -392,4 +530,90 @@ export async function searchSerpApiNews(rawQuery: string): Promise<SerpApiNewsRe
   }).catch(() => undefined);
 
   return { query, articles: parsed.articles, fetchedAt, fromCache: false };
+}
+
+export async function searchSerpApiFinancialWeb(rawQuery: string): Promise<SerpApiWebResult> {
+  const query = normalizePublicFinancialQuery(rawQuery);
+  const config = getSerpApiConfig();
+  const cacheKey = cacheKeyForWebQuery(query);
+  const now = new Date();
+  const cached = await readCachedWeb(cacheKey, now).catch(() => null);
+  if (cached) {
+    return { query, sources: cached.sources, fetchedAt: cached.fetchedAt, fromCache: true };
+  }
+
+  const account = await getSerpApiAccountStatus(config);
+  const reservation = await reserveSerpApiRequest({ monthlyLimit: config.monthlyLimit, account });
+  if (!reservation.allowed) {
+    const message = reservation.code === "MONTHLY_LIMIT_REACHED"
+      ? "Ask Nest's SerpApi monthly search allowance has been reached."
+      : "SerpApi public financial search is temporarily rate limited. Try again shortly.";
+    throw new SerpApiNewsError(reservation.code, message, reservation.retryAfterSeconds);
+  }
+
+  const requestUrl = new URL("search", config.baseUrl);
+  requestUrl.searchParams.set("engine", "google");
+  requestUrl.searchParams.set("q", query);
+  requestUrl.searchParams.set("google_domain", "google.com.sg");
+  requestUrl.searchParams.set("gl", "sg");
+  requestUrl.searchParams.set("hl", "en");
+  requestUrl.searchParams.set("num", "10");
+  requestUrl.searchParams.set("safe", "active");
+  requestUrl.searchParams.set("api_key", config.apiKey);
+
+  let response: Response;
+  try {
+    response = await fetch(requestUrl, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch {
+    throw new SerpApiNewsError("UNAVAILABLE", "SerpApi public financial search could not be reached.");
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new SerpApiNewsError("AUTHENTICATION_FAILED", "SerpApi rejected the configured API credentials.");
+  }
+  if (response.status === 429) {
+    const retryAfter = Number.parseInt(response.headers.get("retry-after") || "5", 10);
+    throw new SerpApiNewsError("RATE_LIMITED", "SerpApi's API rate limit was reached.", retryAfter || 5);
+  }
+  if (!response.ok) {
+    throw new SerpApiNewsError("UNAVAILABLE", `SerpApi returned HTTP ${response.status}.`);
+  }
+
+  const body = await response.json().catch(() => null);
+  const parsed = parseSerpApiWebPayload(body);
+  if (!parsed) {
+    throw new SerpApiNewsError("UNAVAILABLE", "SerpApi returned an invalid public search response.");
+  }
+  if (typeof parsed.payload.error === "string") {
+    const isAuthError = /api key|account|unauthorized/i.test(parsed.payload.error);
+    throw new SerpApiNewsError(
+      isAuthError ? "AUTHENTICATION_FAILED" : "UNAVAILABLE",
+      isAuthError ? "SerpApi rejected the configured API credentials." : "SerpApi could not complete the public financial search.",
+    );
+  }
+  if (!parsed.sources.length) {
+    throw new SerpApiNewsError("NO_DATA", `SerpApi found no public financial sources for “${query}”.`);
+  }
+
+  const fetchedAt = new Date();
+  await prisma.serpApiNewsCache.upsert({
+    where: { cacheKey },
+    create: {
+      cacheKey,
+      payloadJson: JSON.stringify(body),
+      fetchedAt,
+      expiresAt: new Date(fetchedAt.getTime() + SERPAPI_WEB_CACHE_TTL_MS),
+    },
+    update: {
+      payloadJson: JSON.stringify(body),
+      fetchedAt,
+      expiresAt: new Date(fetchedAt.getTime() + SERPAPI_WEB_CACHE_TTL_MS),
+    },
+  }).catch(() => undefined);
+
+  return { query, sources: parsed.sources, fetchedAt, fromCache: false };
 }

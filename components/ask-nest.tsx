@@ -2,7 +2,6 @@
 
 import { workspaceFetch } from "@/lib/workspace-client";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
-
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -32,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { Textarea } from "@/components/ui/controls";
+import { followUpToUserPrompt } from "@/lib/ai/follow-up-prompt.mjs";
 
 type AskNestTurn = {
   id: string;
@@ -622,12 +622,12 @@ export function AskNest({
       inputRef.current?.setSelectionRange(turn.question.length, turn.question.length);
     });
   };
-
   const chooseFollowUp = (followUp: string) => {
-    setQuestion(followUp);
+    const prompt = followUpToUserPrompt(followUp);
+    setQuestion(prompt);
     window.requestAnimationFrame(() => {
       inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(followUp.length, followUp.length);
+      inputRef.current?.setSelectionRange(prompt.length, prompt.length);
     });
   };
 

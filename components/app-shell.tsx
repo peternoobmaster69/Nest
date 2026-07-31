@@ -127,6 +127,7 @@ export function AppShell({
     rewards: true,
     investments: true,
   };
+  const showCio = sidebarMoneyPages.cio !== false;
   const showTransactions = sidebarMoneyPages.transactions !== false;
   const showCreditCards = sidebarMoneyPages.creditCards !== false;
   const showCreditTransactions = showCreditCards && sidebarMoneyPages.creditTransactions !== false;
@@ -137,11 +138,11 @@ export function AppShell({
   const moreRouteActive = [
     "/receivables",
     "/rewards",
-    "/budgets",
+    ...(sidebarMoneyPages.budget !== false ? ["/budgets"] : []),
     "/settings",
     "/profile",
     "/admin",
-    "/cio",
+    ...(showCio ? ["/cio"] : []),
   ].some((path) => currentPath === path || currentPath.startsWith(`${path}/`));
   const navigationWorkspaceId = contextData?.workspaceId ?? routeWorkspaceId;
   const workspaceHref = (path: string) =>
@@ -401,10 +402,10 @@ export function AppShell({
               <ModalCloseButton onClick={() => setMobileMoreOpen(false)} label="Close More navigation" />
             </div>
             <nav className="mobile-more-links" aria-label="More navigation">
-              <Link className={`mobile-more-link${currentPath === "/cio" ? " is-active" : ""}`} href={workspaceHref("/cio")} onClick={closeMobileNavigation} aria-current={currentPath === "/cio" ? "page" : undefined}>
+              {showCio ? <Link className={`mobile-more-link${currentPath === "/cio" ? " is-active" : ""}`} href={workspaceHref("/cio")} onClick={closeMobileNavigation} aria-current={currentPath === "/cio" ? "page" : undefined}>
                 <Compass size={20} aria-hidden="true" />
                 <span><strong>Nest CIO</strong><small>Portfolio health and long-term planning</small></span>
-              </Link>
+              </Link> : null}
               {showCreditTransactions ? (
                 <Link className={`mobile-more-link${currentPath === "/credit-cards" ? " is-active" : ""}`} href={workspaceHref("/credit-cards")} onClick={closeMobileNavigation}>
                   <CreditCard size={20} aria-hidden="true" />
@@ -424,10 +425,10 @@ export function AppShell({
                   <span><strong>Rewards</strong><small>Cards, miles, and hotel points</small></span>
                 </Link>
               ) : null}
-              <Link className={`mobile-more-link${currentPath.startsWith("/budgets") ? " is-active" : ""}`} href={workspaceHref("/budgets/plan")} onClick={closeMobileNavigation}>
+              {sidebarMoneyPages.budget !== false ? <Link className={`mobile-more-link${currentPath.startsWith("/budgets") ? " is-active" : ""}`} href={workspaceHref("/budgets/plan")} onClick={closeMobileNavigation}>
                 <ChartPie size={20} aria-hidden="true" />
                 <span><strong>Budget</strong><small>Plan monthly sources and spending</small></span>
-              </Link>
+              </Link> : null}
               <Link className={`mobile-more-link${currentPath === "/settings" ? " is-active" : ""}`} href={workspaceHref("/settings")} onClick={closeMobileNavigation}>
                 <Settings size={20} aria-hidden="true" />
                 <span><strong>Settings</strong><small>Preferences and workspaces</small></span>

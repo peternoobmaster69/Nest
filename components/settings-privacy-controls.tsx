@@ -1,7 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { Download, HardDrive, ShieldAlert, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePrivacyConsent } from "@/components/privacy-consent";
 import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
@@ -23,7 +23,7 @@ async function responseError(response: Response, fallback: string) {
   return payload.message || payload.error || fallback;
 }
 
-export function SettingsPrivacyControls() {
+export function SettingsPrivacyControls({ view = "privacy" }: { view?: "privacy" | "data" }) {
   const { consent, updateConsent } = usePrivacyConsent();
   const [offlineSummary, setOfflineSummary] = useState(EMPTY_OFFLINE_SUMMARY);
   const [message, setMessage] = useState("");
@@ -106,6 +106,8 @@ export function SettingsPrivacyControls() {
 
   return (
     <>
+      {view === "privacy" ? (
+        <>
       <section className="card settings-card-block" aria-labelledby="privacy-telemetry-heading">
         <div className="settings-row">
           <div className="settings-item-copy">
@@ -128,7 +130,7 @@ export function SettingsPrivacyControls() {
       <section className="card settings-card-block" aria-labelledby="privacy-offline-heading">
         <div className="settings-row">
           <div className="settings-item-copy">
-            <div className="settings-section-title" id="privacy-offline-heading"><HardDrive size={17} aria-hidden="true" /> Offline storage</div>
+            <div className="settings-section-title" id="privacy-offline-heading">Offline storage</div>
             <div className="settings-section-copy">
               Nest stores only the static offline shell, icons, and application assets. Authenticated finance API responses and offline mutations are never cached.
             </div>
@@ -143,11 +145,14 @@ export function SettingsPrivacyControls() {
             : "This browser does not expose offline cache storage."}
         </div>
       </section>
+        </>
+      ) : (
+        <>
 
       <section className="card settings-card-block" aria-labelledby="privacy-data-heading">
         <div className="settings-row">
           <div className="settings-item-copy">
-            <div className="settings-section-title" id="privacy-data-heading"><Download size={17} aria-hidden="true" /> Account data</div>
+            <div className="settings-section-title" id="privacy-data-heading">Account data</div>
             <div className="settings-section-copy">Download a machine-readable JSON copy of your profile, workspace memberships, finance records, notes, notifications, and security-device metadata.</div>
           </div>
           <Button className="btn btn-primary btn-xs" onClick={exportData} disabled={exporting}>
@@ -156,7 +161,7 @@ export function SettingsPrivacyControls() {
         </div>
         <div className="settings-row settings-row-spaced privacy-danger-row">
           <div className="settings-item-copy">
-            <div className="settings-section-title"><ShieldAlert size={17} aria-hidden="true" /> Delete Nest account</div>
+            <div className="settings-section-title">Delete Nest account</div>
             <div className="settings-section-copy">Permanently deletes your identity, credentials, integrations, notifications, and memberships. Shared finance history is retained with your identity removed.</div>
           </div>
           <Button variant="destructive" size="sm" onClick={() => { setDeleteConfirmation(""); setDeleteDialogOpen(true); }}>
@@ -188,6 +193,8 @@ export function SettingsPrivacyControls() {
           <small id="delete-account-help" className="form-hint">A recent sign-in is required.</small>
         </label>
       </Dialog>
+        </>
+      )}
     </>
   );
 }

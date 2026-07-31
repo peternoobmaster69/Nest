@@ -1041,7 +1041,7 @@ export function RewardsPage({
       {/* Credit Cards Tab */}
       {activeTab === "credit-cards" && (
         <div>
-          <div className="rewards-cc-grid" style={{ marginBottom: "20px" }}>
+          <div className="rewards-cc-grid">
             {isLoading && <RewardsCardGridSkeleton />}
             {!isLoading && !isError && data?.creditCards.length === 0 && (
               <EmptyState
@@ -1051,7 +1051,7 @@ export function RewardsPage({
               />
             )}
             {!isLoading && data?.creditCards.map((card) => (
-              <div key={card.id} className="card">
+              <div key={card.id} className="card rewards-item-card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
                     <div style={{ fontSize: "13px", fontWeight: 600 }}>
@@ -1068,18 +1068,18 @@ export function RewardsPage({
                     Remove
                   </Button>
                 </div>
-                <div style={{ marginTop: "12px" }}>
-                  <div style={{ fontSize: "24px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+                <div className="rewards-item-balance">
+                  <div className="rewards-item-value">
                     {formatNumber(card.currentPoints)}
                   </div>
-                  <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--brand-500)", marginTop: "2px" }}>
+                  <div className="rewards-item-accent">
                     {(() => {
                       const conversion = conversionByRewardId.get(card.id);
                       if (!conversion) return "Set conversion";
                       return `${formatNumber(Math.floor(card.currentPoints * conversion.conversionRate))} miles`;
                     })()}
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                  <div className="rewards-item-meta">
                     points{" "}
                     {(() => {
                       const conversion = conversionByRewardId.get(card.id);
@@ -1139,7 +1139,7 @@ export function RewardsPage({
       {/* Frequent Flyer Tab */}
       {activeTab === "frequent-flyers" && (
         <div>
-          <div className="grid-2" style={{ marginBottom: "20px" }}>
+          <div className="grid-2 rewards-program-grid">
             {isLoading && <RewardsCardGridSkeleton />}
             {!isLoading && !isError && data?.frequentFlyers.length === 0 && (
               <div style={{ gridColumn: "1 / -1" }}>
@@ -1151,7 +1151,7 @@ export function RewardsPage({
               </div>
             )}
             {!isLoading && data?.frequentFlyers.map((ff) => (
-              <div key={ff.id} className="card">
+              <div key={ff.id} className="card rewards-item-card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
                     <div style={{ fontSize: "13px", fontWeight: 600 }}>{ff.programName}</div>
@@ -1181,11 +1181,11 @@ export function RewardsPage({
                     </Button>
                   </div>
                 </div>
-                <div style={{ marginTop: "12px" }}>
-                  <div style={{ fontSize: "24px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+                <div className="rewards-item-balance">
+                  <div className="rewards-item-value">
                     {formatNumber(ff.currentMiles)}
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                  <div className="rewards-item-meta">
                     miles
                     {ff.targetMiles && ` / ${formatNumber(ff.targetMiles)} goal`}
                     {` • ${ff.mileNeverExpire ? "never expires" : `valid ${ff.validityPeriodYears} years`}`}
@@ -1215,7 +1215,7 @@ export function RewardsPage({
           </div>
 
           {openHistoryFFId && selectedHistoryFrequentFlyer && (
-            <section ref={historySectionRef} className="card rewards-history-section" style={{ marginTop: "20px", display: "grid", gap: "12px" }}>
+            <section ref={historySectionRef} className="card rewards-history-section">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
                 <div>
                   <div style={{ fontSize: "14px", fontWeight: 700 }}>Reward Points Transaction History</div>
@@ -1467,7 +1467,7 @@ export function RewardsPage({
       {/* Hotel Rewards Tab */}
       {activeTab === "hotel-rewards" && (
         <div>
-          <div className="grid-2" style={{ marginBottom: "20px" }}>
+          <div className="grid-2 rewards-program-grid">
             {isLoading && <RewardsCardGridSkeleton variant="hotel" />}
             {!isLoading && !isError && data?.hotelRewards.length === 0 && (
               <div style={{ gridColumn: "1 / -1" }}>
@@ -1481,7 +1481,7 @@ export function RewardsPage({
             {!isLoading && data?.hotelRewards.map((hotel) => {
               const valueCents = hotelPointValueCents(hotel.currentPoints, hotel.centsPerPoint);
               return (
-                <div key={hotel.id} className="card">
+                <div key={hotel.id} className="card rewards-item-card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ fontSize: "13px", fontWeight: 600 }}>{hotel.programName}</div>
@@ -1505,17 +1505,17 @@ export function RewardsPage({
                       </Button>
                     </div>
                   </div>
-                  <div style={{ marginTop: "12px" }}>
-                    <div style={{ fontSize: "24px", fontWeight: 700, fontFamily: "var(--font-display)" }}>
+                  <div className="rewards-item-balance">
+                    <div className="rewards-item-value">
                       {formatNumber(hotel.currentPoints)}
                     </div>
-                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--brand-500)", marginTop: "2px" }}>
+                    <div className="rewards-item-accent">
                       {formatCurrency(valueCents)}
                     </div>
-                    <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                    <div className="rewards-item-meta">
                       points
                       {hotel.targetPoints && hotel.targetPoints > 0 ? ` / ${formatNumber(hotel.targetPoints)} goal` : ""}
-                      {` - ${hotel.centsPerPoint.toFixed(3)}c per point`}
+                      {` - ${Number(hotel.centsPerPoint).toFixed(3)}c per point`}
                     </div>
                   </div>
                   {hotel.targetPoints !== null && hotel.targetPoints > 0 ? (
@@ -1538,10 +1538,10 @@ export function RewardsPage({
       {/* Conversions Tab */}
       {activeTab === "conversions" && (
         <div>
-          <div style={{ marginBottom: "20px" }}>
+          <div className="rewards-conversion-list">
             {isLoading && <RewardsRowsSkeleton />}
             {!isLoading && !isError && data?.conversions.map((conv) => (
-              <div key={conv.id} className="card" style={{ marginBottom: "8px" }}>
+              <div key={conv.id} className="card rewards-conversion-card">
                 {editingConversionId === conv.id ? (
                   <div className="crud-edit" style={{ gridTemplateColumns: "140px 140px 1fr auto auto" }}>
                     <NumericCalculatorInput
@@ -1593,7 +1593,7 @@ export function RewardsPage({
                     </div>
                     <div style={{ textAlign: "right", display: "grid", gap: "6px", justifyItems: "end" }}>
                       <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--brand-500)" }}>
-                        {conv.conversionRate.toFixed(3)}x
+                        {Number(conv.conversionRate).toFixed(3)}x
                       </div>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <Button
