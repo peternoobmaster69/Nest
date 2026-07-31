@@ -45,6 +45,7 @@ model User {
   askNestTurns             AskNestTurn[]
   askNestMemories          AskNestMemory[]
   askNestUsageDaily        AskNestUsageDaily[]
+  cioStrategyReports       CioStrategyReport[]       @relation("CioStrategyReportCreator")
 }
 
 model Account {
@@ -149,6 +150,7 @@ model Workspace {
   cioPolicyGeographyLimits  CioPolicyGeographyLimit[]
   cioPlanningPositions      CioPlanningPosition[]
   cioRecurringFlows         CioRecurringFlow[]
+  cioStrategyReports        CioStrategyReport[]
   invites                    WorkspaceInvite[]
   auditLogs                  WorkspaceAuditLog[]
   budgetItems                BudgetItem[]
@@ -497,6 +499,29 @@ model CioRecurringFlow {
   @@index([sourceFinancialAccountId])
   @@index([sourceInvestmentAccountId])
   @@index([destinationInvestmentAccountId])
+}
+
+model CioStrategyReport {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  createdByUserId     String?
+  title               String    @db.NVarChar(240)
+  asOfDate            DateTime
+  strategyStatus      String    @db.VarChar(24)
+  completenessBps     Int
+  recommendationCount Int
+  schemaVersion       String    @db.VarChar(16)
+  rendererVersion     String    @db.VarChar(16)
+  contentHash         String    @db.VarChar(64)
+  reportJson          String    @db.NVarChar(Max)
+  createdAt           DateTime  @default(now())
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy           User?     @relation("CioStrategyReportCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, createdAt])
+  @@index([createdByUserId])
+  @@index([contentHash])
 }
 
 model BudgetEnvelope {

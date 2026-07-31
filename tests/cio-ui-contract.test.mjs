@@ -64,6 +64,22 @@ test("CIO configuration covers every bounded API family", async () => {
   assert.match(files[5], /return response\.projection\.retirement\.projection/);
 });
 
+test("CIO strategy reports can be generated, previewed, archived, and downloaded", async () => {
+  const [overview, reportCard, queryKeys] = await Promise.all([
+    source("components/cio/cio-overview.tsx"),
+    source("components/cio/cio-strategy-reports-card.tsx"),
+    source("lib/query-keys.ts"),
+  ]);
+
+  assert.match(overview, /<CioStrategyReportsCard canEdit=\{canEdit\}/);
+  assert.match(reportCard, /apiFetch<[^>]+>\("\/api\/cio\/reports"/);
+  assert.match(reportCard, /method: "POST"/);
+  assert.match(reportCard, /workspaceFetch\(`\/api\/cio\/reports\/\$\{encodeURIComponent\(report\.id\)\}\/pdf`/);
+  assert.match(reportCard, /latest\.topRecommendations\.map/);
+  assert.match(reportCard, /Previous reports/);
+  assert.match(queryKeys, /cioReports: \(workspaceId\?/);
+});
+
 test("CIO charts provide readable equivalents and responsive accessible styling", async () => {
   const [allocation, retirement, globals, styles, utilities] = await Promise.all([
     source("components/cio/charts/allocation-chart.tsx"),

@@ -21,6 +21,7 @@ import {
   CioRecurringFlowCreateSchema,
   CioRecurringFlowUpdateSchema,
   CioRetirementProjectionInputSchema,
+  CioStrategyReportCreateInputSchema,
 } from "../lib/domains/cio/contracts.ts";
 import {
   CIO_ASSET_CLASSES,
@@ -46,6 +47,7 @@ const schemaRegistry = {
   CioPlanningPositionCreateSchema,
   CioPlanningPositionUpdateSchema,
   CioRetirementProjectionInputSchema,
+  CioStrategyReportCreateInputSchema,
 };
 const requestSchemaByOperation = {
   "POST /api/transactions/bulk-import": "BulkImportSchema",
@@ -61,6 +63,7 @@ const requestSchemaByOperation = {
   "POST /api/cio/planning-positions": "CioPlanningPositionCreateSchema",
   "PATCH /api/cio/planning-positions/{id}": "CioPlanningPositionUpdateSchema",
   "POST /api/cio/retirement-projection": "CioRetirementProjectionInputSchema",
+  "POST /api/cio/reports": "CioStrategyReportCreateInputSchema",
 };
 const cioOperationContract = {
   "GET /api/cio/overview": { role: "VIEWER", sameOrigin: false, summary: "Get the canonical CIO overview" },
@@ -81,6 +84,10 @@ const cioOperationContract = {
   "PATCH /api/cio/planning-positions/{id}": { role: "EDITOR", sameOrigin: true, summary: "Update a CIO planning position" },
   "DELETE /api/cio/planning-positions/{id}": { role: "EDITOR", sameOrigin: true, summary: "Delete a CIO planning position" },
   "POST /api/cio/retirement-projection": { role: "VIEWER", sameOrigin: false, summary: "Run a read-only CIO retirement projection" },
+  "GET /api/cio/reports": { role: "VIEWER", sameOrigin: false, summary: "List immutable CIO strategy reports" },
+  "POST /api/cio/reports": { role: "EDITOR", sameOrigin: true, successStatus: "201", summary: "Generate an immutable CIO strategy report" },
+  "GET /api/cio/reports/{id}": { role: "VIEWER", sameOrigin: false, summary: "Get an immutable CIO strategy report" },
+  "GET /api/cio/reports/{id}/pdf": { role: "VIEWER", sameOrigin: false, responseContentType: "application/pdf", summary: "Download a CIO strategy report PDF" },
 };
 
 function presentStringProperty(name) {
@@ -203,6 +210,10 @@ function openApiSchema(name, zodSchema) {
     ];
   }
 
+  if (name === "CioStrategyReportCreateInputSchema") {
+    schema.properties.asOfDate.format = "date";
+  }
+
   return schema;
 }
 
@@ -243,6 +254,14 @@ function operationFor({ method, file, source, path }) {
     path.startsWith("/api/passkeys/authenticate/");
   const isCron = path.startsWith("/api/cron/");
   const successStatus = cioContract?.successStatus ?? "200";
+  const successResponse = { description: successStatus === "201" ? "Resource created" : "Successful response" };
+  if (cioContract?.responseContentType) {
+    successResponse.content = {
+      [cioContract.responseContentType]: {
+        schema: { type: "string", format: "binary" },
+      },
+    };
+  }
   const operation = {
     operationId: `${method.toLowerCase()}_${path.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "")}`,
     tags: [path.split("/")[2] || "api"],
@@ -253,7 +272,7 @@ function operationFor({ method, file, source, path }) {
         : [{ sessionCookie: [] }, { secureSessionCookie: [] }],
     parameters: params,
     responses: {
-      [successStatus]: { description: successStatus === "201" ? "Resource created" : "Successful response" },
+      [successStatus]: successResponse,
       "400": { $ref: "#/components/responses/InvalidRequest" },
       "401": { $ref: "#/components/responses/Unauthenticated" },
       "403": { $ref: "#/components/responses/Forbidden" },

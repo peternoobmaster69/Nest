@@ -80,6 +80,7 @@ export const queryKeys = {
   cioPolicy: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "policy"] as const,
   cioFlows: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "recurring-flows"] as const,
   cioPositions: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "planning-positions"] as const,
+  cioReports: (workspaceId?: WorkspaceId) => ["cio", workspaceId, "reports"] as const,
   cioInvestmentProfile: (workspaceId: WorkspaceId, investmentId: string) =>
     ["cio", workspaceId, "investments", investmentId, "profile"] as const,
   cioInvestmentExposures: (workspaceId: WorkspaceId, investmentId: string) =>

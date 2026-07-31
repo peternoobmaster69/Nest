@@ -27,12 +27,16 @@ const CIO_OPERATIONS = [
   ["patch", "/api/cio/planning-positions/{id}", "EDITOR", true, "CioPlanningPositionUpdateSchema", "200"],
   ["delete", "/api/cio/planning-positions/{id}", "EDITOR", true, null, "200"],
   ["post", "/api/cio/retirement-projection", "VIEWER", false, "CioRetirementProjectionInputSchema", "200"],
+  ["get", "/api/cio/reports", "VIEWER", false, null, "200"],
+  ["post", "/api/cio/reports", "EDITOR", true, "CioStrategyReportCreateInputSchema", "201"],
+  ["get", "/api/cio/reports/{id}", "VIEWER", false, null, "200"],
+  ["get", "/api/cio/reports/{id}/pdf", "VIEWER", false, null, "200"],
 ];
 
 test("CIO OpenAPI operations document exact bodies, success statuses, and security", async () => {
   const spec = await openApi();
   const cioPaths = Object.keys(spec.paths).filter((path) => path.startsWith("/api/cio/"));
-  assert.equal(cioPaths.length, 10);
+  assert.equal(cioPaths.length, 13);
 
   assert.equal(spec.components.parameters.WorkspaceIdHeader.name, "X-Workspace-Id");
   assert.equal(spec.components.parameters.WorkspaceIdHeader.required, false);
@@ -63,6 +67,11 @@ test("CIO OpenAPI operations document exact bodies, success statuses, and securi
 
   assert.equal(spec.paths["/api/cio/recurring-flows"].post.responses["200"], undefined);
   assert.equal(spec.paths["/api/cio/planning-positions"].post.responses["200"], undefined);
+  assert.equal(spec.paths["/api/cio/reports"].post.responses["200"], undefined);
+  assert.equal(
+    spec.paths["/api/cio/reports/{id}/pdf"].get.responses["200"].content["application/pdf"].schema.format,
+    "binary",
+  );
 });
 
 test("CIO OpenAPI schemas retain representable runtime refinements", async () => {
@@ -73,6 +82,7 @@ test("CIO OpenAPI schemas retain representable runtime refinements", async () =>
   assert.deepEqual(schemas.CioProfileInputSchema.properties.planningScope.enum, ["INDIVIDUAL", "HOUSEHOLD"]);
   assert.equal(schemas.CioProfileInputSchema.properties.essentialMonthlySpendingCents.anyOf[0].minimum, 0);
   assert.equal(schemas.CioRetirementProjectionInputSchema.properties.asOfDate.format, "date");
+  assert.equal(schemas.CioStrategyReportCreateInputSchema.properties.asOfDate.format, "date");
   assert.deepEqual(
     schemas.CioRetirementProjectionInputSchema.not.required,
     ["targetRetirementDate", "targetRetirementAge"],

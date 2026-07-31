@@ -93,7 +93,7 @@ test("Ask Nest validates structured answers and grounds displayed currency value
   assert.match(orchestration, /type:\s*["']json_schema["']/);
   assert.match(orchestration, /strict:\s*true/);
   assert.match(orchestration, /GeneratedAnswerSchema\.parse/);
-  assert.match(orchestration, /assertGroundedCurrencyValues\(generated, toolOutputs\)/);
+  assert.match(orchestration, /assertGroundedCurrencyValues\(generated, groundingText\)/);
   assert.match(orchestration, /evidenceById\.get\(id\)/);
 });
 
@@ -105,8 +105,9 @@ test("Ask Nest rewrites an unsupported illustrative value once before blocking i
   assert.match(orchestration, /const groundingFailure = findAskNestGroundingFailure/);
   assert.match(orchestration, /requestItems\.push\(\{ role: "developer", content: GROUNDING_REPAIR_INSTRUCTION \}\)/);
   assert.equal([...orchestration.matchAll(/response = await createResponse\("none"\)/g)].length, 1);
-  assert.match(orchestration, /generated = parseGeneratedResponse\(response\);[\s\S]*?assertGroundedCurrencyValues\(generated, toolOutputs\)/);
-  assert.match(orchestration, /findUnsupportedCioValue\(generated, successfulToolOutputs\)/);
+  assert.match(orchestration, /generated = parseGeneratedResponse\(response\);[\s\S]*?assertGroundedCurrencyValues\(generated, groundingText\)/);
+  assert.match(orchestration, /findUnsupportedCioValue\(generated, successfulToolOutputs, cioAllowedContext\)/);
+  assert.match(orchestration, /message\.role === "user"/);
 });
 
 test("Ask Nest distinguishes outstanding statements from distinct credit cards", async () => {

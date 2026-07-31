@@ -1,6 +1,11 @@
 import type { CioSnapshot } from "@/lib/domains/cio/types";
 
 export type { CioSnapshot };
+export type {
+  CioStrategyReportModel,
+  CioStrategyReportSummary,
+} from "@/lib/domains/cio/report-types";
+export type { CioStrategyRecommendation } from "@/lib/domains/cio/strategy-recommendations";
 
 export const CIO_ASSET_CLASSES = [
   "CASH",

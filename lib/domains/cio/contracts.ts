@@ -288,6 +288,10 @@ export const CioRetirementProjectionInputSchema = z.object({
   }
 });
 
+export const CioStrategyReportCreateInputSchema = z.object({
+  asOfDate: DateOnlySchema.optional(),
+}).strict();
+
 export type CioProfileInput = z.infer<typeof CioProfileInputSchema>;
 export type CioPolicyInput = z.infer<typeof CioPolicyInputSchema>;
 export type CioInvestmentProfileInput = z.infer<typeof CioInvestmentProfileInputSchema>;
@@ -297,3 +301,4 @@ export type CioRecurringFlowUpdateInput = z.infer<typeof CioRecurringFlowUpdateS
 export type CioPlanningPositionCreateInput = z.infer<typeof CioPlanningPositionCreateSchema>;
 export type CioPlanningPositionUpdateInput = z.infer<typeof CioPlanningPositionUpdateSchema>;
 export type CioRetirementProjectionInput = z.infer<typeof CioRetirementProjectionInputSchema>;
+export type CioStrategyReportCreateInput = z.infer<typeof CioStrategyReportCreateInputSchema>;

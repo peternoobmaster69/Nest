@@ -670,3 +670,22 @@ test("Prisma CIO storage is additive and the forward migrations carry database c
   assert.match(schema, /model CioRecurringFlow[\s\S]*?destinationInvestmentAccount\s+InvestmentAccount\?\s+@relation\([^\n]*onDelete: Cascade\)/);
   assert.doesNotMatch(currentNetWorth, /Cio[A-Z]/);
 });
+
+test("CIO strategy reports are immutable workspace-scoped snapshots", async () => {
+  const [schema, migration, repository] = await Promise.all([
+    source("prisma/schema.prisma"),
+    source("prisma/migrations/20260730090000_cio_strategy_reports/migration.sql"),
+    source("lib/domains/cio/report-repository.ts"),
+  ]);
+
+  assert.match(schema, /model CioStrategyReport\b/);
+  assert.match(schema, /reportJson\s+String\s+@db\.NVarChar\(Max\)/);
+  assert.match(schema, /@@unique\(\[workspaceId, id\]\)/);
+  assert.match(migration, /CREATE TABLE \[dbo\]\.\[CioStrategyReport\]/);
+  assert.match(migration, /CioStrategyReport_status_check/);
+  assert.match(migration, /CioStrategyReport_completeness_check/);
+  assert.match(migration, /CioStrategyReport_workspace_fkey/);
+  assert.match(repository, /where: \{ id, workspaceId \}/);
+  assert.match(repository, /CIO_STRATEGY_REPORT_CREATED/);
+  assert.doesNotMatch(repository, /cioStrategyReport\.(?:update|upsert|delete)/);
+});

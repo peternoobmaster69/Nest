@@ -8,6 +8,7 @@ import { CioAllocationCard } from "@/components/cio/cio-allocation-card";
 import { CioLiquidityCard } from "@/components/cio/cio-liquidity-card";
 import { CioPolicyExceptions } from "@/components/cio/cio-policy-exceptions";
 import { CioRetirementCard } from "@/components/cio/cio-retirement-card";
+import { CioStrategyReportsCard } from "@/components/cio/cio-strategy-reports-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceId } from "@/components/workspace-provider";
@@ -59,7 +60,8 @@ export function CioOverview({
       </div>
       <CioRetirementCard overview={overview} onConfigure={(section) => onConfigure(section)} />
       <CioPolicyExceptions overview={overview} onConfigure={(section) => onConfigure(section)} />
-      <p className="cio-disclaimer">Nest CIO provides deterministic planning support from your workspace data. It does not place trades or provide personalised financial advice.</p>
+      <CioStrategyReportsCard canEdit={canEdit} />
+      <p className="cio-disclaimer">Nest CIO provides deterministic household strategy recommendations from your recorded data and confirmed policy. It does not place trades or recommend individual securities.</p>
     </div>
   );
 }

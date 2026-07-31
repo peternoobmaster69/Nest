@@ -5,7 +5,7 @@ type GeneratedCioAnswer = {
 
 const DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}\b/g;
 const PERCENTAGE_PATTERN = /(-?[\d,]+(?:\.\d+)?)\s*%/g;
-const CURRENCY_PATTERN = /(?<![A-Z0-9_-])(-?)(SGD|USD|EUR|GBP|AUD|JPY)\s+(-?[\d,]+(?:\.\d{2})?)(?![\d.])/g;
+const CURRENCY_PATTERN = /(?<![A-Z0-9_-])(-?)(SGD|USD|EUR|GBP|AUD|JPY)\s+(-?[\d,]+(?:\.\d{1,2})?)(?![\d.])/g;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -29,21 +29,36 @@ function currencyValues(value: string) {
   });
 }
 
+function renderedAnswerText(generated: GeneratedCioAnswer) {
+  return [
+    generated.answer,
+    ...generated.highlights.flatMap((highlight) => [highlight.label, highlight.value]),
+  ].join("\n");
+}
+
+export function findUnsupportedCurrencyValue(
+  generated: GeneratedCioAnswer,
+  groundingText: readonly string[],
+) {
+  const supported = new Set(
+    currencyValues(groundingText.join("\n")).map((value) => value.normalized),
+  );
+  return currencyValues(renderedAnswerText(generated))
+    .find((value) => !supported.has(value.normalized))?.rendered ?? null;
+}
+
 export function findUnsupportedCioValue(
   generated: GeneratedCioAnswer,
   outputs: readonly Record<string, unknown>[],
+  allowedContext: readonly string[] = [],
 ) {
   const cioOutputs = successfulCioOutputs(outputs);
   if (!cioOutputs.length) return null;
 
-  const rendered = [
-    generated.answer,
-    ...generated.highlights.flatMap((highlight) => [highlight.label, highlight.value]),
-  ].join("\n");
-  const corpus = JSON.stringify(cioOutputs);
-  const supportedCurrencyValues = new Set(currencyValues(corpus).map((value) => value.normalized));
-  const unsupportedCurrency = currencyValues(rendered).find((value) => !supportedCurrencyValues.has(value.normalized));
-  if (unsupportedCurrency) return unsupportedCurrency.rendered;
+  const rendered = renderedAnswerText(generated);
+  const corpus = [JSON.stringify(cioOutputs), ...allowedContext].join("\n");
+  const unsupportedCurrency = findUnsupportedCurrencyValue(generated, [corpus]);
+  if (unsupportedCurrency) return unsupportedCurrency;
 
   const supportedDates = new Set(corpus.match(DATE_PATTERN) ?? []);
   const unsupportedDate = (rendered.match(DATE_PATTERN) ?? []).find((date) => !supportedDates.has(date));

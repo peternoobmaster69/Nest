@@ -2619,6 +2619,269 @@
         }
       }
     },
+    "/api/cio/reports/{id}/pdf": {
+      "get": {
+        "operationId": "get_api_cio_reports_id_pdf",
+        "tags": [
+          "cio"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 191
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceIdHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/cio/reports/[id]/pdf/route.ts",
+        "summary": "Download a CIO strategy report PDF",
+        "description": "Requires VIEWER access to the selected workspace. This operation is read-only and does not require the mutation-only same-origin check.",
+        "x-required-workspace-role": "VIEWER",
+        "x-same-origin-required": false
+      }
+    },
+    "/api/cio/reports/{id}": {
+      "get": {
+        "operationId": "get_api_cio_reports_id",
+        "tags": [
+          "cio"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 191
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceIdHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/cio/reports/[id]/route.ts",
+        "summary": "Get an immutable CIO strategy report",
+        "description": "Requires VIEWER access to the selected workspace. This operation is read-only and does not require the mutation-only same-origin check.",
+        "x-required-workspace-role": "VIEWER",
+        "x-same-origin-required": false
+      }
+    },
+    "/api/cio/reports": {
+      "get": {
+        "operationId": "get_api_cio_reports",
+        "tags": [
+          "cio"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkspaceIdHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/cio/reports/route.ts",
+        "summary": "List immutable CIO strategy reports",
+        "description": "Requires VIEWER access to the selected workspace. This operation is read-only and does not require the mutation-only same-origin check.",
+        "x-required-workspace-role": "VIEWER",
+        "x-same-origin-required": false
+      },
+      "post": {
+        "operationId": "post_api_cio_reports",
+        "tags": [
+          "cio"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkspaceIdHeader"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Resource created"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/cio/reports/route.ts",
+        "summary": "Generate an immutable CIO strategy report",
+        "description": "Requires EDITOR access to the selected workspace and enforces the shared same-origin mutation check.",
+        "x-required-workspace-role": "EDITOR",
+        "x-same-origin-required": true,
+        "x-request-schemas": [
+          "CioStrategyReportCreateInputSchema"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CioStrategyReportCreateInputSchema"
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cio/retirement-projection": {
       "post": {
         "operationId": "post_api_cio_retirement_projection",
@@ -10866,6 +11129,18 @@
         "x-runtime-refinements": [
           "When all are supplied, bearReturnBps must not exceed baseReturnBps and baseReturnBps must not exceed bullReturnBps."
         ]
+      },
+      "CioStrategyReportCreateInputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "asOfDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "format": "date"
+          }
+        },
+        "additionalProperties": false
       }
     },
     "responses": {

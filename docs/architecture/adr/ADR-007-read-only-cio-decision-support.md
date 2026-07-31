@@ -17,7 +17,9 @@ Households need allocation, liquidity, policy, and retirement views across recor
 
 Nest CIO is read-only financial decision support. A deterministic service in `lib/domains/cio/` builds the authoritative workspace snapshot and projections from structured Nest records plus explicit user-confirmed planning metadata. The CIO page and Ask Nest consume that service; neither calculates authoritative balances independently.
 
-CIO configuration writes assumptions and classifications only. It never posts money, changes an account balance, executes an order or transfer, or exposes a mutation tool to the model. Ask Nest may explain deterministic output and policy trade-offs, but cannot issue security-specific buy, sell, or hold instructions.
+CIO writes are limited to assumptions, classifications, confirmed policy, and immutable report snapshots. They never post money, change an account balance, execute an order or transfer, or expose a mutation tool to the model. Ask Nest may explain and sequence recommendations produced by the strategy engine and discuss qualitative trade-offs. It cannot invent numerical targets or issue security-specific buy, sell, or hold instructions; values supplied in the question remain labelled user assumptions rather than Nest calculations.
+
+Household strategy recommendations are read-only outputs. They may prioritize liquidity, contribution levels, allocation bands, future contribution direction, concentration controls, and retirement timing. They favor contribution-led changes and require user confirmation. Tax, legal, lending, insurance-product, mortgage-product, and individual-security recommendations remain outside this boundary.
 
 Planning net worth remains separate from BR-054 dashboard/public net worth. Internal reallocations are displayed but excluded from new household contributions. Unknown and stale data remain visible.
 
@@ -27,7 +29,9 @@ Planning net worth remains separate from BR-054 dashboard/public net worth. Inte
 - Money and rates remain integer cents and basis points.
 - Investment exposures are explicit weighted classifications, never name-derived facts.
 - Assumptions, data dates, completeness warnings, and rounding rules are returned with results.
-- A future scheduled report can reuse the snapshot, but scheduling is not part of this decision.
+- Generated strategy reports store a versioned, immutable structured snapshot; the PDF is rendered from that snapshot rather than recalculating current values.
+- Report generation requires EDITOR, while viewing and downloading require VIEWER.
+- Scheduled report generation remains deferred.
 
 ## Rejected alternatives
 
@@ -35,6 +39,7 @@ Planning net worth remains separate from BR-054 dashboard/public net worth. Inte
 - Model-only calculations: not deterministic or auditable enough for financial totals.
 - Reusing planning positions in public/dashboard net worth: would change established BR-054 semantics.
 - Automatic product-name classification: would present inference as confirmed household data.
+- Free-form model recommendations: would bypass policy, data-quality, and grounding controls.
 
 ## Known limitations
 
@@ -46,4 +51,3 @@ Nest CIO is not a regulated-advice implementation. Regulatory classification, su
 - [`lib/ai/tools/cio-tools.ts`](../../../lib/ai/tools/cio-tools.ts)
 - [ADR-005](ADR-005-read-only-ai.md)
 - [CIO module](../../modules/cio.md)
-

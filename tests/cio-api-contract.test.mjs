@@ -22,6 +22,9 @@ const ROUTES = {
   "app/api/cio/planning-positions/route.ts": { reads: 1, writes: 1, bodies: 1 },
   "app/api/cio/planning-positions/[id]/route.ts": { reads: 0, writes: 2, bodies: 1 },
   "app/api/cio/retirement-projection/route.ts": { reads: 1, writes: 0, bodies: 1 },
+  "app/api/cio/reports/route.ts": { reads: 1, writes: 1, bodies: 1 },
+  "app/api/cio/reports/[id]/route.ts": { reads: 1, writes: 0, bodies: 0 },
+  "app/api/cio/reports/[id]/pdf/route.ts": { reads: 1, writes: 0, bodies: 0 },
 };
 
 function occurrences(text, pattern) {
@@ -69,6 +72,9 @@ test("CIO exposes the bounded route surface", async () => {
     ["app/api/cio/planning-positions/route.ts", ["GET", "POST"]],
     ["app/api/cio/planning-positions/[id]/route.ts", ["PATCH", "DELETE"]],
     ["app/api/cio/retirement-projection/route.ts", ["POST"]],
+    ["app/api/cio/reports/route.ts", ["GET", "POST"]],
+    ["app/api/cio/reports/[id]/route.ts", ["GET"]],
+    ["app/api/cio/reports/[id]/pdf/route.ts", ["GET"]],
   ]);
 
   for (const [file, , route] of routeSources) {
@@ -149,6 +155,7 @@ test("CIO request contracts are strict, bounded, and omit caller workspace ident
     "CioPlanningPositionCreateSchema",
     "CioPlanningPositionUpdateSchema",
     "CioRetirementProjectionInputSchema",
+    "CioStrategyReportCreateInputSchema",
   ]) {
     assert.match(contracts, new RegExp(`export const ${schema}\\b`), `${schema} must be shared`);
   }

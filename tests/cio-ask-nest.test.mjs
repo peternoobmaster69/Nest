@@ -11,6 +11,7 @@ import {
 import {
   ensureCioDataDate,
   findUnsupportedCioValue,
+  findUnsupportedCurrencyValue,
 } from "../lib/ai/cio-grounding.ts";
 
 const root = process.cwd();
@@ -40,6 +41,7 @@ test("CIO tools are domain-decomposed and registered behind the stable Ask Nest 
   assert.match(stableRegistry, /executeCioAskNestTool/);
   assert.match(cioTools, /buildCioSnapshot/);
   assert.match(cioTools, /runWorkspaceRetirementProjection/);
+  assert.match(cioTools, /buildWorkspaceCioStrategyRecommendations/);
   assert.match(cioTools, /workspaceId: context\.workspaceId/);
   assert.doesNotMatch(cioTools, /prisma\./);
   assert.doesNotMatch(cioTools, /\.(?:create|update|upsert|delete|deleteMany|createMany)\s*\(/);
@@ -123,6 +125,38 @@ test("CIO answer grounding rejects unsupported dates and percentages and supplie
   assert.ok(ensureCioDataDate("x ".repeat(1_000), outputs).length <= 1_600);
 });
 
+test("CIO grounding accepts equivalent money formatting and user-labelled scenario inputs", () => {
+  const outputs = [{
+    ok: true,
+    domain: "CIO",
+    asOfDate: "2026-07-31",
+    amount: { formatted: "SGD 10,000.00" },
+    allocation: { formatted: "42.50%" },
+  }];
+  const scenarioContext = ["Could we model SGD 12,000 at 55% by 2035-01-01?"];
+
+  assert.equal(findUnsupportedCurrencyValue({
+    answer: "The recorded amount is SGD 10000.",
+    highlights: [],
+  }, [JSON.stringify(outputs)]), null);
+  assert.equal(findUnsupportedCioValue({
+    answer: "Your proposed scenario is SGD 12,000 at 55% by 2035-01-01.",
+    highlights: [],
+  }, outputs, scenarioContext), null);
+  assert.equal(findUnsupportedCioValue({
+    answer: "The calculated scenario is SGD 13,000 at 56% by 2036-01-01.",
+    highlights: [],
+  }, outputs, scenarioContext), "SGD 13,000");
+});
+
+test("CIO answers may add qualitative judgment without inventing numerical targets", async () => {
+  const orchestration = await source("lib/ai/ask-nest.ts");
+
+  assert.match(orchestration, /qualitative CIO judgment explaining their sequence and trade-offs/);
+  assert.match(orchestration, /proposed assumptions or scenario inputs/);
+  assert.match(orchestration, /never invent a numerical target, contribution amount, or security-specific action/);
+});
+
 test("CIO intent hints route representative planning questions deterministically", () => {
   const cases = [
     ["What is my true asset allocation?", "get_cio_overview"],
@@ -136,6 +170,7 @@ test("CIO intent hints route representative planning questions deterministically
     ["How much do I withdraw annually?", "get_cio_overview"],
     ["How much is liquid for an emergency?", "get_cio_overview"],
     ["Should I divest Income+?", "get_cio_policy_status"],
+    ["What household investment strategy do you recommend?", "get_cio_strategy_recommendations"],
   ];
 
   for (const [question, expectedTool] of cases) {

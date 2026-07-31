@@ -20,6 +20,8 @@ Provide a workspace-scoped planning balance sheet and investment-policy view wit
 - Keep manual planning assets/liabilities separate from existing Nest net-worth semantics.
 - Annualize external contributions, internal reallocations, and withdrawals without double counting.
 - Calculate liquidity runway, completeness, staleness, concentration, policy exceptions, and bear/base/bull retirement projections deterministically.
+- Produce prioritized household strategy recommendations from the snapshot and confirmed policy without placing trades or naming securities to buy or sell.
+- Persist immutable strategy-report snapshots and render authenticated PDF downloads from the stored report model.
 - Supply the CIO page and bounded Ask Nest read tools.
 
 ## Important contracts
@@ -27,6 +29,10 @@ Provide a workspace-scoped planning balance sheet and investment-policy view wit
 `buildCioSnapshot({ workspaceId, asOfDate })` is the authoritative composite read. Pure engines under `lib/domains/cio/` use integer cents, integer basis points, stable tie-breaking, and bounded horizons. Exposure replacement validates each configured dimension totals exactly 10,000 bps.
 
 The legacy `InvestmentAccount.isLiquid` field is unchanged. When no CIO profile exists, the snapshot uses the documented legacy liquidity fallback and reports incomplete classification. Opinionated allocation bands and constraints remain nullable until a user confirms them.
+
+`buildCioStrategyRecommendations(...)` is a pure policy layer over the canonical snapshot. It prioritizes incomplete data and liquidity before allocation or retirement optimization, solves the base-case annual retirement contribution deterministically, and uses future contributions instead of generating automatic sale instructions. Ask Nest may explain and sequence recommendation objects returned by the bounded CIO strategy tool, but cannot invent numerical targets or security-specific actions. Explicit values from the user's question may be repeated only as labelled scenario assumptions.
+
+`CioStrategyReport` stores the validated report JSON, schema and renderer versions, content hash, data date, completeness, and recommendation count. The record is immutable: there is no update or delete route. PDF downloads render from the stored model so later workspace changes do not rewrite historical conclusions.
 
 The profile records whether the plan is `INDIVIDUAL` or `HOUSEHOLD`. An individual plan has no partner birth date; its included assets, positions, flows, and spending inputs are expected to represent that individual. The retirement timeline uses the primary person's age in both modes. Target retirement spending sets the projected retirement fund target. Essential monthly spending is separate and is used only for emergency-runway and liquidity-policy checks. An explicit zero is configured and disables those months-of-spending calculations; `null` means the assumption is missing.
 
@@ -36,11 +42,12 @@ Contributions are applied at completed year ends. Fixed-point `BigInt` arithmeti
 
 ## Security and privacy
 
-Reads require VIEWER and configuration writes require EDITOR in the active workspace. Referenced investments and accounts are revalidated in that workspace. CIO writes are planning metadata, not financial postings. No CIO tool can mutate state or execute a trade.
+Reads and report downloads require VIEWER; configuration and report generation require EDITOR in the active workspace. Referenced investments and accounts are revalidated in that workspace. CIO writes are planning metadata or immutable report records, not financial postings. No CIO tool can mutate state or execute a trade.
 
 ## Known limitations
 
-- Monte Carlo simulation, taxes, live research, automatic classification, trade execution, and scheduled reports are deferred.
+- Monte Carlo simulation, taxes, live research, automatic classification, trade execution, scheduled reports, and individual-security recommendations are deferred.
+- The first report version does not provide product fee/benchmark comparisons, property underwriting, insurance-needs analysis, or jurisdiction-specific tax conclusions.
 - Household mode does not calculate a separate partner retirement timeline or automatically assign workspace assets and flows to a person.
 - Historical investment valuations can be selected by data date, but Nest has no historical bank-control series. A bank control updated after a requested historical date is excluded and reported as critical rather than backfilled.
 - The appropriate stale-valuation interval and completeness weighting are product mechanics, not household policy; the MVP exposes its chosen values. Their long-term product governance is **Unknown from source code.**

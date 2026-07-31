@@ -23,7 +23,7 @@ Ask Nest request/response, deterministic intent/category/entity logic, 18+ read 
 - Expose bounded workspace/user-scoped read tools.
 - Resolve accounts/envelopes/cards deterministically.
 - Classify spending independently of user sub-account names.
-- Validate structured answers and ground displayed money.
+- Validate structured answers and ground displayed money by numerical value, allowing equivalent formatting and clearly labelled user-supplied scenario inputs.
 - Retain bounded history, quality diagnostics, feedback, and daily usage summaries.
 - Store only explicit safe memory; never use memory as finance truth.
 - Generate card suggestions that require fresh normal-route approval.
@@ -47,7 +47,7 @@ Ask Nest request/response, deterministic intent/category/entity logic, 18+ read 
 
 ## Ask Nest workflow
 
-Question/history bounds → workspace rate limit → deterministic hint → Azure Responses call → tool-call loop → structured answer → evidence/visualization merge → currency grounding → persist turn/usage/memory candidates → return.
+Question/history bounds → workspace rate limit → deterministic hint → Azure Responses call → tool-call loop → structured answer → evidence/visualization merge → value grounding → persist turn/usage/memory candidates → return.
 
 History is at most six client-provided messages plus server persistence rules. Tool errors are converted to safe model-visible summaries.
 
@@ -59,7 +59,7 @@ History is at most six client-provided messages plus server persistence rules. T
 - **Returns:** structured answer, evidence, optional visualization, token/tool diagnostics.
 - **Side effects:** external Azure calls; route persists result/usage.
 - **Preconditions:** model config and validated input.
-- **Postconditions:** answer schema valid and displayed currency grounded or controlled failure.
+- **Postconditions:** answer schema valid; displayed financial values originate from tool output or a clearly labelled user scenario, otherwise a controlled repair/failure occurs.
 - **Complexity:** O(number of tool rounds + tool query costs); external latency dominates.
 
 ### `executeAskNestTool`

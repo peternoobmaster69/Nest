@@ -47,6 +47,7 @@
     "@azure/identity": "^4.13.1",
     "@azure/search-documents": "^13.0.0",
     "@prisma/client": "^6.16.3",
+    "@react-pdf/renderer": "^4.5.1",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "@tanstack/react-query": "^5.90.21",

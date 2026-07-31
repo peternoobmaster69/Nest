@@ -255,6 +255,9 @@ All examples use fictitious identifiers and values.
 | `/api/cio/planning-positions` | GET, POST | [CIO](cio.md) |
 | `/api/cio/planning-positions/{id}` | PATCH, DELETE | [CIO](cio.md) |
 | `/api/cio/retirement-projection` | POST | [CIO](cio.md) |
+| `/api/cio/reports` | GET, POST | [CIO](cio.md) |
+| `/api/cio/reports/{id}` | GET | [CIO](cio.md) |
+| `/api/cio/reports/{id}/pdf` | GET | [CIO](cio.md) |
 
 ### AI
 

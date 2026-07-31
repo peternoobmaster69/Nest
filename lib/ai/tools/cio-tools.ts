@@ -4,6 +4,7 @@ import type { AskNestEvidence } from "@/lib/ai/ask-nest-types";
 import { ApiRequestError } from "@/lib/api/contracts";
 import {
   buildCioSnapshot,
+  buildWorkspaceCioStrategyRecommendations,
   CIO_MAX_CENTS,
   getCioPolicy,
   runWorkspaceRetirementProjection,
@@ -68,6 +69,7 @@ const nullableIntegerParameter = { type: ["integer", "null"] } as const;
 export const CIO_ASK_NEST_TOOL_NAMES = [
   "get_cio_overview",
   "get_cio_policy_status",
+  "get_cio_strategy_recommendations",
   "run_cio_retirement_projection",
   "compare_cio_contribution_scenarios",
 ] as const;
@@ -91,6 +93,20 @@ const CIO_ASK_NEST_TOOLS: FunctionTool[] = [
     type: "function",
     name: "get_cio_policy_status",
     description: "Get the authorized workspace's configured investment-policy limits and deterministic exceptions. Use this for policy, emergency-reserve, concentration, stale-data, or rebalancing-review questions. This tool only provides decision support and never places orders.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
+      },
+      required: ["as_of_date"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_cio_strategy_recommendations",
+    description: "Get read-only deterministic personalized household strategy recommendations for liquidity, allocation, contribution direction, concentration, and retirement. Recommendations use confirmed policy and execute no trade, transfer, purchase, or sale. This tool never recommends an individual security.",
     strict: true,
     parameters: {
       type: "object",
@@ -447,6 +463,53 @@ async function getCioPolicyStatus(rawArgs: unknown, context: CioToolContext): Pr
   };
 }
 
+async function getCioStrategyRecommendations(rawArgs: unknown, context: CioToolContext): Promise<CioToolResult> {
+  const args = CioAsOfArgsSchema.parse(rawArgs);
+  const result = await buildWorkspaceCioStrategyRecommendations({
+    workspaceId: context.workspaceId,
+    asOfDate: args.as_of_date ?? undefined,
+  });
+  const recommendations = result.recommendations.map((item) => ({
+    code: item.code,
+    category: item.category,
+    severity: item.severity,
+    priority: item.priority,
+    title: item.title,
+    action: item.action,
+    rationale: item.rationale,
+    scopeKey: item.scopeKey,
+    current: item.current?.unit === "CENTS"
+      ? { label: item.current.label, amount: money(item.current.value, result.baseCurrency) }
+      : item.current?.unit === "BPS"
+        ? { label: item.current.label, percentage: percentage(item.current.value) }
+        : item.current,
+    target: item.target?.unit === "CENTS"
+      ? { label: item.target.label, amount: money(item.target.value, result.baseCurrency) }
+      : item.target?.unit === "BPS"
+        ? { label: item.target.label, percentage: percentage(item.target.value) }
+        : item.target,
+    annualChange: money(item.annualChangeCents, result.baseCurrency),
+    requiresUserConfirmation: item.requiresUserConfirmation,
+  }));
+  return {
+    output: {
+      ok: true,
+      readOnly: true,
+      asOfDate: result.asOfDate,
+      currency: result.baseCurrency,
+      recommendationCount: recommendations.length,
+      recommendations,
+      dataQuality: dataQuality(result.dataQuality),
+      limitations: [
+        "Recommendations are household strategy guidance derived from recorded data and confirmed policy.",
+        "No trade, transfer, purchase, sale, or individual-security recommendation is generated.",
+        "Every action requires household review and confirmation.",
+      ],
+    },
+    evidence: toEvidence(result.evidence, context.callId),
+  };
+}
+
 async function runCioRetirementProjection(rawArgs: unknown, context: CioToolContext): Promise<CioToolResult> {
   const args = CioRetirementArgsSchema.parse(rawArgs);
   const result = await runWorkspaceRetirementProjection({
@@ -564,6 +627,9 @@ export async function executeCioAskNestTool(
         break;
       case "get_cio_policy_status":
         result = await getCioPolicyStatus(rawArgs, context);
+        break;
+      case "get_cio_strategy_recommendations":
+        result = await getCioStrategyRecommendations(rawArgs, context);
         break;
       case "run_cio_retirement_projection":
         result = await runCioRetirementProjection(rawArgs, context);
