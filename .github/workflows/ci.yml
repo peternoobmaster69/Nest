@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -73,7 +73,7 @@ jobs:
       NEXTAUTH_SECRET: "phase9-ci-only-secret-with-at-least-32-characters"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -125,7 +125,7 @@ jobs:
       RUN_PHASE4_DB_TESTS: "true"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Use Node.js
         uses: actions/setup-node@v4
