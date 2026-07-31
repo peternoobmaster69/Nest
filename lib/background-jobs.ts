@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { logEvent } from "@/lib/observability/logger";
 
 type BackgroundJobPhase = "idle" | "queued" | "reading" | "writing" | "complete" | "error" | "cancelled";
 
@@ -108,6 +109,12 @@ export async function enqueueBackgroundJob(params: {
         availableAt: params.availableAt ?? new Date(),
       },
     });
+    logEvent("info", "job.enqueued", {
+      jobId: job.id,
+      jobType: job.type,
+      workspaceId: job.workspaceId,
+      status: job.status,
+    });
     return { job, created: true, duplicateReason: null as null | "active" | "idempotent" };
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
@@ -126,6 +133,12 @@ export async function enqueueBackgroundJob(params: {
     const job = await prisma.backgroundJob.update({
       where: { id: existing.id },
       data: { duplicateCount: { increment: 1 } },
+    });
+    logEvent("info", "job.duplicate_suppressed", {
+      jobId: job.id,
+      jobType: job.type,
+      workspaceId: job.workspaceId,
+      duplicateReason,
     });
     return { job, created: false, duplicateReason };
   }
@@ -228,6 +241,12 @@ export async function claimBackgroundJob(params: { jobId?: string; type?: string
     });
     if (claimed.count === 1) {
       const job = await prisma.backgroundJob.findUniqueOrThrow({ where: { id: candidate.id } });
+      logEvent("info", "job.claimed", {
+        jobId: job.id,
+        jobType: job.type,
+        workspaceId: job.workspaceId,
+        attempts: job.attempts,
+      });
       return { job, leaseToken };
     }
   }
@@ -305,6 +324,7 @@ export async function completeClaimedBackgroundJob(
     },
   });
   if (updated.count !== 1) throw new BackgroundJobError("LEASE_LOST", "This job no longer owns its worker lease.");
+  logEvent("info", "job.completed", { jobId, status: params.skipped ? "SKIPPED" : "SUCCEEDED" });
 }
 
 function retryDelayMs(retryCount: number) {
@@ -361,6 +381,14 @@ export async function failClaimedBackgroundJob(jobId: string, leaseToken: string
           deadLetteredAt: failure.retryable ? now : null,
           finishedAt: now,
         },
+  });
+  logEvent(shouldRetry ? "warn" : "error", "job.failed", {
+    jobId,
+    jobType: job.type,
+    workspaceId: job.workspaceId,
+    retrying: shouldRetry,
+    retryCount,
+    errorCode: failure.code,
   });
   return updated.count === 1 ? { retrying: shouldRetry, failure } : null;
 }

@@ -37,7 +37,8 @@ import { getAskNestSearchGate } from "@/lib/ai/knowledge-search";
 
 const MAX_TOOL_ROUNDS = 5;
 const MAX_TOTAL_TOOL_CALLS = 8;
-const ASK_NEST_PROMPT_VERSION = "2026-07-31.4";
+const ASK_NEST_MAX_OUTPUT_TOKENS = 2_400;
+const ASK_NEST_PROMPT_VERSION = "2026-07-31.5";
 const GROUNDING_REPAIR_INSTRUCTION = `Revise the previous structured answer because it contains a numerical value that Nest cannot verify.
 Remove every currency amount, date, or percentage that was neither returned by a successful tool nor explicitly supplied by the user as a proposed assumption. User-supplied values must be labelled as proposed inputs, not Nest calculations. You may reformat a supported value or round a CIO currency value to its nearest whole currency unit; do not otherwise change its value. For a conceptual explanation, use qualitative wording without invented numerical examples. Do not add new facts, calculations, or evidence IDs. Preserve supported content and return only the required structured response.`;
 
@@ -166,7 +167,7 @@ function askNestResponseFailureMessage(code: AskNestResponseFailureCode, detail?
     case "AI_NO_MATCHING_DATA":
       return "Nest completed the lookup but found no matching records for the requested filters, and the response could not be safely formatted. Broaden the date range or check the merchant, account, or category name.";
     case "AI_OUTPUT_LIMIT":
-      return "Azure AI reached Ask Nest’s 1,200-token response limit before finishing the verified answer. This is too much answer content, not too many matching transactions. Ask for fewer periods, categories, or details at once.";
+      return `Azure AI reached Ask Nest's ${ASK_NEST_MAX_OUTPUT_TOKENS.toLocaleString("en-SG")}-token response limit before finishing the verified answer. The allowance includes structured generation work as well as visible text. Retry with fewer requested columns or accounts.`;
     case "AI_CONTENT_FILTERED":
       return "Azure AI’s content-safety filter stopped the response. This is a provider safety decision, not a transaction-result limit. Remove unrelated or sensitive instructions and keep the question focused on your Nest records.";
     case "AI_MODEL_GENERATION_FAILED":
@@ -348,6 +349,7 @@ Rules:
 - Use neutral language without praise, blame, alarmism, or anthropomorphic phrasing.
 - If filters are ambiguous, state the interpretation used. If the tools return no matching data, say so directly.
 - Keep the answer under 140 words unless the user explicitly asks for detail.
+- When the user explicitly asks to extract or export records in Markdown, return one compact Markdown table in answer, use one row per returned record, include only requested columns, and do not repeat the table in prose or highlights.
 - Use evidence IDs only when they appeared in successful tool output. Do not create IDs.
 - Return only the required structured response.`;
 }
@@ -552,7 +554,7 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
       tools: availableTools,
       tool_choice: toolChoice,
       parallel_tool_calls: false,
-      max_output_tokens: 1_200,
+      max_output_tokens: ASK_NEST_MAX_OUTPUT_TOKENS,
       safety_identifier: safetyIdentifier,
       include: ["reasoning.encrypted_content"],
       store: false,

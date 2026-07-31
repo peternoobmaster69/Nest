@@ -37,8 +37,7 @@ function estimateRowCount(value: unknown): number | undefined {
 function emitQueryTiming(
   event: QueryTelemetryContext & { durationMs: number; outcome: "success" | "error" },
 ) {
-  console.info(JSON.stringify({
-    event: "database.query_group",
+  logEvent(event.outcome === "error" ? "error" : "info", "database.query_group", {
     domain: event.domain,
     operation: event.operation,
     workspaceId: event.workspaceId ?? undefined,
@@ -46,5 +45,6 @@ function emitQueryTiming(
     rowCount: event.rowCount,
     durationMs: Math.round(event.durationMs * 10) / 10,
     outcome: event.outcome,
-  }));
+  });
 }
+import { logEvent } from "@/lib/observability/logger";

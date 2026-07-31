@@ -422,7 +422,7 @@ const ASK_NEST_TOOLS: FunctionTool[] = [
   {
     type: "function",
     name: "get_investment_summary",
-    description: "Get recorded investment account values and portfolio totals as of a date. This reports Nest data only and does not provide investment advice or market data.",
+    description: "Get recorded investment account values, portfolio totals, and user-confirmed CIO asset-class exposures as of a date. Unconfirmed asset classes remain explicitly unknown. This reports Nest data only and does not provide investment advice or market data.",
     strict: true,
     parameters: {
       type: "object",
@@ -1936,6 +1936,19 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
       inceptionDate: true,
       divestedDate: true,
       isLiquid: true,
+      cioProfile: {
+        select: {
+          classificationStatus: true,
+          liquidityClass: true,
+          portfolioRole: true,
+          riskLevel: true,
+        },
+      },
+      cioExposures: {
+        where: { dimension: "ASSET_CLASS" },
+        orderBy: { exposureKey: "asc" },
+        select: { exposureKey: true, weightBps: true },
+      },
       entries: {
         where: { date: { lt: endExclusive } },
         orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
@@ -1947,6 +1960,14 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
   const rows = accounts.map((account) => {
     const latest = account.entries[0] ?? null;
     const gainLossCents = latest ? latest.currentValueCents - latest.investedCents : 0;
+    const hasConfirmedAssetClass = account.cioProfile?.classificationStatus === "USER_CONFIRMED";
+    const assetClasses = hasConfirmedAssetClass
+      ? account.cioExposures.map((exposure) => ({
+          assetClass: exposure.exposureKey,
+          weightBps: exposure.weightBps,
+          weight: `${(exposure.weightBps / 100).toFixed(2).replace(/\.?0+$/, "")}%`,
+        }))
+      : [];
     return {
       id: account.id,
       name: account.displayName || account.productName,
@@ -1955,6 +1976,14 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
       inceptionDate: formatDate(account.inceptionDate),
       divestedDate: account.divestedDate ? formatDate(account.divestedDate) : null,
       isLiquid: account.isLiquid,
+      classificationStatus: account.cioProfile?.classificationStatus ?? "UNCLASSIFIED",
+      assetClasses,
+      assetClassSummary: assetClasses.length
+        ? assetClasses.map((exposure) => `${exposure.assetClass} ${exposure.weight}`).join(", ")
+        : "UNKNOWN (not user-confirmed)",
+      liquidityClass: account.cioProfile?.liquidityClass ?? null,
+      portfolioRole: account.cioProfile?.portfolioRole ?? null,
+      riskLevel: account.cioProfile?.riskLevel ?? null,
       latestEntryDate: latest ? formatDate(latest.date) : null,
       investedCents: latest?.investedCents ?? 0,
       invested: formatAmount(latest?.investedCents ?? 0, context.currency),

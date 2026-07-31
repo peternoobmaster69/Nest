@@ -154,6 +154,8 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
   }
   assert.match(orchestration, /not too many transaction results/);
   assert.match(orchestration, /incomplete_details\?\.reason/);
+  assert.match(orchestration, /ASK_NEST_MAX_OUTPUT_TOKENS\s*=\s*2_400/);
+  assert.match(orchestration, /one compact Markdown table/);
   assert.match(route, /errorResponse\(error\.publicMessage, error\.code, error\.status\)/);
   assert.doesNotMatch(route, /could not produce a grounded answer\. Try rephrasing/);
   assert.match(panel, /payload\.code/);
@@ -182,10 +184,10 @@ test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", as
   assert.match(panel, /Most recent chart values/);
   assert.match(panel, /coordinates\.length \/ 4/);
   assert.match(panel, /ask-nest-trip-flag/);
-  assert.match(panel, /Select one to add it to the message box/);
+  assert.match(panel, /Select one to ask it now/);
   assert.match(panel, /chooseFollowUp\(followUp\)/);
-  assert.match(panel, /followUpToUserPrompt\(followUp\)/);
-  assert.doesNotMatch(panel, /onClick=\{\(\) => void ask\(followUp\)\}/);
+  assert.match(panel, /void ask\(followUpToUserPrompt\(followUp\)\)/);
+  assert.doesNotMatch(panel, /setQuestion\(prompt\)/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /\.ask-nest-panel/);
   assert.match(panel, /ask-nest-input-shell/);
@@ -204,6 +206,15 @@ test("Ask Nest uses semantic categories independently of sub-account names", asy
   assert.match(categories, /SimplyGo/i);
   assert.match(categories, /AMBIGUOUS_GRAB/);
   assert.match(orchestration, /Never add possibleAdditional to it/);
+});
+
+test("investment extraction exposes only user-confirmed asset classes", async () => {
+  const tools = await source("lib/ai/ask-nest-tools.ts");
+  assert.match(tools, /cioProfile:[\s\S]*?classificationStatus:\s*true/);
+  assert.match(tools, /cioExposures:[\s\S]*?dimension:\s*"ASSET_CLASS"/);
+  assert.match(tools, /classificationStatus === "USER_CONFIRMED"/);
+  assert.match(tools, /assetClassSummary/);
+  assert.match(tools, /UNKNOWN \(not user-confirmed\)/);
 });
 
 test("Ask Nest derives charts and trip cards from successful tool output", async () => {

@@ -10,6 +10,7 @@ import {
   requireWorkspaceAccess,
   type WorkspaceRole,
 } from "@/lib/workspace-auth";
+import { logEvent } from "@/lib/observability/logger";
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024;
 
@@ -93,6 +94,7 @@ export async function runSecureApiRoute(
   handler: (context: SecureApiContext) => Promise<Response>,
 ) {
   const requestId = randomUUID();
+  const startedAt = performance.now();
   try {
     if (options.mutation) assertSameOriginRequest(request);
     let auth: SecureApiContext["auth"];
@@ -107,9 +109,31 @@ export async function runSecureApiRoute(
       }
     }
     const response = await handler({ requestId, auth });
+    logEvent("info", "api.request", {
+      requestId,
+      workspaceId: auth?.workspaceId,
+      method: request.method,
+      route: new URL(request.url).pathname,
+      status: response.status,
+      outcome: response.status >= 500 ? "error" : "success",
+      durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+    });
     return secureHeaders(response, requestId, options.noStore ?? true);
   } catch (error) {
     const limited = rateLimitResponse(error);
+    const status = limited?.status
+      ?? (error instanceof ApiAuthError || error instanceof ApiRequestError ? error.status : undefined)
+      ?? (error instanceof ZodError ? 422 : undefined)
+      ?? (isDatabaseWakeTransientError(error) ? 503 : 500);
+    logEvent(status >= 500 ? "error" : status === 429 ? "warn" : "info", "api.request", {
+      requestId,
+      method: request.method,
+      route: new URL(request.url).pathname,
+      status,
+      outcome: "error",
+      errorType: error instanceof Error ? error.name : "UnknownError",
+      durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+    });
     if (limited) return secureHeaders(limited, requestId, true);
     if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
       const code = error instanceof ApiRequestError
@@ -145,7 +169,15 @@ export async function runSecureApiRoute(
         true,
       );
     }
-    console.error(`[api:${requestId}] ${options.errorMessage ?? "Request failed"}`, error);
+    logEvent("error", "api.unhandled_error", {
+      requestId,
+      method: request.method,
+      route: new URL(request.url).pathname,
+      status: 500,
+      outcome: "error",
+      durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+      error,
+    });
     return secureHeaders(
       Response.json(
         { error: options.errorMessage ?? "Request failed", code: "INTERNAL_ERROR", requestId },

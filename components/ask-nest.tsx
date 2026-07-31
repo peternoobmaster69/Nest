@@ -623,12 +623,7 @@ export function AskNest({
     });
   };
   const chooseFollowUp = (followUp: string) => {
-    const prompt = followUpToUserPrompt(followUp);
-    setQuestion(prompt);
-    window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(prompt.length, prompt.length);
-    });
+    void ask(followUpToUserPrompt(followUp));
   };
 
   const submitFeedback = async (
@@ -909,7 +904,7 @@ export function AskNest({
                         <div className="ask-nest-followups" aria-label="Suggested next questions">
                           <div className="ask-nest-followups-heading">
                             <strong>Suggested next questions</strong>
-                            <span>Select one to add it to the message box.</span>
+                            <span>Select one to ask it now.</span>
                           </div>
                           <div className="ask-nest-followups-list">
                             {turn.answer.followUpQuestions.map((followUp) => (
@@ -918,10 +913,10 @@ export function AskNest({
                                 type="button"
                                 onClick={() => chooseFollowUp(followUp)}
                                 disabled={isPending || historyLoading}
-                                aria-label={`Use suggested question: ${followUp}`}
+                                aria-label={`Ask suggested question: ${followUp}`}
                               >
                                 <span>{followUp}</span>
-                                <i aria-hidden="true">+</i>
+                                <i aria-hidden="true">&rarr;</i>
                               </Button>
                             ))}
                           </div>
