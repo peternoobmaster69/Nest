@@ -34,6 +34,7 @@ import {
   userSuppliedCurrencyGrounding,
 } from "@/lib/ai/cio-grounding";
 import { getAskNestSearchGate } from "@/lib/ai/knowledge-search";
+import { normalizeFollowUpActions } from "@/lib/ai/follow-up-prompt.mjs";
 
 const MAX_TOOL_ROUNDS = 5;
 const MAX_TOTAL_TOOL_CALLS = 8;
@@ -87,6 +88,7 @@ const ANSWER_JSON_SCHEMA = {
       type: "array",
       maxItems: 3,
       items: { type: "string", maxLength: 180 },
+      description: "Next actions written as direct commands in the user's voice. Start with an action verb such as Show, Compare, Explain, Review, Check, or Test. Never write a question or use a question mark.",
     },
     memory_candidates: {
       type: "array",
@@ -350,6 +352,7 @@ Rules:
 - If filters are ambiguous, state the interpretation used. If the tools return no matching data, say so directly.
 - Keep the answer under 140 words unless the user explicitly asks for detail.
 - When the user explicitly asks to extract or export records in Markdown, return one compact Markdown table in answer, use one row per returned record, include only requested columns, and do not repeat the table in prose or highlights.
+- Every follow_up_questions item must be a direct action command in the user's voice. Start with a verb such as Show, Compare, Explain, Review, Check, Test, or Calculate. Never phrase it as a question, an assistant offer, or include a question mark.
 - Use evidence IDs only when they appeared in successful tool output. Do not create IDs.
 - Return only the required structured response.`;
 }
@@ -744,7 +747,7 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
       answer: groundedAnswer,
       highlights: generated.highlights,
       evidence: resolvedEvidence.slice(0, 8),
-      followUpQuestions: generated.follow_up_questions,
+      followUpQuestions: normalizeFollowUpActions(generated.follow_up_questions),
       visualization: resolveVisualization(successfulToolOutputs),
       scope: {
         workspaceName: workspace.name,

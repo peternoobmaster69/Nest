@@ -82,19 +82,41 @@ test("CIO configuration covers every bounded API family", async () => {
   assert.match(files[5], /return response\.projection\.retirement\.projection/);
 });
 
-test("CIO strategy reports can be generated, previewed, archived, and downloaded", async () => {
-  const [overview, reportCard, queryKeys] = await Promise.all([
+test("CIO strategy reports can be generated, grouped as snapshots, and downloaded", async () => {
+  const [overview, reportCard, queryKeys, styles] = await Promise.all([
     source("components/cio/cio-overview.tsx"),
     source("components/cio/cio-strategy-reports-card.tsx"),
     source("lib/query-keys.ts"),
+    source("app/styles/cio.css"),
   ]);
 
   assert.match(overview, /<CioStrategyReportsCard canEdit=\{canEdit\}/);
   assert.match(reportCard, /apiFetch<[^>]+>\("\/api\/cio\/reports"/);
   assert.match(reportCard, /method: "POST"/);
   assert.match(reportCard, /workspaceFetch\(`\/api\/cio\/reports\/\$\{encodeURIComponent\(report\.id\)\}\/pdf`/);
-  assert.match(reportCard, /latest\.topRecommendations\.map/);
-  assert.match(reportCard, /Previous reports/);
+  assert.match(reportCard, /function StrategyReportSnapshot/);
+  assert.match(reportCard, /reports\.data\?\.map/);
+  assert.match(reportCard, /report\.topRecommendations\.map/);
+  assert.match(reportCard, /<article className=\{`cio-report-snapshot/);
+  assert.match(reportCard, /Latest snapshot/);
+  assert.match(reportCard, /Earlier snapshot/);
+  assert.match(reportCard, /Generated/);
+  assert.match(reportCard, /Data date/);
+  assert.match(reportCard, /Completeness/);
+  assert.match(reportCard, /isCioStrategyReportOnCooldown/);
+  assert.match(reportCard, /disabled=\{!canGenerate\}/);
+  assert.match(reportCard, /Next report \{reportDay\(cooldownEndsAt\.toISOString\(\)\)\}/);
+  assert.match(reportCard, /CIO_STRATEGY_REPORT_COOLDOWN/);
+  assert.match(reportCard, /recommendationStateLabel/);
+  assert.match(reportCard, /recommendationCategoryLabel/);
+  assert.match(reportCard, /On track/);
+  assert.doesNotMatch(reportCard, /Recommendation \$\{index \+ 1\}/);
+  assert.doesNotMatch(reportCard, /\{item\.priority\}/);
+  assert.doesNotMatch(reportCard, /Previous reports/);
+  assert.doesNotMatch(reportCard, /cio-report-archive/);
+  assert.match(styles, /\.cio-report-snapshot-list/);
+  assert.match(styles, /\.cio-report-snapshot\.is-latest/);
+  assert.match(styles, /\.cio-report-generate-action/);
   assert.match(queryKeys, /cioReports: \(workspaceId\?/);
 });
 

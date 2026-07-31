@@ -165,9 +165,12 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
 });
 
 test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", async () => {
-  const shell = await source("components/app-shell.tsx");
-  const panel = await source("components/ask-nest.tsx");
-  const styles = await readAppStyles(root);
+  const [shell, panel, styles, orchestration] = await Promise.all([
+    source("components/app-shell.tsx"),
+    source("components/ask-nest.tsx"),
+    readAppStyles(root),
+    source("lib/ai/ask-nest.ts"),
+  ]);
 
   assert.match(shell, /<AskNest/);
   assert.match(panel, /role="dialog"/);
@@ -184,10 +187,13 @@ test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", as
   assert.match(panel, /Most recent chart values/);
   assert.match(panel, /coordinates\.length \/ 4/);
   assert.match(panel, /ask-nest-trip-flag/);
-  assert.match(panel, /Select one to ask it now/);
-  assert.match(panel, /chooseFollowUp\(followUp\)/);
+  assert.match(panel, /Suggested next actions/);
+  assert.match(panel, /Select an action to run it now/);
+  assert.match(panel, /chooseFollowUp\(action\)/);
   assert.match(panel, /void ask\(followUpToUserPrompt\(followUp\)\)/);
   assert.doesNotMatch(panel, /setQuestion\(prompt\)/);
+  assert.match(orchestration, /normalizeFollowUpActions\(generated\.follow_up_questions\)/);
+  assert.match(orchestration, /Never phrase it as a question/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /\.ask-nest-panel/);
   assert.match(panel, /ask-nest-input-shell/);

@@ -474,7 +474,6 @@ async function getCioStrategyRecommendations(rawArgs: unknown, context: CioToolC
     code: item.code,
     category: item.category,
     severity: item.severity,
-    priority: item.priority,
     title: item.title,
     action: item.action,
     rationale: item.rationale,

@@ -901,24 +901,27 @@ export function AskNest({
                         {turn.feedbackError ? <small role="alert">{turn.feedbackError}</small> : null}
                       </div>
                       {turn.answer.followUpQuestions.length ? (
-                        <div className="ask-nest-followups" aria-label="Suggested next questions">
+                        <div className="ask-nest-followups" aria-label="Suggested next actions">
                           <div className="ask-nest-followups-heading">
-                            <strong>Suggested next questions</strong>
-                            <span>Select one to ask it now.</span>
+                            <strong>Suggested next actions</strong>
+                            <span>Select an action to run it now.</span>
                           </div>
                           <div className="ask-nest-followups-list">
-                            {turn.answer.followUpQuestions.map((followUp) => (
-                              <Button
-                                key={followUp}
-                                type="button"
-                                onClick={() => chooseFollowUp(followUp)}
-                                disabled={isPending || historyLoading}
-                                aria-label={`Ask suggested question: ${followUp}`}
-                              >
-                                <span>{followUp}</span>
-                                <i aria-hidden="true">&rarr;</i>
-                              </Button>
-                            ))}
+                            {turn.answer.followUpQuestions.map((followUp) => {
+                              const action = followUpToUserPrompt(followUp);
+                              return (
+                                <Button
+                                  key={action}
+                                  type="button"
+                                  onClick={() => chooseFollowUp(action)}
+                                  disabled={isPending || historyLoading}
+                                  aria-label={`Run suggested action: ${action}`}
+                                >
+                                  <span>{action}</span>
+                                  <i aria-hidden="true">&rarr;</i>
+                                </Button>
+                              );
+                            })}
                           </div>
                         </div>
                       ) : null}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { followUpToUserPrompt } from "../lib/ai/follow-up-prompt.mjs";
+import { followUpToUserPrompt, normalizeFollowUpActions } from "../lib/ai/follow-up-prompt.mjs";
 
 test("assistant-style follow-ups become direct user prompts when selected", () => {
   assert.equal(
@@ -17,9 +17,22 @@ test("assistant-style follow-ups become direct user prompts when selected", () =
   );
 });
 
-test("questions already written in the user's voice stay unchanged", () => {
+test("question-shaped follow-ups become commands", () => {
   assert.equal(
     followUpToUserPrompt("How does this compare with last year?"),
-    "How does this compare with last year?",
+    "Compare this with last year.",
   );
+  assert.equal(followUpToUserPrompt("Why did spending increase?"), "Explain the reason for spending increase.");
+  assert.equal(followUpToUserPrompt("What are my largest investments?"), "Show my largest investments.");
+  assert.equal(followUpToUserPrompt("Can you break this down by asset class?"), "Break this down by asset class.");
+});
+
+test("normalized next actions contain no questions and are deduplicated", () => {
+  const actions = normalizeFollowUpActions([
+    "Would you like me to show the bear scenario?",
+    "Show the bear scenario.",
+    "Which accounts need review?",
+  ]);
+  assert.deepEqual(actions, ["Show the bear scenario.", "Show which accounts need review."]);
+  assert.ok(actions.every((action) => !action.includes("?") && /\.$/.test(action)));
 });

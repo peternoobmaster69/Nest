@@ -7,6 +7,19 @@ import {
 } from "../lib/domains/cio/strategy-recommendations.ts";
 import { composeCioStrategyReportModel } from "../lib/domains/cio/strategy-report-service.ts";
 import { renderCioStrategyReportPdf } from "../lib/domains/cio/strategy-report-pdf.tsx";
+import {
+  CIO_STRATEGY_REPORT_COOLDOWN_DAYS,
+  cioStrategyReportNextAvailableAt,
+  isCioStrategyReportOnCooldown,
+} from "../lib/domains/cio/report-cooldown.ts";
+
+test("CIO strategy reports have a rolling 30-day generation cooldown", () => {
+  const generatedAt = new Date("2026-07-01T10:30:00.000Z");
+  assert.equal(CIO_STRATEGY_REPORT_COOLDOWN_DAYS, 30);
+  assert.equal(cioStrategyReportNextAvailableAt(generatedAt).toISOString(), "2026-07-31T10:30:00.000Z");
+  assert.equal(isCioStrategyReportOnCooldown(generatedAt, new Date("2026-07-31T10:29:59.999Z")), true);
+  assert.equal(isCioStrategyReportOnCooldown(generatedAt, new Date("2026-07-31T10:30:00.000Z")), false);
+});
 
 function retirementStatus() {
   const result = projectRetirement({

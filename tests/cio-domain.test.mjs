@@ -729,5 +729,8 @@ test("CIO strategy reports are immutable workspace-scoped snapshots", async () =
   assert.match(migration, /CioStrategyReport_workspace_fkey/);
   assert.match(repository, /where: \{ id, workspaceId \}/);
   assert.match(repository, /CIO_STRATEGY_REPORT_CREATED/);
+  assert.match(repository, /CIO_STRATEGY_REPORT_COOLDOWN/);
+  assert.match(repository, /assertCioStrategyReportCooldown\(tx/);
+  assert.match(repository, /Prisma\.TransactionIsolationLevel\.Serializable/);
   assert.doesNotMatch(repository, /cioStrategyReport\.(?:update|upsert|delete)/);
 });

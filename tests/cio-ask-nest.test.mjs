@@ -69,6 +69,8 @@ test("CIO tool outputs retain dates, assumptions, completeness warnings, unknown
   assert.match(cioTools, /callId\.slice\(0, 120\).*cio-evidence/);
   assert.match(cioTools, /domain: "CIO"/);
   assert.match(cioTools, /evidence: result\.evidence/);
+  assert.doesNotMatch(cioTools, /rank: index \+ 1/);
+  assert.doesNotMatch(cioTools, /priority: item\.priority/);
 });
 
 test("CIO tools reject impossible calendar dates before workspace data access", async () => {
