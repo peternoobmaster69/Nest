@@ -498,11 +498,17 @@ export async function loadCioSnapshotData(
   const dayEndExclusive = new Date(dayStart);
   dayEndExclusive.setUTCDate(dayEndExclusive.getUTCDate() + 1);
 
-  const [workspace, bankControls, investments, householdProfile, investmentPolicy, planningPositions, recurringFlows] = await Promise.all([
+  const [workspace, bankControls, savingsSubAccounts, investments, householdProfile, investmentPolicy, planningPositions, recurringFlows] = await Promise.all([
     db.workspace.findUnique({ where: { id: params.workspaceId }, select: { id: true, baseCurrency: true } }),
     db.financialAccount.findMany({
       where: { workspaceId: params.workspaceId, kind: "BANK", isActive: true },
       select: { id: true, startingCents: true, updatedAt: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: CIO_MAX_LIST_ITEMS + 1,
+    }),
+    db.budgetEnvelope.findMany({
+      where: { workspaceId: params.workspaceId, isActive: true, isSavings: true },
+      select: { id: true, availableCents: true, updatedAt: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: CIO_MAX_LIST_ITEMS + 1,
     }),
@@ -549,6 +555,8 @@ export async function loadCioSnapshotData(
   if (!workspace) throw new ApiRequestError(404, "Workspace not found");
   const bankControlsAfterAsOf = bankControls.filter((account) => account.updatedAt >= dayEndExclusive);
   const bankControlsAsOf = bankControls.filter((account) => account.updatedAt < dayEndExclusive);
+  const savingsSubAccountsAfterAsOf = savingsSubAccounts.filter((account) => account.updatedAt >= dayEndExclusive);
+  const savingsSubAccountsAsOf = savingsSubAccounts.filter((account) => account.updatedAt < dayEndExclusive);
   return {
     workspace,
     householdProfile,
@@ -556,11 +564,15 @@ export async function loadCioSnapshotData(
     bankControls: bankControlsAsOf.slice(0, CIO_MAX_LIST_ITEMS),
     bankControlCount: bankControls.length,
     bankControlsAfterAsOfCount: bankControlsAfterAsOf.length,
+    savingsSubAccounts: savingsSubAccountsAsOf.slice(0, CIO_MAX_LIST_ITEMS),
+    savingsSubAccountCount: savingsSubAccounts.length,
+    savingsSubAccountsAfterAsOfCount: savingsSubAccountsAfterAsOf.length,
     investments: investments.slice(0, CIO_MAX_LIST_ITEMS),
     planningPositions: planningPositions.slice(0, CIO_MAX_LIST_ITEMS),
     recurringFlows: recurringFlows.slice(0, CIO_MAX_LIST_ITEMS),
     truncated: {
       bankControls: bankControls.length > CIO_MAX_LIST_ITEMS,
+      savingsSubAccounts: savingsSubAccounts.length > CIO_MAX_LIST_ITEMS,
       investments: investments.length > CIO_MAX_LIST_ITEMS,
       planningPositions: planningPositions.length > CIO_MAX_LIST_ITEMS,
       recurringFlows: recurringFlows.length > CIO_MAX_LIST_ITEMS,

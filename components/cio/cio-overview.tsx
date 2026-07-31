@@ -34,6 +34,10 @@ export function CioOverview({
     const destination = "/settings?tab=workspaces#bank-accounts";
     router.push(workspaceId ? buildWorkspacePath(workspaceId, destination) : destination);
   };
+  const openSubAccounts = () => {
+    const destination = "/transactions";
+    router.push(workspaceId ? buildWorkspacePath(workspaceId, destination) : destination);
+  };
 
   return (
     <div className="cio-page">
@@ -53,7 +57,7 @@ export function CioOverview({
         }
       />
       {!canEdit ? <p className="cio-readonly-note" role="status">You have view-only access. An owner or editor can update CIO assumptions.</p> : null}
-      <CioHealthSummary overview={overview} onConfigure={(section) => onConfigure(section)} onOpenBankControls={openBankControls} />
+      <CioHealthSummary overview={overview} onConfigure={(section) => onConfigure(section)} onOpenBankControls={openBankControls} onOpenSubAccounts={openSubAccounts} />
       <div className="cio-content-grid">
         <CioAllocationCard overview={overview} policy={policy?.confirmedAt ? policy : null} onConfigure={(section) => onConfigure(section)} />
         <CioLiquidityCard overview={overview} onConfigure={(section) => onConfigure(section)} />

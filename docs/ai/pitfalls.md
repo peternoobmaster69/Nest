@@ -4,7 +4,7 @@ description: Non-obvious Nest behaviors that commonly make otherwise plausible c
 audience: [ai-assistants, engineers, reviewers]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-31
 ---
 
 # AI pitfalls
@@ -28,6 +28,7 @@ Workspace context, money, posting, sessions, jobs, integrations, AI, and UI.
 | Generating a new key on retry | Duplicate financial action | Reuse caller-stable operation identity |
 | Deleting a bad posting | Destroys audit trail | Reverse and repost |
 | Treating envelopes as cash accounts | Double-counts allocation and cash | Preserve virtual allocation semantics |
+| Inferring savings from an envelope name or icon | Presentation metadata is not a financial classification | Use the explicit `BudgetEnvelope.isSavings` flag |
 | Holding DB transaction across provider call | Increases lock time/failure coupling | Fetch externally before/after a bounded transaction |
 | Assuming a cron runs once | Schedulers retry/overlap | Make work leased, bounded, idempotent |
 | Logging provider/import/AI payloads | May expose financial or credential data | Log identifiers/counts/categories only |

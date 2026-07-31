@@ -103,7 +103,7 @@ A useful starting structure is:
 
 Every sub-account belongs to exactly one bank account. Keep the structure meaningful but reasonably small; transaction groups can provide more detail inside a sub-account without creating dozens of envelopes.
 
-For savings to appear in Nest's Dashboard and public net-worth calculation, use the shield icon (`🛡️`). A sub-account with no custom icon is also treated as savings when its name contains `savings` or `emergency`. Savings remains cash in its parent bank account—it is not a separate asset to add a second time in your own consolidated calculation.
+For savings to appear in Nest's Dashboard, public net-worth calculation, and CIO planning net worth, turn on **Mark as savings (included in net worth)** when creating or editing the sub-account. The saved classification, not its name or icon, controls inclusion. Savings remains cash in its parent bank account—it is not a separate asset to add a second time in your own consolidated calculation.
 
 ### 4. Configure the receivable defaults
 
@@ -262,7 +262,7 @@ If the card is due before the reimbursement arrives, the settlement sub-account 
 
 ### Savings
 
-Savings is a purpose assigned to cash, so model it as a sub-account linked to the bank where the cash actually sits. Use the shield icon so it is included in Nest's savings and net-worth views.
+Savings is a purpose assigned to cash, so model it as a sub-account linked to the bank where the cash actually sits. Mark the sub-account as savings so it is included in Nest's savings and net-worth views.
 
 Moving money into Savings is a sub-account transfer. Moving it to a different bank also requires the real bank transfer and an update to both account balances.
 

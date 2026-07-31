@@ -4,7 +4,7 @@ description: Deterministic household allocation, liquidity, policy, data-quality
 audience: [engineers, finance-domain-reviewers, security-reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 ---
 
 # Nest CIO
@@ -15,7 +15,7 @@ Provide a workspace-scoped planning balance sheet and investment-policy view wit
 
 ## Responsibilities
 
-- Build one canonical typed snapshot from bank control balances, latest investment valuations, and CIO-only planning metadata.
+- Build one canonical typed snapshot from savings sub-account balances, bank controls, latest investment valuations, and CIO-only planning metadata.
 - Allocate exact cents through user-confirmed asset-class, geography, and optional security weights.
 - Keep manual planning assets/liabilities separate from existing Nest net-worth semantics.
 - Annualize external contributions, internal reallocations, and withdrawals without double counting.
@@ -27,6 +27,8 @@ Provide a workspace-scoped planning balance sheet and investment-policy view wit
 ## Important contracts
 
 `buildCioSnapshot({ workspaceId, asOfDate })` is the authoritative composite read. Pure engines under `lib/domains/cio/` use integer cents, integer basis points, stable tie-breaking, and bounded horizons. Exposure replacement validates each configured dimension totals exactly 10,000 bps.
+
+Planning financial assets include only active `BudgetEnvelope` records with `isSavings = true`, plus recorded investments. Other sub-accounts are spending allocations and are excluded from planning net worth. Bank controls remain a separate input for liquidity and minimum-immediate-cash checks.
 
 The legacy `InvestmentAccount.isLiquid` field is unchanged. When no CIO profile exists, the snapshot uses the documented legacy liquidity fallback and reports incomplete classification. Opinionated allocation bands and constraints remain nullable until a user confirms them.
 
@@ -49,7 +51,7 @@ Reads and report downloads require VIEWER; configuration and report generation r
 - Monte Carlo simulation, taxes, live research, automatic classification, trade execution, scheduled reports, and individual-security recommendations are deferred.
 - The first report version does not provide product fee/benchmark comparisons, property underwriting, insurance-needs analysis, or jurisdiction-specific tax conclusions.
 - Household mode does not calculate a separate partner retirement timeline or automatically assign workspace assets and flows to a person.
-- Historical investment valuations can be selected by data date, but Nest has no historical bank-control series. A bank control updated after a requested historical date is excluded and reported as critical rather than backfilled.
+- Historical investment valuations can be selected by data date, but Nest has no historical bank-control or sub-account-balance series. A bank control or savings sub-account updated after a requested historical date is excluded and reported as critical rather than backfilled.
 - The appropriate stale-valuation interval and completeness weighting are product mechanics, not household policy; the MVP exposes its chosen values. Their long-term product governance is **Unknown from source code.**
 
 ## Related files

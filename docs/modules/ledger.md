@@ -4,7 +4,7 @@ description: Real-bank controls, envelopes, transactions, transfers, grouping, p
 audience: [engineers, finance-domain-reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-31
 ---
 
 # Accounts and ledger
@@ -21,6 +21,7 @@ Accounts, envelopes/budgets, transactions, transfers, transaction groups, postin
 
 - Store current real-bank control values.
 - Divide cash into envelope purposes.
+- Persist an explicit savings classification for net-worth eligibility.
 - Record credit/debit/transfer ledger movements.
 - Apply envelope deltas atomically.
 - Group user transactions without changing their ownership.

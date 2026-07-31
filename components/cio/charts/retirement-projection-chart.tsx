@@ -1,5 +1,9 @@
-import type { CioRetirementScenario } from "@/lib/domains/cio/types";
-import { formatCioDate, formatCioLabel, formatCioMoney } from "@/components/cio/cio-format";
+"use client";
+
+import { useState } from "react";
+import type { CioRetirementScenario, CioRetirementScenarioName } from "@/lib/domains/cio/types";
+import { formatCioDate, formatCioLabel, formatCioMoney, formatCioPercent } from "@/components/cio/cio-format";
+import { Button } from "@/components/ui/button";
 
 type ValueMode = "nominal" | "real";
 const WIDTH = 720;
@@ -15,8 +19,10 @@ export function RetirementProjectionChart({
   mode: ValueMode;
   currency: string;
 }) {
+  const [tableScenarioName, setTableScenarioName] = useState<CioRetirementScenarioName>("BASE");
   const allPoints = scenarios.flatMap((scenario) => scenario.points);
   if (!allPoints.length) return <p className="cio-chart-empty">No projection points are available.</p>;
+  const tableScenario = scenarios.find((scenario) => scenario.scenario === tableScenarioName) ?? scenarios[0];
 
   const dates = allPoints.map((point) => new Date(`${point.date}T00:00:00.000Z`).getTime());
   const values = allPoints.map((point) => mode === "nominal" ? point.nominalCents : point.realCents);
@@ -63,24 +69,40 @@ export function RetirementProjectionChart({
       <div className="cio-projection-legend" aria-label="Projection outcomes">
         {scenarios.map((scenario) => {
           const value = mode === "nominal" ? scenario.fundAtRetirementNominalCents : scenario.fundAtRetirementRealCents;
-          return <span key={scenario.scenario}><strong>{formatCioLabel(scenario.scenario)}</strong>{formatCioMoney(value, currency)}</span>;
+          return <span key={scenario.scenario}><strong>{formatCioLabel(scenario.scenario)} · {formatCioPercent(scenario.nominalReturnBps)}</strong>{formatCioMoney(value, currency)}</span>;
         })}
       </div>
 
       <details className="cio-chart-table-toggle">
         <summary>View yearly projection table</summary>
+        <div className="cio-segmented-control cio-projection-table-filter" role="group" aria-label="Yearly projection scenario">
+          {scenarios.map((scenario) => (
+            <Button
+              key={scenario.scenario}
+              variant="ghost"
+              size="sm"
+              className={scenario.scenario === tableScenario.scenario ? "is-active" : ""}
+              onClick={() => setTableScenarioName(scenario.scenario)}
+              aria-pressed={scenario.scenario === tableScenario.scenario}
+              aria-label={`${formatCioLabel(scenario.scenario)} scenario, ${formatCioPercent(scenario.nominalReturnBps)} configured return`}
+            >
+              {formatCioLabel(scenario.scenario)} · {formatCioPercent(scenario.nominalReturnBps)}
+            </Button>
+          ))}
+        </div>
         <div className="cio-table-scroll">
           <table className="cio-data-table">
+            <caption>{formatCioLabel(tableScenario.scenario)} yearly projection using the configured {formatCioPercent(tableScenario.nominalReturnBps)} nominal return.</caption>
             <thead><tr><th scope="col">Scenario</th><th scope="col">Date</th><th scope="col">Age</th><th scope="col">Projected value</th></tr></thead>
             <tbody>
-              {scenarios.flatMap((scenario) => scenario.points.map((point) => (
-                <tr key={`${scenario.scenario}-${point.date}`}>
-                  <th scope="row">{formatCioLabel(scenario.scenario)}</th>
+              {tableScenario.points.map((point) => (
+                <tr key={`${tableScenario.scenario}-${point.date}`}>
+                  <th scope="row">{formatCioLabel(tableScenario.scenario)} · {formatCioPercent(tableScenario.nominalReturnBps)}</th>
                   <td>{formatCioDate(point.date)}</td>
                   <td>{point.age ?? "—"}</td>
                   <td>{formatCioMoney(mode === "nominal" ? point.nominalCents : point.realCents, currency)}</td>
                 </tr>
-              )))}
+              ))}
             </tbody>
           </table>
         </div>

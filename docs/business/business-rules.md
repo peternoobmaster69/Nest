@@ -4,7 +4,7 @@ description: Stable financial, workspace, card, receivable, investment, reward, 
 audience: [engineers, product-reviewers, testers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-07-31
 ---
 
 # Business rules
@@ -85,8 +85,8 @@ Rules are derived from `guide.md`, source, migrations, and tests. Regulatory req
 | BR-050 | Investment entries are cumulative dated snapshots of invested and current value. | Model valuation rather than transaction history. | investment models |
 | BR-051 | Latest investment entry sorts by date, then creation time, then ID. | Deterministic same-day valuation. | investment order tests |
 | BR-052 | Investment entries do not move bank/envelope balances automatically. | Contributions/withdrawals require explicit cash-side recording. | `guide.md` |
-| BR-053 | Liquid net-worth value includes savings plus latest values of investments marked liquid. | Distinguish accessible from total value. | net-worth service |
-| BR-054 | Dashboard/public net worth is savings envelopes plus latest investments, not a full balance sheet. | Avoid false claims and double-counting. | `guide.md`, net-worth service |
+| BR-053 | Liquid net-worth value includes active envelopes explicitly marked `isSavings` plus latest values of investments marked liquid. | Distinguish accessible from total value. | net-worth service |
+| BR-054 | Dashboard/public net worth is active `isSavings` envelopes plus latest investments, not a full balance sheet. | Avoid false claims, name/icon inference, and double-counting. | `guide.md`, net-worth service |
 | BR-055 | Mileage earn/redemption updates account and lot balances consistently. | Keep current total and expiry lots aligned. | rewards history route |
 | BR-056 | Conversion rates use decimal precision; points/miles are integer units. | Avoid precision loss. | Prisma schema |
 
@@ -110,7 +110,7 @@ Rules are derived from `guide.md`, source, migrations, and tests. Regulatory req
 | --- | --- | --- | --- |
 | BR-070 | Nest CIO remains read-only decision support and never executes trades, transfers, postings, or autonomous actions. | Keep planning separate from financial authority. | ADR-007, CIO tool/API tests |
 | BR-071 | Existing structured Nest records and deterministic CIO services are authoritative for CIO calculations. | Prevent model-created balances and assumptions. | snapshot service, Ask Nest CIO tools |
-| BR-072 | CIO planning net worth is separate from BR-054 dashboard/public net worth. | Planning-only positions must not change published accounting semantics. | snapshot/public net-worth tests |
+| BR-072 | CIO planning net worth includes only active `isSavings` envelopes as cash and remains separate from BR-054 dashboard/public net worth. | Spending envelopes are not planning wealth; planning-only positions must not change published accounting semantics. | snapshot/public net-worth tests |
 | BR-073 | CIO classifications, policy constraints, and projection assumptions are explicit and reviewable. | Never present inferred product exposure or invented targets as household policy. | CIO profile/policy contracts |
 | BR-074 | Internal reallocations are reported separately and never counted as new household contributions. | Moving existing wealth does not create wealth. | cash-flow engine tests |
 | BR-075 | Every CIO projection shows its data date, contribution timing, and configured assumptions. | Make deterministic output reproducible and interpretable. | retirement projection contract |

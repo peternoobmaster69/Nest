@@ -22,6 +22,7 @@ import {
 import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
+import { SavingsSubAccountCheckbox } from "@/components/savings-sub-account-checkbox";
 import { AppShell } from "./app-shell";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState } from "@/components/ui-skeleton";
@@ -80,6 +81,7 @@ type DashboardSummary = {
     id: string;
     name: string;
     icon?: string | null;
+    isSavings: boolean;
     accountId?: string;
     availableCents: number;
     targetCents: number;
@@ -151,6 +153,7 @@ type Budget = {
   accountId: string;
   name: string;
   icon?: string | null;
+  isSavings: boolean;
   targetCents: number;
   availableCents: number;
   monthlyOutgoingCents?: number;
@@ -358,6 +361,7 @@ export function DashboardShell({
   const [budgetName, setBudgetName] = useState("");
   const [budgetTarget, setBudgetTarget] = useState("");
   const [budgetAccountId, setBudgetAccountId] = useState("");
+  const [budgetIsSavings, setBudgetIsSavings] = useState(false);
   const [createBudgetOpen, setCreateBudgetOpen] = useState(false);
   const [selectedBankFilterId, setSelectedBankFilterId] = useState<string>(ALL_BANKS_FILTER);
   const [selectedCashFlowAccountId, setSelectedCashFlowAccountId] = useState<string>(CASH_FLOW_ALL_ACCOUNTS);
@@ -465,6 +469,7 @@ export function DashboardShell({
         queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary", workspaceId]) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId) }),
       ]),
     [queryClient, workspaceId]
   );
@@ -510,7 +515,7 @@ export function DashboardShell({
   };
 
   const createBudget = useMutation({
-    mutationFn: (payload: { name: string; targetCents: number; accountId: string; icon?: string }) =>
+    mutationFn: (payload: { name: string; targetCents: number; accountId: string; icon?: string; isSavings: boolean }) =>
       fetchJson("/api/budgets", {
         method: "POST",
         headers: {
@@ -523,6 +528,7 @@ export function DashboardShell({
           name: payload.name,
           icon: payload.icon,
           targetCents: payload.targetCents,
+          isSavings: payload.isSavings,
         }),
       }),
     onMutate: async (payload) => {
@@ -533,6 +539,7 @@ export function DashboardShell({
         accountId: payload.accountId,
         name: payload.name,
         icon: payload.icon,
+        isSavings: payload.isSavings,
         targetCents: payload.targetCents,
         availableCents: 0,
       };
@@ -551,6 +558,7 @@ export function DashboardShell({
       setBudgetName("");
       setBudgetTarget("");
       setBudgetAccountId("");
+      setBudgetIsSavings(false);
     },
     onSettled: refreshAll,
   });
@@ -560,7 +568,13 @@ export function DashboardShell({
     if (!workspaceId || !budgetAccountId || !defaultUserId || !budgetName.trim()) return;
     const parsedTarget = budgetTarget.trim() ? Number(budgetTarget) : 0;
     if (Number.isNaN(parsedTarget) || parsedTarget < 0) return;
-    createBudget.mutate({ name: budgetName.trim(), targetCents: Math.round(parsedTarget * 100), accountId: budgetAccountId });
+    createBudget.mutate({
+      name: budgetName.trim(),
+      targetCents: Math.round(parsedTarget * 100),
+      accountId: budgetAccountId,
+      icon: budgetIsSavings ? "🛡️" : undefined,
+      isSavings: budgetIsSavings,
+    });
   };
 
   const summary = data ?? {
@@ -709,7 +723,7 @@ export function DashboardShell({
     ? (investmentGain / investmentTotals.invested) * 100
     : 0;
   const totalSavings = filteredBudgets
-    .filter((budget) => getBudgetIcon(budget.name, budget.icon) === "🛡️")
+    .filter((budget) => budget.isSavings)
     .reduce((sum, budget) => sum + budget.availableCents, 0);
   const totalInvestmentsAndSavings = investmentTotals.current + totalSavings;
   const selectedBank =
@@ -875,7 +889,7 @@ export function DashboardShell({
                   <Link href={workspaceHref("/transactions")} className="btn btn-primary btn-sm dashboard-overview-action">
                     <ReceiptText size={16} aria-hidden="true" /> Transactions <ArrowRight size={15} aria-hidden="true" />
                   </Link>
-                  <Button type="button" className="btn btn-ghost btn-sm dashboard-overview-action" onClick={() => setCreateBudgetOpen(true)}>
+                  <Button type="button" className="btn btn-ghost btn-sm dashboard-overview-action" onClick={() => { setBudgetIsSavings(false); setCreateBudgetOpen(true); }}>
                     <Plus size={16} aria-hidden="true" /> New sub-account
                   </Button>
                 </div>
@@ -1203,6 +1217,7 @@ export function DashboardShell({
                     value={budgetTarget}
                     onValueChange={setBudgetTarget}
                   />
+                  <SavingsSubAccountCheckbox checked={budgetIsSavings} onCheckedChange={setBudgetIsSavings} />
                 </div>
                 <div className="profile-actions">
                   <Button className="btn btn-ghost btn-xs" type="button" onClick={() => setCreateBudgetOpen(false)}>

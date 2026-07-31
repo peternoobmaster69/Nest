@@ -291,6 +291,10 @@ export async function buildCioSnapshot(params: {
     : 90;
 
   const bankControlCents = safeSum(data.bankControls.map((account) => account.startingCents), "bank control total");
+  const savingsSubAccountCents = safeSum(
+    data.savingsSubAccounts.map((account) => account.availableCents),
+    "savings sub-account total",
+  );
   const valuedInvestments = data.investments.filter((investment) => investment.entries[0]);
   const investmentCurrentValueCents = safeSum(
     valuedInvestments.map((investment) => investment.entries[0]!.currentValueCents),
@@ -300,12 +304,12 @@ export async function buildCioSnapshot(params: {
   const planningLiabilities = data.planningPositions.filter((position) => position.side === "LIABILITY");
   const planningPositionAssetsCents = safeSum(planningAssets.map((position) => position.currentValueCents), "planning assets");
   const planningLiabilitiesCents = safeSum(planningLiabilities.map((position) => position.currentValueCents), "planning liabilities");
-  const financialAssetsCents = safeSum([bankControlCents, investmentCurrentValueCents], "financial assets");
+  const financialAssetsCents = safeSum([savingsSubAccountCents, investmentCurrentValueCents], "financial assets");
 
   const allocationSources: AllocationSource[] = [
-    ...data.bankControls.filter((account) => account.startingCents >= 0).map((account) => ({
-      id: `bank:${account.id}`,
-      valueCents: account.startingCents,
+    ...data.savingsSubAccounts.filter((account) => account.availableCents >= 0).map((account) => ({
+      id: `savings-sub-account:${account.id}`,
+      valueCents: account.availableCents,
       assetClassExposures: [{ key: "CASH", weightBps: 10_000 }],
     })),
     ...valuedInvestments.filter((investment) => investment.entries[0]!.currentValueCents >= 0).map((investment) => ({
@@ -447,6 +451,8 @@ export async function buildCioSnapshot(params: {
     staleAfterDays,
     bankControlCount: data.bankControlCount,
     bankControlsAfterAsOfCount: data.bankControlsAfterAsOfCount,
+    savingsSubAccountCount: data.savingsSubAccountCount,
+    savingsSubAccountsAfterAsOfCount: data.savingsSubAccountsAfterAsOfCount,
     duplicatePlanningPositionIds: duplicatePositionIds,
     truncatedSections,
   });
@@ -455,9 +461,14 @@ export async function buildCioSnapshot(params: {
     (latest, account) => latest === null || account.updatedAt > latest ? account.updatedAt : latest,
     null,
   );
+  const latestSavingsSubAccountDate = data.savingsSubAccounts.reduce<Date | null>(
+    (latest, account) => latest === null || account.updatedAt > latest ? account.updatedAt : latest,
+    null,
+  );
   const evidence: CioEvidenceRef[] = [
     { id: "workspace-financial-assets", kind: "WORKSPACE", label: "Workspace financial assets", href: "/cio", asOfDate: isoDate(asOfDate) },
     { id: "bank-controls", kind: "BANK_CONTROL", label: `${data.bankControls.length} eligible bank control balance${data.bankControls.length === 1 ? "" : "s"}`, href: "/", asOfDate: latestBankControlDate ? isoDate(latestBankControlDate) : isoDate(asOfDate) },
+    { id: "savings-sub-accounts", kind: "SAVINGS_SUB_ACCOUNT", label: `${data.savingsSubAccounts.length} planning-eligible savings sub-account${data.savingsSubAccounts.length === 1 ? "" : "s"}`, href: "/transactions", asOfDate: latestSavingsSubAccountDate ? isoDate(latestSavingsSubAccountDate) : isoDate(asOfDate) },
     ...(data.householdProfile ? [{
       id: "cio-household-profile",
       kind: "CIO_PROFILE" as const,
@@ -523,6 +534,7 @@ export async function buildCioSnapshot(params: {
     baseCurrency: data.workspace.baseCurrency || "SGD",
     totals: {
       bankControlCents,
+      savingsSubAccountCents,
       investmentCurrentValueCents,
       financialAssetsCents,
       planningPositionAssetsCents,

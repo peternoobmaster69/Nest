@@ -37,6 +37,21 @@ test("CIO overview remains deterministic and Ask CIO opens Ask Nest with page co
   assert.match(hook, /\/api\/cio\/policy/);
 });
 
+test("CIO decision readiness is compact by default with accessible expandable detail", async () => {
+  const [health, styles] = await Promise.all([
+    source("components/cio/cio-health-summary.tsx"),
+    source("app/styles/cio.css"),
+  ]);
+
+  assert.match(health, /<details className=\{`cio-health-card is-\$\{statusTone\}`\}>/);
+  assert.match(health, /<summary className="cio-health-summary-row">/);
+  assert.doesNotMatch(health, /<details[^>]*\sopen(?:=|>)/);
+  assert.match(health, /cio-health-issue-count/);
+  assert.match(health, /role="progressbar"/);
+  assert.match(styles, /\.cio-health-summary-row:focus-visible/);
+  assert.match(styles, /\.cio-health-card\[open\] \.cio-health-chevron/);
+});
+
 test("CIO configuration covers every bounded API family", async () => {
   const files = await Promise.all([
     source("components/cio/dialogs/cio-profile-dialog.tsx"),
@@ -94,6 +109,12 @@ test("CIO charts provide readable equivalents and responsive accessible styling"
   assert.match(retirement, /<title id=/);
   assert.match(retirement, /<desc id=/);
   assert.match(retirement, /<table className="cio-data-table">/);
+  assert.match(retirement, /useState<CioRetirementScenarioName>\("BASE"\)/);
+  assert.match(retirement, /aria-label="Yearly projection scenario"/);
+  assert.match(retirement, /setTableScenarioName\(scenario\.scenario\)/);
+  assert.match(retirement, /formatCioPercent\(scenario\.nominalReturnBps\)/);
+  assert.match(retirement, /tableScenario\.points\.map/);
+  assert.match(retirement, /<caption>/);
   assert.match(retirement, /x\(point\.date\)/);
   assert.match(retirement, /point\.date/);
   assert.match(globals, /@import "\.\/styles\/cio\.css"/);

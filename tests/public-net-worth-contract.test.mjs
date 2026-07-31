@@ -15,6 +15,7 @@ test("public net-worth API returns total and liquid amounts", async () => {
   assert.match(route, /publicNetWorthEnabled:\s*true/);
   assert.match(route, /publicNetWorthToken:\s*token/);
   assert.match(payload, /isLiquid:\s*true/);
+  assert.match(payload, /where:\s*\{ workspaceId, isActive: true, isSavings: true \}/);
   assert.match(payload, /account\.isLiquid \? \(account\.entries\[0\]\?\.currentValueCents \?\? 0\) : 0/);
   assert.match(payload, /amount:\s*centsToAmount\(savingsCents \+ investmentCents\)/);
   assert.match(payload, /liquidAmt:\s*centsToAmount\(savingsCents \+ liquidInvestmentCents\)/);

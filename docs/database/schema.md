@@ -4,7 +4,7 @@ description: Complete catalog of Prisma models, fields, relationships, persisten
 audience: [engineers, database-operators, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 ---
 
 # Database schema
@@ -159,9 +159,9 @@ Money is not converted across currencies automatically. Rates use `Decimal`; led
 ### `BudgetEnvelope`
 
 - **Business meaning:** Virtual sub-account assigning cash a purpose.
-- **Fields:** workspace, parent account, name/icon, target/available cents, active flag, creator/timestamps, defaults/templates/transactions/groups/receivables relations.
-- **Indexes:** Workspace/account and workspace/id.
-- **Rule:** `availableCents` changes through ledger deltas and may be negative.
+- **Fields:** workspace, parent account, name/icon, target/available cents, explicit `isSavings` classification, active flag, creator/timestamps, defaults/templates/transactions/groups/receivables relations.
+- **Indexes:** Workspace/account, workspace/id, and workspace/savings/active.
+- **Rule:** `availableCents` changes through ledger deltas and may be negative. Net-worth calculations treat an envelope as savings only when `isSavings = true`; names and icons are presentation metadata.
 
 ### `Transaction`
 

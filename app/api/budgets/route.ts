@@ -9,6 +9,7 @@ const CreateBudgetSchema = z.object({
   name: z.string().min(1).max(80),
   icon: z.string().max(8).optional(),
   targetCents: z.number().int().min(0).optional().default(0),
+  isSavings: z.boolean().optional().default(false),
 });
 
 export async function GET(request: Request) {
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
         accountId: true,
         name: true,
         icon: true,
+        isSavings: true,
         isActive: true,
         availableCents: true,
         targetCents: true,
@@ -138,6 +140,7 @@ export async function POST(request: Request) {
         name: parsed.data.name,
         icon: parsed.data.icon,
         targetCents: parsed.data.targetCents,
+        isSavings: parsed.data.isSavings,
       },
     });
 

@@ -287,6 +287,7 @@ export async function GET() {
           id: b.id,
           name: b.name,
           icon: b.icon,
+          isSavings: b.isSavings,
           accountId: b.accountId,
           availableCents: b.availableCents,
           targetCents: b.targetCents,

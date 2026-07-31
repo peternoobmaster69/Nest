@@ -261,6 +261,7 @@ export function composeCioStrategyReportModel(params: {
     methodology: [
       "The report is generated from the canonical Nest CIO snapshot for the stated data date.",
       "All authoritative money calculations use integer cents and policy rates use integer basis points.",
+      "Financial assets and planning net worth include cash only from active sub-accounts explicitly marked as savings; other sub-account balances are excluded.",
       "Allocation recommendations compare recorded exposures with user-confirmed policy bands and favor contribution-led rebalancing.",
       "The retirement contribution requirement is solved deterministically against the configured base-return scenario.",
       "Internal reallocations are excluded from new household contributions.",

@@ -4,7 +4,7 @@ description: Decision to make Nest CIO deterministic household planning support 
 audience: [engineers, product-reviewers, security-reviewers, ai-assistants]
 status: accepted
 source_of_truth: true
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 ---
 
 # ADR-007: Read-only CIO decision support
@@ -21,7 +21,7 @@ CIO writes are limited to assumptions, classifications, confirmed policy, and im
 
 Household strategy recommendations are read-only outputs. They may prioritize liquidity, contribution levels, allocation bands, future contribution direction, concentration controls, and retirement timing. They favor contribution-led changes and require user confirmation. Tax, legal, lending, insurance-product, mortgage-product, and individual-security recommendations remain outside this boundary.
 
-Planning net worth remains separate from BR-054 dashboard/public net worth. Internal reallocations are displayed but excluded from new household contributions. Unknown and stale data remain visible.
+Planning net worth remains separate from BR-054 dashboard/public net worth. Its cash component is the sum of active sub-accounts explicitly marked `isSavings`; spending sub-accounts are excluded, while bank controls remain available to liquidity checks. Internal reallocations are displayed but excluded from new household contributions. Unknown and stale data remain visible.
 
 ## Consequences
 

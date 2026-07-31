@@ -26,6 +26,8 @@ export function assessCioDataQuality(params: {
   staleAfterDays: number;
   bankControlCount?: number;
   bankControlsAfterAsOfCount?: number;
+  savingsSubAccountCount?: number;
+  savingsSubAccountsAfterAsOfCount?: number;
   duplicatePlanningPositionIds?: readonly string[];
   truncatedSections?: readonly string[];
 }): CioDataQualitySummary {
@@ -45,6 +47,21 @@ export function assessCioDataQuality(params: {
       message: `${bankControlsAfterAsOfCount} current bank control balance${bankControlsAfterAsOfCount === 1 ? " was" : "s were"} updated after the requested data date and is excluded because Nest has no historical bank-balance series.`,
       setupHref: "/",
       actual: { unit: "COUNT", value: bankControlsAfterAsOfCount },
+      threshold: { unit: "COUNT", value: 0 },
+    });
+  }
+
+  const savingsSubAccountCount = params.savingsSubAccountCount ?? 0;
+  const savingsSubAccountsAfterAsOfCount = params.savingsSubAccountsAfterAsOfCount ?? 0;
+  possible += savingsSubAccountCount;
+  earned += Math.max(0, savingsSubAccountCount - savingsSubAccountsAfterAsOfCount);
+  if (savingsSubAccountsAfterAsOfCount > 0) {
+    warnings.push({
+      code: "SAVINGS_BALANCE_AFTER_DATA_DATE",
+      severity: "CRITICAL",
+      message: `${savingsSubAccountsAfterAsOfCount} current savings sub-account balance${savingsSubAccountsAfterAsOfCount === 1 ? " was" : "s were"} updated after the requested data date and is excluded because Nest has no historical sub-account balance series.`,
+      setupHref: "/transactions",
+      actual: { unit: "COUNT", value: savingsSubAccountsAfterAsOfCount },
       threshold: { unit: "COUNT", value: 0 },
     });
   }

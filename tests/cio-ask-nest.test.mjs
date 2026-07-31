@@ -139,6 +139,14 @@ test("CIO grounding accepts equivalent money formatting and user-labelled scenar
     answer: "The recorded amount is SGD 10000.",
     highlights: [],
   }, [JSON.stringify(outputs)]), null);
+  assert.equal(findUnsupportedCurrencyValue({
+    answer: "The projected amount is approximately SGD 2,742.",
+    highlights: [],
+  }, [JSON.stringify({ amount: { formatted: "SGD 2,741.51" } })]), null);
+  assert.equal(findUnsupportedCurrencyValue({
+    answer: "The projected amount is SGD 2,743.",
+    highlights: [],
+  }, [JSON.stringify({ amount: { formatted: "SGD 2,741.51" } })]), "SGD 2,743");
   assert.equal(findUnsupportedCioValue({
     answer: "Your proposed scenario is SGD 12,000 at 55% by 2035-01-01.",
     highlights: [],
@@ -162,6 +170,7 @@ test("CIO intent hints route representative planning questions deterministically
     ["What is my true asset allocation?", "get_cio_overview"],
     ["How much is liquid for an emergency?", "get_cio_overview"],
     ["Can I retire at 60?", "run_cio_retirement_projection"],
+    ["How much do I and my wife need in today's money when I retire in 2052?", "run_cio_retirement_projection"],
     ["What if I add SGD 10,000 each year?", "compare_cio_contribution_scenarios"],
     ["Am I outside my investment policy?", "get_cio_policy_status"],
     ["Which CIO data is stale or unclassified?", "get_cio_overview"],

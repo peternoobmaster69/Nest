@@ -21,6 +21,7 @@ const source = (file) => readFile(path.join(root, file), "utf8");
 
 function snapshotDatabase({
   bankControls = [],
+  savingsSubAccounts = [],
   investments = [],
   householdProfile = null,
   investmentPolicy = null,
@@ -30,6 +31,12 @@ function snapshotDatabase({
   return {
     workspace: { findUnique: async () => ({ id: "workspace-1", baseCurrency: "SGD" }) },
     financialAccount: { findMany: async () => bankControls },
+    budgetEnvelope: {
+      findMany: async (args) => {
+        assert.equal(args.where.isSavings, true);
+        return savingsSubAccounts;
+      },
+    },
     investmentAccount: { findMany: async () => investments },
     cioHouseholdProfile: { findUnique: async () => householdProfile },
     cioInvestmentPolicy: { findUnique: async () => investmentPolicy },
@@ -320,11 +327,17 @@ test("policy engine reports configured account, security, geography, and satelli
   ]);
 });
 
-test("CIO financial assets use bank controls plus latest investment values, never planning positions", async () => {
+test("CIO planning net worth uses only savings sub-accounts, investments, and planning positions", async () => {
   const asOf = new Date("2026-07-30T00:00:00.000Z");
   const db = {
     workspace: { findUnique: async () => ({ id: "workspace-1", baseCurrency: "SGD" }) },
     financialAccount: { findMany: async () => [{ id: "bank-1", startingCents: 1_000, updatedAt: asOf }] },
+    budgetEnvelope: {
+      findMany: async (args) => {
+        assert.deepEqual(args.where, { workspaceId: "workspace-1", isActive: true, isSavings: true });
+        return [{ id: "savings-1", availableCents: 600, updatedAt: asOf }];
+      },
+    },
     investmentAccount: { findMany: async () => [{
       id: "investment-1",
       displayName: "Broker",
@@ -372,10 +385,12 @@ test("CIO financial assets use bank controls plus latest investment values, neve
 
   const snapshot = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: asOf, db });
   assert.equal(snapshot.totals.bankControlCents, 1_000);
+  assert.equal(snapshot.totals.savingsSubAccountCents, 600);
   assert.equal(snapshot.totals.investmentCurrentValueCents, 2_000);
-  assert.equal(snapshot.totals.financialAssetsCents, 3_000);
+  assert.equal(snapshot.totals.financialAssetsCents, 2_600);
   assert.equal(snapshot.totals.planningPositionAssetsCents, 50_000);
-  assert.equal(snapshot.totals.planningNetWorthCents, 52_600);
+  assert.equal(snapshot.totals.planningNetWorthCents, 52_200);
+  assert.equal(snapshot.totals.investableAssetsCents, 2_600);
 });
 
 test("only a confirmed policy changes the valuation freshness threshold", async () => {
@@ -396,6 +411,7 @@ test("only a confirmed policy changes the valuation freshness threshold", async 
   const database = (confirmed) => ({
     workspace: { findUnique: async () => ({ id: "workspace-1", baseCurrency: "SGD" }) },
     financialAccount: { findMany: async () => [] },
+    budgetEnvelope: { findMany: async () => [] },
     investmentAccount: { findMany: async () => [{
       id: "investment-1",
       displayName: "Broker",
@@ -443,6 +459,27 @@ test("historical snapshots exclude bank controls updated after the data date", a
 
   assert.equal(snapshot.totals.bankControlCents, 0);
   const warning = snapshot.dataQuality.warnings.find((item) => item.code === "BANK_BALANCE_AFTER_DATA_DATE");
+  assert.equal(warning?.severity, "CRITICAL");
+  assert.deepEqual(warning?.actual, { unit: "COUNT", value: 1 });
+});
+
+test("historical snapshots exclude savings sub-accounts updated after the data date", async () => {
+  const asOf = new Date("2026-07-30T00:00:00.000Z");
+  const snapshot = await buildCioSnapshot({
+    workspaceId: "workspace-1",
+    asOfDate: asOf,
+    db: snapshotDatabase({
+      savingsSubAccounts: [{
+        id: "savings-after-as-of",
+        availableCents: 50_000,
+        updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      }],
+    }),
+  });
+
+  assert.equal(snapshot.totals.savingsSubAccountCents, 0);
+  assert.equal(snapshot.totals.planningNetWorthCents, 0);
+  const warning = snapshot.dataQuality.warnings.find((item) => item.code === "SAVINGS_BALANCE_AFTER_DATA_DATE");
   assert.equal(warning?.severity, "CRITICAL");
   assert.deepEqual(warning?.actual, { unit: "COUNT", value: 1 });
 });
@@ -627,11 +664,12 @@ test("zero essential spending remains configured without fabricating emergency r
 });
 
 test("Prisma CIO storage is additive and the forward migrations carry database checks", async () => {
-  const [schema, migration, flowHardeningMigration, profileScopeMigration, currentNetWorth] = await Promise.all([
+  const [schema, migration, flowHardeningMigration, profileScopeMigration, savingsMigration, currentNetWorth] = await Promise.all([
     source("prisma/schema.prisma"),
     source("prisma/migrations/20260730000000_nest_cio/migration.sql"),
     source("prisma/migrations/20260730070000_cio_flow_reference_invariants/migration.sql"),
     source("prisma/migrations/20260730080000_cio_profile_planning_scope/migration.sql"),
+    source("prisma/migrations/20260731000000_budget_envelope_is_savings/migration.sql"),
     source("lib/net-worth.ts"),
   ]);
 
@@ -658,6 +696,10 @@ test("Prisma CIO storage is additive and the forward migrations carry database c
   assert.match(profileScopeMigration, /WHEN \[partnerBirthDate\] IS NULL THEN ''INDIVIDUAL''/);
   assert.match(profileScopeMigration, /planningScope\] IN \(''INDIVIDUAL'', ''HOUSEHOLD''\)/);
   assert.match(profileScopeMigration, /planningScope\] = ''HOUSEHOLD'' OR \[partnerBirthDate\] IS NULL/);
+  assert.match(schema, /isSavings\s+Boolean\s+@default\(false\)/);
+  assert.match(savingsMigration, /ADD \[isSavings\] BIT NOT NULL/);
+  assert.match(savingsMigration, /SET \[isSavings\] = 1/);
+  assert.match(savingsMigration, /BudgetEnvelope_workspaceId_isSavings_isActive_idx/);
   assert.match(migration, /CioPlanningPosition_liability_flags_check[^\n]*CHECK/);
   assert.match(migration, /CioInvestmentProfile_workspace_account_fkey[\s\S]*?FOREIGN KEY \(\[workspaceId\], \[investmentAccountId\]\)/);
   assert.match(migration, /CioInvestmentExposure_workspace_account_fkey[\s\S]*?FOREIGN KEY \(\[workspaceId\], \[investmentAccountId\]\)/);

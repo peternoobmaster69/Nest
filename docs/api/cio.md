@@ -4,7 +4,7 @@ description: Workspace-scoped read and planning-metadata endpoints for Nest CIO.
 audience: [engineers, API-consumers, security-reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 ---
 
 # Nest CIO API
@@ -37,7 +37,7 @@ Report creation accepts an optional ISO `asOfDate`. It freezes the canonical sna
 
 ## Safety behavior
 
-Missing valuations remain missing, unconfigured exposure is allocated to `UNKNOWN`, and invalid exposure totals are rejected. Internal reallocations never enter the external-contribution total. Manual planning positions never alter dashboard/public net worth or underlying balances. For historical data dates, current bank controls updated after that date are excluded with a critical warning because Nest has no historical bank-balance series.
+Missing valuations remain missing, unconfigured exposure is allocated to `UNKNOWN`, and invalid exposure totals are rejected. Internal reallocations never enter the external-contribution total. Manual planning positions never alter dashboard/public net worth or underlying balances. Planning financial assets include only active sub-accounts with `isSavings = true`; ordinary spending sub-accounts are excluded. For historical data dates, current bank controls or savings sub-accounts updated after that date are excluded with a critical warning because Nest has no historical balance series for either source.
 
 Strategy recommendations cover household liquidity, confirmed allocation bands, future contribution direction, concentration controls, and retirement contribution sufficiency. They require user confirmation, do not execute anything, and do not recommend individual securities.
 

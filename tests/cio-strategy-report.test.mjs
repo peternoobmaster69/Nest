@@ -69,6 +69,7 @@ function snapshot() {
     baseCurrency: "SGD",
     totals: {
       bankControlCents: 1_000_000,
+      savingsSubAccountCents: 1_000_000,
       investmentCurrentValueCents: 37_151_300,
       financialAssetsCents: 38_151_300,
       planningPositionAssetsCents: 61_200_000,

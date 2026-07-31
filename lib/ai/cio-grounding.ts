@@ -5,7 +5,7 @@ type GeneratedCioAnswer = {
 
 const DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}\b/g;
 const PERCENTAGE_PATTERN = /(-?[\d,]+(?:\.\d+)?)\s*%/g;
-const CURRENCY_PATTERN = /(?<![A-Z0-9_-])(-?)(SGD|USD|EUR|GBP|AUD|JPY)\s+(-?[\d,]+(?:\.\d{1,2})?)(?![\d.])/g;
+const CURRENCY_PATTERN = /(?<![A-Z0-9_-])(-?)(SGD|USD|EUR|GBP|AUD|JPY)\s+(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)(?![\d,]|\.\d)/g;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -23,10 +23,29 @@ function normalizedPercentages(value: string) {
 
 function currencyValues(value: string) {
   return [...value.matchAll(CURRENCY_PATTERN)].map((match) => {
-    const numeric = Number(match[3].replaceAll(",", ""));
+    const rawNumeric = match[3].replaceAll(",", "");
+    const numeric = Number(rawNumeric);
     const signed = match[1] === "-" || numeric < 0 ? -Math.abs(numeric) : numeric;
-    return { rendered: match[0], normalized: `${match[2]}:${signed}` };
+    return {
+      rendered: match[0],
+      currency: match[2],
+      amount: signed,
+      fractionDigits: rawNumeric.split(".")[1]?.length ?? 0,
+      normalized: `${match[2]}:${signed}`,
+    };
   });
+}
+
+function isSupportedCurrencyValue(
+  candidate: ReturnType<typeof currencyValues>[number],
+  supported: ReturnType<typeof currencyValues>,
+) {
+  if (supported.some((value) => value.normalized === candidate.normalized)) return true;
+  if (candidate.fractionDigits !== 0) return false;
+  return supported.some((value) => (
+    value.currency === candidate.currency
+    && Math.sign(value.amount) * Math.round(Math.abs(value.amount)) === candidate.amount
+  ));
 }
 
 function renderedAnswerText(generated: GeneratedCioAnswer) {
@@ -40,11 +59,9 @@ export function findUnsupportedCurrencyValue(
   generated: GeneratedCioAnswer,
   groundingText: readonly string[],
 ) {
-  const supported = new Set(
-    currencyValues(groundingText.join("\n")).map((value) => value.normalized),
-  );
+  const supported = currencyValues(groundingText.join("\n"));
   return currencyValues(renderedAnswerText(generated))
-    .find((value) => !supported.has(value.normalized))?.rendered ?? null;
+    .find((value) => !isSupportedCurrencyValue(value, supported))?.rendered ?? null;
 }
 
 export function findUnsupportedCioValue(

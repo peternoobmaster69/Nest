@@ -1,8 +1,6 @@
 "use client";
-
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
-
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
@@ -27,6 +25,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { TransactionMonthList } from "@/components/transactions/transaction-month-list";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
 import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
+import { SavingsSubAccountCheckbox } from "@/components/savings-sub-account-checkbox";
 
 const ALL_BANKS_FILTER = "ALL";
 const GROUP_ICON_OPTIONS = [
@@ -48,11 +47,11 @@ type Budget = {
   accountId: string;
   name: string;
   icon?: string | null;
+  isSavings: boolean;
   availableCents: number;
   targetCents: number;
   receivableReservedCents?: number;
 };
-
 type Transaction = {
   id: string;
   accountId: string;
@@ -67,7 +66,6 @@ type Transaction = {
   kind: string;
   date: string;
 };
-
 type TransactionGroup = {
   id: string;
   budgetId: string;
@@ -80,16 +78,13 @@ type TransactionGroup = {
   firstTransactionDate?: string | null;
   lastTransactionDate?: string | null;
 };
-
 type GroupTransactionOption = Pick<Transaction, "id" | "subject" | "date" | "amountCents" | "direction" | "groupId" | "group">;
-
 type TransactionGroupDetail = {
   group: Pick<TransactionGroup, "id" | "budgetId" | "name" | "icon">;
   memberIds: string[];
   transactions: GroupTransactionOption[];
   candidateLimit: number;
 };
-
 type TransactionsPageResponse = {
   transactions: Transaction[];
   total: number;
@@ -102,7 +97,6 @@ type TransactionsPageResponse = {
     expenseCents: number;
   };
 };
-
 type TransactionMonthSummary = {
   monthKey: string;
   monthLabel: string;
@@ -336,6 +330,7 @@ export function TransactionsPage() {
   const [createBudgetName, setCreateBudgetName] = useState("");
   const [createBudgetTarget, setCreateBudgetTarget] = useState("");
   const [createBudgetAccountId, setCreateBudgetAccountId] = useState("");
+  const [createBudgetIsSavings, setCreateBudgetIsSavings] = useState(false);
 
   // Icon options for budgets
   const budgetIconOptions = [
@@ -884,6 +879,7 @@ export function TransactionsPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
     },
   });
 
@@ -1005,7 +1001,7 @@ export function TransactionsPage() {
 
   // Budget management mutations
   const createBudget = useMutation({
-    mutationFn: (payload: { name: string; targetCents: number; accountId: string; icon?: string }) =>
+    mutationFn: (payload: { name: string; targetCents: number; accountId: string; icon?: string; isSavings: boolean }) =>
       fetchJson("/api/budgets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1015,6 +1011,7 @@ export function TransactionsPage() {
           targetCents: payload.targetCents,
           accountId: payload.accountId,
           icon: payload.icon || undefined,
+          isSavings: payload.isSavings,
         }),
       }),
     onSuccess: () => {
@@ -1022,14 +1019,16 @@ export function TransactionsPage() {
       setCreateBudgetName("");
       setCreateBudgetTarget("");
       setCreateBudgetAccountId("");
+      setCreateBudgetIsSavings(false);
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
     },
   });
 
   const updateBudget = useMutation({
-    mutationFn: (payload: { id: string; name: string; targetCents: number; icon?: string }) =>
+    mutationFn: (payload: { id: string; name: string; targetCents: number; icon?: string; isSavings: boolean }) =>
       fetchJson(`/api/budgets/${payload.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1037,6 +1036,7 @@ export function TransactionsPage() {
           name: payload.name,
           targetCents: payload.targetCents,
           icon: payload.icon || undefined,
+          isSavings: payload.isSavings,
         }),
       }),
     onSuccess: () => {
@@ -1048,6 +1048,7 @@ export function TransactionsPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
     },
   });
 
@@ -1062,6 +1063,7 @@ export function TransactionsPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
     },
   });
 
@@ -1539,6 +1541,7 @@ export function TransactionsPage() {
     setCreateBudgetName("");
     setCreateBudgetTarget("");
     setCreateBudgetAccountId(effectiveSelectedBankId || bankAccountOptions[0]?.id || "");
+    setCreateBudgetIsSavings(false);
     setIsBudgetModalOpen(true);
   };
 
@@ -1548,7 +1551,7 @@ export function TransactionsPage() {
     setEditingBudgetId(budget.id);
     setEditingBudgetName(budget.name);
     setEditingBudgetIcon(resolvedIcon);
-    setEditingBudgetIsSavings(resolvedIcon === "🛡️");
+    setEditingBudgetIsSavings(budget.isSavings);
     setEditingBudgetTarget(budget.targetCents > 0 ? String((budget.targetCents / 100).toFixed(2)) : "");
     setIsBudgetModalOpen(true);
   };
@@ -1563,6 +1566,7 @@ export function TransactionsPage() {
     setCreateBudgetName("");
     setCreateBudgetTarget("");
     setCreateBudgetAccountId("");
+    setCreateBudgetIsSavings(false);
   };
 
   const onCreateBudget = (event: FormEvent) => {
@@ -1573,6 +1577,8 @@ export function TransactionsPage() {
       name: createBudgetName.trim(),
       targetCents: Math.round(parsedTarget * 100),
       accountId: createBudgetAccountId,
+      icon: createBudgetIsSavings ? "🛡️" : undefined,
+      isSavings: createBudgetIsSavings,
     });
   };
 
@@ -1584,6 +1590,7 @@ export function TransactionsPage() {
       name: editingBudgetName.trim(),
       targetCents: Math.round(parsedTarget * 100),
       icon: editingBudgetIsSavings ? "🛡️" : editingBudgetIcon || undefined,
+      isSavings: editingBudgetIsSavings,
     });
   };
 
@@ -3037,41 +3044,32 @@ export function TransactionsPage() {
                   onValueChange={(v) => editingBudgetId ? setEditingBudgetTarget(v) : setCreateBudgetTarget(v)}
                 />
               </label>
-              {editingBudgetId ? (
-                <>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                    <Input
-                      type="checkbox"
-                      checked={editingBudgetIsSavings}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setEditingBudgetIsSavings(checked);
-                        if (checked) {
-                          setEditingBudgetIcon("🛡️");
-                        }
-                      }}
-                    />
-                    <span>Is this a savings sub-account?</span>
-                  </label>
-                  {!editingBudgetIsSavings && (
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>Icon</div>
-                      <div className="icon-picker">
-                        {budgetIconOptions.map((icon) => (
-                          <Button
-                            key={icon}
-                            type="button"
-                            className={`icon-chip${editingBudgetIcon === icon ? " on" : ""}`}
-                            onClick={() => setEditingBudgetIcon(icon)}
-                            aria-label={`Select icon ${icon}`}
-                          >
-                            {icon}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
+              <SavingsSubAccountCheckbox
+                checked={editingBudgetId ? editingBudgetIsSavings : createBudgetIsSavings}
+                onCheckedChange={(checked) => {
+                  if (!editingBudgetId) return setCreateBudgetIsSavings(checked);
+                  setEditingBudgetIsSavings(checked);
+                  if (checked) setEditingBudgetIcon("🛡️");
+                  else if (editingBudgetIcon === "🛡️") setEditingBudgetIcon("");
+                }}
+              />
+              {editingBudgetId && !editingBudgetIsSavings ? (
+                <div>
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>Icon</div>
+                  <div className="icon-picker">
+                    {budgetIconOptions.map((icon) => (
+                      <Button
+                        key={icon}
+                        type="button"
+                        className={`icon-chip${editingBudgetIcon === icon ? " on" : ""}`}
+                        onClick={() => setEditingBudgetIcon(icon)}
+                        aria-label={`Select icon ${icon}`}
+                      >
+                        {icon}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               ) : null}
             </div>
             <div className="txn-modal-actions">

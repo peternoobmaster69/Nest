@@ -43,7 +43,7 @@ export type CioPlanningScope = (typeof CIO_PLANNING_SCOPES)[number];
 
 export type CioEvidenceRef = {
   id: string;
-  kind: "WORKSPACE" | "BANK_CONTROL" | "INVESTMENT_VALUATION" | "CIO_PROFILE" | "CIO_POLICY" | "PLANNING_POSITION" | "RECURRING_FLOW";
+  kind: "WORKSPACE" | "BANK_CONTROL" | "SAVINGS_SUB_ACCOUNT" | "INVESTMENT_VALUATION" | "CIO_PROFILE" | "CIO_POLICY" | "PLANNING_POSITION" | "RECURRING_FLOW";
   label: string;
   href: string;
   asOfDate: string;
@@ -119,7 +119,7 @@ export type CioPolicyException = {
 };
 
 export type CioDataQualityWarning = {
-  code: "MISSING_VALUATION" | "NEGATIVE_VALUATION" | "BANK_BALANCE_AFTER_DATA_DATE" | "UNCLASSIFIED_INVESTMENT" | "UNKNOWN_EXPOSURE" | "STALE_VALUATION" | "MISSING_PROFILE" | "MISSING_POLICY" | "POSSIBLE_DUPLICATE" | "DATA_TRUNCATED";
+  code: "MISSING_VALUATION" | "NEGATIVE_VALUATION" | "BANK_BALANCE_AFTER_DATA_DATE" | "SAVINGS_BALANCE_AFTER_DATA_DATE" | "UNCLASSIFIED_INVESTMENT" | "UNKNOWN_EXPOSURE" | "STALE_VALUATION" | "MISSING_PROFILE" | "MISSING_POLICY" | "POSSIBLE_DUPLICATE" | "DATA_TRUNCATED";
   severity: "INFO" | "WARNING" | "CRITICAL";
   message: string;
   entityId?: string;
@@ -207,6 +207,7 @@ export type CioSnapshot = {
   baseCurrency: string;
   totals: {
     bankControlCents: number;
+    savingsSubAccountCents: number;
     investmentCurrentValueCents: number;
     financialAssetsCents: number;
     planningPositionAssetsCents: number;

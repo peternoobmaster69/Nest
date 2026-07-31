@@ -351,6 +351,7 @@ function overviewOutput(snapshot: CioSnapshot) {
     facts: {
       financialAssets: money(snapshot.totals.financialAssetsCents, snapshot.baseCurrency),
       bankControlBalance: money(snapshot.totals.bankControlCents, snapshot.baseCurrency),
+      planningEligibleSavingsSubAccounts: money(snapshot.totals.savingsSubAccountCents, snapshot.baseCurrency),
       investmentValue: money(snapshot.totals.investmentCurrentValueCents, snapshot.baseCurrency),
       planningAssets: money(snapshot.totals.planningPositionAssetsCents, snapshot.baseCurrency),
       planningLiabilities: money(snapshot.totals.planningLiabilitiesCents, snapshot.baseCurrency),

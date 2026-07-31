@@ -8,6 +8,7 @@ const UpdateBudgetSchema = z.object({
   icon: z.string().max(8).optional(),
   targetCents: z.number().int().min(0).optional(),
   availableCents: z.number().int().min(0).optional(),
+  isSavings: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
 
