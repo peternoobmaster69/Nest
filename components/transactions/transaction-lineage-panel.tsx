@@ -109,8 +109,16 @@ export function TransactionLineagePanel({
       onToggle={(event) => {
         if (!event.currentTarget.open) return;
         const details = event.currentTarget;
+        const summary = details.querySelector<HTMLElement>(".tx-lineage-summary");
+        const scrollContainer = details.closest<HTMLElement>(".txn-modal-body");
         window.requestAnimationFrame(() => {
-          details.scrollIntoView({ block: "nearest" });
+          if (!summary || !scrollContainer) return;
+          const summaryRect = summary.getBoundingClientRect();
+          const containerRect = scrollContainer.getBoundingClientRect();
+          scrollContainer.scrollTo({
+            top: Math.max(0, scrollContainer.scrollTop + summaryRect.top - containerRect.top - 10),
+            behavior: "auto",
+          });
         });
       }}
     >

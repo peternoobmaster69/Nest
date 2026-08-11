@@ -6997,7 +6997,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .tx-lineage-panel {
   display: block;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid color-mix(in srgb, var(--brand-500) 24%, var(--border-subtle));
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--brand-500) 4%, var(--bg-subtle));
@@ -7017,6 +7017,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   padding: 9px 11px;
   cursor: pointer;
   list-style: none;
+  scroll-margin-block-start: 10px;
   user-select: none;
 }
 
@@ -7058,16 +7059,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .tx-lineage-body {
   display: grid;
   gap: 8px;
-  max-height: min(46dvh, 420px);
   min-height: 0;
   padding: 8px 10px 10px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
   border-top: 1px solid var(--border-subtle);
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
 }
 
 .tx-lineage-intro,

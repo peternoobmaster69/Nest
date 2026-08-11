@@ -22,7 +22,7 @@ test("transaction lineage is an authorized bounded read of immutable correction 
   assert.match(service, /transaction\.reversalOfId === postingGroup\.sourceId/);
 });
 
-test("transaction records expose compact scrollable correction history without mixing reversals into the list", async () => {
+test("transaction records expose correction history through the dialog scroll surface without mixing reversals into the list", async () => {
   const [route, page, list, panel, dialog, styles] = await Promise.all([
     source("app/api/transactions/route.ts"),
     source("components/transactions-page.tsx"),
@@ -41,10 +41,13 @@ test("transaction records expose compact scrollable correction history without m
   assert.match(panel, /<details[\s\S]*?className="tx-lineage-panel/);
   assert.match(panel, /<summary className="tx-lineage-summary">/);
   assert.match(panel, /<strong>Record evolution<\/strong>/);
-  assert.match(panel, /details\.scrollIntoView\(\{ block: "nearest" \}\)/);
+  assert.match(panel, /details\.closest<HTMLElement>\("\.txn-modal-body"\)/);
+  assert.match(panel, /scrollContainer\.scrollTo\(\{/);
   assert.match(panel, /Compensating reversal/);
   assert.match(panel, /describeChanges/);
-  assert.match(styles, /\.tx-lineage-body\s*\{[^}]*max-height:\s*min\(46dvh, 420px\)[^}]*overflow-y:\s*auto[^}]*touch-action:\s*pan-y/s);
+  assert.match(styles, /\.tx-lineage-panel\s*\{[^}]*overflow:\s*visible/s);
+  assert.match(styles, /\.tx-lineage-body\s*\{[^}]*overflow:\s*visible/s);
+  assert.doesNotMatch(styles, /\.tx-lineage-body\s*\{[^}]*overflow-y:\s*auto/s);
   assert.ok(
     dialog.indexOf("Correction reason") < dialog.indexOf("<TransactionLineagePanel"),
     "record evolution belongs below the correction fields",
