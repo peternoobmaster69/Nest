@@ -191,6 +191,8 @@ All examples use fictitious identifiers and values.
 | `/api/budgets/reconciliation` | GET | [Ledger](ledger.md) |
 | `/api/transactions` | GET, POST | [Ledger](ledger.md) |
 | `/api/transactions/{id}` | PATCH, DELETE | [Ledger](ledger.md) |
+| `/api/transactions/{id}/corrections` | POST | [Ledger](ledger.md) |
+| `/api/transactions/{id}/lineage` | GET | [Ledger](ledger.md) |
 | `/api/transactions/bulk-import` | POST | [Ledger](ledger.md) |
 | `/api/transactions/months` | GET | [Ledger](ledger.md) |
 | `/api/transactions/transfer` | POST | [Ledger](ledger.md) |

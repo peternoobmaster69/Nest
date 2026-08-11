@@ -387,9 +387,9 @@ test("modal action bars remain outside independently scrolling content", async (
   assert.match(contract, /\.cc-modal-scroll,[\s\S]*?\.cct-form-grid,[\s\S]*?\.st-modal-form\s*>\s*\.st-form-grid[\s\S]*?overflow-y:\s*auto/);
   assert.match(contract, /\.modal-footer,[\s\S]*?\.txn-modal-actions,[\s\S]*?\.st-modal-actions,[\s\S]*?\.auto-rule-modal-footer[\s\S]*?position:\s*static\s*!important[\s\S]*?flex:\s*0\s+0\s+auto\s*!important/);
 
-  const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+  const transactionCorrection = await readFile(path.join(root, "components/transactions/transaction-correction-dialog.tsx"), "utf8");
   const receivables = await readFile(path.join(root, "components/receivables-page.tsx"), "utf8");
-  assert.match(transactions, /<form className="modal-form-shell" onSubmit={onSubmitEdit}>[\s\S]*?<div className="profile-modal-body txn-modal-body txn-modal-form">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
+  assert.match(transactionCorrection, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body txn-modal-body txn-modal-form">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
   assert.match(receivables, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body recv-modal-body">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
 });
 
@@ -462,10 +462,11 @@ test("Create Receivable uses a non-overlapping responsive modal layout", async (
 });
 
 test("phone popup fields and actions cannot overflow their grid tracks", async () => {
-  const [styles, budgetPlan, transactions] = await Promise.all([
+  const [styles, budgetPlan, transactions, transactionCorrection] = await Promise.all([
     readAppStyles(root),
     readFile(path.join(root, "components/budget-plan-page.tsx"), "utf8"),
     readFile(path.join(root, "components/transactions-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/transactions/transaction-correction-dialog.tsx"), "utf8"),
   ]);
   const contract = styles.slice(styles.indexOf("COMPACT FORM + DIALOG CONTRACT"));
 
@@ -476,7 +477,7 @@ test("phone popup fields and actions cannot overflow their grid tracks", async (
   assert.match(styles, /@media \(max-width: 600px\)[\s\S]*?\.bp-form \.form-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/s);
   assert.match(budgetPlan, /className="bp-confirm-summary"/);
   assert.doesNotMatch(budgetPlan, /gridTemplateColumns:\s*"1fr 1fr"/);
-  assert.equal((transactions.match(/className="profile-modal txn-modal txn-entry-modal"/g) ?? []).length, 2);
+  assert.equal((`${transactions}\n${transactionCorrection}`.match(/className="profile-modal txn-modal txn-entry-modal"/g) ?? []).length, 2);
   assert.match(contract, /body \.profile-modal\.txn-modal\.txn-entry-modal\[class\]\s*\{[^}]*width:\s*100%\s*!important[^}]*max-width:\s*none\s*!important/s);
 });
 

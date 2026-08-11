@@ -159,7 +159,16 @@ export async function GET(request: Request) {
       createdAt: true,
       updatedAt: true,
       group: { select: { id: true, name: true, icon: true } },
+      postingGroup: { select: { operation: true } },
     } as const;
+    type ListedTransaction = Prisma.TransactionGetPayload<{ select: typeof select }>;
+    const serializeTransaction = ({ postingGroup, ...transaction }: ListedTransaction) => ({
+      ...transaction,
+      date: transaction.date.toISOString(),
+      createdAt: transaction.createdAt.toISOString(),
+      updatedAt: transaction.updatedAt.toISOString(),
+      hasCorrectionHistory: postingGroup?.operation === "TRANSACTION_CORRECTION",
+    });
 
     if (wantsPaginatedResponse) {
       const txs = await prisma.transaction.findMany({
@@ -189,12 +198,7 @@ export async function GET(request: Request) {
       const expenseCents = summary.find((s) => s.direction === "DEBIT")?._sum.amountCents ?? 0;
 
       return NextResponse.json({
-        transactions: pageItems.map((t) => ({
-          ...t,
-          date: t.date.toISOString(),
-          createdAt: t.createdAt.toISOString(),
-          updatedAt: t.updatedAt.toISOString(),
-        })),
+        transactions: pageItems.map(serializeTransaction),
         total,
         page,
         limit,
@@ -215,12 +219,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      txs.map((t) => ({
-        ...t,
-        date: t.date.toISOString(),
-        createdAt: t.createdAt.toISOString(),
-        updatedAt: t.updatedAt.toISOString(),
-      })),
+      txs.map(serializeTransaction),
     );
   } catch (error) {
     if (error instanceof ApiAuthError) {

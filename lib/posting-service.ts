@@ -42,6 +42,66 @@ type LedgerTransactionInput = Prisma.TransactionUncheckedCreateInput & {
   reversalOfId?: string | null;
 };
 
+type LedgerTransactionCorrection = {
+  subject?: string;
+  amountCents?: number;
+  direction?: "DEBIT" | "CREDIT";
+  kind?: "EXPENSE" | "INCOME" | "ADJUSTMENT";
+  details?: string | null;
+  notes?: string | null;
+  date?: Date;
+  budgetId?: string | null;
+  groupId?: string | null;
+};
+
+const CORRECTABLE_TRANSACTION_KINDS = new Set(["EXPENSE", "INCOME", "ADJUSTMENT"]);
+const CORRECTABLE_POSTING_OPERATIONS = new Set([
+  "TRANSACTION_CREATE",
+  "TRANSACTION_UPDATE",
+  "TRANSACTION_BULK_IMPORT",
+  "TRANSACTION_CORRECTION",
+]);
+
+const correctionTransactionSelect = {
+  id: true,
+  workspaceId: true,
+  accountId: true,
+  budgetId: true,
+  groupId: true,
+  kind: true,
+  direction: true,
+  date: true,
+  amountCents: true,
+  subject: true,
+  details: true,
+  notes: true,
+  isSynced: true,
+  isFromFamily: true,
+  externalRef: true,
+  creditCardTransactionId: true,
+  receivableId: true,
+  voidedAt: true,
+  postingGroup: { select: { operation: true } },
+  creditCardLinks: { take: 1, select: { id: true } },
+} as const satisfies Prisma.TransactionSelect;
+
+type CorrectionSourceTransaction = Prisma.TransactionGetPayload<{
+  select: typeof correctionTransactionSelect;
+}>;
+
+type ReversalSourceTransaction = Pick<
+  CorrectionSourceTransaction,
+  | "id"
+  | "workspaceId"
+  | "accountId"
+  | "budgetId"
+  | "direction"
+  | "amountCents"
+  | "subject"
+  | "notes"
+  | "externalRef"
+>;
+
 export async function createPostingGroupRecord(
   db: Prisma.TransactionClient,
   params: {
@@ -211,6 +271,196 @@ export async function claimReceivable(db: Prisma.TransactionClient, id: string) 
   }
 }
 
+function normalizeTransactionDirection(direction: string): "DEBIT" | "CREDIT" {
+  if (direction === "CREDIT" || direction === "Incoming") return "CREDIT";
+  if (direction === "DEBIT" || direction === "Outgoing") return "DEBIT";
+  throw new PostingConflictError("Transaction has an unsupported ledger direction.");
+}
+
+function assertTransactionCanBeCorrected(transaction: CorrectionSourceTransaction) {
+  const postingOperation = transaction.postingGroup?.operation;
+  const hasUnsupportedPostingOperation = Boolean(
+    postingOperation && !CORRECTABLE_POSTING_OPERATIONS.has(postingOperation),
+  );
+  const isLinkedWorkflow =
+    Boolean(transaction.creditCardTransactionId) ||
+    Boolean(transaction.receivableId) ||
+    transaction.creditCardLinks.length > 0 ||
+    hasUnsupportedPostingOperation;
+
+  if (!CORRECTABLE_TRANSACTION_KINDS.has(transaction.kind) || isLinkedWorkflow) {
+    throw new PostingConflictError(
+      "This transaction belongs to a linked financial workflow and must be corrected from that workflow.",
+    );
+  }
+}
+
+async function createTransactionReversal(
+  db: Prisma.TransactionClient,
+  postingGroupId: string,
+  original: ReversalSourceTransaction,
+  reason: string,
+) {
+  const originalDirection = normalizeTransactionDirection(original.direction);
+  const direction = originalDirection === "CREDIT" ? "DEBIT" : "CREDIT";
+
+  return createLedgerTransaction(db, postingGroupId, {
+    workspaceId: original.workspaceId,
+    accountId: original.accountId,
+    budgetId: original.budgetId,
+    kind: "REVERSAL",
+    direction,
+    date: new Date(),
+    amountCents: original.amountCents,
+    subject: `Reversal: ${original.subject}`,
+    details: reason,
+    notes: original.notes,
+    externalRef: original.externalRef ? `reversal:${original.externalRef}` : `reversal:${original.id}`,
+    reversalOfId: original.id,
+    isSynced: false,
+    isFromFamily: false,
+  });
+}
+
+export async function correctLedgerTransaction(params: {
+  transactionId: string;
+  actorUserId: string;
+  reason: string;
+  idempotencyKey: string;
+  replacement: LedgerTransactionCorrection;
+}) {
+  const original = await prisma.transaction.findUnique({
+    where: { id: params.transactionId },
+    select: correctionTransactionSelect,
+  });
+  if (!original) throw new PostingConflictError("Transaction not found.");
+  assertTransactionCanBeCorrected(original);
+
+  return executePosting({
+    workspaceId: original.workspaceId,
+    operation: "TRANSACTION_CORRECTION",
+    idempotencyKey: params.idempotencyKey,
+    actorUserId: params.actorUserId,
+    sourceType: "TRANSACTION",
+    sourceId: original.id,
+    request: {
+      transactionId: original.id,
+      reason: params.reason,
+      replacement: params.replacement,
+    },
+    reason: params.reason,
+  }, async (db, postingGroupId) => {
+    const locked = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT [id]
+      FROM [Transaction] WITH (UPDLOCK, HOLDLOCK)
+      WHERE [id] = ${original.id}
+    `);
+    if (!locked[0]) throw new PostingConflictError("Transaction not found.");
+
+    const current = await db.transaction.findUnique({
+      where: { id: original.id },
+      select: correctionTransactionSelect,
+    });
+    if (!current || current.voidedAt) {
+      throw new PostingConflictError("Transaction is already reversed or corrected.");
+    }
+    assertTransactionCanBeCorrected(current);
+
+    const nextBudgetId = params.replacement.budgetId === undefined
+      ? current.budgetId
+      : params.replacement.budgetId;
+    const budgetChanged = nextBudgetId !== current.budgetId;
+    const nextGroupId = params.replacement.groupId !== undefined
+      ? params.replacement.groupId
+      : budgetChanged
+        ? null
+        : current.groupId;
+
+    if (nextGroupId && !nextBudgetId) {
+      throw new Error("A transaction group requires a selected sub-account.");
+    }
+
+    if (nextBudgetId) {
+      const budget = await db.budgetEnvelope.findFirst({
+        where: {
+          id: nextBudgetId,
+          workspaceId: current.workspaceId,
+          accountId: current.accountId,
+          ...(budgetChanged ? { isActive: true } : {}),
+        },
+        select: { id: true },
+      });
+      if (!budget) {
+        throw new Error("Selected sub-account does not belong to this transaction account.");
+      }
+    }
+
+    if (nextGroupId) {
+      const group = await db.transactionGroup.findFirst({
+        where: {
+          id: nextGroupId,
+          workspaceId: current.workspaceId,
+          budgetId: nextBudgetId!,
+        },
+        select: { id: true },
+      });
+      if (!group) throw new Error("Selected group does not belong to this sub-account.");
+    }
+
+    const nextDirection = params.replacement.direction ?? normalizeTransactionDirection(current.direction);
+    const nextAmountCents = params.replacement.amountCents ?? current.amountCents;
+    const nextKind = (params.replacement.kind ?? current.kind) as "EXPENSE" | "INCOME" | "ADJUSTMENT";
+    const reversal = await createTransactionReversal(db, postingGroupId, current, params.reason);
+
+    const voided = await db.transaction.updateMany({
+      where: { id: current.id, voidedAt: null },
+      data: {
+        voidedAt: new Date(),
+        voidedByUserId: params.actorUserId,
+        voidReason: params.reason,
+      },
+    });
+    if (voided.count !== 1) {
+      throw new PostingConflictError("Transaction is already reversed or corrected.");
+    }
+
+    const replacement = await createLedgerTransaction(db, postingGroupId, {
+      workspaceId: current.workspaceId,
+      accountId: current.accountId,
+      budgetId: nextBudgetId,
+      groupId: nextGroupId,
+      kind: nextKind,
+      direction: nextDirection,
+      date: params.replacement.date ?? current.date,
+      amountCents: nextAmountCents,
+      subject: params.replacement.subject ?? current.subject,
+      details: params.replacement.details === undefined ? current.details : params.replacement.details,
+      notes: params.replacement.notes === undefined ? current.notes : params.replacement.notes,
+      externalRef: `correction:${current.id}:${postingGroupId}`,
+      isSynced: false,
+      isFromFamily: current.isFromFamily,
+    });
+
+    const updatedBudgets = await applyTransactionBudgetDelta(db, {
+      previousBudgetId: current.budgetId,
+      previousDirection: current.direction,
+      previousAmountCents: current.amountCents,
+      nextBudgetId,
+      nextDirection,
+      nextAmountCents,
+    });
+
+    return {
+      ok: true,
+      correctedTransactionId: current.id,
+      reversalTransactionId: reversal.id,
+      replacementTransactionId: replacement.id,
+      tx: replacement,
+      updatedBudgets,
+    };
+  });
+}
+
 export async function reverseLedgerTransaction(params: {
   transactionId: string;
   actorUserId: string;
@@ -253,23 +503,8 @@ export async function reverseLedgerTransaction(params: {
       throw new PostingConflictError("Transaction is already reversed.");
     }
 
-    const direction = original.direction === "CREDIT" ? "DEBIT" : "CREDIT";
-    const reversal = await createLedgerTransaction(db, postingGroupId, {
-      workspaceId: original.workspaceId,
-      accountId: original.accountId,
-      budgetId: original.budgetId,
-      kind: "REVERSAL",
-      direction,
-      date: new Date(),
-      amountCents: original.amountCents,
-      subject: `Reversal: ${original.subject}`,
-      details: params.reason,
-      notes: original.notes,
-      externalRef: original.externalRef ? `reversal:${original.externalRef}` : `reversal:${original.id}`,
-      reversalOfId: original.id,
-      isSynced: false,
-      isFromFamily: false,
-    });
+    const direction = normalizeTransactionDirection(original.direction) === "CREDIT" ? "DEBIT" : "CREDIT";
+    const reversal = await createTransactionReversal(db, postingGroupId, original, params.reason);
 
     await db.$executeRaw(Prisma.sql`
       UPDATE [Transaction]

@@ -8184,6 +8184,127 @@
         }
       }
     },
+    "/api/transactions/{id}/corrections": {
+      "post": {
+        "operationId": "post_api_transactions_id_corrections",
+        "tags": [
+          "transactions"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 191
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/transactions/[id]/corrections/route.ts",
+        "x-request-schemas": [
+          "CorrectTransactionSchema"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectTransactionSchema"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions/{id}/lineage": {
+      "get": {
+        "operationId": "get_api_transactions_id_lineage",
+        "tags": [
+          "transactions"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "secureSessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 191
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-source-handler": "app/api/transactions/[id]/lineage/route.ts"
+      }
+    },
     "/api/transactions/{id}": {
       "patch": {
         "operationId": "patch_api_transactions_id",
@@ -9707,6 +9828,91 @@
           "id",
           "type"
         ],
+        "additionalProperties": false
+      },
+      "CorrectTransactionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "amountCents": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "DEBIT",
+              "CREDIT"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "EXPENSE",
+              "INCOME",
+              "ADJUSTMENT"
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "budgetId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "groupId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
         "additionalProperties": false
       },
       "CioProfileInputSchema": {

@@ -43,7 +43,8 @@ Important root, route, platform, domain, database, operational, generated, and p
 
 | File | Responsibility | Key exports/contracts | Risk |
 | --- | --- | --- | --- |
-| `lib/posting-service.ts` | Atomic posting, ledger record, reversal, reconciliation | `executePosting`, `createLedgerTransaction`, `reverseLedgerTransaction` | Duplicate/inconsistent balances |
+| `lib/posting-service.ts` | Atomic posting, ledger record, reversal, correction, reconciliation | `executePosting`, `createLedgerTransaction`, `reverseLedgerTransaction`, `correctLedgerTransaction` | Duplicate/inconsistent balances |
+| `lib/domains/ledger/transaction-lineage.ts` | Bounded reconstruction of immutable transaction versions and reversals | `readTransactionLineage` | Incomplete or cross-workspace audit history |
 | `lib/budget-ledger.ts` | Budget availability deltas | calculate/apply/recalculate helpers | Envelope drift |
 | `lib/bank-consistency.ts` | Account/ledger consistency projection | `getBankConsistency` | Misleading reconciliation |
 | `lib/credit-card-statement-cycle.ts` | Statement month derivation | `deriveStatementCycle` | Wrong card period |

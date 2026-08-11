@@ -54,6 +54,8 @@ The route must still validate that any referenced account/card/budget belongs to
 | `createPostingGroupRecord(...)` | Create auditable group inside an existing transaction | transaction client/metadata → group | Inserts record; constraint failure | O(1) |
 | `createLedgerTransaction(...)` | Persist user-visible transaction in posting workflow | transaction client/data → transaction | Inserts record | O(1) |
 | `reverseLedgerTransaction(params)` | Negate a prior ledger effect while retaining history | workspace/source/reversal metadata → result | Transactional writes; conflict/ownership failure | O(e) |
+| `correctLedgerTransaction(params)` | Replace a standalone posted entry without rewriting history | source/corrected fields/reason → reversal and replacement result | One serializable posting; linked workflows or concurrent correction conflict | O(e) |
+| `readTransactionLineage(params)` | Reconstruct visible record evolution from correction posting links | transaction/workspace IDs → bounded chronological versions | Read-only; fails on missing/cyclic lineage | O(v), at most 50 versions |
 | `reconcileWorkspaceBudgets(db, workspaceId)` | Recalculate envelope availability from ledger truth | client/workspace → completion | Reads and updates budgets | O(b+t) |
 | `getBudgetAvailableDeltaCents(direction, amount)` | Convert transaction direction to envelope delta | direction/cents → signed cents | Throws or returns rule-specific delta | O(1) |
 | `deriveStatementCycle(params)` | Assign card activity to a statement period | transaction date/statement day → year/month | None | O(1) |

@@ -11,6 +11,7 @@ import {
   BudgetPlanPostSchema,
   DeleteSchema as BudgetPlanDeleteSchema,
 } from "../lib/domains/ledger/budget-plan/contracts.ts";
+import { CorrectTransactionSchema } from "../lib/domains/ledger/transaction-contracts.ts";
 import {
   CioExposuresInputSchema,
   CioInvestmentProfileInputSchema,
@@ -38,6 +39,7 @@ const schemaRegistry = {
   BudgetPlanPostSchema,
   BudgetPlanPatchSchema,
   BudgetPlanDeleteSchema,
+  CorrectTransactionSchema,
   CioProfileInputSchema,
   CioPolicyInputSchema,
   CioInvestmentProfileInputSchema,
@@ -51,6 +53,7 @@ const schemaRegistry = {
 };
 const requestSchemaByOperation = {
   "POST /api/transactions/bulk-import": "BulkImportSchema",
+  "POST /api/transactions/{id}/corrections": "CorrectTransactionSchema",
   "POST /api/credit-transactions/import-maybank": "ImportMaybankSchema",
   "POST /api/budgets/plan": "BudgetPlanPostSchema",
   "PATCH /api/budgets/plan": "BudgetPlanPatchSchema",

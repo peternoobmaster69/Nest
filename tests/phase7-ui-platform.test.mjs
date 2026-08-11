@@ -17,9 +17,10 @@ async function walk(directory) {
 }
 
 test("Phase 7 keeps the shipped mobile popup width and anti-overlap contract", async () => {
-  const [styles, transactions, investments] = await Promise.all([
+  const [styles, transactions, transactionCorrection, investments] = await Promise.all([
     readAppStyles(root),
     source("components/transactions-page.tsx"),
+    source("components/transactions/transaction-correction-dialog.tsx"),
     source("components/investments-page.tsx"),
   ]);
   const contract = styles.slice(styles.indexOf("COMPACT FORM + DIALOG CONTRACT"));
@@ -27,7 +28,7 @@ test("Phase 7 keeps the shipped mobile popup width and anti-overlap contract", a
   assert.match(contract, /body \.profile-modal\.txn-modal\.txn-entry-modal\[class\][\s\S]*?width:\s*100%\s*!important/);
   assert.match(contract, /\.inv-modal,[\s\S]*?width:\s*var\(--mobile-modal-inline-size\)\s*!important/);
   assert.match(contract, /@media \(max-width: 599px\)[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/);
-  assert.equal((transactions.match(/profile-modal txn-modal txn-entry-modal/g) ?? []).length, 2);
+  assert.equal((`${transactions}\n${transactionCorrection}`.match(/profile-modal txn-modal txn-entry-modal/g) ?? []).length, 2);
   assert.equal((investments.match(/className="profile-modal inv-modal"/g) ?? []).length, 2);
 });
 
