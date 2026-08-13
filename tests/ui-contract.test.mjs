@@ -869,6 +869,12 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(investments, /const currentValueDifference = \(b\.latest\?\.currentValueCents \?\? 0\) - \(a\.latest\?\.currentValueCents \?\? 0\)/);
   assert.match(investments, /compact:\s*`[^`]*\$\{year\.slice\(-2\)\}`/);
   assert.match(investments, /data-compact-label=\{inceptionBadge\.compact\}/);
+  assert.match(investments, /calculateAnnualInvestmentContributions/);
+  assert.match(investments, /id="inv-annual-contributions"[\s\S]*?role="tooltip"/);
+  assert.match(investments, /inv-contribution-trend[\s\S]*?is-up[\s\S]*?is-down/);
+  assert.match(styles, /\.inv-contribution-tooltip-shell:focus-within \.inv-contribution-tooltip/);
+  assert.match(styles, /\.inv-contribution-trend\.is-up\s*\{[^}]*var\(--amount-positive\)/s);
+  assert.match(styles, /\.inv-contribution-trend\.is-down\s*\{[^}]*var\(--amount-negative\)/s);
   assert.doesNotMatch(investments, /inv-inception-label-(?:full|short)/);
   assert.match(investments, /className=\{`inv-account-liquidity-status \$\{account\.isLiquid \? "is-liquid" : "is-locked"\}`\}/);
   assert.match(investments, /account\.isLiquid[\s\S]*?\? <Droplet[\s\S]*?: <Lock/);

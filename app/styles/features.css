@@ -6703,6 +6703,134 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   font-weight: 600;
 }
 
+.inv-contribution-tooltip-shell {
+  position: relative;
+  z-index: 4;
+  width: max-content;
+}
+
+.inv-contribution-tooltip-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: help;
+}
+
+.inv-contribution-tooltip-trigger::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.inv-contribution-tooltip-trigger svg {
+  flex: 0 0 auto;
+  opacity: 0.72;
+}
+
+.inv-contribution-tooltip-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.inv-contribution-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  min-width: 184px;
+  max-width: min(240px, calc(100vw - 32px));
+  max-height: min(260px, 50vh);
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.25;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-3px);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+}
+
+.inv-contribution-tooltip-shell:hover .inv-contribution-tooltip,
+.inv-contribution-tooltip-shell:focus-within .inv-contribution-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.inv-contribution-tooltip dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.inv-contribution-tooltip dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.inv-contribution-tooltip dt,
+.inv-contribution-tooltip dd {
+  margin: 0;
+}
+
+.inv-contribution-tooltip dd {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--text-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inv-contribution-trend {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.inv-contribution-trend.is-up {
+  color: var(--amount-positive);
+}
+
+.inv-contribution-trend.is-down {
+  color: var(--amount-negative);
+}
+
+.inv-contribution-tooltip .is-ytd {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inv-contribution-tooltip .is-ytd dt {
+  color: var(--brand-600);
+  font-weight: 700;
+}
+
+.inv-contribution-tooltip small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 .inv-edit-icon {
   position: absolute;
   top: 8px;

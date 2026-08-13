@@ -10,6 +10,11 @@ function hashKey(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+export function normalizeCreditAlertCurrency(value: string | undefined) {
+  const normalized = value?.trim().toUpperCase();
+  return normalized && /^[A-Z]{3}$/.test(normalized) ? normalized : null;
+}
+
 export async function ingestCreditAlert(params: {
   workspaceId: string;
   rawBody: string;
@@ -25,6 +30,7 @@ export async function ingestCreditAlert(params: {
     ? hashKey(`${workspaceId}\0${parsedAlert.transactionRef}`)
     : null;
   const normalizedBank = getSingaporeBankByName(parsedAlert.bankName)?.name ?? parsedAlert.bankName;
+  const normalizedCurrency = normalizeCreditAlertCurrency(parsedAlert.currency);
   const signedAmountCents =
     parsedAlert.amountCents === undefined
       ? undefined
@@ -78,7 +84,7 @@ export async function ingestCreditAlert(params: {
         contentHash,
         bankName: normalizedBank,
         transactionRef: parsedAlert.transactionRef,
-        currency: parsedAlert.currency,
+        currency: normalizedCurrency,
         amountCents: signedAmountCents,
         transactionDate: parsedAlert.transactionDate,
         merchant: parsedAlert.merchant,

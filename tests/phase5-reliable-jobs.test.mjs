@@ -62,6 +62,7 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
   assert.doesNotMatch(settings, /GMAIL_SYNC_INTERVAL_MS/);
   assert.doesNotMatch(settings, /setInterval\([\s\S]{0,220}syncGmail\.mutate/);
   assert.match(ingest, /sourceMessageId/);
+  assert.match(ingest, /normalizeCreditAlertCurrency/);
   assert.match(ingest, /\[redacted after parsing; sha256:/);
   assert.match(ingest, /requiredMissing[\s\S]*?sealFailedCreditAlertBody/);
   assert.match(ingest, /Unable to parse required fields: \$\{missingFields\.join\(", "\)\}/);
