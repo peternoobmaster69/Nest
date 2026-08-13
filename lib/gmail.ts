@@ -183,10 +183,18 @@ export function openGmailCredential(params: {
   field: "accessToken" | "refreshToken";
   value: string;
 }) {
-  return decryptCredential(
-    params.value,
-    gmailCredentialContext(params.integrationId, params.workspaceId, params.field),
-  );
+  try {
+    return decryptCredential(
+      params.value,
+      gmailCredentialContext(params.integrationId, params.workspaceId, params.field),
+    );
+  } catch {
+    throw new GmailProviderError(
+      "GMAIL_RECONNECT_REQUIRED",
+      "Stored Gmail authorization can no longer be opened. Reconnect Gmail in Settings.",
+      false,
+    );
+  }
 }
 
 export async function revokeGmailCredential(params: {

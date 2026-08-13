@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       queued: job?.status === "PENDING",
       jobId: queued.job.id,
       message: job?.message ?? "Gmail sync queued.",
+      errorCode: job?.errorCode ?? null,
     }, { status: 202 });
   });
 }

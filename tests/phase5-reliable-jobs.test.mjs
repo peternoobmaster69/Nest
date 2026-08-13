@@ -30,10 +30,11 @@ test("background jobs use database-enforced scope ownership, leases, retries, an
 });
 
 test("Gmail sync is bounded, resumable, cursor-based, and never launched after a response", async () => {
-  const [runner, provider, route, settings, ingest, diagnostics, creditAlerts, retention] = await Promise.all([
+  const [runner, provider, route, status, settings, ingest, diagnostics, creditAlerts, retention] = await Promise.all([
     source("lib/gmail-sync-runner.ts"),
     source("lib/gmail.ts"),
     source("app/api/gmail/sync/route.ts"),
+    source("app/api/gmail/status/route.ts"),
     source("components/settings-page.tsx"),
     source("lib/credit-alert-ingest.ts"),
     source("lib/credit-alert-diagnostics.ts"),
@@ -45,6 +46,7 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
   assert.match(runner, /checkpointJson|continueBackgroundJob|lastHistoryId/);
   assert.match(runner, /GMAIL_SYNC_MESSAGES_PER_SLICE/);
   assert.match(provider, /listGmailHistoryPage|getGmailProfile|maxResults/);
+  assert.match(provider, /GMAIL_RECONNECT_REQUIRED/);
   assert.match(provider, /fetchGmailMessageMetadata[\s\S]*?format: "metadata"[\s\S]*?metadataHeaders/);
   assert.match(runner, /fetchGmailMessageMetadata[\s\S]*?isGmailCreditAlertSubject[\s\S]*?checkpoint\.ignored \+= 1[\s\S]*?continue/);
   assert.ok(
@@ -53,6 +55,10 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
     "Gmail subject metadata must be checked before a message body is fetched",
   );
   assert.match(route, /await processGmailSyncQueue/);
+  assert.match(route, /errorCode/);
+  assert.match(status, /requiresReconnect/);
+  assert.doesNotMatch(status, /integration: integration \}/);
+  assert.match(settings, /Reconnect Gmail/);
   assert.doesNotMatch(settings, /GMAIL_SYNC_INTERVAL_MS/);
   assert.doesNotMatch(settings, /setInterval\([\s\S]{0,220}syncGmail\.mutate/);
   assert.match(ingest, /sourceMessageId/);

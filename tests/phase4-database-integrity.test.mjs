@@ -54,6 +54,19 @@ test("Phase 4 preflight distinguishes repairable legacy aliases from blockers", 
   assert.doesNotMatch(preflight, /Transaction\][\s\S]{0,180}externalRef[\s\S]{0,180}HAVING COUNT/);
 });
 
+test("monthly budget confirmation's claim state is permitted by the database", async () => {
+  const [service, migration, preflight] = await Promise.all([
+    read("lib/domains/ledger/budget-plan/confirm-service.ts"),
+    read("prisma/migrations/20260813000000_allow_monthly_budget_plan_confirming_status/migration.sql"),
+    read("scripts/check-phase4-preflight.mjs"),
+  ]);
+
+  assert.match(service, /data: \{ status: "CONFIRMING" \}/);
+  assert.match(migration, /MonthlyBudgetPlan_status_check/);
+  assert.match(migration, /N'DRAFT', N'REVIEW', N'CONFIRMING', N'CONFIRMED'/);
+  assert.match(preflight, /N'DRAFT', N'REVIEW', N'CONFIRMING', N'CONFIRMED'/);
+});
+
 test("cross-workspace receivables keep source aliases out of local composite foreign keys", async () => {
   const route = await read("app/api/credit-transactions/[id]/accounting/route.ts");
   assert.match(route, /accountId: sourceAccount\?\.workspaceId === workspaceId \? sourceAccount\.id : null/);

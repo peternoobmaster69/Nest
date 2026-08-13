@@ -1,4 +1,4 @@
-import { exchangeCodeForTokens, openGmailCredential, sealGmailCredential } from "@/lib/gmail";
+import { exchangeCodeForTokens, GmailProviderError, openGmailCredential, sealGmailCredential } from "@/lib/gmail";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { consumeIntegrationOAuthState } from "@/lib/integration-oauth-state";
@@ -80,14 +80,22 @@ export async function GET(request: Request) {
     });
 
     if (existing) {
-      const refreshToken = tokens.refresh_token || (existing.refreshToken
-        ? openGmailCredential({
+      let refreshToken = tokens.refresh_token;
+      if (!refreshToken && existing.refreshToken) {
+        try {
+          refreshToken = openGmailCredential({
             integrationId: existing.id,
             workspaceId: existing.workspaceId,
             field: "refreshToken",
             value: existing.refreshToken,
-          })
-        : undefined);
+          });
+        } catch (error) {
+          if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_RECONNECT_REQUIRED") throw error;
+        }
+      }
+      if (!refreshToken) {
+        return NextResponse.redirect(workspaceSettingsRedirect(origin, auth.workspaceId, "refresh_required"));
+      }
       await prisma.gmailIntegration.update({
         where: { id: existing.id },
         data: {

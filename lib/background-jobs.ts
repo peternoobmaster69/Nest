@@ -16,6 +16,7 @@ export type BackgroundJobProgress = {
   status?: string;
   attempts?: number;
   retryCount?: number;
+  errorCode?: string | null;
 };
 
 export class BackgroundJobError extends Error {
@@ -389,6 +390,7 @@ export async function failClaimedBackgroundJob(jobId: string, leaseToken: string
     retrying: shouldRetry,
     retryCount,
     errorCode: failure.code,
+    error,
   });
   return updated.count === 1 ? { retrying: shouldRetry, failure } : null;
 }
@@ -496,6 +498,7 @@ export function backgroundJobToProgress(
       status: job.status,
       attempts: job.attempts,
       retryCount: job.retryCount,
+      errorCode: job.errorCode ?? "LEASE_EXPIRED",
     };
   }
   return {
@@ -509,5 +512,6 @@ export function backgroundJobToProgress(
     status: job.status,
     attempts: job.attempts,
     retryCount: job.retryCount,
+    errorCode: job.errorCode,
   };
 }

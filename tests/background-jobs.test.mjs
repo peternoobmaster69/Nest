@@ -47,4 +47,17 @@ test("an expired background job stops polling and asks the user to retry", () =>
   assert.equal(progress?.phase, "error");
   assert.equal(progress?.progress, 100);
   assert.match(progress?.message ?? "", /Please retry/);
+  assert.equal(progress?.errorCode, "LEASE_EXPIRED");
+});
+
+test("a failed background job exposes its safe error code to the owning UI", () => {
+  const progress = backgroundJobToProgress(makeJob({
+    status: "FAILED",
+    errorCode: "GMAIL_RECONNECT_REQUIRED",
+    message: "Reconnect Gmail in Settings.",
+    leaseExpiresAt: null,
+  }));
+
+  assert.equal(progress?.phase, "error");
+  assert.equal(progress?.errorCode, "GMAIL_RECONNECT_REQUIRED");
 });
