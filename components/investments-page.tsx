@@ -12,10 +12,14 @@ import { EmptyState } from "@/components/ui-skeleton";
 import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
-import { Droplet, Lock, Plus } from "lucide-react";
+import { Droplet, Info, Lock, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
-import { compareInvestmentEntries, getLatestInvestmentEntry } from "@/lib/investment-entry-order";
+import {
+  calculateAnnualInvestmentContributions,
+  compareInvestmentEntries,
+  getLatestInvestmentEntry,
+} from "@/lib/investment-entry-order";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
@@ -87,6 +91,29 @@ function formatInceptionBadge(value: string) {
   };
 }
 
+function ContributionTrendIndicator({
+  currentCents,
+  previousCents,
+  previousYear,
+}: {
+  currentCents: number;
+  previousCents: number | undefined;
+  previousYear: number;
+}) {
+  if (previousCents === undefined || currentCents === previousCents) return null;
+  const increased = currentCents > previousCents;
+  return (
+    <span
+      className={`inv-contribution-trend ${increased ? "is-up" : "is-down"}`}
+      role="img"
+      aria-label={`${increased ? "Increased" : "Decreased"} from ${previousYear}`}
+      title={`${increased ? "Increased" : "Decreased"} from ${previousYear}`}
+    >
+      {increased ? "▲" : "▼"}
+    </span>
+  );
+}
+
 function buildLinePath(points: Array<{ x: number; y: number }>) {
   if (!points.length) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -137,6 +164,8 @@ export function InvestmentsPage() {
   const [newFunds, setNewFunds] = useState("0");
   const [entryInvested, setEntryInvested] = useState("0");
   const [entryCurrentValue, setEntryCurrentValue] = useState("0");
+  const [contributionAsOf] = useState(() => new Date());
+  const currentYear = contributionAsOf.getFullYear();
 
   const context = useQuery({
     queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
@@ -220,6 +249,18 @@ export function InvestmentsPage() {
     }
     return total;
   }, [accounts.data]);
+  const annualContributions = useMemo(
+    () => calculateAnnualInvestmentContributions(accounts.data ?? [], contributionAsOf),
+    [accounts.data, contributionAsOf],
+  );
+  const contributionsByYear = useMemo(
+    () => new Map(annualContributions.map((contribution) => [contribution.year, contribution.contributedCents])),
+    [annualContributions],
+  );
+  const ytdContributionCents = annualContributions
+    .find((contribution) => contribution.year === currentYear)?.contributedCents ?? 0;
+  const priorAnnualContributions = annualContributions
+    .filter((contribution) => contribution.year < currentYear);
   const totalCurrentAcrossAll = useMemo(() => {
     let total = 0;
     for (const account of accounts.data ?? []) {
@@ -657,8 +698,51 @@ export function InvestmentsPage() {
 
               {/* Invested Amount */}
               <div style={{ flex: "0 1 150px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                  Total Invested
+                <div className="inv-contribution-tooltip-shell" style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+                  <Button
+                    type="button"
+                    className="inv-contribution-tooltip-trigger"
+                    aria-label="Total Invested contribution history"
+                    aria-describedby="inv-annual-contributions"
+                  >
+                    <span>Total Invested</span>
+                    <Info size={12} aria-hidden="true" />
+                  </Button>
+                  <div id="inv-annual-contributions" className="inv-contribution-tooltip" role="tooltip">
+                    <dl>
+                      <div className="is-ytd">
+                        <dt>{currentYear} YTD</dt>
+                        <dd>
+                          <ContributionTrendIndicator
+                            currentCents={ytdContributionCents}
+                            previousCents={contributionsByYear.get(currentYear - 1)}
+                            previousYear={currentYear - 1}
+                          />
+                          {formatCents(ytdContributionCents)}
+                        </dd>
+                      </div>
+                      {priorAnnualContributions.map((contribution) => (
+                        <div key={contribution.year}>
+                          <dt>{contribution.year}</dt>
+                          <dd>
+                            <ContributionTrendIndicator
+                              currentCents={contribution.contributedCents}
+                              previousCents={contributionsByYear.get(contribution.year - 1)}
+                              previousYear={contribution.year - 1}
+                            />
+                            {formatCents(contribution.contributedCents)}
+                          </dd>
+                        </div>
+                      ))}
+                      {!priorAnnualContributions.length ? (
+                        <div>
+                          <dt>Earlier</dt>
+                          <dd>None recorded</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                    <small>Net change in total invested</small>
+                  </div>
                 </div>
                 <div style={{ fontSize: "18px", fontWeight: 600, color: "var(--text-secondary)" }}>
                   {formatCents(totalInvestedAcrossAll)}

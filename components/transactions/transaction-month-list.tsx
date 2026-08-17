@@ -7,6 +7,7 @@ type TransactionRow = {
   amountCents: number;
   direction: "DEBIT" | "CREDIT";
   group?: { name: string; icon?: string | null } | null;
+  hasCorrectionHistory?: boolean;
 };
 
 type MonthGroup<T extends TransactionRow> = {
@@ -92,7 +93,7 @@ export function TransactionMonthList<T extends TransactionRow>({
                 }}
                 role="button"
                 tabIndex={deleting ? -1 : 0}
-                aria-label={grouping ? `${selected ? "Deselect" : "Select"} transaction ${transaction.subject}` : `Edit transaction ${transaction.subject}`}
+                aria-label={grouping ? `${selected ? "Deselect" : "Select"} transaction ${transaction.subject}` : `Correct transaction ${transaction.subject}${transaction.hasCorrectionHistory ? "; correction history available" : ""}`}
                 aria-pressed={grouping ? selected : undefined}
               >
                 <div className={`tx-recent-arrow ${grouping ? "select" : incomeTransaction ? "income" : "expense"}${selected ? " is-selected" : ""}`}>
@@ -106,6 +107,7 @@ export function TransactionMonthList<T extends TransactionRow>({
                   <span className="tx-recent-date">
                     {formatTransactionDate(transaction.date)}
                     {transaction.group ? <span className="tx-row-group-pill">{transaction.group.icon || "📌"} {transaction.group.name}</span> : null}
+                    {transaction.hasCorrectionHistory ? <span className="tx-row-correction-pill">Corrected</span> : null}
                   </span>
                 </div>
               </div>

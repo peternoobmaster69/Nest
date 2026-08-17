@@ -27,6 +27,7 @@ Accounts, envelopes/budgets, transactions, transfers, transaction groups, postin
 - Group user transactions without changing their ownership.
 - Prevent replay and concurrent double effects.
 - Reverse posted rows instead of deleting history.
+- Expose correction lineage without mixing voided originals or reversals into normal transaction lists.
 - Report drift without silently repairing it.
 
 ## Public APIs and important functions
@@ -36,6 +37,8 @@ Accounts, envelopes/budgets, transactions, transfers, transaction groups, postin
 | `lib/posting-service.ts` | `executePosting` | Atomic idempotent operation; replay or conflict |
 |  | `createLedgerTransaction` | Create a transaction tied to a posting |
 |  | `reverseLedgerTransaction` | Attributed reversal/void |
+|  | `correctLedgerTransaction` | Atomic reversal plus corrected replacement |
+| `lib/domains/ledger/transaction-lineage.ts` | `readTransactionLineage` | Bounded chronological reconstruction from immutable posting links |
 |  | `claimCreditCardTransaction`, `claimReceivable` | Conditional one-row concurrency claim |
 |  | `reconcileWorkspaceBudgets` | Compare stored versus ledger-derived envelope balance |
 | `lib/budget-ledger.ts` | delta and recalculate helpers | Direction-aware envelope arithmetic |
@@ -68,6 +71,22 @@ Source: [posting sequence](../diagrams/posting-sequence.mmd).
 - **Side effects:** creates opposite row and marks original voided.
 - **Edge cases:** already-voided/missing/cross-workspace transaction.
 - **Postcondition:** historical original remains.
+
+### `correctLedgerTransaction`
+
+- **Parameters:** transaction ID, actor, reason, idempotency key, corrected fields.
+- **Returns:** original, reversal, and replacement IDs plus updated envelopes.
+- **Side effects:** atomically voids the original, creates an opposite reversal and a visible replacement, and applies only the net envelope delta.
+- **Edge cases:** replay, concurrent correction, inactive/mismatched destination, and linked transfer/card/receivable workflows.
+- **Postcondition:** reconciliation sees `original + reversal + replacement = replacement`; normal lists show only the replacement.
+
+### `readTransactionLineage`
+
+- **Parameters:** active transaction ID and its already-authorized workspace ID.
+- **Returns:** up to 50 chronological versions with correction reason, actor/time, field values, and matching compensating reversal.
+- **Side effects:** none.
+- **Security:** every traversed version is constrained to the authorized workspace; normal transaction lists still hide voided and reversal rows.
+- **Postcondition:** the current visible record can explain its evolution without duplicating audit state or changing ledger balances.
 
 ## Configuration
 

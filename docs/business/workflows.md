@@ -37,6 +37,15 @@ Failure risks: database wake, pending session limit, no membership, or underpriv
 
 The final manual step is intentional; see [BR-012–BR-015](business-rules.md).
 
+## Correct a standalone transaction
+
+1. UI sends corrected fields and an optional audit reason to `POST /api/transactions/{id}/corrections` with an idempotency key.
+2. Posting locks the original and rejects an already-corrected or linked workflow entry.
+3. One serializable operation voids the original, creates its opposite reversal, creates the corrected replacement, and applies the net envelope delta.
+4. Normal views show the replacement; reconciliation retains all three rows.
+
+Transfers, card accounting, and receivable settlement must be corrected through their owning workflow so paired or source-linked effects remain consistent.
+
 ## Envelope transfer
 
 ```mermaid

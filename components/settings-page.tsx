@@ -69,6 +69,7 @@ type Context = {
 
 type GmailStatus = {
   connected: boolean;
+  requiresReconnect: boolean;
   integration: {
     id: string;
     email: string;
@@ -93,6 +94,7 @@ type GmailSyncProgress = {
   total: number;
   current: number;
   updatedAt: number;
+  errorCode?: string | null;
 };
 
 type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
@@ -100,6 +102,7 @@ type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
   queued?: boolean;
   jobId?: string;
   message?: string;
+  errorCode?: string | null;
 };
 
 function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSummary {
@@ -293,6 +296,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
     if (status === "connected") setGmailMessage("Gmail connected successfully.");
     else if (status === "denied") setGmailMessage("Gmail permission was denied.");
     else if (status === "forbidden") setGmailMessage("Gmail callback failed authorization.");
+    else if (status === "refresh_required") setGmailMessage("Google did not return a reusable Gmail authorization. Reconnect Gmail and approve access again.");
     else setGmailMessage("Gmail connection failed.");
     url.searchParams.delete("gmail");
     window.history.replaceState({}, "", url.toString());
@@ -462,6 +466,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
           total: current?.total ?? 0,
           current: current?.current ?? 0,
           updatedAt: Date.now(),
+          errorCode: data.errorCode ?? null,
         }));
         setIsGmailSyncPolling(!data.queued);
         return;
@@ -1028,6 +1033,11 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
   const isGmailSyncActive = Boolean(
     gmailSyncProgress && gmailSyncProgress.phase !== "complete" && gmailSyncProgress.phase !== "error",
   );
+  const gmailRequiresReconnect = Boolean(
+    gmailStatus.data?.requiresReconnect
+      || gmailSyncProgress?.errorCode === "GMAIL_RECONNECT_REQUIRED"
+      || /reconnect gmail/i.test(gmailMessage),
+  );
   const gmailRequiresReauthentication = isRecentAuthenticationRequired(gmailMessage);
   const gmailNotice = getGmailNotice(gmailMessage, gmailSyncProgress?.phase);
   const autoRuleRequiresReauthentication = isRecentAuthenticationRequired(autoRuleMessage);
@@ -1123,9 +1133,15 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
           </div>
           {gmailStatus.data?.connected ? (
             <div className="gmail-alerts-actions">
-              <Button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending || isGmailSyncPolling}>
-                {syncGmail.isPending || isGmailSyncPolling ? "Syncing..." : "Sync Inbox"}
-              </Button>
+              {gmailRequiresReconnect ? (
+                <Button className="btn btn-primary btn-xs" onClick={() => connectGmail.mutate()} disabled={connectGmail.isPending}>
+                  {connectGmail.isPending ? "Redirecting..." : "Reconnect Gmail"}
+                </Button>
+              ) : (
+                <Button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending || isGmailSyncPolling}>
+                  {syncGmail.isPending || isGmailSyncPolling ? "Syncing..." : "Sync Inbox"}
+                </Button>
+              )}
               <Button className="btn btn-ghost btn-xs" onClick={() => void confirmDisconnectGmail()} disabled={disconnectGmail.isPending}>
                 Disconnect
               </Button>

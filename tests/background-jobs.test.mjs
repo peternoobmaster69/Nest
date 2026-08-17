@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Prisma } from "@prisma/client";
 
-import { backgroundJobToProgress } from "../lib/background-jobs.ts";
+import { backgroundJobToProgress, sanitizeBackgroundJobError } from "../lib/background-jobs.ts";
 
 function makeJob(overrides = {}) {
   return {
@@ -47,4 +48,32 @@ test("an expired background job stops polling and asks the user to retry", () =>
   assert.equal(progress?.phase, "error");
   assert.equal(progress?.progress, 100);
   assert.match(progress?.message ?? "", /Please retry/);
+  assert.equal(progress?.errorCode, "LEASE_EXPIRED");
+});
+
+test("a failed background job exposes its safe error code to the owning UI", () => {
+  const progress = backgroundJobToProgress(makeJob({
+    status: "FAILED",
+    errorCode: "GMAIL_RECONNECT_REQUIRED",
+    message: "Reconnect Gmail in Settings.",
+    leaseExpiresAt: null,
+  }));
+
+  assert.equal(progress?.phase, "error");
+  assert.equal(progress?.errorCode, "GMAIL_RECONNECT_REQUIRED");
+});
+
+test("a database constraint failure retains only its safe constraint name", () => {
+  const failure = sanitizeBackgroundJobError(new Prisma.PrismaClientKnownRequestError(
+    "database rejected private row data",
+    {
+      code: "P2003",
+      clientVersion: "test",
+      meta: { constraint: "CardAlertStaging_currency_check" },
+    },
+  ));
+
+  assert.equal(failure.code, "P2003:CardAlertStaging_currency_check");
+  assert.match(failure.message, /database validation/);
+  assert.doesNotMatch(failure.message, /private row data/);
 });

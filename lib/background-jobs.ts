@@ -16,6 +16,7 @@ export type BackgroundJobProgress = {
   status?: string;
   attempts?: number;
   retryCount?: number;
+  errorCode?: string | null;
 };
 
 export class BackgroundJobError extends Error {
@@ -58,9 +59,21 @@ function statusToPhase(status: string): BackgroundJobPhase {
   return "idle";
 }
 
-function sanitizeBackgroundJobError(error: unknown): JobFailure {
+export function sanitizeBackgroundJobError(error: unknown): JobFailure {
   if (error instanceof BackgroundJobError) {
     return { code: error.code, message: error.message, retryable: error.retryable };
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+    const rawConstraint = error.meta?.constraint ?? error.meta?.field_name;
+    const constraint = typeof rawConstraint === "string" && /^[A-Za-z0-9_]{1,64}$/.test(rawConstraint)
+      ? rawConstraint
+      : null;
+    return {
+      code: constraint ? `P2003:${constraint}` : "P2003",
+      message: "The background job could not be completed because stored data failed database validation.",
+      retryable: false,
+    };
   }
 
   const candidate = error as { code?: unknown; retryable?: unknown; safeMessage?: unknown } | null;
@@ -389,6 +402,7 @@ export async function failClaimedBackgroundJob(jobId: string, leaseToken: string
     retrying: shouldRetry,
     retryCount,
     errorCode: failure.code,
+    error,
   });
   return updated.count === 1 ? { retrying: shouldRetry, failure } : null;
 }
@@ -496,6 +510,7 @@ export function backgroundJobToProgress(
       status: job.status,
       attempts: job.attempts,
       retryCount: job.retryCount,
+      errorCode: job.errorCode ?? "LEASE_EXPIRED",
     };
   }
   return {
@@ -509,5 +524,6 @@ export function backgroundJobToProgress(
     status: job.status,
     attempts: job.attempts,
     retryCount: job.retryCount,
+    errorCode: job.errorCode,
   };
 }

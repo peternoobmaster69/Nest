@@ -23,9 +23,18 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { TransactionMonthList } from "@/components/transactions/transaction-month-list";
+import { TransactionCorrectionDialog } from "@/components/transactions/transaction-correction-dialog";
+import type { TransactionLineageResponse } from "@/components/transactions/transaction-lineage-panel";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
 import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 import { SavingsSubAccountCheckbox } from "@/components/savings-sub-account-checkbox";
+import {
+  getTransactionPeriodParam,
+  getTransactionQuickPeriodDateRange,
+  isTransactionQuickPeriod,
+  TRANSACTION_ALL_PERIOD,
+  type TransactionQuickPeriod,
+} from "@/lib/transaction-date-filters";
 
 const ALL_BANKS_FILTER = "ALL";
 const GROUP_ICON_OPTIONS = [
@@ -64,6 +73,7 @@ type Transaction = {
   amountCents: number;
   direction: "DEBIT" | "CREDIT";
   kind: string;
+  hasCorrectionHistory?: boolean;
   date: string;
 };
 type TransactionGroup = {
@@ -281,6 +291,7 @@ export function TransactionsPage() {
   const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
   const [editSubject, setEditSubject] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editReason, setEditReason] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editOperation, setEditOperation] = useState<"DEDUCT" | "ADD">("ADD");
   const [editTransactionDate, setEditTransactionDate] = useState("");
@@ -447,39 +458,10 @@ export function TransactionsPage() {
   const currentMonthLabel = MONTH_NAMES[currentMonthIndex];
   const previousMonthLabel = MONTH_NAMES[(currentMonthIndex + 11) % 12];
 
-  const getDateRangeForQuickSelect = (type: string) => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-
-    switch (type) {
-      case "thisMonth": {
-        return {
-          from: new Date(year, month, 1).toISOString().split("T")[0],
-          to: new Date(year, month + 1, 0).toISOString().split("T")[0],
-        };
-      }
-      case "lastMonth": {
-        return {
-          from: new Date(year, month - 1, 1).toISOString().split("T")[0],
-          to: new Date(year, month, 0).toISOString().split("T")[0],
-        };
-      }
-      case "thisYear": {
-        return {
-          from: new Date(year, 0, 1).toISOString().split("T")[0],
-          to: new Date(year, 11, 31).toISOString().split("T")[0],
-        };
-      }
-      default:
-        return {};
-    }
-  };
-
   // Initialize with "This Month" active
   useEffect(() => {
     if (activeQuickSelect === "thisMonth" && !dateFilter.from) {
-      setDateFilter(getDateRangeForQuickSelect("thisMonth"));
+      setDateFilter(getTransactionQuickPeriodDateRange("thisMonth"));
     }
   }, []);
 
@@ -499,10 +481,10 @@ export function TransactionsPage() {
     return () => window.clearTimeout(timeoutId);
   }, [editingGroupSearch]);
 
-  const handleQuickSelect = (type: string) => {
+  const handleQuickSelect = (type: TransactionQuickPeriod) => {
     setActiveQuickSelect(type);
     setSelectedCustomMonths([]);
-    setDateFilter(getDateRangeForQuickSelect(type));
+    setDateFilter(getTransactionQuickPeriodDateRange(type));
   };
 
   const toggleCustomMonth = (monthIndex: number, year: number) => {
@@ -702,6 +684,9 @@ export function TransactionsPage() {
     const requestedFrom = searchParams.get("from");
     const requestedTo = searchParams.get("to");
     const requestedMonths = searchParams.get("months");
+    const requestedPeriod = searchParams.get("period");
+    const requestedAllPeriod = requestedPeriod === TRANSACTION_ALL_PERIOD;
+    const requestedQuickPeriod = isTransactionQuickPeriod(requestedPeriod) ? requestedPeriod : null;
     const requestedSearch = searchParams.get("search")?.trim().slice(0, 120) ?? "";
     const isAskNestView = searchParams.get("view") === "ask-nest";
 
@@ -714,6 +699,8 @@ export function TransactionsPage() {
       !requestedFrom &&
       !requestedTo &&
       !requestedMonths &&
+      !requestedAllPeriod &&
+      !requestedQuickPeriod &&
       !requestedSearch
     ) {
       setHydratedUrlFilterKey(urlFilterKey);
@@ -750,7 +737,13 @@ export function TransactionsPage() {
     const validMonths = requestedMonths
       ? [...new Set(requestedMonths.split(",").filter((value) => /^\d{4}-(0[1-9]|1[0-2])$/.test(value)))].slice(0, 24)
       : [];
-    if (validMonths.length) {
+    if (requestedAllPeriod) {
+      clearDateFilter();
+    } else if (requestedQuickPeriod) {
+      setSelectedCustomMonths([]);
+      setActiveQuickSelect(requestedQuickPeriod);
+      setDateFilter(getTransactionQuickPeriodDateRange(requestedQuickPeriod));
+    } else if (validMonths.length) {
       const sorted = [...validMonths].sort();
       const [firstYear, firstMonth] = sorted[0].split("-").map(Number);
       const [lastYear, lastMonth] = sorted.at(-1)!.split("-").map(Number);
@@ -777,8 +770,9 @@ export function TransactionsPage() {
     budgetId: activeBudgetFilterId === "ALL" ? null : activeBudgetFilterId,
     groupId: activeGroupFilterId === "ALL" ? null : activeGroupFilterId,
     months: customMonthsFilter || null,
-    from: customMonthsFilter ? null : dateFilter.from,
-    to: customMonthsFilter ? null : dateFilter.to,
+    period: getTransactionPeriodParam(activeQuickSelect),
+    from: activeQuickSelect === "custom" && !customMonthsFilter ? dateFilter.from : null,
+    to: activeQuickSelect === "custom" && !customMonthsFilter ? dateFilter.to : null,
     search: debouncedSearchQuery || null,
   }, urlFilterHydrated && bankFilterHydrated);
 
@@ -1067,14 +1061,15 @@ export function TransactionsPage() {
     },
   });
 
-  const updateTx = useMutation({
-    mutationFn: (payload: { id: string; subject: string; notes?: string | null; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId: string; groupId?: string | null }) =>
-      fetchJson(`/api/transactions/${payload.id}`, {
-        method: "PATCH",
+  const correctTx = useMutation({
+    mutationFn: (payload: { id: string; subject: string; notes?: string | null; reason?: string; amountCents: number; operation: "DEDUCT" | "ADD"; date: string; budgetId: string; groupId?: string | null }) =>
+      fetchJson(`/api/transactions/${payload.id}/corrections`, {
+        method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           subject: payload.subject,
           notes: payload.notes ?? null,
+          reason: payload.reason || undefined,
           amountCents: payload.amountCents,
           direction: payload.operation === "ADD" ? "CREDIT" : "DEBIT",
           kind: payload.operation === "ADD" ? "ADJUSTMENT" : "EXPENSE",
@@ -1087,6 +1082,7 @@ export function TransactionsPage() {
       setEditingTxId(null);
       setEditSubject("");
       setEditNotes("");
+      setEditReason("");
       setEditAmount("");
       setEditOperation("DEDUCT");
       setEditTransactionDate("");
@@ -1208,6 +1204,12 @@ export function TransactionsPage() {
     if (!editingTransaction) return budgets.data;
     return budgets.data.filter((budget) => budget.accountId === editingTransaction.accountId);
   }, [budgets.data, editingTransaction]);
+  const transactionLineage = useQuery({
+    queryKey: queryKeys.transactions(workspaceId, "lineage", editingTransaction?.id),
+    queryFn: () => fetchJson<TransactionLineageResponse>(`/api/transactions/${editingTransaction!.id}/lineage`),
+    enabled: Boolean(editingTransaction?.id && editingTransaction.hasCorrectionHistory),
+    staleTime: Infinity,
+  });
 
   const filteredTransactions = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -1305,11 +1307,12 @@ export function TransactionsPage() {
   );
 
   const beginEdit = (tx: Transaction) => {
-    updateTx.reset();
+    correctTx.reset();
     deleteTx.reset();
     setEditingTxId(tx.id);
     setEditSubject(tx.subject);
     setEditNotes(tx.notes || tx.details || "");
+    setEditReason("");
     setEditAmount((tx.amountCents / 100).toFixed(2));
     setEditOperation(tx.direction === "CREDIT" ? "ADD" : "DEDUCT");
     setEditTransactionDate(new Date(tx.date).toISOString().split("T")[0]);
@@ -1318,11 +1321,12 @@ export function TransactionsPage() {
   };
 
   const closeEditModal = () => {
-    updateTx.reset();
+    correctTx.reset();
     deleteTx.reset();
     setEditingTxId(null);
     setEditSubject("");
     setEditNotes("");
+    setEditReason("");
     setEditAmount("");
     setEditOperation("DEDUCT");
     setEditTransactionDate("");
@@ -1362,14 +1366,44 @@ export function TransactionsPage() {
     }
   }, [editingTxId, editFormGroups.data, editGroupId]);
 
-  const onSubmitEdit = (event: FormEvent) => {
+  const onSubmitEdit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editingTxId || !editSubject || !editAmount || !editTransactionDate || !editBudgetId) return;
-    updateTx.mutate({
-      id: editingTxId,
+    if (!editingTransaction || !editSubject || !editAmount || !editTransactionDate || !editBudgetId) return;
+    const amountCents = Math.round(Number(editAmount) * 100);
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0) return;
+
+    const currentBudget = budgets.data?.find((budget) => budget.id === editingTransaction.budgetId);
+    const correctedBudget = editableBudgets.find((budget) => budget.id === editBudgetId);
+    const currentEffectCents = editingTransaction.direction === "CREDIT"
+      ? editingTransaction.amountCents
+      : -editingTransaction.amountCents;
+    const correctedEffectCents = editOperation === "ADD" ? amountCents : -amountCents;
+    const resultingBudgetCents = (correctedBudget?.availableCents ?? 0) + correctedEffectCents - (
+      editingTransaction.budgetId === editBudgetId ? currentEffectCents : 0
+    );
+    const confirmed = await confirmMoneyChange({
+      title: "Correct transaction?",
+      message: "The original entry will be reversed and the corrected replacement will be posted atomically.",
+      confirmLabel: "Create correction",
+      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+      details: [
+        { label: "Entry", value: editingTransaction.subject },
+        { label: "Current sub-account", value: currentBudget?.name || "Unassigned" },
+        { label: "Corrected sub-account", value: correctedBudget?.name || "Unassigned" },
+        { label: "Amount", value: `${formatMoney(editingTransaction.amountCents, baseCurrency)} → ${formatMoney(amountCents, baseCurrency)}`, tone: editOperation === "ADD" ? "positive" : "negative" },
+        { label: "Date", value: new Date(editTransactionDate).toLocaleDateString("en-SG") },
+        { label: "Resulting sub-account balance", value: formatMoney(resultingBudgetCents, baseCurrency) },
+      ],
+      reversal: "The original and compensating reversal remain immutable in financial history; the replacement becomes the visible entry.",
+    });
+    if (!confirmed) return;
+
+    correctTx.mutate({
+      id: editingTransaction.id,
       subject: editSubject,
       notes: editNotes || null,
-      amountCents: Math.round(Number(editAmount) * 100),
+      reason: editReason.trim() || undefined,
+      amountCents,
       operation: editOperation,
       date: editTransactionDate,
       budgetId: editBudgetId,
@@ -2715,117 +2749,39 @@ export function TransactionsPage() {
       )}
 
       {editingTxId && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={closeEditModal} title="Edit transaction" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal txn-modal txn-entry-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="profile-modal-head">
-              <h3>Edit Transaction</h3>
-              <ModalCloseButton onClick={closeEditModal} label="Close Edit Transaction" />
-            </div>
-            <form className="modal-form-shell" onSubmit={onSubmitEdit}>
-              <div className="profile-modal-body txn-modal-body txn-modal-form">
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Amount
-                <NumericCalculatorInput
-                  min="1"
-                  step="0.01"
-                  placeholder="Amount"
-                  value={editAmount}
-                  onValueChange={setEditAmount}
-                />
-              </label>
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Date
-                <Input
-                  type="date"
-                  className="input"
-                  value={editTransactionDate}
-                  onChange={(e) => setEditTransactionDate(e.target.value)}
-                  required
-                />
-              </label>
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Deduct or Add
-                <div className="segmented-toggle" role="tablist" aria-label="Transaction operation">
-                  <Button
-                    type="button"
-                    className={`segmented-toggle-btn segmented-toggle-btn-deduct ${editOperation === "DEDUCT" ? "is-active" : ""}`}
-                    onClick={() => setEditOperation("DEDUCT")}
-                  >
-                    Deduct
-                  </Button>
-                  <Button
-                    type="button"
-                    className={`segmented-toggle-btn segmented-toggle-btn-add ${editOperation === "ADD" ? "is-active" : ""}`}
-                    onClick={() => setEditOperation("ADD")}
-                  >
-                    Add
-                  </Button>
-                </div>
-              </label>
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Sub Account
-                <Select className="input" value={editBudgetId} onChange={(e) => {
-                  setEditBudgetId(e.target.value);
-                  setEditGroupId("");
-                }} required>
-                  <option value="" disabled>
-                    Select sub account
-                  </option>
-                  {editableBudgets.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Group <span style={{ color: "var(--text-tertiary)" }}>(optional)</span>
-                <Select className="input" value={editGroupId} onChange={(e) => setEditGroupId(e.target.value)}>
-                  <option value="">No group</option>
-                  {(editFormGroups.data ?? []).map((group) => (
-                    <option key={group.id} value={group.id}>{group.icon || "📌"} {group.name}</option>
-                  ))}
-                </Select>
-              </label>
-              <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Title
-                <Input className="input" placeholder="Title" value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
-              </label>
-              <MarkdownEditor
-                className="modal-grid-span-2"
-                label="Notes"
-                value={editNotes}
-                onChange={setEditNotes}
-                placeholder="Write notes in Markdown"
-                calculator
-              />
-              {updateTx.isError ? (
-                <div className="modal-grid-span-2" style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
-                  {(updateTx.error as Error).message || "Failed to save transaction"}
-                </div>
-              ) : null}
-              </div>
-              <div className="txn-modal-actions">
-                <Button
-                  className="btn btn-ghost modal-action-destructive"
-                  type="button"
-                  onClick={confirmDeleteEditingTx}
-                  disabled={deleteTx.isPending || !editingTxId}
-                >
-                  {deleteTx.isPending && editingTxId && deletingTransactionIds.includes(editingTxId) ? "Deleting..." : "Delete"}
-                </Button>
-                <div className="modal-action-group">
-                  <Button className="btn btn-ghost" type="button" onClick={closeEditModal}>
-                    Cancel
-                  </Button>
-                  <Button className="btn btn-primary" type="submit" disabled={updateTx.isPending}>
-                    {updateTx.isPending ? <LoadingDots /> : "Save"}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </Dialog>,
+        <TransactionCorrectionDialog
+          amount={editAmount}
+          budgets={editableBudgets}
+          budgetId={editBudgetId}
+          date={editTransactionDate}
+          deletePending={deleteTx.isPending}
+          deleting={deletingTransactionIds.includes(editingTxId)}
+          error={correctTx.isError ? correctTx.error as Error : null}
+          formatAmount={formatCents}
+          groupId={editGroupId}
+          groups={editFormGroups.data ?? []}
+          lineage={transactionLineage.data ?? null}
+          lineageError={transactionLineage.isError ? transactionLineage.error as Error : null}
+          lineageLoading={transactionLineage.isLoading && transactionLineage.isFetching}
+          notes={editNotes}
+          operation={editOperation}
+          pending={correctTx.isPending}
+          reason={editReason}
+          showLineage={Boolean(editingTransaction?.hasCorrectionHistory)}
+          subject={editSubject}
+          onAmountChange={setEditAmount}
+          onBudgetChange={(value) => { setEditBudgetId(value); setEditGroupId(""); }}
+          onClose={closeEditModal}
+          onDateChange={setEditTransactionDate}
+          onDelete={confirmDeleteEditingTx}
+          onGroupChange={setEditGroupId}
+          onLineageRetry={() => { void transactionLineage.refetch(); }}
+          onNotesChange={setEditNotes}
+          onOperationChange={setEditOperation}
+          onReasonChange={setEditReason}
+          onSubjectChange={setEditSubject}
+          onSubmit={onSubmitEdit}
+        />,
         document.body
       )}
 

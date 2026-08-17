@@ -50,6 +50,7 @@ test("all finance mutations require at least EDITOR", async () => {
     "app/api/budgets/plan/route.ts": ["POST", "PATCH", "DELETE"],
     "app/api/transactions/route.ts": ["POST"],
     "app/api/transactions/[id]/route.ts": ["PATCH", "DELETE"],
+    "app/api/transactions/[id]/corrections/route.ts": ["POST"],
     "app/api/transactions/transfer/route.ts": ["POST"],
     "app/api/transactions/bulk-import/route.ts": ["POST"],
     "app/api/transaction-groups/route.ts": ["POST"],
