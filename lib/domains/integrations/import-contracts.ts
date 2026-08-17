@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const MAX_IMPORT_ROWS_PER_CHUNK = 250;
+export const MAX_IMPORT_ROWS_PER_CHUNK = 250;
 export const MAX_MAYBANK_ROWS_PER_CHUNK = 500;
 
 export const ImportMaybankSchema = z.object({
@@ -14,14 +14,21 @@ export const ImportMaybankSchema = z.object({
   path: ["chunkIndex"],
 });
 
-const ImportedTransactionSchema = z.object({
-  AccountName: z.string().trim().max(200).optional(),
+const optionalImportedText = (maxLength?: number) => z.preprocess(
+  (value) => value === null ? undefined : value,
+  maxLength === undefined
+    ? z.string().trim().optional()
+    : z.string().trim().max(maxLength).optional(),
+);
+
+export const ImportedTransactionSchema = z.object({
+  AccountName: optionalImportedText(200),
   Direction: z.enum(["DEBIT", "CREDIT"]),
   Subject: z.string().trim().min(1).max(500),
   Date: z.string().trim().min(8).max(40),
   AmountCents: z.number().int().positive().max(2_147_483_647),
-  Details: z.string().trim().max(2_000).optional(),
-  Notes: z.string().trim().max(2_000).optional(),
+  Details: optionalImportedText(2_000),
+  Notes: optionalImportedText(),
 });
 
 export const BulkImportSchema = z.object({

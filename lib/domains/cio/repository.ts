@@ -530,7 +530,7 @@ export async function loadCioSnapshotData(
         entries: {
           where: { date: { lt: dayEndExclusive } },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-          take: 1,
+          take: 5_000,
           select: { id: true, date: true, createdAt: true, investedCents: true, currentValueCents: true },
         },
       },

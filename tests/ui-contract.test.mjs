@@ -873,6 +873,7 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(investments, /data-compact-label=\{inceptionBadge\.compact\}/);
   assert.match(investments, /calculateAnnualInvestmentContributions/);
   assert.match(investments, /id="inv-annual-contributions"[\s\S]*?role="tooltip"/);
+  assert.doesNotMatch(investments, /Opening snapshots/);
   assert.match(investments, /inv-contribution-trend[\s\S]*?is-up[\s\S]*?is-down/);
   assert.match(styles, /\.inv-contribution-tooltip-shell:focus-within \.inv-contribution-tooltip/);
   assert.match(styles, /\.inv-contribution-trend\.is-up\s*\{[^}]*var\(--amount-positive\)/s);

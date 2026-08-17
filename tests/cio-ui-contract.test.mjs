@@ -55,6 +55,24 @@ test("CIO decision readiness is compact by default with accessible expandable de
   assert.match(styles, /\.cio-health-card\[open\] \.cio-health-chevron/);
 });
 
+test("CIO overview shows current-year contribution pace when the snapshot provides it", async () => {
+  const [overview, progressCard, styles] = await Promise.all([
+    source("components/cio/cio-overview.tsx"),
+    source("components/cio/cio-contribution-progress.tsx"),
+    source("app/styles/cio.css"),
+  ]);
+
+  assert.match(overview, /<CioContributionProgressCard overview=\{overview\}/);
+  assert.match(progressCard, /if \(!progress\) return null/);
+  assert.match(progressCard, /On track for/);
+  assert.match(progressCard, /Behind .* pace/);
+  assert.match(progressCard, /Recorded invested change YTD/);
+  assert.match(progressCard, /role="progressbar"/);
+  assert.match(progressCard, /contributionGrowthRateBps/);
+  assert.match(styles, /\.cio-contribution-card\.is-on-track/);
+  assert.match(styles, /\.cio-contribution-card\.is-behind/);
+});
+
 test("CIO configuration covers every bounded API family", async () => {
   const files = await Promise.all([
     source("components/cio/dialogs/cio-profile-dialog.tsx"),

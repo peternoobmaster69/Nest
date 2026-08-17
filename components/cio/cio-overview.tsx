@@ -4,6 +4,7 @@ import { MessageCircleQuestion, Settings2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { CioPolicy, CioSetupSection, CioSnapshot } from "@/components/cio/types";
 import { CioHealthSummary } from "@/components/cio/cio-health-summary";
+import { CioContributionProgressCard } from "@/components/cio/cio-contribution-progress";
 import { CioAllocationCard } from "@/components/cio/cio-allocation-card";
 import { CioLiquidityCard } from "@/components/cio/cio-liquidity-card";
 import { CioPolicyExceptions } from "@/components/cio/cio-policy-exceptions";
@@ -58,6 +59,7 @@ export function CioOverview({
       />
       {!canEdit ? <p className="cio-readonly-note" role="status">You have view-only access. An owner or editor can update CIO assumptions.</p> : null}
       <CioHealthSummary overview={overview} onConfigure={(section) => onConfigure(section)} onOpenBankControls={openBankControls} onOpenSubAccounts={openSubAccounts} />
+      <CioContributionProgressCard overview={overview} />
       <div className="cio-content-grid">
         <CioAllocationCard overview={overview} policy={policy?.confirmedAt ? policy : null} onConfigure={(section) => onConfigure(section)} />
         <CioLiquidityCard overview={overview} onConfigure={(section) => onConfigure(section)} />

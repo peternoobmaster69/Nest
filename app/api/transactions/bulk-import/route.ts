@@ -1,9 +1,8 @@
-import { applyBudgetAvailableDelta, getBudgetAvailableDeltaCents } from "@/lib/budget-ledger";
+import { recalculateBudgetAvailableCents } from "@/lib/budget-ledger";
 import { executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
-import { enforceDistributedRateLimit } from "@/lib/security-rate-limit";
 import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
@@ -99,17 +98,21 @@ export async function POST(request: Request) {
    try {
     const parsed = { data: await parseJsonBody(request, BulkImportSchema, 1024 * 1024) };
 
-    const { workspaceId, accountId, budgetId, kind, transactions, chunkIndex, chunkSize, recalculate } = parsed.data;
+    const {
+      workspaceId,
+      accountId,
+      budgetId,
+      kind,
+      transactions,
+      chunkIndex,
+      totalChunks,
+      chunkSize,
+      recalculate,
+    } = parsed.data;
+    const isFinalChunk = chunkIndex === undefined || totalChunks === undefined || chunkIndex === totalChunks - 1;
+    const shouldRecalculate = recalculate && isFinalChunk;
 
     const { userId } = await requireWorkspaceAccess(workspaceId, "EDITOR");
-    await enforceDistributedRateLimit(request, {
-      scope: "transaction-bulk-import",
-      identifier: `${workspaceId}:${userId}`,
-      limit: 10,
-      windowMs: 10 * 60_000,
-      blockMs: 10 * 60_000,
-    });
-
     // Validate account belongs to workspace
     const account = await prisma.financialAccount.findFirst({
       where: {
@@ -168,38 +171,41 @@ export async function POST(request: Request) {
       }
     }
 
-    const existingDuplicateKeys = await getExistingDuplicateKeys(
-      workspaceId,
-      accountId,
-      budgetId,
-      toImport.map((item) => ({
-        date: item.date,
-        subject: item.subject,
-        amountCents: item.tx.AmountCents,
-      })),
-    );
-    const seenImportKeys = new Set<string>();
-    const nonDuplicates = toImport.filter((item) => {
-      const duplicateKey = getDuplicateKey(item.date, item.subject, item.tx.AmountCents);
-      const existsInDatabase = existingDuplicateKeys.has(duplicateKey);
-      const repeatedInPayload = seenImportKeys.has(duplicateKey);
-      if (existsInDatabase || repeatedInPayload) {
-        result.duplicates++;
-        result.duplicateRecords.push({
-          date: getUtcDayRange(item.date).start.toISOString().slice(0, 10),
+    let rowsToCreate = toImport;
+    if (kind.trim().toUpperCase() !== "MIGRATION") {
+      const existingDuplicateKeys = await getExistingDuplicateKeys(
+        workspaceId,
+        accountId,
+        budgetId,
+        toImport.map((item) => ({
+          date: item.date,
           subject: item.subject,
           amountCents: item.tx.AmountCents,
-          direction: item.direction,
-          notes: item.tx.Notes?.trim() || null,
-          reason: existsInDatabase ? "EXISTING_TRANSACTION" : "DUPLICATE_IN_PAYLOAD",
-        });
-        return false;
-      }
-      seenImportKeys.add(duplicateKey);
-      return true;
-    });
+        })),
+      );
+      const seenImportKeys = new Set<string>();
+      rowsToCreate = toImport.filter((item) => {
+        const duplicateKey = getDuplicateKey(item.date, item.subject, item.tx.AmountCents);
+        const existsInDatabase = existingDuplicateKeys.has(duplicateKey);
+        const repeatedInPayload = seenImportKeys.has(duplicateKey);
+        if (existsInDatabase || repeatedInPayload) {
+          result.duplicates++;
+          result.duplicateRecords.push({
+            date: getUtcDayRange(item.date).start.toISOString().slice(0, 10),
+            subject: item.subject,
+            amountCents: item.tx.AmountCents,
+            direction: item.direction,
+            notes: item.tx.Notes?.trim() || null,
+            reason: existsInDatabase ? "EXISTING_TRANSACTION" : "DUPLICATE_IN_PAYLOAD",
+          });
+          return false;
+        }
+        seenImportKeys.add(duplicateKey);
+        return true;
+      });
+    }
 
-    const data: Prisma.TransactionCreateManyInput[] = nonDuplicates.map((item) => ({
+    const data: Prisma.TransactionCreateManyInput[] = rowsToCreate.map((item) => ({
         workspaceId,
         accountId,
         budgetId,
@@ -214,6 +220,7 @@ export async function POST(request: Request) {
         isFromFamily: false,
       }));
 
+    let balanceRecalculated = false;
     try {
       const posting = await executePosting({
           workspaceId,
@@ -229,21 +236,19 @@ export async function POST(request: Request) {
           sourceId: chunkIndex === undefined ? null : String(chunkIndex),
           request: parsed.data,
         }, async (db, postingGroupId) => {
-          if (data.length === 0) return { count: 0 };
-          const ledgerRows = data.map((row) => ({ ...row, postingGroupId })) as Prisma.TransactionCreateManyInput[];
-          const created = await db.transaction.createMany({ data: ledgerRows });
-          if (recalculate && created.count > 0) {
-            const deltaCents = data.reduce(
-              (sum, tx) => sum + getBudgetAvailableDeltaCents(tx.direction, tx.amountCents),
-              0,
-            );
-            if (deltaCents !== 0) {
-              await applyBudgetAvailableDelta(db, budgetId, deltaCents);
-            }
+          let count = 0;
+          if (data.length > 0) {
+            const ledgerRows = data.map((row) => ({ ...row, postingGroupId })) as Prisma.TransactionCreateManyInput[];
+            const created = await db.transaction.createMany({ data: ledgerRows });
+            count = created.count;
           }
-          return created;
+          if (shouldRecalculate) {
+            await recalculateBudgetAvailableCents(db, workspaceId, budgetId);
+          }
+          return { count, recalculated: shouldRecalculate };
         });
       result.imported = posting.result.count;
+      balanceRecalculated = posting.result.recalculated;
       if (posting.replayed) {
         result.duplicates = 0;
         result.duplicateRecords = [];
@@ -260,13 +265,13 @@ export async function POST(request: Request) {
       total: transactions.length,
       chunked: chunkIndex !== undefined || chunkSize !== undefined,
       chunkIndex: chunkIndex ?? 0,
-      totalChunks: parsed.data.totalChunks ?? 1,
+      totalChunks: totalChunks ?? 1,
       nextChunkIndex: (chunkIndex ?? 0) + 1,
       chunkSize: chunkSize ?? transactions.length,
       processedCount: transactions.length,
       remainingCount: 0,
       isComplete: true,
-      recalculated: recalculate && result.imported > 0,
+      recalculated: balanceRecalculated,
     }, { status: 201 });
   } catch (error) {
     if (error instanceof PostingConflictError) {

@@ -72,7 +72,7 @@ test("annual contributions use the net invested change within each year", () => 
   ]);
 });
 
-test("a pre-existing account's first snapshot is an opening baseline", () => {
+test("an account's first snapshot is attributed to its first recorded year", () => {
   const accounts = [{
     inceptionDate: "2022-02-23T00:00:00.000Z",
     entries: [
@@ -82,8 +82,31 @@ test("a pre-existing account's first snapshot is an opening baseline", () => {
   }];
 
   assert.deepEqual(calculateAnnualInvestmentContributions(accounts), [
-    { year: 2026, contributedCents: 3_300 },
+    { year: 2026, contributedCents: 36_650 },
   ]);
+});
+
+test("accounts first recorded in later years follow the graph and reconcile to total invested", () => {
+  const accounts = [
+    {
+      inceptionDate: "2021-01-01T00:00:00.000Z",
+      entries: [
+        { ...entry("a-2021", "2021-01-01T00:00:00.000Z"), investedCents: 10_000 },
+        { ...entry("a-2022", "2022-01-01T00:00:00.000Z"), investedCents: 20_000 },
+      ],
+    },
+    {
+      inceptionDate: "2020-01-01T00:00:00.000Z",
+      entries: [{ ...entry("b-2022", "2022-06-01T00:00:00.000Z"), investedCents: 5_000 }],
+    },
+  ];
+
+  const annual = calculateAnnualInvestmentContributions(accounts);
+  assert.deepEqual(annual, [
+    { year: 2022, contributedCents: 15_000 },
+    { year: 2021, contributedCents: 10_000 },
+  ]);
+  assert.equal(annual.reduce((sum, row) => sum + row.contributedCents, 0), 25_000);
 });
 
 test("same-year reductions offset later top-ups instead of inflating contributions", () => {
@@ -98,7 +121,7 @@ test("same-year reductions offset later top-ups instead of inflating contributio
   }];
 
   assert.deepEqual(calculateAnnualInvestmentContributions(accounts), [
-    { year: 2026, contributedCents: 28_500 },
+    { year: 2026, contributedCents: 30_250 },
   ]);
 });
 

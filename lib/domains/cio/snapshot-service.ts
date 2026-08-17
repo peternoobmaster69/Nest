@@ -1,4 +1,5 @@
 import { ApiRequestError } from "@/lib/api/contracts";
+import { calculateAnnualInvestmentContributions } from "@/lib/investment-entry-order";
 import {
   calculateAllocation,
   calculateLiquidityTotals,
@@ -9,6 +10,7 @@ import {
   calculateEmergencyRunway,
   summarizeRecurringFlows,
 } from "./cashflow-engine";
+import { calculateCioContributionProgress } from "./contribution-progress";
 import {
   CioRetirementProjectionInputSchema,
   type CioRetirementProjectionInput,
@@ -412,6 +414,21 @@ export async function buildCioSnapshot(params: {
     ...planningAssets.filter((position) => position.includeInRetirementProjection).map((position) => position.currentValueCents),
   ], "retirement assets");
   const overrideContribution = data.householdProfile?.annualExternalContributionOverrideCents ?? null;
+  const configuredAnnualContributionCents = overrideContribution
+    ?? recurringFlows.retirementEligibleNetExternalAnnualCents;
+  const contributionGrowthRateBps = data.householdProfile?.contributionGrowthRateBps ?? null;
+  const currentYearContributionCents = calculateAnnualInvestmentContributions(data.investments)
+    .find((contribution) => contribution.year === asOfDate.getUTCFullYear())
+    ?.contributedCents ?? 0;
+  const contributionProgress = contributionGrowthRateBps !== null && configuredAnnualContributionCents > 0
+    ? calculateCioContributionProgress({
+      asOfDate,
+      actualYtdCents: currentYearContributionCents,
+      annualTargetCents: configuredAnnualContributionCents,
+      contributionGrowthRateBps,
+      targetSource: overrideContribution !== null ? "OVERRIDE" : "DERIVED",
+    })
+    : null;
   const retirement = buildRetirementStatus({
     data,
     asOfDate,
@@ -554,6 +571,7 @@ export async function buildCioSnapshot(params: {
       source: overrides?.annualExternalContributionCents !== undefined || overrideContribution !== null ? "OVERRIDE" : "DERIVED",
       internalReallocationAnnualCents: recurringFlows.internalReallocationAnnualCents,
     },
+    contributionProgress,
     dataQuality,
     policyExceptions,
     retirement,

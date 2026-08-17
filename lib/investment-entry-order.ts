@@ -54,9 +54,9 @@ export function getLatestInvestmentEntry<T extends OrderableInvestmentEntry>(ent
 
 /**
  * Derives annual net contributions from cumulative invested snapshots.
- * Existing accounts use their first recorded snapshot as an opening baseline;
- * accounts first recorded in their inception year use zero as their baseline.
- * Valuation changes never affect this amount.
+ * Each account starts at zero in its first recorded year so the annual changes
+ * reconcile to the portfolio's recorded invested total. Valuation changes
+ * never affect this amount.
  */
 export function calculateAnnualInvestmentContributions<T extends InvestedAmountEntry>(
   accounts: readonly InvestmentContributionAccount<T>[],
@@ -83,12 +83,7 @@ export function calculateAnnualInvestmentContributions<T extends InvestedAmountE
       entriesByYear.set(year, yearEntries);
     }
 
-    const firstYear = new Date(firstEntry.date).getFullYear();
-    const inceptionDate = account.inceptionDate ? new Date(account.inceptionDate) : null;
-    const inceptionYear = inceptionDate && !Number.isNaN(inceptionDate.getTime())
-      ? inceptionDate.getFullYear()
-      : null;
-    let previousInvestedCents = inceptionYear === firstYear ? 0 : firstEntry.investedCents;
+    let previousInvestedCents = 0;
 
     for (const [year, yearEntries] of entriesByYear) {
       const endingInvestedCents = yearEntries[yearEntries.length - 1].investedCents;

@@ -227,6 +227,7 @@ export type CioSnapshot = {
     source: "DERIVED" | "OVERRIDE";
     internalReallocationAnnualCents: number;
   };
+  contributionProgress: import("./contribution-progress").CioContributionProgress | null;
   dataQuality: CioDataQualitySummary;
   policyExceptions: CioPolicyException[];
   retirement: CioRetirementStatus;

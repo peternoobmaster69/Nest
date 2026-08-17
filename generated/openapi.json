@@ -9086,8 +9086,7 @@
                   "maxLength": 2000
                 },
                 "Notes": {
-                  "type": "string",
-                  "maxLength": 2000
+                  "type": "string"
                 }
               },
               "required": [

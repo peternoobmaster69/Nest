@@ -120,6 +120,25 @@
 .cio-metric-card > small { color: var(--text-tertiary); line-height: var(--leading-base); }
 .cio-metric-card.is-warning { border-color: color-mix(in srgb, var(--warning) 35%, var(--color-border)); }
 
+.cio-contribution-card { display: grid; gap: var(--space-4); }
+.cio-contribution-card.is-on-track { border-color: color-mix(in srgb, var(--success) 35%, var(--color-border)); }
+.cio-contribution-card.is-behind { border-color: color-mix(in srgb, var(--warning) 40%, var(--color-border)); }
+.cio-contribution-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.cio-contribution-heading h2 { margin: 2px 0 0; color: var(--text-primary); font-size: var(--text-2xl); line-height: var(--leading-tight); }
+.cio-contribution-heading p { margin: var(--space-1) 0 0; color: var(--text-tertiary); }
+.cio-contribution-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--r-pill); font-size: var(--text-sm); font-weight: var(--font-weight-bold); }
+.cio-contribution-status.is-on-track { color: var(--success); background: var(--success-bg); }
+.cio-contribution-status.is-behind { color: var(--warning); background: var(--warning-bg); }
+.cio-contribution-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: 0; }
+.cio-contribution-facts > div { min-width: 0; padding: var(--space-3); border-radius: var(--r-md); background: var(--color-surface-subtle); }
+.cio-contribution-facts dt { color: var(--text-tertiary); font-size: var(--text-xs); }
+.cio-contribution-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--text-primary); font-size: var(--text-lg); font-weight: var(--font-weight-bold); }
+.cio-contribution-progress-track { position: relative; height: 10px; border-radius: var(--r-pill); background: var(--color-surface-subtle); }
+.cio-contribution-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--success); }
+.cio-contribution-card.is-behind .cio-contribution-progress-track span { background: var(--warning); }
+.cio-contribution-progress-track i { position: absolute; top: -3px; width: 2px; height: 16px; border-radius: 2px; background: var(--text-primary); transform: translateX(-1px); }
+.cio-contribution-meta { display: flex; justify-content: space-between; gap: var(--space-3); color: var(--text-tertiary); font-size: var(--text-xs); }
+
 .cio-setup-actions { padding: var(--space-4) var(--space-5); }
 .cio-setup-actions > div { margin-bottom: var(--space-3); }
 .cio-setup-actions ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
@@ -367,6 +386,9 @@
   .cio-health-meta { grid-column: 2 / -1; grid-row: 2; flex-wrap: wrap; gap: 1px var(--space-3); white-space: normal; }
   .cio-health-details { padding: var(--space-3); }
   .cio-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cio-contribution-heading,
+  .cio-contribution-meta { align-items: flex-start; flex-direction: column; }
+  .cio-contribution-facts { grid-template-columns: 1fr; }
   .cio-setup-actions li { grid-template-columns: auto minmax(0, 1fr); }
   .cio-setup-actions li .btn { grid-column: 2; width: fit-content; }
   .cio-liquidity-list,

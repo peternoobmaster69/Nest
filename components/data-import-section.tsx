@@ -10,6 +10,10 @@ import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/controls";
 import { bankAccountsQueryOptions } from "@/lib/accounts";
+import {
+  ImportedTransactionSchema,
+  MAX_IMPORT_ROWS_PER_CHUNK,
+} from "@/lib/domains/integrations/import-contracts";
 
 interface DataImportSectionProps {
   workspaceId: string | null;
@@ -71,7 +75,7 @@ type RecalculateResult = {
   }>;
 };
 
-const CHUNK_SIZE = 25; // Process 25 records at a time
+const CHUNK_SIZE = MAX_IMPORT_ROWS_PER_CHUNK;
 
 export function DataImportSection({ workspaceId, baseCurrency }: DataImportSectionProps) {
   const routeWorkspaceId = useWorkspaceId();
@@ -144,31 +148,17 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       const validTransactions: unknown[] = [];
 
       transactions.forEach((tx: unknown, index: number) => {
-        if (typeof tx !== "object" || tx === null) {
+        const parsed = ImportedTransactionSchema.safeParse(tx);
+        if (!parsed.success) {
           invalid++;
-          errors.push(`Item ${index + 1}: Not a valid object`);
-          return;
-        }
-
-        const t = tx as Record<string, unknown>;
-        const missing: string[] = [];
-
-        if (!t.Direction || (t.Direction !== "DEBIT" && t.Direction !== "CREDIT")) {
-          missing.push("Direction (DEBIT or CREDIT)");
-        }
-        if (!t.Subject || typeof t.Subject !== "string") missing.push("Subject");
-        if (!t.Date) missing.push("Date");
-        if (typeof t.AmountCents !== "number" || t.AmountCents <= 0) {
-          missing.push("AmountCents (positive number)");
-        }
-
-        if (missing.length > 0) {
-          invalid++;
-          errors.push(`Item ${index + 1}: Missing/invalid ${missing.join(", ")}`);
+          const details = parsed.error.issues
+            .map((issue) => `${issue.path.join(".") || "transaction"}: ${issue.message}`)
+            .join(", ");
+          errors.push(`Item ${index + 1}: ${details}`);
         } else {
           valid++;
-          totalAmountCents += t.AmountCents as number;
-          validTransactions.push(t);
+          totalAmountCents += parsed.data.AmountCents;
+          validTransactions.push(parsed.data);
         }
       });
 
@@ -278,7 +268,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
       const allDuplicateRecords: DuplicateRecord[] = [];
       let totalFailed = 0;
       const allErrors: string[] = [];
-      const targetBudgetId = selectedBudgetId;
+      let balanceRecalculated = false;
 
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
         const startIndex = chunkIndex * CHUNK_SIZE;
@@ -303,6 +293,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         allDuplicateRecords.push(...result.duplicateRecords);
         totalFailed += result.failed;
         allErrors.push(...result.errors);
+        balanceRecalculated = balanceRecalculated || result.recalculated === true;
 
         setProgress({
           current: endIndex,
@@ -315,19 +306,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
         });
       }
 
-      let recalculationMessage = "";
-      if (totalImported > 0) {
-        setIsRecalculating(true);
-        try {
-          const recalculated = await recalculateBudget(targetBudgetId);
-          setRecalcResult(recalculated);
-          recalculationMessage = ` Budget recalculated (${recalculated.budgets.length} updated).`;
-        } catch (error) {
-          recalculationMessage = ` Recalculation failed: ${error instanceof Error ? error.message : "Unknown error"}`;
-        } finally {
-          setIsRecalculating(false);
-        }
-      }
+      const recalculationMessage = balanceRecalculated ? " Balance recalculated." : "";
 
       setMessage(`Import complete! Imported ${totalImported} transactions. ${totalDuplicates} duplicates skipped. ${totalFailed} failed.${recalculationMessage}`);
       setJsonInput("");
@@ -693,7 +672,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
           <li>Optional: <code>Details</code>, <code>Notes</code>, <code>AccountName</code> (for reference)</li>
         </ul>
         <div className="settings-import-help-note">
-          Duplicate detection: Transactions with the same Date + Subject + AmountCents will be skipped.
+          {kind === "Migration"
+            ? "Migration imports preserve every supplied row, including repeated transactions."
+            : "Duplicate detection: Transactions with the same Date + Subject + AmountCents will be skipped."}
         </div>
       </details>
     </div>
