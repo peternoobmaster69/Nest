@@ -44,7 +44,7 @@ import { confirmMoneyChange } from "@/lib/confirm-destructive";
 
 const CashFlowChart = dynamic(
   () => import("@/components/dashboard/cash-flow-chart").then((module) => module.CashFlowChart),
-  { ssr: false, loading: () => <div className="cash-flow-chart cash-flow-chart-loading" aria-hidden="true" /> },
+  { ssr: false, loading: () => <div className="cash-flow-chart-loading skeleton" aria-hidden="true" /> },
 );
 
 type CashFlowPoint = import("@/components/dashboard/cash-flow-chart").CashFlowPoint;

@@ -475,6 +475,33 @@
 .space-y-4 > * + * { margin-top: var(--space-4); }
 
 /* Route and lazy-content states reserve their geometry to avoid layout shift. */
+.initial-route-loading {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.initial-route-loading-mark {
+  inline-size: var(--space-12);
+  block-size: var(--space-12);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-lg);
+  background: var(--color-surface-raised);
+  color: var(--color-primary);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+}
+
 .route-state {
   min-block-size: var(--route-state-min-block);
   inline-size: min(100%, var(--layout-narrow));

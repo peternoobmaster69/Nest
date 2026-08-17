@@ -56,17 +56,13 @@ export const SidebarSkeleton = React.memo(function SidebarSkeleton() {
     <>
       <div className="sb-scroll sb-skeleton-scroll">
         <div className="sb-sec">Overview</div>
-        <div className="sb-skeleton-item skeleton-block" />
+        {Array.from({ length: 2 }, (_, index) => <div className="sb-skeleton-item skeleton-block" key={`overview-${index}`} />)}
 
         <div className="sb-sec">Money</div>
-        <div className="sb-skeleton-item skeleton-block" />
-        <div className="sb-skeleton-item skeleton-block" />
-        <div className="sb-skeleton-item skeleton-block" />
-        <div className="sb-skeleton-item skeleton-block" />
+        {Array.from({ length: 7 }, (_, index) => <div className="sb-skeleton-item skeleton-block" key={`money-${index}`} />)}
 
         <div className="sb-sec">Workspace</div>
-        <div className="sb-skeleton-item skeleton-block" />
-        <div className="sb-skeleton-item skeleton-block" />
+        {Array.from({ length: 2 }, (_, index) => <div className="sb-skeleton-item skeleton-block" key={`workspace-${index}`} />)}
       </div>
       <div className="sb-bot">
         <div className="sb-skeleton-user">

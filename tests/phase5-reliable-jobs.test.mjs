@@ -43,6 +43,10 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
 
   assert.doesNotMatch(runner, /activeSyncs|setTimeout|setInterval/);
   assert.match(runner, /checkpointJson|continueBackgroundJob|lastHistoryId/);
+  assert.match(
+    runner,
+    /await continueBackgroundJob\([\s\S]*?getGmailSyncProgressCounters\(checkpoint\.scannedMessages, job\.total\)/,
+  );
   assert.match(runner, /GMAIL_SYNC_MESSAGES_PER_SLICE/);
   assert.match(provider, /listGmailHistoryPage|getGmailProfile|maxResults/);
   assert.match(provider, /fetchGmailMessageMetadata[\s\S]*?format: "metadata"[\s\S]*?metadataHeaders/);
@@ -52,7 +56,7 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
       runner.indexOf("fetchGmailMessage(accessToken, message.id)"),
     "Gmail subject metadata must be checked before a message body is fetched",
   );
-  assert.match(route, /await processGmailSyncQueue/);
+  assert.match(route, /await processGmailSyncQueue[\s\S]*?maxSlices: 10/);
   assert.doesNotMatch(settings, /GMAIL_SYNC_INTERVAL_MS/);
   assert.doesNotMatch(settings, /setInterval\([\s\S]{0,220}syncGmail\.mutate/);
   assert.match(ingest, /sourceMessageId/);

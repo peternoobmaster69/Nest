@@ -20,6 +20,7 @@ import {
   throwIfBackgroundJobCancelled,
 } from "@/lib/background-jobs";
 import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
+import { getGmailSyncProgressCounters } from "@/lib/gmail-sync-counters";
 import { prisma } from "@/lib/prisma";
 
 type GmailIntegrationRecord = {
@@ -135,7 +136,7 @@ async function processGmailSyncJob(jobId: string, origin?: string) {
     await heartbeatBackgroundJob(job.id, leaseToken, {
       progress: Math.min(90, 5 + checkpoint.scannedMessages),
       message: checkpoint.mode === "history" ? "Reading new Gmail history..." : "Scanning a bounded Gmail page...",
-      current: checkpoint.scannedMessages,
+      ...getGmailSyncProgressCounters(checkpoint.scannedMessages, job.total),
       checkpoint,
     });
 
@@ -192,8 +193,7 @@ async function processGmailSyncJob(jobId: string, origin?: string) {
           await heartbeatBackgroundJob(job.id, leaseToken, {
             progress: Math.min(90, 10 + checkpoint.scannedMessages),
             message: `Reviewed ${checkpoint.scannedMessages} Gmail message${checkpoint.scannedMessages === 1 ? "" : "s"}.`,
-            current: checkpoint.scannedMessages,
-            total: Math.max(checkpoint.scannedMessages, (job.total ?? 0)),
+            ...getGmailSyncProgressCounters(checkpoint.scannedMessages, job.total),
             checkpoint,
           });
           continue;
@@ -220,8 +220,7 @@ async function processGmailSyncJob(jobId: string, origin?: string) {
       await heartbeatBackgroundJob(job.id, leaseToken, {
         progress: Math.min(90, 10 + checkpoint.scannedMessages),
         message: `Reviewed ${checkpoint.scannedMessages} Gmail message${checkpoint.scannedMessages === 1 ? "" : "s"}.`,
-        current: checkpoint.scannedMessages,
-        total: Math.max(checkpoint.scannedMessages, (job.total ?? 0)),
+        ...getGmailSyncProgressCounters(checkpoint.scannedMessages, job.total),
         checkpoint,
       });
     }
@@ -232,7 +231,7 @@ async function processGmailSyncJob(jobId: string, origin?: string) {
         checkpoint,
         message: `Gmail page complete; ${checkpoint.scannedMessages} messages processed so far.`,
         progress: Math.min(90, 10 + checkpoint.scannedMessages),
-        current: checkpoint.scannedMessages,
+        ...getGmailSyncProgressCounters(checkpoint.scannedMessages, job.total),
       });
       return { completed: false, jobId: job.id, summary: checkpoint };
     }

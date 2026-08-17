@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       await processGmailSyncQueue({
         jobId: queued.job.id,
         origin: new URL(request.url).origin,
-        maxSlices: 1,
+        maxSlices: 10,
       });
     }
 

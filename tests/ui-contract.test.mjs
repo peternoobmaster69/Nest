@@ -211,6 +211,8 @@ test("dashboard uses one responsive overview and a clear content hierarchy", asy
   assert.match(styles, /@media \(max-width: 1024px\)\s*\{[\s\S]*?grid-template-areas:[\s\S]*?"cash-flow"[\s\S]*?"payments"[\s\S]*?"recent"/);
   assert.match(styles, /@media \(max-width: 1024px\)[\s\S]*?\.dashboard-home-main-stack\s*\{[^}]*display:\s*contents/s);
   assert.match(styles, /\.cash-flow-chart\s*\{[^}]*height:\s*220px/s);
+  assert.match(styles, /\.cash-flow-chart-skeleton,\s*\.cash-flow-chart-loading\s*\{[^}]*height:\s*258px/s);
+  assert.match(styles, /\.dashboard-cash-flow-panel > \.empty-state\s*\{[^}]*min-height:\s*258px/s);
   assert.match(styles, /\.dashboard-payments-panel \.cc-home-list\s*\{[^}]*max-height:\s*none[^}]*overflow-y:\s*visible/s);
 });
 

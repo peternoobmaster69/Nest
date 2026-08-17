@@ -117,6 +117,17 @@ test("route states, query invalidation, and runtime performance reporting are pr
   assert.match(await source("lib/api/client.ts"), /classifyMutationFailure[\s\S]*?"offline"[\s\S]*?"permission"[\s\S]*?"conflict"[\s\S]*?"stale"/);
   assert.match(await source("components/web-vitals-reporter.tsx"), /useReportWebVitals/);
   assert.match(await source("scripts/report-ui-performance.mjs"), /1\.05/);
+
+  const rootLoading = await source("app/loading.tsx");
+  const componentStyles = await source("app/styles/components.css");
+  assert.doesNotMatch(rootLoading, /AppShellSkeleton/);
+  assert.match(rootLoading, /initial-route-loading/);
+  assert.match(componentStyles, /\.initial-route-loading\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?inset:\s*0;/);
+
+  const shellSkeleton = await source("components/ui-skeleton.tsx");
+  assert.match(shellSkeleton, /length:\s*2[^\n]*overview-/);
+  assert.match(shellSkeleton, /length:\s*7[^\n]*money-/);
+  assert.match(shellSkeleton, /length:\s*2[^\n]*workspace-/);
 });
 
 test("local fonts reserve rendering without external stylesheet links", async () => {

@@ -2873,10 +2873,15 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   white-space: nowrap;
 }
 
-.cash-flow-chart-skeleton {
+.cash-flow-chart-skeleton,
+.cash-flow-chart-loading {
   width: 100%;
-  height: 220px;
+  height: 258px;
   border-radius: var(--r-md);
+}
+
+.dashboard-cash-flow-panel > .empty-state {
+  min-height: 258px;
 }
 
 @media (max-width: 1024px) {
