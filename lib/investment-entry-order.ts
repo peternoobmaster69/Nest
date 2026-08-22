@@ -13,6 +13,18 @@ export type AnnualInvestmentContribution = {
   contributedCents: number;
 };
 
+export type InvestmentCashFlow = {
+  date: Date;
+  amountCents: number;
+};
+
+export type ValuedInvestmentEntry = InvestedAmountEntry & {
+  currentValueCents: number;
+};
+
+const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+const MIN_ANNUALIZATION_SPAN_YEARS = 30 / 365.25;
+
 export type InvestmentContributionAccount<T extends InvestedAmountEntry> = {
   inceptionDate?: string | Date | null;
   entries: readonly T[];
@@ -95,4 +107,94 @@ export function calculateAnnualInvestmentContributions<T extends InvestedAmountE
 
   return Array.from(contributionsByYear, ([year, contributedCents]) => ({ year, contributedCents }))
     .sort((a, b) => b.year - a.year);
+}
+
+/**
+ * Turns cumulative invested/valuation snapshots into signed cash flows from
+ * the investor's perspective: a rise in invested capital is money going out
+ * (a contribution), a fall is money coming back (a withdrawal), and the
+ * latest current value is added as a final inflow, as if liquidated today.
+ * This is the input XIRR needs to weight a return by *when* money went in,
+ * not just how much.
+ */
+export function buildInvestmentCashFlows<T extends ValuedInvestmentEntry>(
+  entries: readonly T[],
+): InvestmentCashFlow[] {
+  const sorted = [...entries].sort(compareInvestmentEntries);
+  if (!sorted.length) return [];
+
+  const flows: InvestmentCashFlow[] = [];
+  let previousInvestedCents = 0;
+  for (const entry of sorted) {
+    const contributedCents = entry.investedCents - previousInvestedCents;
+    if (contributedCents !== 0) {
+      flows.push({ date: new Date(entry.date), amountCents: -contributedCents });
+    }
+    previousInvestedCents = entry.investedCents;
+  }
+
+  const latest = sorted[sorted.length - 1];
+  if (latest.currentValueCents !== 0) {
+    flows.push({ date: new Date(latest.date), amountCents: latest.currentValueCents });
+  }
+
+  return flows;
+}
+
+/**
+ * Solves for the annualized, money-weighted rate of return (XIRR) implied by
+ * a set of dated cash flows, as a percentage. Returns null when the flows
+ * don't bracket a solvable rate or span too little time to annualize
+ * meaningfully (a short window turns small moves into extreme percentages).
+ */
+export function calculateAnnualizedReturn(cashFlows: readonly InvestmentCashFlow[]): number | null {
+  const sorted = [...cashFlows].sort((a, b) => a.date.getTime() - b.date.getTime());
+  if (sorted.length < 2) return null;
+
+  const startMs = sorted[0].date.getTime();
+  const endMs = sorted[sorted.length - 1].date.getTime();
+  const spanYears = (endMs - startMs) / MS_PER_YEAR;
+  if (spanYears < MIN_ANNUALIZATION_SPAN_YEARS) return null;
+
+  const hasOutflow = sorted.some((flow) => flow.amountCents < 0);
+  const hasInflow = sorted.some((flow) => flow.amountCents > 0);
+  if (!hasOutflow || !hasInflow) return null;
+
+  const yearsFromStart = sorted.map((flow) => (flow.date.getTime() - startMs) / MS_PER_YEAR);
+  const netPresentValue = (rate: number) => {
+    if (rate <= -1) return Number.POSITIVE_INFINITY;
+    return sorted.reduce(
+      (sum, flow, index) => sum + flow.amountCents / Math.pow(1 + rate, yearsFromStart[index]),
+      0,
+    );
+  };
+
+  const low = -0.9999;
+  let high = 10;
+  const npvLow = netPresentValue(low);
+  let npvHigh = netPresentValue(high);
+
+  let widenAttempts = 0;
+  while (npvLow * npvHigh > 0 && widenAttempts < 40) {
+    high *= 2;
+    npvHigh = netPresentValue(high);
+    widenAttempts += 1;
+  }
+  if (npvLow * npvHigh > 0 || Number.isNaN(npvLow) || Number.isNaN(npvHigh)) return null;
+
+  let rate = 0;
+  let lowBound = low;
+  let highBound = high;
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    rate = (lowBound + highBound) / 2;
+    const value = netPresentValue(rate);
+    if (Math.abs(value) < 1) break;
+    if ((value > 0) === (npvLow > 0)) {
+      lowBound = rate;
+    } else {
+      highBound = rate;
+    }
+  }
+
+  return rate * 100;
 }

@@ -16,7 +16,9 @@ import { Droplet, Info, Lock, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import {
+  buildInvestmentCashFlows,
   calculateAnnualInvestmentContributions,
+  calculateAnnualizedReturn,
   compareInvestmentEntries,
   getLatestInvestmentEntry,
 } from "@/lib/investment-entry-order";
@@ -140,6 +142,10 @@ export function InvestmentsPage() {
   const [selectedAccountId, setSelectedAccountId] = useSessionState<string | null>("nest:view:investments:account", null);
   const [timeRange, setTimeRange] = useSessionState<TimeRange>("nest:view:investments:range", "ALL");
   const [showAllAccounts, setShowAllAccounts] = useSessionState("nest:view:investments:all", false);
+  const [returnDisplayMode, setReturnDisplayMode] = useSessionState<"absolute" | "annualized">(
+    "nest:view:investments:returnMode",
+    "absolute",
+  );
   const [accountError, setAccountError] = useState("");
   const [entryError, setEntryError] = useState("");
   const [hydratedInvestmentsUrlKey, setHydratedInvestmentsUrlKey] = useState<string | null>(null);
@@ -285,6 +291,17 @@ export function InvestmentsPage() {
     ? (totalGainCents / totalInvestedAcrossAll) * 100
     : 0;
   const isProfit = totalGainCents >= 0;
+
+  // Annualized (money-weighted) return: weighs the return by how long each
+  // contribution has actually been invested, instead of blending recent and
+  // long-held contributions into one undifferentiated percentage.
+  const annualizedReturnPercentage = useMemo(() => {
+    const cashFlows = (accounts.data ?? []).flatMap((account) => buildInvestmentCashFlows(account.entries ?? []));
+    return calculateAnnualizedReturn(cashFlows);
+  }, [accounts.data]);
+
+  const displayedReturnPercentage = returnDisplayMode === "absolute" ? returnPercentage : annualizedReturnPercentage;
+  const displayedReturnIsProfit = displayedReturnPercentage === null ? isProfit : displayedReturnPercentage >= 0;
 
   const reconcileInvestments = () => {
     void queryClient.invalidateQueries({ queryKey: investmentsQueryKey, refetchType: "active" });
@@ -760,20 +777,47 @@ export function InvestmentsPage() {
               </div>
 
               {/* Return Percentage */}
-              <div style={{ flex: "0 1 150px" }}>
+              <div
+                className="inv-return-toggle"
+                style={{ flex: "0 1 150px" }}
+                role="button"
+                tabIndex={0}
+                aria-pressed={returnDisplayMode === "annualized"}
+                title={
+                  returnDisplayMode === "absolute"
+                    ? "All-time return since inception. Tap for the annualized return, which accounts for when each contribution was made."
+                    : annualizedReturnPercentage === null
+                      ? "Not enough contribution history to annualize yet. Tap for the all-time return."
+                      : "Annualized return, weighted by when each contribution was made. Tap for the all-time return."
+                }
+                onClick={() => setReturnDisplayMode((mode) => (mode === "absolute" ? "annualized" : "absolute"))}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  setReturnDisplayMode((mode) => (mode === "absolute" ? "annualized" : "absolute"));
+                }}
+              >
                 <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                  Return
+                  {returnDisplayMode === "absolute" ? "Return" : "Annualized Return"}
                 </div>
                 <div style={{
                   fontSize: "18px",
                   fontWeight: 700,
-                  color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)",
+                  color: displayedReturnPercentage === null
+                    ? "var(--text-tertiary)"
+                    : displayedReturnIsProfit ? "var(--amount-positive)" : "var(--amount-negative)",
                   display: "flex",
                   alignItems: "center",
                   gap: "4px"
                 }}>
-                  <span>{isProfit ? "▲" : "▼"}</span>
-                  <span>{Math.abs(returnPercentage).toFixed(2)}%</span>
+                  {displayedReturnPercentage === null ? (
+                    <span>—</span>
+                  ) : (
+                    <>
+                      <span>{displayedReturnIsProfit ? "▲" : "▼"}</span>
+                      <span>{Math.abs(displayedReturnPercentage).toFixed(2)}%</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

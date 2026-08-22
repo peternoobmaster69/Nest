@@ -6714,6 +6714,21 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   width: max-content;
 }
 
+.inv-return-toggle {
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color var(--t);
+}
+
+.inv-return-toggle:hover {
+  background: var(--bg-subtle);
+}
+
+.inv-return-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
 .inv-contribution-tooltip-trigger {
   position: relative;
   display: inline-flex;
