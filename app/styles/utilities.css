@@ -575,8 +575,14 @@
   transition: transform var(--duration-fast) var(--ease-decelerate);
 }
 
-.skip-link:focus {
+.skip-link:focus-visible {
   transform: translateY(0);
+}
+
+/* iOS standalone PWAs can restore DOM focus when resuming.
+   Keep the skip link off-screen unless the focus is keyboard-visible. */
+.skip-link:focus:not(:focus-visible) {
+  transform: translateY(calc(-100% - 24px));
 }
 
 @media (min-width: 769px) {
