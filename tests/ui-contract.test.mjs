@@ -849,9 +849,10 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(styles, /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?animation-duration:\s*0\.01ms\s*!important/);
   assert.match(styles, /\.body\s*\{[^}]*min-height:\s*0[^}]*overscroll-behavior-y:\s*contain/s);
   assert.match(shell, /className="skip-link" href="#main-content"/);
-  assert.match(styles, /\.skip-link\s*\{[^}]*transform:\s*translateY\(calc\(-100% - 24px\)\)/s);
-  assert.match(styles, /\.skip-link:focus-visible\s*\{[^}]*transform:\s*translateY\(0\)/s);
-  assert.match(styles, /\.skip-link:focus:not\(:focus-visible\)\s*\{[^}]*transform:\s*translateY\(calc\(-100% - 24px\)\)/s);
+  assert.match(styles, /\.skip-link\s*\{[^}]*opacity:\s*0[^}]*visibility:\s*hidden[^}]*pointer-events:\s*none[^}]*safe-area-inset-top/s);
+  assert.match(styles, /\.skip-link:focus-visible\s*\{[^}]*opacity:\s*1[^}]*visibility:\s*visible[^}]*pointer-events:\s*auto[^}]*transform:\s*translateY\(0\)/s);
+  assert.match(styles, /\.skip-link:focus:not\(:focus-visible\)\s*\{[^}]*opacity:\s*0[^}]*visibility:\s*hidden[^}]*pointer-events:\s*none[^}]*safe-area-inset-top/s);
+  assert.match(styles, /@media\s*\(display-mode:\s*standalone\)[\s\S]*?html,[\s\S]*?body\s*\{[^}]*height:\s*100vh[^}]*min-height:\s*100vh[^}]*\}[\s\S]*?\.app-shell\s*\{[^}]*height:\s*100vh/s);
   assert.match(shell, /id="main-content" tabIndex=\{-1\}/);
   assert.match(shell, /aria-controls="mobile-more-menu"/);
   assert.match(transactions, /className="budget-mini budget-mini-compact tx-account-card"[\s\S]*?role="button"[\s\S]*?aria-pressed=/);
