@@ -18,7 +18,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Nest",
-    statusBarStyle: "default",
+    // black-translucent lets the app draw its own solid background under the
+    // status bar; iOS 26's Liquid Glass blur over a flat color is invisible,
+    // whereas "default" renders a black bar with a blur fade into the topbar.
+    statusBarStyle: "black-translucent",
   },
   applicationName: "Nest",
   manifest: "/manifest.webmanifest",
@@ -29,7 +32,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
-  themeColor: "#f5f2ed",
+  // Matches --bg-elevated (topbar background) per theme; theme-provider keeps
+  // these in sync when the user overrides the system theme.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#2a2723" },
+  ],
 };
 
 const dmSans = DM_Sans({

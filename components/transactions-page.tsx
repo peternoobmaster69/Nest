@@ -6,7 +6,7 @@ import { formatMoney, normalizeCurrency } from "@/lib/currency";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -16,7 +16,7 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction, confirmMoneyChange } from "@/lib/confirm-destructive";
-import { AlertTriangle, ArrowLeftRight, Check, Layers3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Check, ChevronDown, ChevronUp, Layers3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
@@ -284,6 +284,8 @@ export function TransactionsPage() {
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [activeBudgetFilterId, setActiveBudgetFilterId] = useSessionState<string>("nest:view:transactions:budget", "ALL");
   const [activeGroupFilterId, setActiveGroupFilterId] = useSessionState<string>("nest:view:transactions:group", "ALL");
+  const [isSubAccountsExpanded, setIsSubAccountsExpanded] = useSessionState<boolean>("nest:view:transactions:subaccounts-expanded", false);
+  const [subAccountGridColumns, setSubAccountGridColumns] = useState(8);
   const [hydratedUrlFilterKey, setHydratedUrlFilterKey] = useState<string | null>(null);
   const urlFilterHydrated = hydratedUrlFilterKey === urlFilterKey;
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
@@ -307,6 +309,8 @@ export function TransactionsPage() {
   const [receivableInfoBudgetId, setReceivableInfoBudgetId] = useState<string | null>(null);
   const recentTransactionsRef = useRef<HTMLElement | null>(null);
   const subAccountsRef = useRef<HTMLElement | null>(null);
+  const subAccountsGridWrapRef = useRef<HTMLDivElement | null>(null);
+  const subAccountsGridHeightBeforeToggle = useRef<number | null>(null);
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
   const transactionGroupPickerRef = useRef<HTMLDivElement | null>(null);
   const transactionGroupPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -640,6 +644,46 @@ export function TransactionsPage() {
     if (!txBankStorageKey || !bankFilterHydrated) return;
     setBrowserCookie(txBankStorageKey, selectedBankId || ALL_BANKS_FILTER);
   }, [txBankStorageKey, selectedBankId, bankFilterHydrated]);
+
+  useEffect(() => {
+    // Keep in sync with the .tx-account-grid column breakpoints in app/styles/features.css.
+    const updateColumns = () => {
+      if (window.matchMedia("(max-width: 768px)").matches) setSubAccountGridColumns(3);
+      else if (window.matchMedia("(max-width: 1024px)").matches) setSubAccountGridColumns(6);
+      else setSubAccountGridColumns(8);
+    };
+    updateColumns();
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
+  }, []);
+
+  const toggleSubAccountsExpanded = () => {
+    // FLIP: record the wrapper's height before React swaps the card list so
+    // the layout effect can animate from it to the post-render height.
+    subAccountsGridHeightBeforeToggle.current =
+      subAccountsGridWrapRef.current?.getBoundingClientRect().height ?? null;
+    setIsSubAccountsExpanded((v) => !v);
+  };
+
+  useLayoutEffect(() => {
+    const wrap = subAccountsGridWrapRef.current;
+    const fromHeight = subAccountsGridHeightBeforeToggle.current;
+    subAccountsGridHeightBeforeToggle.current = null;
+    if (!wrap || fromHeight === null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const toHeight = wrap.getBoundingClientRect().height;
+    if (fromHeight === toHeight) return;
+    wrap.style.overflow = "hidden";
+    const animation = wrap.animate(
+      [{ height: `${fromHeight}px` }, { height: `${toHeight}px` }],
+      { duration: 240, easing: "ease-in-out" },
+    );
+    const clearClip = () => {
+      wrap.style.overflow = "";
+    };
+    animation.onfinish = clearClip;
+    animation.oncancel = clearClip;
+  }, [isSubAccountsExpanded]);
 
   useEffect(() => {
     if (activeBudgetFilterId === "ALL") return;
@@ -1195,6 +1239,20 @@ export function TransactionsPage() {
     if (!effectiveSelectedBankId) return budgets.data;
     return budgets.data.filter((b) => b.accountId === effectiveSelectedBankId);
   }, [budgets.data, effectiveSelectedBankId]);
+  const collapsedBudgetCount = subAccountGridColumns * 2 - 1; // pinned "All accounts" card fills one slot
+  const hasHiddenSubAccounts = visibleBudgets.length > collapsedBudgetCount;
+  const displayedBudgets = useMemo(() => {
+    if (isSubAccountsExpanded || !hasHiddenSubAccounts) return visibleBudgets;
+    const collapsed = visibleBudgets.slice(0, collapsedBudgetCount);
+    // Keep the active filter's card visible while collapsed (e.g. a persisted
+    // filter after reload) by pulling it into the last visible slot.
+    const activeIndex =
+      activeBudgetFilterId === "ALL" ? -1 : visibleBudgets.findIndex((b) => b.id === activeBudgetFilterId);
+    if (activeIndex >= collapsedBudgetCount) {
+      collapsed[collapsed.length - 1] = visibleBudgets[activeIndex];
+    }
+    return collapsed;
+  }, [isSubAccountsExpanded, hasHiddenSubAccounts, visibleBudgets, collapsedBudgetCount, activeBudgetFilterId]);
   const editingTransaction = useMemo(
     () => transactionList.find((tx) => tx.id === editingTxId) ?? null,
     [transactionList, editingTxId],
@@ -1845,7 +1903,7 @@ export function TransactionsPage() {
           </div>
         </div>
 
-      <section ref={subAccountsRef} className="card">
+      <section ref={subAccountsRef} className="card tx-subaccounts-section">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
             <span aria-hidden="true">📁</span>
@@ -1917,7 +1975,8 @@ export function TransactionsPage() {
             </div>
           </div>
         ) : null}
-        <div className="account-cards-grid tx-account-grid">
+        <div ref={subAccountsGridWrapRef} id="tx-account-grid-wrap">
+        <div id="tx-account-grid" className="account-cards-grid tx-account-grid">
           {/*
             Transactions page: compact account chips with only name + amount.
           */}
@@ -1960,7 +2019,7 @@ export function TransactionsPage() {
               </div>
             </div>
           </div>
-          {visibleBudgets.map((b) => (
+          {displayedBudgets.map((b) => (
             <div
               key={b.id}
               className="budget-mini budget-mini-compact tx-account-card"
@@ -2037,6 +2096,22 @@ export function TransactionsPage() {
             </div>
           ))}
         </div>
+        </div>
+        {hasHiddenSubAccounts ? (
+          <Button
+            type="button"
+            className="btn btn-ghost btn-sm tx-account-grid-more"
+            aria-expanded={isSubAccountsExpanded}
+            aria-controls="tx-account-grid-wrap"
+            onClick={toggleSubAccountsExpanded}
+          >
+            {isSubAccountsExpanded ? (
+              <>Show fewer <ChevronUp size={14} aria-hidden="true" /></>
+            ) : (
+              <>Show all {visibleBudgets.length} sub-accounts <ChevronDown size={14} aria-hidden="true" /></>
+            )}
+          </Button>
+        ) : null}
       </section>
 
       {activeBudgetFilterId !== "ALL" ? (

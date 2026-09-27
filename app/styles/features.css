@@ -11,7 +11,7 @@
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: env(safe-area-inset-top, 0px) 0 0;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -1056,10 +1056,10 @@
 .topbar {
   position: relative;
   z-index: 20;
-  height: 52px;
+  height: calc(52px + env(safe-area-inset-top, 0px));
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 0 24px;
+  padding: env(safe-area-inset-top, 0px) 24px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1395,11 +1395,11 @@
 
   .notification-popover {
     position: fixed;
-    top: 60px;
+    top: calc(60px + env(safe-area-inset-top, 0px));
     left: 12px;
     right: 12px;
     width: auto;
-    max-height: calc(100dvh - 72px);
+    max-height: calc(100dvh - 72px - env(safe-area-inset-top, 0px));
   }
 }
 
@@ -5134,7 +5134,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .collab-banner {
   position: fixed;
   left: 50%;
-  top: 12px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   z-index: 1150;
   width: min(920px, calc(100vw - 20px));
@@ -5152,7 +5152,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .collab-banner-modern {
   position: fixed;
   left: 50%;
-  top: 12px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   z-index: 1150;
   width: min(720px, calc(100vw - 24px));
@@ -6639,13 +6639,36 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 .inv-account-amounts small {
   display: block;
   font-size: 9px;
+  line-height: 1.1;
   color: var(--text-tertiary);
 }
 
 .inv-account-amounts p {
-  margin: 2px 0 0;
+  margin: 0;
   font-size: 12px;
+  line-height: 1.15;
   font-weight: 600;
+}
+
+.inv-account-performance {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px;
+  /* Pull the delta line up against the amounts row it annotates. */
+  margin-top: -4px;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.inv-account-performance > span[aria-hidden] {
+  font-size: 9px;
+}
+
+.inv-account-performance-return {
+  font-weight: 500;
+  opacity: 0.85;
 }
 
 .inv-account-actions {
@@ -6714,14 +6737,84 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   width: max-content;
 }
 
+.inv-header-total-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.inv-header-total-value {
+  font-size: 32px;
+  line-height: 1.15;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+}
+
+.inv-header-stat {
+  flex: 0 1 150px;
+}
+
+.inv-header-stat-label {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+
+.inv-header-stat-value {
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.inv-header-stat-value.is-invested {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.inv-header-stat-value.is-return {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inv-header-stat-value.is-muted {
+  color: var(--text-tertiary);
+}
+
 .inv-return-toggle {
   cursor: pointer;
   border-radius: 6px;
   transition: background-color var(--t);
+  /* The global coarse-pointer rule inflates [role="button"] to the 44px touch
+     target; centering our own content keeps it aligned with sibling stats. */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.inv-return-toggle:hover {
-  background: var(--bg-subtle);
+.inv-return-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inv-return-toggle-label svg {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity var(--t);
+}
+
+.inv-return-toggle:hover .inv-return-toggle-label svg,
+.inv-return-toggle:focus-visible .inv-return-toggle-label svg {
+  opacity: 1;
+}
+
+.inv-return-toggle:hover .inv-return-toggle-label {
+  color: var(--text-secondary);
 }
 
 .inv-return-toggle:focus-visible {
@@ -6740,12 +6833,16 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   color: inherit;
   font: inherit;
   cursor: help;
+  /* Opt out of the coarse-pointer 44px minimum, which would inflate this
+     inline label; the ::before overlay provides the touch target instead. */
+  min-block-size: 0;
+  min-inline-size: 0;
 }
 
 .inv-contribution-tooltip-trigger::before {
   content: "";
   position: absolute;
-  inset: -8px;
+  inset: -14px -8px;
 }
 
 .inv-contribution-tooltip-trigger svg {
@@ -7463,7 +7560,12 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   content: "";
 }
 
-.tx-group-picker-trigger:hover,
+@media (hover: hover) {
+  .tx-group-picker-trigger:hover {
+    background: var(--bg-subtle);
+  }
+}
+
 .tx-group-picker-trigger.is-open {
   background: color-mix(in srgb, var(--brand-500) 18%, var(--bg-subtle));
 }
@@ -7571,7 +7673,12 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   text-align: left;
 }
 
-.tx-group-picker-option:hover,
+@media (hover: hover) {
+  .tx-group-picker-option:hover {
+    background: var(--bg-subtle);
+  }
+}
+
 .tx-group-picker-option:focus-visible,
 .tx-group-picker-option.is-active {
   outline: 0;
@@ -7692,13 +7799,19 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   text-align: left;
 }
 
-.tx-group-card:hover,
-.tx-group-card.is-active {
-  border-color: var(--brand-500);
-  box-shadow: var(--shadow-sm);
+/* Hover must stay visually distinct from .is-active (and only exist on
+   devices with real hover): touch leaves :hover stuck on the tapped card,
+   which read as "still selected" when both shared the brand border. */
+@media (hover: hover) {
+  .tx-group-card:hover {
+    border-color: var(--border-default);
+    box-shadow: var(--shadow-sm);
+  }
 }
 
 .tx-group-card.is-active {
+  border-color: var(--brand-500);
+  box-shadow: var(--shadow-sm);
   background: color-mix(in srgb, var(--brand-500) 6%, var(--bg-surface));
 }
 
@@ -7891,7 +8004,12 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   border-bottom: 0;
 }
 
-.tx-group-member-row:hover,
+@media (hover: hover) {
+  .tx-group-member-row:hover {
+    background: var(--bg-subtle);
+  }
+}
+
 .tx-group-member-row.is-selected {
   background: color-mix(in srgb, var(--brand-500) 6%, var(--bg-surface));
 }
@@ -9034,32 +9152,26 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     flex: none !important;
   }
 
-  .inv-portfolio-header > div:first-child > div:last-child {
-    font-size: 24px !important;
+  .inv-header-total-value {
+    font-size: 24px;
   }
 
   .inv-portfolio-header > div[style*="width: 1px"] {
     display: none;
   }
 
-  .inv-portfolio-header > div:nth-child(3),
-  .inv-portfolio-header > div:nth-child(5),
-  .inv-portfolio-header > div:nth-child(7) {
-    flex: none !important;
+  .inv-header-stat {
+    flex: none;
     min-width: 0;
   }
 
-  .inv-portfolio-header > div:nth-child(3) > div:first-child,
-  .inv-portfolio-header > div:nth-child(5) > div:first-child,
-  .inv-portfolio-header > div:nth-child(7) > div:first-child {
-    font-size: 11px !important;
-    margin-bottom: 2px !important;
+  .inv-header-stat-label {
+    font-size: 11px;
+    margin-bottom: 2px;
   }
 
-  .inv-portfolio-header > div:nth-child(3) > div:last-child,
-  .inv-portfolio-header > div:nth-child(5) > div:last-child,
-  .inv-portfolio-header > div:nth-child(7) > div:last-child {
-    font-size: 14px !important;
+  .inv-header-stat-value {
+    font-size: 14px;
   }
 
   .inv-modal-actions {
@@ -11186,7 +11298,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 /* Toast */
 .cc-toast {
   position: fixed;
-  top: 20px;
+  top: calc(20px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   color: #fff;
@@ -11740,10 +11852,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 [data-theme="dark"] .cash-flow-card {
   --cash-flow-net: #60a5fa;
   --cash-flow-grid: color-mix(in srgb, var(--border-subtle) 78%, transparent);
-}
-
-[data-theme="dark"] .inv-chart-wrap {
-  background: var(--bg-base);
 }
 
 [data-theme="dark"] .inv-grid-line {
@@ -13449,11 +13557,29 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 }
 
+.tx-subaccounts-section {
+  /* Breathing room above the section when card selection auto-scrolls it
+     to the top of the .body scroll area (scrollIntoView block: "start"). */
+  scroll-margin-top: 16px;
+}
+
 .tx-account-grid {
   grid-template-columns: repeat(8, minmax(0, 1fr));
   grid-auto-rows: 68px;
   align-items: stretch;
   gap: 8px;
+}
+
+/* Sub-accounts collapse expander; column counts at each breakpoint are
+   mirrored in transactions-page.tsx (subAccountGridColumns). Doubled class
+   beats the later-loaded .btn base (display: inline-flex) so margin centers. */
+.btn.tx-account-grid-more {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 8px auto 0;
+  color: var(--brand-600);
+  font-weight: 600;
 }
 
 .tx-bank-card {
@@ -13852,6 +13978,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 @media (max-width: 1024px) {
+  /* Column count mirrored in transactions-page.tsx (subAccountGridColumns). */
   .tx-account-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
@@ -13869,6 +13996,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 @media (max-width: 768px) {
+  /* Column count mirrored in transactions-page.tsx (subAccountGridColumns). */
   .tx-account-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

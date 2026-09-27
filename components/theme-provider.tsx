@@ -28,6 +28,12 @@ function getSystemTheme(): Theme {
 
 function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme);
+  // The stored theme can differ from prefers-color-scheme, so the SSR'd
+  // media-based theme-color metas must be overridden to match --bg-elevated.
+  const color = theme === "dark" ? "#2a2723" : "#ffffff";
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    meta.setAttribute("content", color);
+  });
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

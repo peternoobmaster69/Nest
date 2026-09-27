@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui-skeleton";
 import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { ChartCursorTooltip, useChartCursorTooltip } from "@/components/chart-cursor-tooltip";
-import { Droplet, Info, Lock, Plus } from "lucide-react";
+import { ArrowRightLeft, Droplet, Info, Lock, Plus } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import {
@@ -698,10 +698,10 @@ export function InvestmentsPage() {
           <div className="inv-portfolio-header">
               {/* Total Portfolio Value - Primary */}
               <div style={{ flex: "1 1 200px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                <div className="inv-header-total-label">
                   Total Portfolio Value
                 </div>
-                <div style={{ fontSize: "32px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>
+                <div className="inv-header-total-value">
                   {formatCents(totalCurrentAcrossAll)}
                 </div>
                 <div className="inv-withdrawable-summary">
@@ -714,8 +714,8 @@ export function InvestmentsPage() {
               <div style={{ width: "1px", height: "50px", background: "var(--border-subtle)", flexShrink: 0 }} />
 
               {/* Invested Amount */}
-              <div style={{ flex: "0 1 150px" }}>
-                <div className="inv-contribution-tooltip-shell" style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+              <div className="inv-header-stat">
+                <div className="inv-contribution-tooltip-shell inv-header-stat-label">
                   <Button
                     type="button"
                     className="inv-contribution-tooltip-trigger"
@@ -761,25 +761,24 @@ export function InvestmentsPage() {
                     <small>Net change in total invested</small>
                   </div>
                 </div>
-                <div style={{ fontSize: "18px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                <div className="inv-header-stat-value is-invested">
                   {formatCents(totalInvestedAcrossAll)}
                 </div>
               </div>
 
               {/* Gain/Loss */}
-              <div style={{ flex: "0 1 150px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
+              <div className="inv-header-stat">
+                <div className="inv-header-stat-label">
                   {isProfit ? "Gain" : "Loss"}
                 </div>
-                <div style={{ fontSize: "18px", fontWeight: 700, color: isProfit ? "var(--amount-positive)" : "var(--amount-negative)" }}>
+                <div className={`inv-header-stat-value ${isProfit ? "positive" : "negative"}`}>
                   {isProfit ? "+" : "-"}{formatCents(Math.abs(totalGainCents))}
                 </div>
               </div>
 
               {/* Return Percentage */}
               <div
-                className="inv-return-toggle"
-                style={{ flex: "0 1 150px" }}
+                className="inv-return-toggle inv-header-stat"
                 role="button"
                 tabIndex={0}
                 aria-pressed={returnDisplayMode === "annualized"}
@@ -797,19 +796,17 @@ export function InvestmentsPage() {
                   setReturnDisplayMode((mode) => (mode === "absolute" ? "annualized" : "absolute"));
                 }}
               >
-                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                  {returnDisplayMode === "absolute" ? "Return" : "Annualized Return"}
+                <div className="inv-header-stat-label inv-return-toggle-label">
+                  <span>{returnDisplayMode === "absolute" ? "Return" : "Annualized Return"}</span>
+                  <ArrowRightLeft size={10} aria-hidden="true" />
                 </div>
-                <div style={{
-                  fontSize: "18px",
-                  fontWeight: 700,
-                  color: displayedReturnPercentage === null
-                    ? "var(--text-tertiary)"
-                    : displayedReturnIsProfit ? "var(--amount-positive)" : "var(--amount-negative)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px"
-                }}>
+                <div
+                  className={`inv-header-stat-value is-return ${
+                    displayedReturnPercentage === null
+                      ? "is-muted"
+                      : displayedReturnIsProfit ? "positive" : "negative"
+                  }`}
+                >
                   {displayedReturnPercentage === null ? (
                     <span>—</span>
                   ) : (
@@ -910,6 +907,9 @@ export function InvestmentsPage() {
           const investedCents = latest?.investedCents ?? 0;
           const currentCents = latest?.currentValueCents ?? 0;
           const currentValueClass = currentCents >= investedCents ? "positive" : "negative";
+          const gainCents = currentCents - investedCents;
+          const accountIsProfit = gainCents >= 0;
+          const returnPercentage = investedCents > 0 ? (gainCents / investedCents) * 100 : null;
           const inceptionBadge = formatInceptionBadge(account.inceptionDate);
           return (
             <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""} ${recentlyUpdated ? "is-recently-updated" : ""}`}>
@@ -948,6 +948,18 @@ export function InvestmentsPage() {
                     <small>Current</small>
                     <p className={currentValueClass}>{formatCents(currentCents)}</p>
                   </div>
+                </div>
+                <div
+                  className={`inv-account-performance ${currentValueClass}`}
+                  title={`All-time ${accountIsProfit ? "gain" : "loss"} on this account`}
+                >
+                  <span aria-hidden="true">{accountIsProfit ? "▲" : "▼"}</span>
+                  <span>{accountIsProfit ? "+" : "-"}{formatCents(Math.abs(gainCents))}</span>
+                  {returnPercentage !== null ? (
+                    <span className="inv-account-performance-return">
+                      ({Math.abs(returnPercentage).toFixed(2)}%)
+                    </span>
+                  ) : null}
                 </div>
               </Button>
               <div className="inv-account-actions">

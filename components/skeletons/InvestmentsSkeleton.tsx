@@ -62,6 +62,9 @@ export function InvestmentsAccountGridSkeleton() {
                 <Skeleton width={78} height={15} borderRadius="4px" />
               </div>
             </div>
+            <div className="inv-account-performance">
+              <Skeleton width={110} height={13} borderRadius="4px" />
+            </div>
           </div>
           <div className="inv-account-actions">
             <Skeleton width={72} height={22} borderRadius="999px" />
