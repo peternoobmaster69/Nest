@@ -50,3 +50,18 @@ body[data-modal-scroll-lock="true"] {
   overflow: hidden;
 }
 
+/* WebKit can under-report 100dvh by the home-indicator safe area for
+   installed standalone PWAs using viewport-fit=cover. In standalone mode
+   there is no browser chrome, so 100vh is the reliable full-screen shell. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    height: 100vh;
+    min-height: 100vh;
+  }
+
+  .app-shell {
+    height: 100vh;
+  }
+}
+

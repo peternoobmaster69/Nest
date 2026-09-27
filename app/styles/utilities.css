@@ -571,18 +571,31 @@
   color: #fff;
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
-  transform: translateY(calc(-100% - 24px));
-  transition: transform var(--duration-fast) var(--ease-decelerate);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(calc(-100% - env(safe-area-inset-top, 0px) - 24px));
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-decelerate),
+    visibility 0s linear var(--duration-fast);
 }
 
 .skip-link:focus-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
   transform: translateY(0);
+  transition-delay: 0s;
 }
 
 /* iOS standalone PWAs can restore DOM focus when resuming.
-   Keep the skip link off-screen unless the focus is keyboard-visible. */
+   Keep the skip link fully hidden unless focus is keyboard-visible. */
 .skip-link:focus:not(:focus-visible) {
-  transform: translateY(calc(-100% - 24px));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(calc(-100% - env(safe-area-inset-top, 0px) - 24px));
 }
 
 @media (min-width: 769px) {
