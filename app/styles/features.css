@@ -16104,6 +16104,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   position: fixed;
   z-index: var(--z-toast);
   top: max(var(--space-4), env(safe-area-inset-top));
+  bottom: auto;
   right: var(--space-4);
   display: grid;
   width: min(380px, calc(100vw - 32px));

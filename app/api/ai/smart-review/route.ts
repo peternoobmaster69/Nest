@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { reviewCreditCardTransactions } from "@/lib/ai/smart-review";
+import { AgentPolicyError } from "@/lib/ai/agent-policy";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
 
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
     const result = await reviewCreditCardTransactions({ workspaceId, userId, transactionIds });
     return NextResponse.json(result, { headers: PRIVATE_HEADERS });
   } catch (error) {
+    if (error instanceof AgentPolicyError) return NextResponse.json({ error: error.message, code: "AI_AGENT_DISABLED" }, { status: error.status, headers: PRIVATE_HEADERS });
     const limited = rateLimitResponse(error);
     if (limited) return limited;
     if (error instanceof ApiAuthError) {

@@ -58,15 +58,11 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
       runner.indexOf("fetchGmailMessage(accessToken, message.id)"),
     "Gmail subject metadata must be checked before a message body is fetched",
   );
-<<<<<<< HEAD
   assert.match(route, /await processGmailSyncQueue[\s\S]*?maxSlices: 10/);
-=======
-  assert.match(route, /await processGmailSyncQueue/);
   assert.match(route, /errorCode/);
   assert.match(status, /requiresReconnect/);
   assert.doesNotMatch(status, /integration: integration \}/);
   assert.match(settings, /Reconnect Gmail/);
->>>>>>> df165cc0b831bebc44d53773c566c19c6289f6a6
   assert.doesNotMatch(settings, /GMAIL_SYNC_INTERVAL_MS/);
   assert.doesNotMatch(settings, /setInterval\([\s\S]{0,220}syncGmail\.mutate/);
   assert.match(ingest, /sourceMessageId/);

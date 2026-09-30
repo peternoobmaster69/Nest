@@ -47,6 +47,8 @@ Ask Nest request/response, deterministic intent/category/entity logic, 18+ read 
 
 ## Ask Nest workflow
 
+For transaction creation and correction, Ask Nest starts a [transaction draft](transaction-agent.md) inline in the same thread. The model extracts a draft only; an EDITOR must approve its current review through the confirmation endpoint. Existing question-answering tools remain read-only.
+
 Question/history bounds → workspace rate limit → deterministic hint → Azure Responses call → tool-call loop → structured answer → evidence/visualization merge → value grounding → persist turn/usage/memory candidates → return.
 
 History is at most six client-provided messages plus server persistence rules. Tool errors are converted to safe model-visible summaries.
@@ -72,6 +74,8 @@ History is at most six client-provided messages plus server persistence rules. T
 ## Configuration
 
 Required for Ask Nest: `AI_WORKLOAD_ENDPOINT`, `AI_WORKLOAD_API_KEY`, `AI_WORKLOAD_MODEL`. Optional pricing, history retention, search gates/config, Massive, and SerpApi settings are documented in `.env.example`.
+
+The platform administrator can configure Ask Nest, the transaction assistant, and Smart Review in [Admin → Agents](agents.md). Saved settings control pause state, capabilities, instructions, deployment, reasoning effort, output limits, and approved demonstrations. Ask Nest defaults to eight lookup rounds and sixteen tool calls. Configuration is revisioned; core grounding and financial-confirmation checks remain enforced in code.
 
 ## Error handling
 

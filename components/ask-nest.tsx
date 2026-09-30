@@ -1,5 +1,9 @@
 "use client";
 
+import { suggestedQuestions } from "@/lib/ai/ask-nest-prompts";
+import { draftPlaceholder, draftSummary, TransactionAgentCard, useTransactionAgent, type AgentSession } from "@/components/transaction-agent";
+import { AskNestVisualizationView, formatAsOf, renderWithFormattedDates } from "@/components/ask-nest-visualization";
+import { couldBeTransaction, isTransactionRequest } from "@/lib/ai/transaction-agent-contracts";
 import { workspaceFetch } from "@/lib/workspace-client";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import Link from "next/link";
@@ -9,11 +13,13 @@ import {
   CircleAlert,
   LoaderCircle,
   PencilLine,
+  ReceiptText,
   RotateCcw,
   Save,
   Send,
   Sparkles,
   Trash2,
+  X,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
@@ -25,7 +31,6 @@ import type {
   AskNestFeedbackRating,
   AskNestFeedbackReason,
   AskNestHistoryMessage,
-  AskNestVisualization,
 } from "@/lib/ai/ask-nest-types";
 import { Button } from "@/components/ui/button";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
@@ -109,11 +114,7 @@ function askNestErrorLabel(code?: string) {
   return code ? ASK_NEST_ERROR_LABELS[code] ?? "Ask Nest could not complete the request" : "Ask Nest could not complete the request";
 }
 
-const GENERAL_QUESTIONS = [
-  "What needs my attention right now?",
-  "How does this month's spending compare with last month?",
-  "Which card payments are due next?",
-];
+const RECORD_EXAMPLES = ["Deduct $10", "Spent $12.50 on lunch yesterday", "Change yesterday’s lunch to $12"];
 
 const NOT_USEFUL_REASONS: Array<{ value: AskNestFeedbackReason; label: string }> = [
   { value: "WRONG_DATA", label: "Wrong figures" },
@@ -123,45 +124,6 @@ const NOT_USEFUL_REASONS: Array<{ value: AskNestFeedbackReason; label: string }>
   { value: "OTHER", label: "Other" },
 ];
 
-function suggestedQuestions(path: string) {
-  if (path.startsWith("/transactions")) {
-    return [
-      "What are my largest expenses this month?",
-      "How does this month's spending compare with last month?",
-      "Show my recent unassigned transactions.",
-    ];
-  }
-  if (path.startsWith("/credit-transactions") || path.startsWith("/credit-cards")) {
-    return [
-      "Which card payments are due next?",
-      "How much is outstanding across my cards?",
-      "Show recent unallocated card activity.",
-    ];
-  }
-  if (path.startsWith("/receivables")) {
-    return [
-      "How much is still open in receivables?",
-      "Show my largest open receivables.",
-      "Which receivables were added this month?",
-    ];
-  }
-  if (path.startsWith("/budgets")) {
-    return [
-      "Summarize this month's budget plan.",
-      "Which sub-accounts have the lowest available balance?",
-      "How much remains unallocated this month?",
-    ];
-  }
-  if (path.startsWith("/investments")) {
-    return [
-      "Summarize my recorded investment values.",
-      "Which investment accounts have a recorded gain or loss?",
-      "How much of my recorded portfolio is liquid?",
-    ];
-  }
-  return GENERAL_QUESTIONS;
-}
-
 function getHistory(turns: AskNestTurn[]): AskNestHistoryMessage[] {
   return turns
     .filter((turn): turn is AskNestTurn & { answer: AskNestAnswer } => Boolean(turn.answer))
@@ -170,135 +132,6 @@ function getHistory(turns: AskNestTurn[]): AskNestHistoryMessage[] {
       { role: "user" as const, content: turn.question },
       { role: "assistant" as const, content: turn.answer.answer },
     ]);
-}
-
-function formatAsOf(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "just now";
-  return new Intl.DateTimeFormat("en-SG", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Singapore",
-  }).format(date);
-}
-
-function renderWithFormattedDates(value: string) {
-  const parts = value.split(/(\b\d{4}-\d{2}-\d{2}\b)/g);
-  return parts.map((part, index) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
-    const date = new Date(`${part}T00:00:00.000Z`);
-    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== part) return part;
-    const label = new Intl.DateTimeFormat("en-SG", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    }).format(date);
-    return <time className="ask-nest-inline-date" dateTime={part} title={part} key={`${part}-${index}`}>{label}</time>;
-  });
-}
-
-function formatChartPeriodLabel(value: string, compact = false) {
-  const monthMatch = /^(\d{4})-(\d{2})$/.exec(value);
-  if (!monthMatch) return value;
-  const date = new Date(`${value}-01T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return value;
-  const month = new Intl.DateTimeFormat("en-SG", { month: "short", timeZone: "UTC" }).format(date);
-  return compact ? `${month} ’${monthMatch[1]!.slice(2)}` : `${month} ${monthMatch[1]}`;
-}
-
-function AskNestVisualizationView({ visualization, onNavigate, workspaceId }: {
-  visualization: AskNestVisualization;
-  onNavigate: () => void;
-  workspaceId?: string | null;
-}) {
-  if (visualization.type === "trip_cards") {
-    if (!visualization.items.length) return null;
-    return (
-      <section className="ask-nest-visual ask-nest-trip-visual" aria-label={visualization.title}>
-        <h4>{visualization.title}</h4>
-        <div className="ask-nest-trip-grid">
-          {visualization.items.map((item) => (
-            <Link key={`${item.label}-${item.href}`} href={workspaceId ? buildWorkspacePath(workspaceId, item.href) : item.href} onClick={onNavigate}>
-              <span className="ask-nest-trip-flag" aria-hidden="true">{item.flag}</span>
-              <span className="ask-nest-trip-copy">
-                <strong>{item.label}</strong>
-                <small>{renderWithFormattedDates(item.dateRange)}</small>
-              </span>
-              <b>{item.amount}</b>
-            </Link>
-          ))}
-        </div>
-        {visualization.disclaimer ? <p className="ask-nest-visual-disclaimer">{visualization.disclaimer}</p> : null}
-      </section>
-    );
-  }
-
-  if (visualization.type === "trend_chart") {
-    if (!visualization.points.length) return null;
-    const width = 380;
-    const height = 150;
-    const padding = { top: 16, right: 12, bottom: 32, left: 12 };
-    const max = Math.max(1, ...visualization.points.map((point) => point.valueCents));
-    const denominator = Math.max(1, visualization.points.length - 1);
-    const coordinates = visualization.points.map((point, index) => ({
-      ...point,
-      compactLabel: formatChartPeriodLabel(point.label, true),
-      readableLabel: formatChartPeriodLabel(point.label),
-      x: padding.left + (index / denominator) * (width - padding.left - padding.right),
-      y: padding.top + (1 - point.valueCents / max) * (height - padding.top - padding.bottom),
-    }));
-    const labelEvery = Math.max(1, Math.ceil(coordinates.length / 4));
-    return (
-      <figure className="ask-nest-visual ask-nest-chart">
-        <figcaption>{visualization.title}</figcaption>
-        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${visualization.title} in ${visualization.currency}`}>
-          <line x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} className="ask-nest-chart-axis" />
-          <polyline points={coordinates.map((point) => `${point.x},${point.y}`).join(" ")} className="ask-nest-chart-line" />
-          {coordinates.map((point, index) => (
-            <g key={`${point.label}-${index}`}>
-              <circle cx={point.x} cy={point.y} r="4" className="ask-nest-chart-dot"><title>{`${point.readableLabel}: ${point.formattedValue}`}</title></circle>
-              {(index % labelEvery === 0 || index === coordinates.length - 1) ? (
-                <text x={point.x} y={height - 10} textAnchor="middle">{point.compactLabel}</text>
-              ) : null}
-            </g>
-          ))}
-        </svg>
-        <dl className="ask-nest-chart-values" aria-label="Most recent chart values">
-          {coordinates.slice(-3).map((point) => (
-            <div key={point.label}>
-              <dt>{point.readableLabel}</dt>
-              <dd>{point.formattedValue}</dd>
-            </div>
-          ))}
-        </dl>
-      </figure>
-    );
-  }
-
-  if (!visualization.items.length) return null;
-  const max = Math.max(1, ...visualization.items.flatMap((item) => [item.investedCents, item.currentValueCents]));
-  return (
-    <figure className="ask-nest-visual ask-nest-investment-chart">
-      <figcaption>{visualization.title}</figcaption>
-      <div className="ask-nest-investment-legend"><span className="is-invested">Invested</span><span className="is-current">Current</span></div>
-      <div className="ask-nest-investment-rows">
-        {visualization.items.map((item) => (
-          <div className="ask-nest-investment-row" key={item.id}>
-            <strong>{item.label}</strong>
-            <div className="ask-nest-investment-bars">
-              <span className="is-invested" style={{ width: `${Math.max(2, item.investedCents / max * 100)}%` }} title={`Invested ${item.invested}`} />
-              <span className="is-current" style={{ width: `${Math.max(2, item.currentValueCents / max * 100)}%` }} title={`Current ${item.currentValue}`} />
-            </div>
-            <small>{item.invested} → {item.currentValue}</small>
-          </div>
-        ))}
-      </div>
-    </figure>
-  );
 }
 
 export function AskNest({
@@ -336,7 +169,16 @@ export function AskNest({
   const abortRef = useRef<AbortController | null>(null);
   const prompts = useMemo(() => suggestedQuestions(currentPath), [currentPath]);
   const greetingName = userName?.trim().split(/\s+/)[0] || "";
+  const agent = useTransactionAgent(workspaceId, open);
+  const activeDraft = agent.active;
   const isPending = turns.some((turn) => turn.pending);
+  const composerLocked = isPending || historyLoading || agent.busy || Boolean(activeDraft?.needsReload);
+  // Questions and transaction drafts share one thread, in the order they were started.
+  const thread = useMemo(() => [
+    ...turns.map((turn, index) => ({ kind: "turn" as const, at: turn.createdAt ?? "", index, turn })),
+    ...agent.sessions.map((session, index) => ({ kind: "draft" as const, at: session.createdAt, index: turns.length + index, session })),
+  ].sort((a, b) => (a.at && b.at && a.at !== b.at ? a.at.localeCompare(b.at) : a.index - b.index)), [turns, agent.sessions]);
+  const latestSessionKey = agent.sessions.at(-1)?.key;
 
   useEffect(() => setMounted(true), []);
 
@@ -414,7 +256,11 @@ export function AskNest({
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open, turns]);
+  }, [open, turns, agent.sessions, agent.busy]);
+
+  useEffect(() => {
+    if (open && !composerLocked && !memoryOpen) inputRef.current?.focus();
+  }, [open, composerLocked, memoryOpen]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -536,6 +382,7 @@ export function AskNest({
       if (!response.ok) throw new Error("Could not clear conversation history.");
       setTurns([]);
       setNextCursor(null);
+      agent.clearFinished();
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : "Could not clear conversation history.");
     } finally {
@@ -543,10 +390,17 @@ export function AskNest({
     }
   };
 
-  const ask = async (rawQuestion: string) => {
+  /** Requests to change money start a draft in the thread; everything else is answered read-only. */
+  const ask = async (rawQuestion: string, asQuestion = false) => {
     const nextQuestion = rawQuestion.trim();
     if (nextQuestion.length < 2 || nextQuestion.length > 600 || isPending || historyLoading) return;
-
+    if (!asQuestion && isTransactionRequest(nextQuestion)) {
+      setQuestion("");
+      // One draft at a time: a new command while one is open refines that draft.
+      if (activeDraft) agent.reply(nextQuestion);
+      else agent.start(nextQuestion, true);
+      return;
+    }
     const id = crypto.randomUUID();
     const history = getHistory(turns);
     setQuestion("");
@@ -598,15 +452,24 @@ export function AskNest({
     }
   };
 
+  // While a draft is open the composer replies to it, so short answers like "2" or "yesterday" work.
+  const submitComposer = () => {
+    const text = question.trim();
+    if (!activeDraft) return void ask(question);
+    if (!text || composerLocked) return;
+    setQuestion("");
+    agent.reply(text);
+  };
+
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void ask(question);
+    submitComposer();
   };
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      void ask(question);
+      submitComposer();
     }
   };
 
@@ -622,6 +485,12 @@ export function AskNest({
       inputRef.current?.setSelectionRange(turn.question.length, turn.question.length);
     });
   };
+  const askInstead = async (session: AgentSession) => {
+    if (await agent.discard(session)) void ask(session.text, true);
+  };
+
+  const recordInstead = (turn: AskNestTurn) => agent.start(turn.question);
+
   const chooseFollowUp = (followUp: string) => {
     void ask(followUpToUserPrompt(followUp));
   };
@@ -654,6 +523,162 @@ export function AskNest({
     }
   };
 
+  const renderTurn = (turn: AskNestTurn) => (
+    <article key={turn.id} className="ask-nest-turn">
+      <div className="ask-nest-question">{turn.question}</div>
+      {turn.createdAt ? <time className="ask-nest-turn-date" dateTime={turn.createdAt}>{formatAsOf(turn.createdAt)}</time> : null}
+      {turn.pending ? (
+        <div className="ask-nest-thinking" role="status">
+          <LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" />
+          <span>Checking your Nest data…</span>
+        </div>
+      ) : turn.error ? (
+        <div className="ask-nest-error" role="alert">
+          <CircleAlert size={18} aria-hidden="true" />
+          <div>
+            <strong>{askNestErrorLabel(turn.errorCode)}</strong>
+            <p>{turn.error}</p>
+            {turn.errorCode === "AI_WORKSPACE_UNAVAILABLE" ? (
+              <Button type="button" onClick={() => window.location.reload()}>
+                <RotateCcw size={14} aria-hidden="true" /> Refresh page
+              </Button>
+            ) : EDITABLE_ASK_NEST_ERRORS.has(turn.errorCode ?? "") ? (
+              <Button type="button" onClick={() => editFailedQuestion(turn)}>
+                <PencilLine size={14} aria-hidden="true" /> Edit question
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => retry(turn)}>
+                <RotateCcw size={14} aria-hidden="true" /> Retry same question
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : turn.answer ? (
+        <div className="ask-nest-response">
+          <p className="ask-nest-answer">{renderWithFormattedDates(turn.answer.answer)}</p>
+          {turn.answer.memoryUpdates?.length ? (
+            <div className="ask-nest-memory-saved" role="status">
+              <Brain size={15} aria-hidden="true" />
+              <span><strong>Remembered</strong>{turn.answer.memoryUpdates.join(" · ")}</span>
+            </div>
+          ) : null}
+          {turn.answer.highlights.length ? (
+            <dl className="ask-nest-highlights">
+              {turn.answer.highlights.map((highlight, index) => (
+                <div key={`${highlight.label}-${index}`} className={`ask-nest-highlight is-${highlight.tone}`}>
+                  <dt>{highlight.label}</dt>
+                  <dd>{renderWithFormattedDates(highlight.value)}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {turn.answer.visualization ? (
+            <AskNestVisualizationView visualization={turn.answer.visualization} workspaceId={workspaceId} onNavigate={() => setOpen(false)} />
+          ) : null}
+          {turn.answer.evidence.length ? (
+            <div className="ask-nest-evidence">
+              <span>Supporting data</span>
+              {turn.answer.evidence.map((item) => item.href.startsWith("https://") ? (
+                <a key={item.id} href={item.href} target="_blank" rel="noreferrer">
+                  <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </a>
+              ) : (
+                <Link key={item.id} href={workspaceId ? buildWorkspacePath(workspaceId, item.href) : item.href} onClick={() => setOpen(false)}>
+                  <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          {turn.answer.followUpQuestions.length ? (
+            <div className="ask-nest-followups" aria-label="Suggested next actions">
+              <div className="ask-nest-followups-heading">
+                <strong>Suggested next actions</strong>
+                <span>Select an action to run it now.</span>
+              </div>
+              <div className="ask-nest-followups-list">
+                {turn.answer.followUpQuestions.map((followUp) => {
+                  const action = followUpToUserPrompt(followUp);
+                  return (
+                    <Button
+                      key={action}
+                      type="button"
+                      onClick={() => chooseFollowUp(action)}
+                      disabled={isPending || historyLoading || agent.busy}
+                      aria-label={`Run suggested action: ${action}`}
+                    >
+                      <span>{action}</span>
+                      <i aria-hidden="true">&rarr;</i>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <div className="ask-nest-answer-meta">
+            <details className="ask-nest-scope">
+              <summary>Data scope</summary>
+              <p>
+                {turn.answer.scope.workspaceName} · {turn.answer.scope.currency} · {turn.answer.scope.pageTitle}
+              </p>
+              <p>Checked {formatAsOf(turn.answer.scope.asOf)}</p>
+              {turn.answer.scope.toolsUsed.length ? (
+                <p>Sources: {turn.answer.scope.toolsUsed.join(", ")}</p>
+              ) : null}
+            </details>
+            <div className="ask-nest-feedback" aria-label="Rate this Ask Nest answer">
+              {turn.feedbackRating ? (
+                <span className="ask-nest-feedback-thanks">Feedback saved · {turn.feedbackRating === "HELPFUL" ? "Helpful" : "Not useful"}</span>
+              ) : (
+                <>
+                  <span className="ask-nest-feedback-label">Was this useful?</span>
+                  <Button
+                    type="button"
+                    onClick={() => void submitFeedback(turn, "HELPFUL", null)}
+                    disabled={turn.feedbackPending}
+                    aria-label="Mark this answer as helpful"
+                  >
+                    <ThumbsUp size={14} aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setTurns((current) => current.map((item) => item.id === turn.id ? { ...item, feedbackPrompt: !item.feedbackPrompt, feedbackError: "" } : item))}
+                    disabled={turn.feedbackPending}
+                    aria-expanded={Boolean(turn.feedbackPrompt)}
+                    aria-label="Mark this answer as not useful"
+                  >
+                    <ThumbsDown size={14} aria-hidden="true" />
+                  </Button>
+                </>
+              )}
+              {turn.feedbackPrompt && !turn.feedbackRating ? (
+                <div className="ask-nest-feedback-reasons" aria-label="Why was this answer not useful?">
+                  {NOT_USEFUL_REASONS.map((reason) => (
+                    <Button
+                      key={reason.value}
+                      type="button"
+                      onClick={() => void submitFeedback(turn, "NOT_HELPFUL", reason.value)}
+                      disabled={turn.feedbackPending}
+                    >
+                      {reason.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+              {turn.feedbackError ? <small role="alert">{turn.feedbackError}</small> : null}
+            </div>
+            {couldBeTransaction(turn.question) ? (
+              <Button type="button" variant="ghost" size="sm" className="ask-nest-record-instead" onClick={() => recordInstead(turn)} disabled={agent.busy || Boolean(activeDraft)}>
+                <ReceiptText size={14} aria-hidden="true" /> Record this instead
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+
   const panel = open ? (
     <div className="ask-nest-layer">
       <Button type="button" className="ask-nest-backdrop" onClick={close} aria-label="Close Ask Nest" />
@@ -675,19 +700,20 @@ export function AskNest({
           <Button
             type="button"
             className={`ask-nest-memory-toggle${memoryOpen ? " is-active" : ""}`}
-            onClick={() => memoryOpen ? setMemoryOpen(false) : showMemory()}
+            onClick={() => { if (memoryOpen) setMemoryOpen(false); else showMemory(); }}
             aria-pressed={memoryOpen}
             aria-label={memoryOpen ? "Return to Ask Nest conversation" : "Review what Ask Nest remembers"}
           >
             <Brain size={15} aria-hidden="true" />
             <span>{memoryOpen ? "Chat" : "Memory"}</span>
           </Button>
-          {!memoryOpen && turns.length ? (
+          {!memoryOpen && (turns.length || agent.sessions.length) ? (
             <Button
               type="button"
               className="ask-nest-clear"
               onClick={() => void clearHistory()}
-              disabled={isPending || historyLoading}
+              disabled={isPending || historyLoading || agent.busy}
+              aria-label="Clear conversation history"
             >
               Clear
             </Button>
@@ -759,18 +785,27 @@ export function AskNest({
               <LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" />
               <span>Loading conversation history…</span>
             </div>
-          ) : !turns.length ? (
+          ) : !thread.length ? (
             <div className="ask-nest-welcome">
-              <span className="ask-nest-readonly-label">Read-only</span>
+              <span className="ask-nest-readonly-label">Read-only answers · You confirm every change</span>
               <h3>{greetingName ? `Hi ${greetingName}, ask about the money already in Nest` : "Ask about the money already in Nest"}</h3>
               <p>
-                Ask for comparisons, card payments, receivables, budget details, or an explanation of a bank discrepancy.
+                Ask for comparisons, card payments, receivables, budget details, or a bank discrepancy. You can also record or correct a transaction in plain words. Nothing is saved until you confirm the review.
               </p>
               <div className="ask-nest-prompts" aria-label="Suggested questions">
                 {prompts.map((prompt) => (
                   <Button key={prompt} type="button" onClick={() => void ask(prompt)}>
                     <span>{prompt}</span>
                     <ArrowUpRight size={15} aria-hidden="true" />
+                  </Button>
+                ))}
+              </div>
+              <div className="ask-nest-prompts ask-nest-record-prompts" aria-label="Record a transaction">
+                <span className="ask-nest-prompts-label">Or record something</span>
+                {RECORD_EXAMPLES.map((example) => (
+                  <Button key={example} type="button" disabled={agent.busy} onClick={() => agent.start(example)}>
+                    <span>{example}</span>
+                    <ReceiptText size={15} aria-hidden="true" />
                   </Button>
                 ))}
               </div>
@@ -782,153 +817,10 @@ export function AskNest({
                   {historyLoading ? "Loading…" : "Load older conversations"}
                 </Button>
               ) : null}
-              {turns.map((turn) => (
-                <article key={turn.id} className="ask-nest-turn">
-                  <div className="ask-nest-question">{turn.question}</div>
-                  {turn.createdAt ? <time className="ask-nest-turn-date" dateTime={turn.createdAt}>{formatAsOf(turn.createdAt)}</time> : null}
-                  {turn.pending ? (
-                    <div className="ask-nest-thinking" role="status">
-                      <LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" />
-                      <span>Checking your Nest data…</span>
-                    </div>
-                  ) : turn.error ? (
-                    <div className="ask-nest-error" role="alert">
-                      <CircleAlert size={18} aria-hidden="true" />
-                      <div>
-                        <strong>{askNestErrorLabel(turn.errorCode)}</strong>
-                        <p>{turn.error}</p>
-                        {turn.errorCode === "AI_WORKSPACE_UNAVAILABLE" ? (
-                          <Button type="button" onClick={() => window.location.reload()}>
-                            <RotateCcw size={14} aria-hidden="true" /> Refresh page
-                          </Button>
-                        ) : EDITABLE_ASK_NEST_ERRORS.has(turn.errorCode ?? "") ? (
-                          <Button type="button" onClick={() => editFailedQuestion(turn)}>
-                            <PencilLine size={14} aria-hidden="true" /> Edit question
-                          </Button>
-                        ) : (
-                          <Button type="button" onClick={() => retry(turn)}>
-                            <RotateCcw size={14} aria-hidden="true" /> Retry same question
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ) : turn.answer ? (
-                    <div className="ask-nest-response">
-                      <p className="ask-nest-answer">{renderWithFormattedDates(turn.answer.answer)}</p>
-                      {turn.answer.memoryUpdates?.length ? (
-                        <div className="ask-nest-memory-saved" role="status">
-                          <Brain size={15} aria-hidden="true" />
-                          <span><strong>Remembered</strong>{turn.answer.memoryUpdates.join(" · ")}</span>
-                        </div>
-                      ) : null}
-                      {turn.answer.highlights.length ? (
-                        <dl className="ask-nest-highlights">
-                          {turn.answer.highlights.map((highlight, index) => (
-                            <div key={`${highlight.label}-${index}`} className={`ask-nest-highlight is-${highlight.tone}`}>
-                              <dt>{highlight.label}</dt>
-                              <dd>{renderWithFormattedDates(highlight.value)}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      ) : null}
-                      {turn.answer.visualization ? (
-                        <AskNestVisualizationView visualization={turn.answer.visualization} workspaceId={workspaceId} onNavigate={() => setOpen(false)} />
-                      ) : null}
-                      {turn.answer.evidence.length ? (
-                        <div className="ask-nest-evidence">
-                          <span>Supporting data</span>
-                          {turn.answer.evidence.map((item) => item.href.startsWith("https://") ? (
-                            <a key={item.id} href={item.href} target="_blank" rel="noreferrer">
-                              <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
-                              <ArrowUpRight size={15} aria-hidden="true" />
-                            </a>
-                          ) : (
-                            <Link key={item.id} href={workspaceId ? buildWorkspacePath(workspaceId, item.href) : item.href} onClick={() => setOpen(false)}>
-                              <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
-                              <ArrowUpRight size={15} aria-hidden="true" />
-                            </Link>
-                          ))}
-                        </div>
-                      ) : null}
-                      <details className="ask-nest-scope">
-                        <summary>Data scope</summary>
-                        <p>
-                          {turn.answer.scope.workspaceName} · {turn.answer.scope.currency} · {turn.answer.scope.pageTitle}
-                        </p>
-                        <p>Checked {formatAsOf(turn.answer.scope.asOf)}</p>
-                        {turn.answer.scope.toolsUsed.length ? (
-                          <p>Sources: {turn.answer.scope.toolsUsed.join(", ")}</p>
-                        ) : null}
-                      </details>
-                      <div className="ask-nest-feedback" aria-label="Rate this Ask Nest answer">
-                        {turn.feedbackRating ? (
-                          <span className="ask-nest-feedback-thanks">Feedback saved · {turn.feedbackRating === "HELPFUL" ? "Helpful" : "Not useful"}</span>
-                        ) : (
-                          <>
-                            <span>Was this useful?</span>
-                            <Button
-                              type="button"
-                              onClick={() => void submitFeedback(turn, "HELPFUL", null)}
-                              disabled={turn.feedbackPending}
-                              aria-label="Mark this answer as helpful"
-                            >
-                              <ThumbsUp size={14} aria-hidden="true" /> Helpful
-                            </Button>
-                            <Button
-                              type="button"
-                              onClick={() => setTurns((current) => current.map((item) => item.id === turn.id ? { ...item, feedbackPrompt: !item.feedbackPrompt, feedbackError: "" } : item))}
-                              disabled={turn.feedbackPending}
-                              aria-expanded={Boolean(turn.feedbackPrompt)}
-                            >
-                              <ThumbsDown size={14} aria-hidden="true" /> Not useful
-                            </Button>
-                          </>
-                        )}
-                        {turn.feedbackPrompt && !turn.feedbackRating ? (
-                          <div className="ask-nest-feedback-reasons" aria-label="Why was this answer not useful?">
-                            {NOT_USEFUL_REASONS.map((reason) => (
-                              <Button
-                                key={reason.value}
-                                type="button"
-                                onClick={() => void submitFeedback(turn, "NOT_HELPFUL", reason.value)}
-                                disabled={turn.feedbackPending}
-                              >
-                                {reason.label}
-                              </Button>
-                            ))}
-                          </div>
-                        ) : null}
-                        {turn.feedbackError ? <small role="alert">{turn.feedbackError}</small> : null}
-                      </div>
-                      {turn.answer.followUpQuestions.length ? (
-                        <div className="ask-nest-followups" aria-label="Suggested next actions">
-                          <div className="ask-nest-followups-heading">
-                            <strong>Suggested next actions</strong>
-                            <span>Select an action to run it now.</span>
-                          </div>
-                          <div className="ask-nest-followups-list">
-                            {turn.answer.followUpQuestions.map((followUp) => {
-                              const action = followUpToUserPrompt(followUp);
-                              return (
-                                <Button
-                                  key={action}
-                                  type="button"
-                                  onClick={() => chooseFollowUp(action)}
-                                  disabled={isPending || historyLoading}
-                                  aria-label={`Run suggested action: ${action}`}
-                                >
-                                  <span>{action}</span>
-                                  <i aria-hidden="true">&rarr;</i>
-                                </Button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              ))}
+              {thread.map((item) => item.kind === "draft" ? (
+                <TransactionAgentCard key={item.session.key} session={item.session} agent={agent} latest={item.session.key === latestSessionKey}
+                  typing={Boolean(question.trim())} workspaceId={workspaceId} onNavigate={() => setOpen(false)} onAskInstead={(session) => void askInstead(session)} />
+              ) : renderTurn(item.turn))}
             </div>
           )}
           </>
@@ -936,18 +828,27 @@ export function AskNest({
         </div>
 
         {!memoryOpen ? <footer className="ask-nest-footer">
+          {activeDraft ? (
+            <div className="ask-nest-draft-strip" role="status">
+              <ReceiptText size={15} aria-hidden="true" />
+              <span><strong>Drafting</strong>{draftSummary(activeDraft)}</span>
+              <Button type="button" variant="ghost" size="sm" disabled={agent.busy} onClick={() => void agent.discard(activeDraft)}>
+                <X size={14} aria-hidden="true" /> Cancel
+              </Button>
+            </div>
+          ) : null}
           <form className="ask-nest-form" onSubmit={onSubmit}>
             <div className="ask-nest-input-shell">
-              <label htmlFor="ask-nest-input" className="sr-only">Ask a question about your Nest data</label>
+              <label htmlFor="ask-nest-input" className="sr-only">{activeDraft ? "Reply to the transaction draft" : "Ask a question or describe a transaction"}</label>
               <Textarea
                 ref={inputRef}
                 id="ask-nest-input"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value.slice(0, 600))}
                 onKeyDown={onInputKeyDown}
-                placeholder={`Ask about ${pageTitle.toLowerCase()}…`}
+                placeholder={activeDraft ? draftPlaceholder(activeDraft) : `Ask about ${pageTitle.toLowerCase()}, or say “spent $12 on lunch”`}
                 rows={2}
-                disabled={isPending || historyLoading}
+                disabled={composerLocked}
               />
             </div>
             <Button
@@ -955,13 +856,13 @@ export function AskNest({
               variant="primary"
               iconOnly
               className="ask-nest-send"
-              disabled={isPending || historyLoading || question.trim().length < 2}
-              aria-label="Send question"
+              disabled={composerLocked || question.trim().length < (activeDraft ? 1 : 2)}
+              aria-label={activeDraft ? "Send reply" : "Send"}
             >
-              {isPending ? <LoaderCircle size={18} className="ask-nest-spinner" aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}
+              {isPending || agent.busy ? <LoaderCircle size={18} className="ask-nest-spinner" aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}
             </Button>
           </form>
-          <p>Read-only · Figures come from Nest records and may still need review.</p>
+          <p>{activeDraft ? "Nothing is saved until you press Confirm. Drafts expire after 30 minutes." : "Read-only · Figures come from Nest records and may still need review."}</p>
         </footer> : (
           <footer className="ask-nest-footer ask-nest-memory-footer">
             <Button type="button" variant="secondary" onClick={() => setMemoryOpen(false)}>Back to conversation</Button>

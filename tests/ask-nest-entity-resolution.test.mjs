@@ -3,10 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("../lib/ai/entity-resolution.ts", import.meta.url), "utf8");
+// The pure scoring rules are shared with the transaction assistant.
+const matching = await readFile(new URL("../lib/ai/entity-matching.ts", import.meta.url), "utf8");
 
 test("Ask Nest entity resolution is deterministic and workspace-scoped", () => {
   assert.match(source, /resolveAskNestEntity/);
-  assert.match(source, /CONCEPT_GROUPS/);
+  assert.match(source, /from "\.\/entity-matching"/);
+  assert.match(matching, /CONCEPT_GROUPS/);
+  assert.doesNotMatch(matching, /prisma|responses\.create|embeddings\.create/);
   assert.match(source, /where: \{ workspaceId, isActive: true \}/);
   assert.match(source, /resolveAskNestAccount/);
   assert.match(source, /resolveAskNestBudget/);

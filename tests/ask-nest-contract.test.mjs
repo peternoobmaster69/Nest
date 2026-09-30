@@ -6,6 +6,11 @@ import { readAppStyles } from "./read-app-styles.mjs";
 
 const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
+// The panel is split into the controller and its answer visualizations.
+const panelSource = async () => (await Promise.all([
+  "components/ask-nest.tsx",
+  "components/ask-nest-visualization.tsx",
+].map(source))).join("\n");
 
 test("Ask Nest keeps Azure credentials server-side and uses the v1 Responses API", async () => {
   const config = await source("lib/ai/config.ts");
@@ -39,7 +44,7 @@ test("Ask Nest personalizes greetings with the authenticated user's profile name
   const [orchestration, shell, panel] = await Promise.all([
     source("lib/ai/ask-nest.ts"),
     source("components/app-shell.tsx"),
-    source("components/ask-nest.tsx"),
+    panelSource(),
   ]);
 
   assert.match(orchestration, /prisma\.user\.findUnique\([\s\S]*?where: \{ id: input\.userId \}[\s\S]*?select: \{ name: true \}/);
@@ -137,7 +142,7 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
   const [orchestration, route, panel] = await Promise.all([
     source("lib/ai/ask-nest.ts"),
     source("app/api/ai/ask/route.ts"),
-    source("components/ask-nest.tsx"),
+    panelSource(),
   ]);
 
   for (const code of [
@@ -154,7 +159,7 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
   }
   assert.match(orchestration, /not too many transaction results/);
   assert.match(orchestration, /incomplete_details\?\.reason/);
-  assert.match(orchestration, /ASK_NEST_MAX_OUTPUT_TOKENS\s*=\s*2_400/);
+  assert.match(orchestration, /max_output_tokens:\s*configuration\.maxOutputTokens/);
   assert.match(orchestration, /one compact Markdown table/);
   assert.match(route, /errorResponse\(error\.publicMessage, error\.code, error\.status\)/);
   assert.doesNotMatch(route, /could not produce a grounded answer\. Try rephrasing/);
@@ -167,7 +172,7 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
 test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", async () => {
   const [shell, panel, styles, orchestration] = await Promise.all([
     source("components/app-shell.tsx"),
-    source("components/ask-nest.tsx"),
+    panelSource(),
     readAppStyles(root),
     source("lib/ai/ask-nest.ts"),
   ]);
@@ -227,7 +232,7 @@ test("Ask Nest derives charts and trip cards from successful tool output", async
   const [orchestration, tools, panel] = await Promise.all([
     source("lib/ai/ask-nest.ts"),
     source("lib/ai/ask-nest-tools.ts"),
-    source("components/ask-nest.tsx"),
+    panelSource(),
   ]);
 
   assert.match(orchestration, /resolveVisualization\(successfulToolOutputs\)/);
@@ -351,7 +356,7 @@ test("Ask Nest memory is explicit, scoped, reviewable, and never a financial sou
   const memory = await source("lib/ai/memory.ts");
   const route = await source("app/api/ai/memory/route.ts");
   const askRoute = await source("app/api/ai/ask/route.ts");
-  const panel = await source("components/ask-nest.tsx");
+  const panel = await panelSource();
   const schema = await source("prisma/schema.prisma");
 
   assert.match(orchestration, /memory_candidates/);
@@ -381,7 +386,7 @@ test("Ask Nest records bounded quality diagnostics and accepts scoped usefulness
     source("app/api/ai/ask/route.ts"),
     source("app/api/ai/feedback/route.ts"),
     source("prisma/schema.prisma"),
-    source("components/ask-nest.tsx"),
+    panelSource(),
     source("lib/ai/ask-nest-retention.ts"),
   ]);
   assert.match(orchestration, /toolDiagnostics/);
@@ -410,4 +415,24 @@ test("Ask Nest hybrid knowledge search is workspace-filtered and evaluation-gate
   assert.match(search, /queryType: "semantic"/);
   assert.match(orchestration, /routing\.needsHybridRetrieval/);
   assert.match(tools, /search_workspace_knowledge/);
+});
+
+test("Ask Nest keeps questions and transaction drafts in one thread without mode tabs", async () => {
+  const [panel, agent, review] = await Promise.all([
+    source("components/ask-nest.tsx"),
+    source("components/transaction-agent.tsx"),
+    source("components/transaction-agent-review.tsx"),
+  ]);
+
+  assert.doesNotMatch(panel, /transaction-agent-tabs|transactionMode/);
+  assert.match(panel, /isTransactionRequest\(nextQuestion\)[\s\S]*?agent\.start\(nextQuestion, true\)/);
+  // Only the composer replies to an open draft; follow-up buttons always ask read-only questions.
+  assert.match(panel, /const submitComposer = \(\) => \{[\s\S]*?agent\.reply\(text\)/);
+  assert.match(panel, /ask-nest-draft-strip/);
+  assert.match(panel, /Record this instead/);
+  assert.match(agent, /This was a question/);
+  assert.match(agent, /previousDraftId: lastSaved\.draftId/);
+  // Writes still happen only through the review's explicit Confirm button.
+  assert.match(review, /onClick=\{onConfirm\}/);
+  assert.doesNotMatch(agent, /action: "confirm"[\s\S]{0,40}useEffect/);
 });

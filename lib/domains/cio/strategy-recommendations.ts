@@ -92,7 +92,7 @@ function metric(
   return { unit, value, label };
 }
 
-function projectionInput(
+export function projectionInput(
   assumptions: CioRetirementProjectionAssumptions,
   annualExternalContributionCents: number,
 ) {

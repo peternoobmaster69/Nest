@@ -26,6 +26,7 @@ Expose necessary operational insight and deliberately minimal public projections
 - Generate/revoke random workspace public token.
 - Return minimal aggregate public data with rate limits and no-store.
 - Audit share creation/revocation.
+- Manage registered agents, capability policies, examples, evaluations, and fine-tuning through [Admin → Agents](agents.md).
 
 ## Public APIs and important files
 

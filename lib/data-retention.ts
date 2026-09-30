@@ -17,6 +17,7 @@ type PolicyName =
   | "auditLogs"
   | "loginSessions"
   | "expiredCaches"
+  | "transactionAgentDrafts"
   | "rateLimits";
 
 type RetentionPolicy = {
@@ -171,6 +172,15 @@ export async function runDataRetention(options: { now?: Date } = {}) {
   }, config.batchSize);
 
   const rateLimitCutoff = cutoff(now, 7);
+  // Ledger postings retain the audit trail; draft conversations need not be permanent.
+  const draftCutoff = cutoff(now, 30);
+  results.transactionAgentDrafts = await runBoundedPolicy(
+    (size) => prisma.$executeRaw(Prisma.sql`
+      DELETE TOP (${size}) FROM [dbo].[TransactionAgentDraft] WHERE [expiresAt] < ${draftCutoff}
+    `),
+    config.batchSize,
+  );
+
   results.rateLimits = await runBoundedPolicy(
     (size) => prisma.$executeRaw(Prisma.sql`
       DELETE TOP (${size}) FROM [dbo].[SecurityRateLimit]

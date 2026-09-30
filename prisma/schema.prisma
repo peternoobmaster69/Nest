@@ -43,6 +43,7 @@ model User {
   webAuthnChallenges       WebAuthnChallenge[]
   pushSubscriptions        PushSubscription[]
   askNestTurns             AskNestTurn[]
+  transactionAgentDrafts   TransactionAgentDraft[]
   askNestMemories          AskNestMemory[]
   askNestUsageDaily        AskNestUsageDaily[]
   cioStrategyReports       CioStrategyReport[]       @relation("CioStrategyReportCreator")
@@ -161,6 +162,7 @@ model Workspace {
   inAppNotifications         InAppNotification[]
   transactionGroups          TransactionGroup[]
   askNestTurns               AskNestTurn[]
+  transactionAgentDrafts     TransactionAgentDraft[]
   askNestMemories            AskNestMemory[]
   askNestUsageDaily          AskNestUsageDaily[]
 
@@ -759,6 +761,120 @@ model Transaction {
   @@index([creditCardTransactionId])
   @@index([receivableId])
   @@index([reversalOfId])
+}
+
+model TransactionAgentDraft {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  userId        String
+  revision      Int       @default(0)
+  status        String    @default("CLARIFY") @db.VarChar(16)
+  stateJson     String    @db.NVarChar(Max)
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: NoAction)
+
+  @@index([workspaceId, userId, updatedAt])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AiAgentConfig {
+  id                   String   @id @db.VarChar(64)
+  enabled              Boolean  @default(true)
+  instructions         String   @db.NVarChar(Max)
+  deployment           String?  @db.NVarChar(200)
+  reasoningEffort      String   @default("default") @db.VarChar(16)
+  maxOutputTokens      Int      @default(4000)
+  maxToolRounds        Int      @default(8)
+  maxToolCalls         Int      @default(16)
+  trainingExampleLimit Int      @default(4)
+  capabilitiesJson     String   @db.NVarChar(Max)
+  revision             Int      @default(1)
+  updatedByUserId      String?  @db.NVarChar(191)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model AiAgentRevision {
+  id           String   @id @default(cuid()) @db.NVarChar(191)
+  agentId      String   @db.VarChar(64)
+  revision     Int
+  settingsJson String   @db.NVarChar(Max)
+  actorUserId  String   @db.NVarChar(191)
+  action       String   @default("CONFIGURATION") @db.VarChar(32)
+  targetId     String?  @db.NVarChar(191)
+  createdAt    DateTime @default(now())
+
+  @@unique([agentId, revision])
+  @@index([actorUserId])
+}
+
+model AiAgentExample {
+  id              String   @id @default(cuid()) @db.NVarChar(191)
+  agentId         String   @db.VarChar(64)
+  title           String   @db.NVarChar(120)
+  input           String   @db.NVarChar(Max)
+  expectedOutput  String   @db.NVarChar(Max)
+  contextJson     String   @db.NVarChar(Max)
+  contentHash     String   @db.VarChar(64)
+  purpose         String   @db.VarChar(16)
+  status          String   @default("DRAFT") @db.VarChar(16)
+  matchMode       String   @db.VarChar(16)
+  revision        Int      @default(1)
+  updatedByUserId String   @db.NVarChar(191)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([agentId, contentHash])
+  @@index([agentId, purpose, status])
+  @@index([updatedByUserId])
+}
+
+model AiAgentEvaluation {
+  id            String   @id @db.NVarChar(191)
+  agentId       String   @db.VarChar(64)
+  revision      Int
+  datasetHash   String   @db.VarChar(64)
+  requestHash   String   @db.VarChar(64)
+  status        String   @db.VarChar(16)
+  passedCount   Int      @default(0)
+  totalCount    Int
+  resultsJson   String   @db.NVarChar(Max)
+  actorUserId   String   @db.NVarChar(191)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([agentId, createdAt])
+  @@index([actorUserId])
+}
+
+model AiAgentFineTuneJob {
+  id                String   @id @db.NVarChar(191)
+  agentId           String   @db.VarChar(64)
+  revision          Int
+  requestHash       String   @db.VarChar(64)
+  datasetHash       String   @db.VarChar(64)
+  providerHash      String   @db.VarChar(64)
+  providerJobId     String?  @db.NVarChar(200)
+  trainingFileId    String?  @db.NVarChar(200)
+  validationFileId  String?  @db.NVarChar(200)
+  baseModel         String   @db.NVarChar(200)
+  trainingType      String   @db.VarChar(32)
+  status            String   @db.VarChar(32)
+  fineTunedModel    String?  @db.NVarChar(300)
+  trainingCount     Int
+  validationCount   Int
+  error             String?  @db.NVarChar(500)
+  actorUserId       String   @db.NVarChar(191)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([agentId, createdAt])
+  @@index([providerJobId])
+  @@index([actorUserId])
 }
 
 model AskNestTurn {

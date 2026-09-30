@@ -15,7 +15,7 @@ Document AI request bounds, private response behavior, quality state, and the no
 
 ## Scope
 
-All routes require VIEWER workspace access and return `private, no-store`. The client cannot specify a workspace in these bodies.
+Question, history, memory, feedback, and Smart Review routes require VIEWER workspace access. The transaction assistant requires EDITOR access. All return `private, no-store`. The client cannot specify a workspace in these bodies.
 
 ## Endpoints
 
@@ -32,7 +32,30 @@ All routes require VIEWER workspace access and return `private, no-store`. The c
 
 Feedback reasons: `WRONG_DATA`, `MISUNDERSTOOD`, `MISSING_DETAIL`, `NO_RESULTS`, `OTHER`.
 
+## Administrator agent management
+
+These application-wide routes require an authenticated session whose email matches server-side `ADMIN`, independently of workspace role. They use private/no-store responses and same-origin mutation checks. Mutations are limited to 100 per ten minutes per administrator; evaluation and training submissions have a separate limit of ten. Supported agent IDs are `ask-nest`, `transaction-assistant`, and `smart-review`.
+
+| Operation | Request | Success |
+| --- | --- | --- |
+| `GET /api/admin/agents` | None | Registered configurations, example counts, provider presence/default model |
+| `GET /api/admin/agents/{agentId}` | Agent ID | Configuration, examples, latest ten revisions/evaluations/jobs |
+| `PATCH /api/admin/agents/{agentId}` | Complete settings plus current `revision` | Updated configuration and revision |
+| `POST /api/admin/agents/{agentId}/examples` | `title`, `input`, `expectedOutput`, `contextJson`, `purpose`, `status`, `matchMode` | `201` saved example |
+| `PUT /api/admin/agents/{agentId}/examples/{exampleId}` | Same example fields plus example `revision` | Updated example |
+| `DELETE /api/admin/agents/{agentId}/examples/{exampleId}` | JSON body with example `revision` | `204` |
+| `GET /api/admin/agents/{agentId}/dataset` | Optional `purpose=TRAINING` or `EVALUATION` | Download of approved, complete JSONL examples |
+| `POST /api/admin/agents/{agentId}/evaluations` | UUID `requestId`, agent `revision`, one to five approved `exampleIds` | Persisted evaluation results; same request ID replays the run |
+| `POST /api/admin/agents/{agentId}/fine-tuning` | UUID `requestId`, agent `revision`, `baseModel`, `trainingType`, optional `epochs` | Persisted Azure job/submission status |
+| `POST /api/admin/agents/{agentId}/fine-tuning/{jobId}` | `action`: `refresh` or `cancel` | Updated job status |
+
+Validation and bounds are defined in `lib/ai/agent-contracts.ts` and generated OpenAPI. Common errors are `401` (session), `403` (administrator/origin), `409` (stale revision, request-ID conflict, or active job), `422` (unsupported capability or incomplete dataset), `429` (rate limit), `502` (provider), and `503` (provider or database migration not ready). Runtime AI routes also return `403` when an agent is paused or its requested operation is disabled.
+
+Configuration contains `enabled`, `instructions`, nullable `deployment`, `reasoningEffort`, `maxOutputTokens`, `maxToolRounds`, `maxToolCalls`, `trainingExampleLimit`, and capability IDs. Revisions advance for both configuration and example changes. Fine-tuning base models are provider model IDs; runtime model overrides are Azure deployment names. See [Agent administration](../modules/agents.md) for fixture formats, evaluation scope, export restrictions, and deployment handoff.
+
 ## Example: Ask Nest
+
+`GET/POST /api/ai/transactions` provides revisioned transaction drafts and explicit confirmation. See the [transaction assistant API and interaction contract](../modules/transaction-agent.md). Financial writes occur only through its separate `confirm` action, which accepts a persisted draft ID and revision.
 
 ```http
 POST /api/ai/ask

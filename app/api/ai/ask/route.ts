@@ -11,6 +11,7 @@ import { z } from "zod";
 import { answerAskNest, AskNestResponseError } from "@/lib/ai/ask-nest";
 import { AiConfigurationError } from "@/lib/ai/config";
 import { consumeAskNestRateLimit } from "@/lib/ai/rate-limit";
+import { AgentPolicyError } from "@/lib/ai/agent-policy";
 import { prisma } from "@/lib/prisma";
 import { saveAskNestMemories } from "@/lib/ai/memory";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
@@ -144,6 +145,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(answer, { headers: PRIVATE_HEADERS });
   } catch (error) {
+    if (error instanceof AgentPolicyError) return errorResponse(error.message, "AI_AGENT_DISABLED", error.status);
     const limited = rateLimitResponse(error);
     if (limited) return limited;
     if (error instanceof ApiAuthError) {

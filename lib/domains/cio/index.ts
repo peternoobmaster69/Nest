@@ -8,6 +8,7 @@ export * from "./retirement-projection";
 export * from "./repository";
 export * from "./snapshot-service";
 export * from "./strategy-recommendations";
+export * from "./advisor";
 export * from "./report-types";
 export * from "./strategy-report-service";
 export * from "./report-repository";

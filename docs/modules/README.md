@@ -28,6 +28,7 @@ Define the cohesive modules used by this knowledge base. Nest is one npm package
 | [CIO](cio.md) | Deterministic allocation, liquidity, policy, and retirement planning | CIO page and Ask Nest |
 | [Rewards](rewards.md) | Miles, points, expiry, conversions | Rewards UI |
 | [AI](ai.md) | Ask Nest, Smart Review, deterministic/entity/provider reads | Assistant and card review |
+| [Agent administration](agents.md) | Registered capabilities, configuration, curated examples, evaluations, Azure fine-tuning | Platform administrator and agent runtimes |
 | [Integrations](integrations.md) | Gmail alerts, Maybank imports, provider credentials | Cards and jobs |
 | [Jobs/notifications](jobs-notifications.md) | Durable work, reminders, email/push/in-app | Cron, admin, browser |
 | [Admin/public](admin-public.md) | Fail-closed operations view and minimal public projections | Administrators/share viewers |

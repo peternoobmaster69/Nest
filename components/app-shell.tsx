@@ -434,7 +434,7 @@ export function AppShell({
                 <span><strong>Settings</strong><small>Preferences and workspaces</small></span>
               </Link>
               {contextData?.isAdmin ? (
-                <Link className={`mobile-more-link${currentPath === "/admin" ? " is-active" : ""}`} href={workspaceHref("/admin")} onClick={closeMobileNavigation}>
+                <Link className={`mobile-more-link${currentPath === "/admin" || currentPath.startsWith("/admin/") ? " is-active" : ""}`} href={workspaceHref("/admin")} onClick={closeMobileNavigation}>
                   <ShieldCheck size={20} aria-hidden="true" />
                   <span><strong>Admin</strong><small>System and Ask Nest oversight</small></span>
                 </Link>

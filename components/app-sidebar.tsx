@@ -326,7 +326,7 @@ export function AppSidebar({
           <Settings className="sb-ic" size={18} aria-hidden="true" />Settings
         </Link>
         {resolvedContext?.isAdmin ? (
-          <Link className={`sb-item${currentPath === "/admin" ? " on" : ""}`} href={workspaceHref("/admin")} onClick={handleNavClick}>
+          <Link className={`sb-item${currentPath === "/admin" || currentPath.startsWith("/admin/") ? " on" : ""}`} href={workspaceHref("/admin")} onClick={handleNavClick}>
             <ShieldCheck className="sb-ic" size={18} aria-hidden="true" />Admin
           </Link>
         ) : null}

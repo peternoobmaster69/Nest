@@ -35,15 +35,15 @@ import {
 } from "@/lib/ai/cio-grounding";
 import { getAskNestSearchGate } from "@/lib/ai/knowledge-search";
 import { normalizeFollowUpActions } from "@/lib/ai/follow-up-prompt.mjs";
+import { enabledAgentTools } from "./agent-catalog";
+import { getAgentConfiguration, getAgentTrainingExamples } from "./agent-runtime";
+import { agentReasoningOptions, assertAgentEnabled, composeAgentInstructions } from "./agent-policy";
 
-const MAX_TOOL_ROUNDS = 5;
-const MAX_TOTAL_TOOL_CALLS = 8;
-const ASK_NEST_MAX_OUTPUT_TOKENS = 2_400;
-const ASK_NEST_PROMPT_VERSION = "2026-07-31.5";
+const ASK_NEST_PROMPT_VERSION = "2026-10-01.1";
 const GROUNDING_REPAIR_INSTRUCTION = `Revise the previous structured answer because it contains a numerical value that Nest cannot verify.
 Remove every currency amount, date, or percentage that was neither returned by a successful tool nor explicitly supplied by the user as a proposed assumption. User-supplied values must be labelled as proposed inputs, not Nest calculations. You may reformat a supported value or round a CIO currency value to its nearest whole currency unit; do not otherwise change its value. For a conceptual explanation, use qualitative wording without invented numerical examples. Do not add new facts, calculations, or evidence IDs. Preserve supported content and return only the required structured response.`;
 
-const GeneratedAnswerSchema = z.object({
+export const GeneratedAnswerSchema = z.object({
   answer: z.string().trim().min(1).max(1_600),
   highlights: z.array(z.object({
     label: z.string().trim().min(1).max(80),
@@ -55,7 +55,7 @@ const GeneratedAnswerSchema = z.object({
   memory_candidates: z.array(AskNestMemoryCandidateSchema).max(3),
 }).strict();
 
-const ANSWER_JSON_SCHEMA = {
+export const ANSWER_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -159,9 +159,9 @@ function askNestResponseFailureMessage(code: AskNestResponseFailureCode, detail?
     case "AI_WORKSPACE_UNAVAILABLE":
       return "Nest could not load the active workspace, so no financial records were available to query. Refresh the page and confirm the correct workspace is selected.";
     case "AI_LOOKUP_LIMIT":
-      return "This question required more than eight separate data lookups, so Ask Nest stopped before composing an answer. This is a lookup limit, not too many transaction results. Ask about one account, category, or shorter period at a time.";
+      return "This question exceeded the agent's configured data-lookup allowance. This is a lookup limit, not too many transaction results. Ask about one account, category, or shorter period, or ask an administrator to increase the allowance.";
     case "AI_LOOKUP_ROUNDS_EXHAUSTED":
-      return "Ask Nest did not finish planning its data lookups within five rounds. This is not caused by the number of matching transactions. Narrow the question to one comparison, account, or category.";
+      return "Ask Nest reached its configured lookup-round limit. Narrow the question to one comparison, account, or category, or ask an administrator to increase the allowance.";
     case "AI_INVALID_TOOL_FILTERS":
       return "Ask Nest generated invalid filters for the Nest data tools, such as an unsupported date range or category. State the dates and account or category explicitly, then submit the edited question.";
     case "AI_DATA_TOOL_UNAVAILABLE":
@@ -169,7 +169,7 @@ function askNestResponseFailureMessage(code: AskNestResponseFailureCode, detail?
     case "AI_NO_MATCHING_DATA":
       return "Nest completed the lookup but found no matching records for the requested filters, and the response could not be safely formatted. Broaden the date range or check the merchant, account, or category name.";
     case "AI_OUTPUT_LIMIT":
-      return `Azure AI reached Ask Nest's ${ASK_NEST_MAX_OUTPUT_TOKENS.toLocaleString("en-SG")}-token response limit before finishing the verified answer. The allowance includes structured generation work as well as visible text. Retry with fewer requested columns or accounts.`;
+      return "Azure AI reached the agent's configured output-token limit before finishing the verified answer. Retry with fewer requested columns or accounts, or ask an administrator to increase the allowance.";
     case "AI_CONTENT_FILTERED":
       return "Azure AI’s content-safety filter stopped the response. This is a provider safety decision, not a transaction-result limit. Remove unrelated or sensitive instructions and keep the question focused on your Nest records.";
     case "AI_MODEL_GENERATION_FAILED":
@@ -241,6 +241,7 @@ type AskNestToolDiagnostic = {
 
 type AskNestDiagnostics = {
   promptVersion: string;
+  configurationRevision: number;
   intentVersion: string;
   intent: string;
   intentConfidence: string;
@@ -276,7 +277,7 @@ function normalizeAuthenticatedUserName(value: string | null | undefined) {
   return normalized ? normalized.slice(0, 80) : null;
 }
 
-function buildInstructions(params: {
+export function buildInstructions(params: {
   currency: string;
   pageTitle: string;
   pagePath: string;
@@ -494,11 +495,14 @@ function resolveVisualization(toolOutputs: Record<string, unknown>[]): AskNestVi
 
 export async function answerAskNest(input: AskNestInput): Promise<AskNestResult> {
   const startedAt = Date.now();
+  const configuration = await getAgentConfiguration("ask-nest");
+  assertAgentEnabled(configuration);
   const routing = classifyAskNestIntent(input.question, input.pagePath);
   const searchGate = getAskNestSearchGate();
-  const retrievalEligible = searchGate.active && routing.needsHybridRetrieval;
-  const availableTools = getAskNestTools(retrievalEligible);
-  const [workspace, user, memories, priorTopics] = await Promise.all([
+  const retrievalEligible = configuration.capabilities.includes("knowledge") && searchGate.active && routing.needsHybridRetrieval;
+  const allowedTools = enabledAgentTools(configuration);
+  const availableTools = getAskNestTools(retrievalEligible).filter((tool) => allowedTools.has(tool.name));
+  const [workspace, user, memories, priorTopics, trainingExamples] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id: input.workspaceId },
       select: { name: true, baseCurrency: true },
@@ -507,24 +511,25 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
       where: { id: input.userId },
       select: { name: true },
     }),
-    loadRelevantAskNestMemories({
+    configuration.capabilities.includes("memory") ? loadRelevantAskNestMemories({
       workspaceId: input.workspaceId,
       userId: input.userId,
       question: input.question,
-    }),
-    loadRelevantAskNestTopics({
+    }) : Promise.resolve([]),
+    configuration.capabilities.includes("memory") ? loadRelevantAskNestTopics({
       workspaceId: input.workspaceId,
       userId: input.userId,
       question: input.question,
-    }),
+    }) : Promise.resolve([]),
+    getAgentTrainingExamples(configuration, input.question),
   ]);
   if (!workspace) {
     throw new AskNestResponseError("AI_WORKSPACE_UNAVAILABLE");
   }
 
   const currency = normalizeCurrency(workspace.baseCurrency);
-  const { client, model } = getAiWorkloadClient();
-  const instructions = buildInstructions({
+  const { client, model } = getAiWorkloadClient(configuration.deployment);
+  const instructions = composeAgentInstructions(buildInstructions({
     currency,
     pageTitle: input.pageTitle,
     pagePath: input.pagePath,
@@ -532,7 +537,7 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
     memories,
     priorTopics,
     planningHint: buildAskNestPlanningHint(input.question, input.pagePath),
-  });
+  }), configuration, trainingExamples);
   const requestItems: ResponseInputItem[] = buildConversation(input.history, input.question);
   const evidenceItems: AskNestEvidence[] = [];
   const toolsUsed: string[] = [];
@@ -552,12 +557,13 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
   const createResponse = async (toolChoice: "auto" | "none" = "auto") => {
     const response = await client.responses.create({
       model,
+      ...agentReasoningOptions(configuration),
       instructions,
       input: requestItems,
       tools: availableTools,
-      tool_choice: toolChoice,
+      tool_choice: availableTools.length ? toolChoice : "none",
       parallel_tool_calls: false,
-      max_output_tokens: ASK_NEST_MAX_OUTPUT_TOKENS,
+      max_output_tokens: configuration.maxOutputTokens,
       safety_identifier: safetyIdentifier,
       include: ["reasoning.encrypted_content"],
       store: false,
@@ -589,12 +595,12 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
   let response = await createResponse(routing.recommendedTools.length ? "auto" : "none");
   let totalToolCalls = 0;
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+  for (let round = 0; round < configuration.maxToolRounds; round += 1) {
     const calls = response.output.filter((item): item is ResponseFunctionToolCall => item.type === "function_call");
     if (!calls.length) break;
 
     totalToolCalls += calls.length;
-    if (totalToolCalls > MAX_TOTAL_TOOL_CALLS) {
+    if (totalToolCalls > configuration.maxToolCalls) {
       throw new AskNestResponseError("AI_LOOKUP_LIMIT");
     }
 
@@ -605,6 +611,7 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
       let args: unknown = {};
       let status: AskNestToolDiagnostic["status"] = "SUCCESS";
       try {
+        if (!availableTools.some((tool) => tool.name === call.name)) throw new AskNestToolInputError("This tool is not enabled for the agent.");
         args = parseToolArguments(call);
         const result = await executeAskNestTool(call.name, args, {
           workspaceId: input.workspaceId,
@@ -638,7 +645,7 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
       toolOutputs.push(JSON.stringify(toolOutput));
     }
 
-    response = await createResponse();
+    response = await createResponse(round + 1 >= configuration.maxToolRounds || totalToolCalls >= configuration.maxToolCalls ? "none" : "auto");
   }
 
   const parseGeneratedResponse = (candidate: typeof response) => {
@@ -727,10 +734,11 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
   }
 
   return {
-    memoryCandidates: generated.memory_candidates,
+    memoryCandidates: configuration.capabilities.includes("memory") ? generated.memory_candidates : [],
     tokenUsage: hasTokenUsage ? tokenUsage : null,
     diagnostics: {
       promptVersion: ASK_NEST_PROMPT_VERSION,
+      configurationRevision: configuration.revision,
       intentVersion: routing.version,
       intent: routing.intent,
       intentConfidence: routing.confidence,

@@ -877,7 +877,7 @@
 
 .ask-nest-thread {
   display: grid;
-  gap: 26px;
+  gap: 22px;
 }
 
 .ask-nest-memory-toggle {
@@ -944,8 +944,8 @@
   width: fit-content;
   max-width: 88%;
   margin-left: auto;
-  padding: 9px 12px;
-  border-radius: 14px 14px 4px 14px;
+  padding: 9px 13px;
+  border-radius: 16px 16px 4px 16px;
   background: var(--brand-700);
   color: #fff;
   font-size: var(--text-base);

@@ -44,6 +44,8 @@ Expose only bounded read tools. Derive values from scoped queries, require struc
 
 ## Consequences
 
+September 2026 extension: the [transaction assistant](../../modules/transaction-agent.md) extracts structured drafts without mutation tools. Users approve a concrete review with a dedicated confirmation button. A deterministic EDITOR-only endpoint revalidates the persisted draft and posts through the existing ledger service. This extends the Smart Review pattern to ordinary transaction creation and correction; model messages and tool calls still cannot execute financial writes.
+
 - Users must explicitly approve actions in normal UI workflows.
 - Prompt/tool changes require golden evaluation and contract tests.
 - Model outages degrade the feature, not finance integrity.

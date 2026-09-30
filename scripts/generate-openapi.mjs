@@ -12,6 +12,11 @@ import {
   DeleteSchema as BudgetPlanDeleteSchema,
 } from "../lib/domains/ledger/budget-plan/contracts.ts";
 import { CorrectTransactionSchema } from "../lib/domains/ledger/transaction-contracts.ts";
+import { TransactionAgentRequestSchema } from "../lib/ai/transaction-agent-contracts.ts";
+import {
+  AgentConfigurationUpdateSchema, AgentExampleSchema, AgentExampleUpdateSchema, AgentRevisionSchema,
+  AgentEvaluationRequestSchema, AgentFineTuneRequestSchema, AgentFineTuneActionSchema,
+} from "../lib/ai/agent-contracts.ts";
 import {
   CioExposuresInputSchema,
   CioInvestmentProfileInputSchema,
@@ -40,6 +45,9 @@ const schemaRegistry = {
   BudgetPlanPatchSchema,
   BudgetPlanDeleteSchema,
   CorrectTransactionSchema,
+  TransactionAgentRequestSchema,
+  AgentConfigurationUpdateSchema, AgentExampleSchema, AgentExampleUpdateSchema, AgentRevisionSchema,
+  AgentEvaluationRequestSchema, AgentFineTuneRequestSchema, AgentFineTuneActionSchema,
   CioProfileInputSchema,
   CioPolicyInputSchema,
   CioInvestmentProfileInputSchema,
@@ -52,6 +60,14 @@ const schemaRegistry = {
   CioStrategyReportCreateInputSchema,
 };
 const requestSchemaByOperation = {
+  "PATCH /api/admin/agents/{agentId}": "AgentConfigurationUpdateSchema",
+  "POST /api/admin/agents/{agentId}/examples": "AgentExampleSchema",
+  "PUT /api/admin/agents/{agentId}/examples/{exampleId}": "AgentExampleUpdateSchema",
+  "DELETE /api/admin/agents/{agentId}/examples/{exampleId}": "AgentRevisionSchema",
+  "POST /api/admin/agents/{agentId}/evaluations": "AgentEvaluationRequestSchema",
+  "POST /api/admin/agents/{agentId}/fine-tuning": "AgentFineTuneRequestSchema",
+  "POST /api/admin/agents/{agentId}/fine-tuning/{jobId}": "AgentFineTuneActionSchema",
+  "POST /api/ai/transactions": "TransactionAgentRequestSchema",
   "POST /api/transactions/bulk-import": "BulkImportSchema",
   "POST /api/transactions/{id}/corrections": "CorrectTransactionSchema",
   "POST /api/credit-transactions/import-maybank": "ImportMaybankSchema",
@@ -242,6 +258,7 @@ function openApiPath(file) {
 function operationFor({ method, file, source, path }) {
   const operationKey = `${method} ${path}`;
   const cioContract = cioOperationContract[operationKey];
+  const isAdminAgent = path.startsWith("/api/admin/agents");
   const params = [...path.matchAll(/\{([^}]+)}/g)].map((match) => ({
     name: match[1],
     in: "path",
@@ -256,7 +273,8 @@ function operationFor({ method, file, source, path }) {
     path.startsWith("/api/public/") ||
     path.startsWith("/api/passkeys/authenticate/");
   const isCron = path.startsWith("/api/cron/");
-  const successStatus = cioContract?.successStatus ?? "200";
+  const successStatus = cioContract?.successStatus ?? (isAdminAgent && method === "DELETE" ? "204" :
+    isAdminAgent && method === "POST" && (path.endsWith("/examples") || path.endsWith("/fine-tuning")) ? "201" : "200");
   const successResponse = { description: successStatus === "201" ? "Resource created" : "Successful response" };
   if (cioContract?.responseContentType) {
     successResponse.content = {
@@ -309,9 +327,31 @@ function operationFor({ method, file, source, path }) {
     );
     operation["x-request-schemas"] = ["BudgetPlanDeleteSchema"];
   }
-  const acceptsJsonBody = method === "POST" || method === "PUT" || method === "PATCH";
+  if (isAdminAgent) {
+    operation.description = "Requires the configured platform administrator. Agent configuration and curated examples are global; workspace roles do not grant administrator access.";
+    operation["x-required-admin"] = true;
+    operation["x-same-origin-required"] = method !== "GET";
+    operation.responses["404"] = { $ref: "#/components/responses/NotFound" };
+    const agentParam = operation.parameters.find((parameter) => parameter.name === "agentId");
+    if (agentParam) agentParam.schema.enum = ["ask-nest", "transaction-assistant", "smart-review"];
+    if (path.endsWith("/dataset")) {
+      operation.parameters.push({ name: "purpose", in: "query", required: false, schema: { type: "string", enum: ["TRAINING", "EVALUATION"], default: "TRAINING" } });
+      successResponse.content = { "application/x-ndjson": { schema: { type: "string" } } };
+    }
+  }
+  const acceptsJsonBody = method === "POST" || method === "PUT" || method === "PATCH" || (isAdminAgent && method === "DELETE");
   if ((acceptsJsonBody || !cioContract) && schemaNames.length) operation["x-request-schemas"] = schemaNames;
   const registeredSchema = requestSchemaByOperation[operationKey];
+  if (path === "/api/ai/transactions") {
+    operation.summary = method === "GET" ? "Restore a transaction draft" : "Draft, clarify, confirm, or cancel a transaction";
+    operation["x-required-workspace-role"] = "EDITOR";
+    operation["x-same-origin-required"] = method === "POST";
+    operation.parameters.push({ $ref: "#/components/parameters/WorkspaceIdHeader" });
+    if (method === "GET") {
+      delete operation["x-request-schemas"];
+      operation.parameters.push({ name: "draftId", in: "query", required: true, schema: { type: "string", maxLength: 191 } });
+    }
+  }
   if (registeredSchema && acceptsJsonBody) operation["x-request-schemas"] = [registeredSchema];
   if (acceptsJsonBody) {
     operation.requestBody = {

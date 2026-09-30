@@ -76,6 +76,8 @@ npm run openapi:check
 
 See [migration operations](../database/migrations.md).
 
+Agent administration uses the additive `20261001000000_admin_agents` migration. Apply it with `npm run prisma:migrate:deploy` and regenerate/restart the application before opening `/admin/agents`. No registry seed is needed. Its tests use isolated provider/database stubs and do not start paid training jobs; see [Agent administration](../modules/agents.md) for manual evaluation and Azure training workflows.
+
 ## Financial Changes
 
 - Use integer cents at storage and service boundaries.

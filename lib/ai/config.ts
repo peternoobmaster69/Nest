@@ -68,11 +68,11 @@ function getAiWorkloadConfig(): AiWorkloadConfig {
 
 let cachedClient: { signature: string; client: OpenAI } | null = null;
 
-export function getAiWorkloadClient() {
+export function getAiWorkloadClient(deployment?: string | null) {
   const config = getAiWorkloadConfig();
   const signature = `${config.baseURL}\u0000${config.model}\u0000${config.apiKey}`;
   if (cachedClient?.signature === signature) {
-    return { client: cachedClient.client, model: config.model };
+    return { client: cachedClient.client, model: deployment || config.model };
   }
 
   const client = new OpenAI({
@@ -82,5 +82,14 @@ export function getAiWorkloadClient() {
     timeout: 30_000,
   });
   cachedClient = { signature, client };
-  return { client, model: config.model };
+  return { client, model: deployment || config.model };
+}
+
+export function getAiWorkloadStatus() {
+  try {
+    const config = getAiWorkloadConfig();
+    return { configured: true, model: config.model };
+  } catch {
+    return { configured: false, model: process.env.AI_WORKLOAD_MODEL?.trim() || null };
+  }
 }

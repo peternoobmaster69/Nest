@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 export type QueryRoot =
+  | "admin-agents"
   | "app-context"
   | "bank-accounts"
   | "budget-plan"
@@ -60,6 +61,8 @@ const workspaceDataRoots = [
 ] as const satisfies readonly QueryRoot[];
 
 export const queryKeys = {
+  adminAgents: () => ["admin-agents"] as const,
+  adminAgent: (id: string) => ["admin-agents", id] as const,
   key: <const T extends TypedQueryKey>(value: T) => value,
   all: <const T extends QueryRoot>(root: T) => [root] as const,
   scoped: <const T extends QueryRoot, const P extends readonly unknown[]>(

@@ -1,0 +1,60 @@
+.transaction-agent-reply { font-size: 14px; line-height: 1.6; }
+.transaction-agent-picker { margin: 12px 0 0; }
+.transaction-agent-picker label { display: grid; gap: 6px; font-size: 12px; }
+.transaction-agent-filter { width: 100%; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-elevated); color: var(--text-primary); }
+.transaction-agent-choices { display: grid; gap: 8px; max-height: 340px; overflow-y: auto; margin-top: 8px; }
+.transaction-agent-choices button { display: grid; gap: 4px; padding: 12px; min-height: 48px; text-align: left; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-elevated); overflow-wrap: anywhere; }
+.transaction-agent-choices button:hover { background: var(--bg-subtle); }
+.transaction-agent-choices small { color: var(--text-secondary); }
+.transaction-agent-review { margin: 12px 0 0; padding: 16px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-elevated); font-size: 13px; }
+.transaction-agent-review h3 { display: flex; gap: 6px; align-items: center; margin: 0 0 12px; font-size: 15px; }
+.transaction-agent-review dl { display: grid; gap: 8px; margin: 0; }
+.transaction-agent-review dl > div { display: grid; grid-template-columns: 95px minmax(0, 1fr); gap: 8px; }
+.transaction-agent-review dt { color: var(--text-secondary); }
+.transaction-agent-review dd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin: 0; overflow-wrap: anywhere; }
+.transaction-agent-review dd small { color: var(--text-secondary); }
+.transaction-agent-before, .transaction-agent-balances { border-top: 1px solid var(--border-subtle); padding-top: 12px; margin-top: 12px; }
+.transaction-agent-before p { margin-bottom: 0; line-height: 1.5; }
+.transaction-agent-balances p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; }
+.transaction-agent-warnings { padding: 10px 10px 10px 26px; border-radius: 8px; background: var(--warning-bg); line-height: 1.6; }
+.transaction-agent-hint { color: var(--text-secondary); line-height: 1.5; }
+.transaction-agent-review > .btn { width: 100%; min-height: 44px; }
+.transaction-agent-link { color: var(--brand-700); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.transaction-agent-turn button:disabled { opacity: .55; cursor: not-allowed; }
+.transaction-agent-turn button:focus-visible, .ask-nest-draft-strip button:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; }
+.transaction-agent-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--bg-subtle); color: var(--text-secondary); font-size: 11px; font-weight: 600; vertical-align: middle; }
+.transaction-agent-edit { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.transaction-agent-edit input { flex: 1 1 140px; min-width: 0; min-height: 36px; }
+.transaction-agent-toggle { display: inline-flex; gap: 4px; }
+.transaction-agent-picker > .btn { margin-top: 8px; }
+.transaction-agent-actions > .btn-secondary { width: 100%; min-height: 40px; white-space: normal; overflow-wrap: anywhere; }
+
+/* Drafts sit inline in the Ask Nest thread. */
+.transaction-agent-turn { display: grid; gap: 10px; }
+.transaction-agent-turn > .ask-nest-question { margin-top: 2px; }
+.transaction-agent-turn .transaction-agent-reply { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-primary); }
+.transaction-agent-status { display: inline-flex; align-items: center; gap: 5px; width: fit-content; padding: 2px 9px; border-radius: 999px; background: var(--bg-subtle); color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.transaction-agent-status.is-clarify, .transaction-agent-status.is-review { background: var(--brand-50); color: var(--brand-700); }
+.transaction-agent-status.is-saved { background: var(--success-bg); color: var(--success); }
+.transaction-agent-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.transaction-agent-actions:empty { display: none; }
+.transaction-agent-turn .ask-nest-thinking { margin-top: 0; }
+.transaction-agent-turn .ask-nest-history-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin: 0; }
+
+.ask-nest-draft-strip { display: flex; align-items: center; gap: 8px; margin: 0 0 9px; padding: 7px 7px 7px 11px; border: 1px solid var(--brand-200); border-radius: 12px; background: var(--brand-50); color: var(--brand-700); font-size: 13px; }
+.ask-nest-draft-strip > svg { flex: 0 0 auto; }
+.ask-nest-draft-strip > span { display: flex; flex: 1; min-width: 0; gap: 6px; overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
+.ask-nest-draft-strip strong { color: var(--brand-700); }
+.ask-nest-draft-strip .btn { flex: 0 0 auto; gap: 4px; }
+
+.ask-nest-answer-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.ask-nest-answer-meta .ask-nest-scope, .ask-nest-answer-meta .ask-nest-feedback { margin-top: 0; }
+.ask-nest-answer-meta .ask-nest-scope[open] { flex-basis: 100%; order: 2; }
+.ask-nest-answer-meta .ask-nest-feedback { gap: 4px; }
+.ask-nest-answer-meta .ask-nest-feedback > button { min-width: 30px; justify-content: center; padding: 5px 7px; border-color: transparent; background: transparent; }
+.ask-nest-feedback-label { margin-right: 2px; }
+.ask-nest-record-instead { gap: 5px; margin-left: auto; color: var(--text-secondary); font-size: 12px; }
+
+.ask-nest-record-prompts { margin-top: 20px; }
+.ask-nest-prompts-label { color: var(--text-tertiary); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.ask-nest-record-prompts button { border-style: dashed; }

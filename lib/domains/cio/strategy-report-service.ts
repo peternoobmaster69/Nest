@@ -6,6 +6,7 @@ import {
   CioStrategyReportModelSchema,
   type CioStrategyReportModel,
 } from "./report-types";
+import { buildCioAdvisorBrief, planCioNewMoneyAllocation } from "./advisor";
 import { buildCioSnapshot } from "./snapshot-service";
 import {
   buildCioStrategyRecommendations,
@@ -62,7 +63,7 @@ function addUtcMonths(date: Date, months: number) {
   return result;
 }
 
-function strategyStatus(
+export function strategyStatus(
   snapshot: CioSnapshot,
   recommendations: readonly CioStrategyRecommendation[],
 ) {
@@ -75,7 +76,7 @@ function strategyStatus(
   return "ON_TRACK" as const;
 }
 
-function executiveStance(
+export function executiveStance(
   status: CioStrategyReportModel["strategyStatus"],
   recommendations: readonly CioStrategyRecommendation[],
 ) {
@@ -307,6 +308,37 @@ export async function buildWorkspaceCioStrategyRecommendations(params: {
       policy: recommendationPolicy(policy),
       profile: recommendationProfile(profile),
     }),
+    dataQuality: snapshot.dataQuality,
+    evidence: snapshot.evidence,
+  };
+}
+
+export async function buildWorkspaceCioAdvisorBrief(params: {
+  workspaceId: string;
+  asOfDate?: string | Date;
+}) {
+  const { snapshot, policy, profile } = await loadStrategyInputs(params.workspaceId, params.asOfDate);
+  const advisorPolicy = recommendationPolicy(policy);
+  const advisorProfile = recommendationProfile(profile);
+  const recommendations = buildCioStrategyRecommendations({ snapshot, policy: advisorPolicy, profile: advisorProfile });
+  const status = strategyStatus(snapshot, recommendations);
+  return {
+    strategyStatus: status,
+    executiveStance: executiveStance(status, recommendations),
+    ...buildCioAdvisorBrief({ snapshot, policy: advisorPolicy, profile: advisorProfile, recommendations }),
+  };
+}
+
+export async function planWorkspaceCioNewMoney(params: {
+  workspaceId: string;
+  amountCents: number;
+  asOfDate?: string | Date;
+}) {
+  const { snapshot, policy } = await loadStrategyInputs(params.workspaceId, params.asOfDate);
+  return {
+    asOfDate: snapshot.asOfDate,
+    baseCurrency: snapshot.baseCurrency,
+    plan: planCioNewMoneyAllocation(snapshot, recommendationPolicy(policy), params.amountCents),
     dataQuality: snapshot.dataQuality,
     evidence: snapshot.evidence,
   };

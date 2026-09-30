@@ -4,6 +4,7 @@ import { AdminBackgroundJobsTable, AdminRecentActivityTable } from "@/components
 import { PageFrame } from "@/components/page-frame";
 import { requireAdminPage } from "@/lib/admin-auth";
 import { getAdminOverview } from "@/lib/admin-overview";
+import { AdminNavigation } from "@/components/admin-navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export default async function AdminPage() {
       userImage={session.user?.image || null}
     >
       <div className="admin-page">
+        <AdminNavigation current="overview" />
         <section className="admin-group" aria-labelledby="admin-access-title">
           <h2 className="admin-group-title" id="admin-access-title">Access</h2>
           <AdminDirectories users={overview.users} workspaces={overview.workspaces} />
