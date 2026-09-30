@@ -62,6 +62,8 @@ History is at most six client-provided messages plus server persistence rules. T
 - **Side effects:** external Azure calls; route persists result/usage.
 - **Preconditions:** model config and validated input.
 - **Postconditions:** answer schema valid; displayed financial values originate from tool output or a clearly labelled user scenario, otherwise a controlled repair/failure occurs.
+- **Grounding repair:** when a value cannot be verified, one repair turn names the exact blocked value and, if the configured tool budget allows, may use up to two more lookup rounds (for example `get_cio_advisor_brief`) to fetch the precomputed figure. Outputs from those rounds join the grounding set; if the value is still unsupported, the answer is blocked.
+- **CIO advice:** broad advice questions route to `get_cio_advisor_brief`, and new-money questions route to `plan_cio_new_money`. The prompt asks for a CIO-style structure (position, prioritized actions, trade-off, what would change the advice, next step) and forbids deriving monthly equivalents, gaps, sums, or splits.
 - **Complexity:** O(number of tool rounds + tool query costs); external latency dominates.
 
 ### `executeAskNestTool`
@@ -134,4 +136,4 @@ Stable failure categories distinguish configuration, invalid request, rate limit
 
 ## Last Updated
 
-2026-07-28
+2026-10-01

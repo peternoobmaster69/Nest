@@ -4,9 +4,11 @@ import type { AskNestEvidence } from "@/lib/ai/ask-nest-types";
 import { ApiRequestError } from "@/lib/api/contracts";
 import {
   buildCioSnapshot,
+  buildWorkspaceCioAdvisorBrief,
   buildWorkspaceCioStrategyRecommendations,
   CIO_MAX_CENTS,
   getCioPolicy,
+  planWorkspaceCioNewMoney,
   runWorkspaceRetirementProjection,
   type CioDataQualitySummary,
   type CioEvidenceRef,
@@ -14,6 +16,8 @@ import {
   type CioRetirementProjectionPoint,
   type CioRetirementStatus,
   type CioSnapshot,
+  type CioStrategyRecommendation,
+  monthlyEquivalentCents,
 } from "@/lib/domains/cio";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -47,6 +51,11 @@ const CioContributionComparisonArgsSchema = z.object({
   additional_annual_contribution_cents: z.number().int().min(0).max(CIO_MAX_CENTS),
 }).strict();
 
+const CioNewMoneyArgsSchema = z.object({
+  as_of_date: NullableDateSchema,
+  amount_cents: z.number().int().min(1).max(CIO_MAX_CENTS),
+}).strict();
+
 type CioToolContext = {
   workspaceId: string;
   userId: string;
@@ -72,6 +81,8 @@ export const CIO_ASK_NEST_TOOL_NAMES = [
   "get_cio_strategy_recommendations",
   "run_cio_retirement_projection",
   "compare_cio_contribution_scenarios",
+  "get_cio_advisor_brief",
+  "plan_cio_new_money",
 ] as const;
 
 const CIO_ASK_NEST_TOOLS: FunctionTool[] = [
@@ -147,6 +158,35 @@ const CIO_ASK_NEST_TOOLS: FunctionTool[] = [
         additional_annual_contribution_cents: { type: "integer", minimum: 0, maximum: CIO_MAX_CENTS, description: "Additional annual external contribution in integer cents above the configured/derived baseline." },
       },
       required: ["as_of_date", "additional_annual_contribution_cents"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_cio_advisor_brief",
+    description: "Get Nest's read-only deterministic CIO advisory brief: strategy status and stance, prioritized recommendations, asset-class drift against confirmed bands with currency differences, new money needed to reach every band minimum, liquidity floor shortfall and months to restore it, contribution pace with monthly equivalents, and retirement levers (required annual and monthly contribution, additional contribution, earliest funded retirement date, required base return). Use it for broad advice, strategy, what-should-I-do, trade-off, and how-far-off questions. It never executes a trade or recommends an individual security.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
+      },
+      required: ["as_of_date"],
+    },
+  },
+  {
+    type: "function",
+    name: "plan_cio_new_money",
+    description: "Split a hypothetical amount of new investable money across the household's confirmed asset-class bands, filling target shortfalls first and then target weights, and show each band before and after. Use it when the user asks where new money, a bonus, or savings should go. It is read-only, is not saved, never sells, and never names an individual security or product.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
+        amount_cents: { type: "integer", minimum: 1, maximum: CIO_MAX_CENTS, description: "Hypothetical new external money in integer cents, as stated by the user." },
+      },
+      required: ["as_of_date", "amount_cents"],
     },
   },
 ];
@@ -614,6 +654,177 @@ async function compareCioContributionScenarios(rawArgs: unknown, context: CioToo
   };
 }
 
+function recommendationOutput(item: CioStrategyRecommendation, currency: string) {
+  return {
+    code: item.code,
+    category: item.category,
+    severity: item.severity,
+    title: item.title,
+    action: item.action,
+    rationale: item.rationale,
+    scopeKey: item.scopeKey,
+    current: strategyMetric(item.current, currency),
+    target: strategyMetric(item.target, currency),
+    annualChange: money(item.annualChangeCents, currency),
+    monthlyChangeEquivalent: money(item.annualChangeCents === null ? null : monthlyEquivalentCents(item.annualChangeCents), currency),
+    requiresUserConfirmation: item.requiresUserConfirmation,
+  };
+}
+
+function strategyMetric(metric: CioStrategyRecommendation["current"], currency: string) {
+  if (metric?.unit === "CENTS") return { label: metric.label, amount: money(metric.value, currency) };
+  if (metric?.unit === "BPS") return { label: metric.label, percentage: percentage(metric.value) };
+  return metric;
+}
+
+async function getCioAdvisorBrief(rawArgs: unknown, context: CioToolContext): Promise<CioToolResult> {
+  const args = CioAsOfArgsSchema.parse(rawArgs);
+  const brief = await buildWorkspaceCioAdvisorBrief({
+    workspaceId: context.workspaceId,
+    asOfDate: args.as_of_date ?? undefined,
+  });
+  const currency = brief.currency;
+  const levers = brief.retirement.levers;
+  const progress = brief.contributions.progress;
+  return {
+    output: {
+      ok: true,
+      readOnly: true,
+      asOfDate: brief.asOfDate,
+      currency,
+      strategyStatus: brief.strategyStatus,
+      executiveStance: brief.executiveStance,
+      recommendations: brief.recommendations.map((item) => recommendationOutput(item, currency)),
+      allocation: {
+        policyConfirmed: brief.allocation.policyConfirmed,
+        total: money(brief.allocation.totalCents, currency),
+        unknownValue: money(brief.allocation.unknown.valueCents, currency),
+        unknownAllocation: percentage(brief.allocation.unknown.allocationBps),
+        drift: brief.allocation.drift.map((row) => ({
+          assetClass: row.assetClass,
+          status: row.status,
+          current: money(row.currentCents, currency),
+          currentAllocation: percentage(row.currentBps),
+          minimum: percentage(row.minimumBps),
+          target: percentage(row.targetBps),
+          maximum: percentage(row.maximumBps),
+          driftFromTarget: percentage(row.driftFromTargetBps),
+          valueAtTarget: money(row.valueAtTargetCents, currency),
+          differenceFromTarget: money(row.differenceFromTargetCents, currency),
+        })),
+        newMoneyToReachAllMinimums: money(brief.allocation.newMoneyToReachAllMinimumsCents, currency),
+      },
+      liquidity: {
+        readilyAvailable: money(brief.liquidity.readilyAvailableCents, currency),
+        immediateBankCash: money(brief.liquidity.immediateBankCashCents, currency),
+        immediateBankCashFloor: money(brief.liquidity.immediateBankCashFloorCents, currency),
+        immediateBankCashShortfall: money(brief.liquidity.immediateBankCashShortfallCents, currency),
+        essentialMonthlyExpense: money(brief.liquidity.essentialMonthlyExpenseCents, currency),
+        emergencyRunwayMonths: brief.liquidity.emergencyRunwayMonths,
+        policyFloor: money(brief.liquidity.policyFloorCents, currency),
+        policyShortfall: money(brief.liquidity.policyShortfallCents, currency),
+        monthsToRestoreAtNetContributions: brief.liquidity.monthsToRestoreAtNetContributions,
+        monthsToRestoreAssumption: "Assumes every recorded net external contribution is redirected to the reserve.",
+      },
+      contributions: {
+        source: brief.contributions.source,
+        usedAnnual: money(brief.contributions.usedAnnualCents, currency),
+        usedMonthlyEquivalent: money(brief.contributions.usedMonthlyCents, currency),
+        netExternalAnnual: money(brief.contributions.netExternalAnnualCents, currency),
+        netExternalMonthlyEquivalent: money(brief.contributions.netExternalMonthlyCents, currency),
+        internalReallocationsExcluded: money(brief.contributions.internalReallocationAnnualCents, currency),
+        progress: progress ? {
+          year: progress.year,
+          status: progress.status,
+          actualYearToDate: money(progress.actualYtdCents, currency),
+          expectedToDate: money(progress.expectedToDateCents, currency),
+          annualTarget: money(progress.annualTargetCents, currency),
+          paceGap: money(progress.paceGapCents, currency),
+          remainingThisYear: money(progress.remainingAnnualCents, currency),
+          annualProgress: percentage(progress.annualProgressBps),
+          calendarProgress: percentage(progress.calendarProgressBps),
+        } : null,
+      },
+      retirement: {
+        status: brief.retirement.status,
+        missingFields: brief.retirement.missingFields,
+        levers: levers ? {
+          retirementDate: levers.retirementDate,
+          currentAnnualContribution: money(levers.currentAnnualContributionCents, currency),
+          currentMonthlyContributionEquivalent: money(levers.currentMonthlyContributionCents, currency),
+          requiredAnnualContribution: money(levers.requiredAnnualContributionCents, currency),
+          requiredMonthlyContributionEquivalent: money(levers.requiredMonthlyContributionCents, currency),
+          additionalAnnualContributionNeeded: money(levers.additionalAnnualContributionCents, currency),
+          additionalMonthlyContributionNeeded: money(levers.additionalMonthlyContributionCents, currency),
+          baseGapOrSurplusReal: money(levers.baseGapOrSurplusRealCents, currency),
+          baseSustainableMonthlyIncomeReal: money(levers.baseSustainableMonthlyIncomeRealCents, currency),
+          targetMonthlySpendingToday: money(levers.targetMonthlySpendingTodayCents, currency),
+          monthlySpendingGapOrSurplusToday: money(levers.monthlySpendingGapOrSurplusTodayCents, currency),
+          earliestFundedRetirementDate: levers.earliestFundedRetirementDate,
+          earliestFundedDateSearch: levers.earliestFundedDateSearch,
+          requiredBaseReturnStatus: levers.requiredBaseReturn.status,
+          requiredBaseReturn: percentage(levers.requiredBaseReturn.bps),
+          configuredBaseReturn: percentage(levers.baseReturnBps),
+          requiredContributionUnavailable: levers.requiredAnnualContributionCents === null,
+        } : null,
+      },
+      dataQuality: dataQuality(brief.dataQuality),
+      limitations: [
+        "Monthly figures are exact equivalents of annual amounts, rounded to the cent by Nest.",
+        "Retirement levers change one assumption at a time on the deterministic base scenario and are not saved.",
+        "No trade, transfer, sale, or individual-security recommendation is generated. Every action requires household confirmation.",
+      ],
+    },
+    evidence: toEvidence(brief.evidence, context.callId),
+  };
+}
+
+async function planCioNewMoney(rawArgs: unknown, context: CioToolContext): Promise<CioToolResult> {
+  const args = CioNewMoneyArgsSchema.parse(rawArgs);
+  const result = await planWorkspaceCioNewMoney({
+    workspaceId: context.workspaceId,
+    amountCents: args.amount_cents,
+    asOfDate: args.as_of_date ?? undefined,
+  });
+  const currency = result.baseCurrency;
+  const plan = result.plan;
+  return {
+    output: {
+      ok: true,
+      readOnly: true,
+      asOfDate: result.asOfDate,
+      currency,
+      proposedNewMoney: money(args.amount_cents, currency),
+      plan: plan.status === "POLICY_REQUIRED" ? plan : {
+        status: plan.status,
+        method: plan.method,
+        totalBefore: money(plan.totalBeforeCents, currency),
+        totalAfter: money(plan.totalAfterCents, currency),
+        unknownValue: money(plan.unknown.valueCents, currency),
+        unknownAllocation: percentage(plan.unknown.allocationBps),
+        bands: plan.bands.map((row) => ({
+          assetClass: row.assetClass,
+          allocate: money(row.allocationCents, currency),
+          shareOfNewMoney: percentage(row.allocationShareBps),
+          before: money(row.currentCents, currency),
+          beforeAllocation: percentage(row.currentBps),
+          after: money(row.afterCents, currency),
+          afterAllocation: percentage(row.afterBps),
+          minimum: percentage(row.minimumBps),
+          target: percentage(row.targetBps),
+          maximum: percentage(row.maximumBps),
+          statusBefore: row.statusBefore,
+          statusAfter: row.statusAfter,
+        })),
+        stillOutsideBands: plan.stillOutsideBands,
+      },
+      dataQuality: dataQuality(result.dataQuality),
+      limitation: "Asset-class routing only. Nest does not choose products or securities, sell holdings, or save or execute this plan.",
+    },
+    evidence: toEvidence(result.evidence, context.callId),
+  };
+}
+
 export async function executeCioAskNestTool(
   name: string,
   rawArgs: unknown,
@@ -636,6 +847,12 @@ export async function executeCioAskNestTool(
         break;
       case "compare_cio_contribution_scenarios":
         result = await compareCioContributionScenarios(rawArgs, context);
+        break;
+      case "get_cio_advisor_brief":
+        result = await getCioAdvisorBrief(rawArgs, context);
+        break;
+      case "plan_cio_new_money":
+        result = await planCioNewMoney(rawArgs, context);
         break;
       default:
         return null;

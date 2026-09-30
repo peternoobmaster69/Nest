@@ -4,7 +4,7 @@ description: Deterministic household allocation, liquidity, policy, data-quality
 audience: [engineers, finance-domain-reviewers, security-reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-31
+last_updated: 2026-10-01
 ---
 
 # Nest CIO
@@ -37,6 +37,17 @@ The legacy `InvestmentAccount.isLiquid` field is unchanged. When no CIO profile 
 `CioStrategyReport` stores the validated report JSON, schema and renderer versions, content hash, data date, completeness, and recommendation count. The record is immutable: there is no update or delete route. PDF downloads render from the stored model so later workspace changes do not rewrite historical conclusions.
 
 The profile records whether the plan is `INDIVIDUAL` or `HOUSEHOLD`. An individual plan has no partner birth date; its included assets, positions, flows, and spending inputs are expected to represent that individual. The retirement timeline uses the primary person's age in both modes. Target retirement spending sets the projected retirement fund target. Essential monthly spending is separate and is used only for emergency-runway and liquidity-policy checks. An explicit zero is configured and disables those months-of-spending calculations; `null` means the assumption is missing.
+
+### Advisory brief and new-money planning
+
+`lib/domains/cio/advisor.ts` precomputes every derived figure an advisory answer may quote, so Ask Nest copies values instead of dividing, subtracting, or annualizing them:
+
+- `buildCioAdvisorBrief(...)` / `buildWorkspaceCioAdvisorBrief(...)`: band drift with currency differences from target, the new money needed to lift every band to its minimum without sales, the liquidity floor shortfall and months to restore it at recorded net contributions, contribution pace with monthly equivalents, and retirement levers.
+- `solveCioRetirementLevers(...)`: required and additional annual and monthly contribution, earliest funded whole-year retirement date at today's contribution (up to 60 years), and the base return required within the configured bear-to-bull range. Each lever changes one assumption at a time.
+- `planCioNewMoneyAllocation(...)` / `planWorkspaceCioNewMoney(...)`: splits a hypothetical amount across confirmed bands by filling target shortfalls first and then target weights (largest-remainder cents, so parts always sum exactly). It returns `POLICY_REQUIRED` without a confirmed policy, never sells, and never names a product or security. Nothing is saved.
+- `monthlyEquivalentCents(...)` rounds half away from zero to the cent.
+
+Ask Nest exposes these as `get_cio_advisor_brief` and `plan_cio_new_money` in the Investments and CIO capability.
 
 ## Projection mechanics
 
