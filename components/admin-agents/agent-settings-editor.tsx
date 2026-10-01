@@ -5,6 +5,7 @@ import { Check, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { apiFetch } from "@/lib/api/client";
 import { getAgentDefinition, type AgentConfiguration, type AgentSettings } from "@/lib/ai/agent-catalog";
 import { AgentSettingsSchema, type AgentDetail } from "@/lib/ai/agent-contracts";
+import { AGENT_PROMPT_VERSION } from "@/lib/ai/agent-instructions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/form-field";
@@ -35,7 +36,8 @@ export function AgentSettingsEditor({ detail, model, draft, onDraftChange, onSav
         <div><h3>Configuration</h3><p>Set how this agent works across Nest.</p></div>
         <label className="agent-enabled-control"><Input type="checkbox" role="switch" checked={settings.enabled} onChange={(event) => change("enabled", event.target.checked)} />{settings.enabled ? "Agent enabled" : "Agent paused"}</label>
       </div>
-      <TextAreaField label="Instructions" hint="Describe priorities, terminology, and how the agent should respond." rows={5} maxLength={12_000} value={settings.instructions} onChange={(event) => change("instructions", event.target.value)} />
+      <TextAreaField label="Instructions" hint="Define priorities, decision rules, local terminology, and the response you expect. Nest adds its core workflow and financial protections to every request." rows={14} maxLength={12_000} value={settings.instructions} onChange={(event) => change("instructions", event.target.value)} />
+      <div className="agent-form-footer"><span>Recommended prompt · {AGENT_PROMPT_VERSION}</span><Button variant="ghost" size="sm" disabled={save.isPending || settings.instructions === definition.defaults.instructions} onClick={() => change("instructions", definition.defaults.instructions)}><RotateCcw size={14} aria-hidden="true" />Use recommended instructions</Button></div>
       <div className="agent-fields-grid">
         <TextField label="Model deployment" placeholder={model || "Use the default deployment"} hint="Leave blank to use the shared model. Fine-tuned models need an Azure deployment name." value={settings.deployment ?? ""} maxLength={200} onChange={(event) => change("deployment", event.target.value || null)} />
         <SelectField label="Reasoning effort" hint="The selected deployment must support this setting." value={settings.reasoningEffort} onChange={(event) => change("reasoningEffort", event.target.value as AgentSettings["reasoningEffort"])}>

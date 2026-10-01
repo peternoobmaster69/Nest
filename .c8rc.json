@@ -1,0 +1,21 @@
+{
+  "all": true,
+  "include": [
+    "app/**/*.{ts,tsx,js,mjs,cjs}",
+    "components/**/*.{ts,tsx,js,mjs,cjs}",
+    "hooks/**/*.{ts,tsx,js,mjs,cjs}",
+    "lib/**/*.{ts,tsx,js,mjs,cjs}",
+    "public/**/*.{ts,tsx,js,mjs,cjs}",
+    "scripts/**/*.{ts,tsx,js,mjs,cjs}",
+    "prisma/**/*.{ts,tsx,js,mjs,cjs}",
+    "types/**/*.{ts,tsx,js,mjs,cjs}",
+    "proxy.ts",
+    "instrumentation.ts",
+    "next.config.ts"
+  ],
+  "exclude": ["**/*.d.ts", "prisma/migrations/**"],
+  "extension": [".ts", ".tsx", ".js", ".mjs", ".cjs"],
+  "exclude-after-remap": true,
+  "reporter": ["lcovonly", "json-summary", "text-summary"],
+  "reports-dir": "coverage"
+}

@@ -7,8 +7,8 @@ import {
 } from "openai";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { answerAskNest, AskNestResponseError } from "@/lib/ai/ask-nest";
+import { AskNestRequestSchema } from "@/lib/ai/ask-nest-contracts";
 import { AiConfigurationError } from "@/lib/ai/config";
 import { consumeAskNestRateLimit } from "@/lib/ai/rate-limit";
 import { AgentPolicyError } from "@/lib/ai/agent-policy";
@@ -19,26 +19,6 @@ import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-r
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const HistoryMessageSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  content: z.string().trim().min(1).max(1_600),
-}).strict();
-
-const AskNestRequestSchema = z.object({
-  question: z.string().trim().min(2).max(600),
-  pagePath: z.string().trim().regex(/^\/[A-Za-z0-9/_-]*$/).max(120),
-  history: z.array(HistoryMessageSchema).max(6).default([]),
-}).strict().superRefine((value, context) => {
-  const historyLength = value.history.reduce((sum, message) => sum + message.content.length, 0);
-  if (historyLength > 6_000) {
-    context.addIssue({
-      code: "custom",
-      path: ["history"],
-      message: "Conversation context is too long.",
-    });
-  }
-});
 
 const PRIVATE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",

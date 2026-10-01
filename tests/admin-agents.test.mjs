@@ -6,6 +6,8 @@ import { AGENT_IDS, defaultAgentConfiguration, enabledAgentTools } from "../lib/
 import { AgentSettingsSchema, AgentConfigurationUpdateSchema } from "../lib/ai/agent-contracts.ts";
 import { assertAgentCapability, composeAgentInstructions, scoreAgentOutput, selectAgentExamples } from "../lib/ai/agent-policy.ts";
 import { EMPTY_TRANSACTION_INTENT } from "../lib/ai/transaction-agent-contracts.ts";
+import { AGENT_PROMPT_VERSION, DEFAULT_AGENT_INSTRUCTIONS, LEGACY_AGENT_INSTRUCTIONS } from "../lib/ai/agent-instructions.ts";
+import { ensureCioDataDate } from "../lib/ai/cio-grounding.ts";
 
 process.env.DATABASE_URL = "sqlserver://localhost:1433;database=agent_test;user=test;password=test";
 process.env.AI_WORKLOAD_ENDPOINT = "https://agent-test.openai.azure.com";
@@ -70,6 +72,7 @@ globalThis.prisma = db;
 const { getAiWorkloadClient } = await import("../lib/ai/config.ts");
 const { getAgentConfiguration } = await import("../lib/ai/agent-runtime.ts");
 const { getAgentRegistry, getAgentDetail, saveAgentConfiguration, saveAgentExample, deleteAgentExample } = await import("../lib/ai/agent-store.ts");
+const { upgradeLegacyAgentInstructions } = await import("../lib/ai/agent-prompt-upgrade.ts");
 const { agentDatasetLine, buildAgentDataset, evaluateAgent, runAgentExample } = await import("../lib/ai/agent-training.ts");
 const { startAgentFineTuning, updateAgentFineTuning } = await import("../lib/ai/agent-fine-tuning.ts");
 const { answerAskNest } = await import("../lib/ai/ask-nest.ts");
@@ -83,6 +86,8 @@ const example = (overrides = {}) => ({ id: "example", agentId: "ask-nest", revis
 
 beforeEach(() => {
   records = Object.fromEntries(tables.map((name) => [name, []])); sequence = 0; providerCalls = []; uploads = []; jobCalls = []; transactionTail = Promise.resolve();
+  db.workspace = { findUnique: async () => ({ name: "Sample workspace", baseCurrency: "SGD" }) };
+  db.user = { findUnique: async () => ({ name: "Sample user" }) };
   client.responses.create = async (params) => { providerCalls.push(clone(params)); return { status: "completed", output: [], output_text: JSON.stringify(answer) }; };
   client.responses.parse = async (params) => { providerCalls.push(params); return { status: "completed", output_parsed: clone(intent) }; };
   client.files.create = async ({ file }) => { uploads.push(await file.text()); return { id: `file-${uploads.length}` }; };
@@ -108,6 +113,84 @@ test("configuration updates validate capabilities, reject stale revisions, and r
   await assert.rejects(saveAgentConfiguration("ask-nest", settings("ask-nest"), "admin"), /changed/);
   await assert.rejects(saveAgentConfiguration("ask-nest", settings("ask-nest", { revision: 1, capabilities: ["write_arbitrary_sql"] }), "admin"), /registered/);
   assert.equal(AgentConfigurationUpdateSchema.safeParse(settings("ask-nest", { maxToolCalls: 999 })).success, false);
+});
+
+test("prompt upgrades need no records when an agent already uses registry defaults", async () => {
+  assert.deepEqual(await upgradeLegacyAgentInstructions("admin", true), AGENT_IDS.map(id => ({ id, status: "default", revision: 0 })));
+  assert.equal(records.aiAgentConfig.length, 0);
+  assert.equal(records.aiAgentRevision.length, 0);
+});
+
+test("prompt upgrades preview by default, preserve custom settings, and write one audited revision", async () => {
+  const saved = await saveAgentConfiguration("ask-nest", settings("ask-nest", {
+    instructions: LEGACY_AGENT_INSTRUCTIONS["ask-nest"], enabled: false, deployment: "household-deployment",
+    capabilities: ["investments"], reasoningEffort: "high", maxOutputTokens: 5500, maxToolRounds: 5, maxToolCalls: 9, trainingExampleLimit: 2,
+  }), "admin");
+  const custom = await saveAgentConfiguration("transaction-assistant", settings("transaction-assistant", {
+    instructions: `${LEGACY_AGENT_INSTRUCTIONS["transaction-assistant"]}\nPreserve our custom terminology.`,
+  }), "admin");
+  await saveAgentConfiguration("smart-review", settings("smart-review"), "admin");
+  assert.deepEqual((await upgradeLegacyAgentInstructions("upgrade-admin")).map(result => result.status), ["pending", "custom", "current"]);
+  assert.equal(records.aiAgentRevision.length, 3);
+  assert.deepEqual(await getAgentConfiguration("ask-nest"), saved);
+
+  assert.deepEqual((await upgradeLegacyAgentInstructions("upgrade-admin", true)).map(result => result.status), ["updated", "custom", "current"]);
+  const updated = await getAgentConfiguration("ask-nest");
+  assert.deepEqual(AgentSettingsSchema.strip().parse(updated), { ...AgentSettingsSchema.strip().parse(saved), instructions: DEFAULT_AGENT_INSTRUCTIONS["ask-nest"] });
+  assert.equal(updated.revision, saved.revision + 1);
+  assert.deepEqual(await getAgentConfiguration("transaction-assistant"), custom);
+  assert.equal(records.aiAgentRevision.at(-1).actorUserId, "upgrade-admin");
+  assert.equal(records.aiAgentRevision.at(-1).action, "CONFIGURATION");
+  assert.equal(JSON.parse(records.aiAgentRevision.at(-1).settingsJson).instructions, DEFAULT_AGENT_INSTRUCTIONS["ask-nest"]);
+  assert.deepEqual((await upgradeLegacyAgentInstructions("upgrade-admin", true)).map(result => result.status), ["current", "custom", "current"]);
+  assert.equal(records.aiAgentRevision.length, 4);
+});
+
+test("prompt upgrades preserve an administrator edit made after the preview read", async () => {
+  const saved = await saveAgentConfiguration("ask-nest", settings("ask-nest", { instructions: LEGACY_AGENT_INSTRUCTIONS["ask-nest"] }), "admin");
+  const original = db.aiAgentConfig.findMany;
+  db.aiAgentConfig.findMany = async (query) => {
+    const snapshot = await original(query);
+    await saveAgentConfiguration("ask-nest", { ...AgentSettingsSchema.strip().parse(saved), revision: saved.revision, instructions: "A newer custom instruction." }, "editing-admin");
+    return snapshot;
+  };
+  try {
+    const results = await upgradeLegacyAgentInstructions("upgrade-admin", true);
+    assert.deepEqual(results[0], { id: "ask-nest", status: "conflict", revision: 1 });
+    assert.equal((await getAgentConfiguration("ask-nest")).instructions, "A newer custom instruction.");
+    assert.equal(records.aiAgentRevision.length, 2);
+    assert.equal(records.aiAgentRevision.at(-1).actorUserId, "editing-admin");
+  } finally { db.aiAgentConfig.findMany = original; }
+});
+
+test("mixed conceptual and personal questions retain permitted tools on the first model request", async () => {
+  await saveAgentConfiguration("ask-nest", settings("ask-nest", { capabilities: ["investments"], trainingExampleLimit: 0 }), "admin");
+  const result = await answerAskNest({ workspaceId: "sample", userId: "sample", question: "What does today's money mean, and what is my retirement target in today's money?", history: [], pagePath: "/cio", pageTitle: "CIO" });
+  assert.deepEqual(result.diagnostics.recommendedTools, [], "The conceptual routing hint must not disable evidence gathering");
+  assert.equal(providerCalls.length, 1);
+  assert.equal(providerCalls[0].tool_choice, "auto");
+  assert.ok(providerCalls[0].tools.some(tool => tool.name === "run_cio_retirement_projection"));
+  assert.equal(providerCalls[0].tools.some(tool => tool.name === "get_financial_snapshot"), false);
+  assert.equal(result.diagnostics.promptVersion, AGENT_PROMPT_VERSION);
+});
+
+test("Ask Nest retains a complete multi-part explanation while respecting disabled tools", async () => {
+  const explanation = `A bank account represents the cash held with a bank. A sub-account assigns a purpose to part of that same cash, such as regular bills, groceries, or a future purchase. The two views answer different questions: the bank view shows where the money sits, while the sub-account view shows what it is intended to cover. Adding both balances together would count the same money twice.
+
+A useful review starts with upcoming commitments and the cash assigned to them. Check whether bills are already covered, whether a card statement still needs to be paid, and whether the remaining allocations match the household's priorities. Moving an allocation between sub-accounts changes its purpose; it does not create income or make the household wealthier. A review should explain that distinction before recommending a change.
+
+Card activity needs its own context. A purchase records spending, a reservation assigns cash to pay for that spending, and settling the statement pays the obligation. Those stages should be reconciled so that the same purchase is not treated as several separate expenses. A pending reimbursement also differs from available cash: another person may owe the household money, but that money has not arrived until repayment is recorded.
+
+For decisions that depend on personal balances or dates, use the current records and their coverage. A missing transaction or an unavailable statement does not prove that no spending occurred. If evidence is incomplete, explain the supported parts of the answer and identify the particular record needed to complete the review. Keep general explanations separate from findings about the household, and avoid turning a plausible example into a claimed fact about its accounts.`;
+  assert.ok(explanation.length > 1600);
+  await saveAgentConfiguration("ask-nest", settings("ask-nest", { capabilities: [], trainingExampleLimit: 0 }), "admin");
+  client.responses.create = async (params) => { providerCalls.push(clone(params)); return { status: "completed", output: [], output_text: JSON.stringify({ ...answer, answer: explanation }) }; };
+  const result = await answerAskNest({ workspaceId: "sample", userId: "sample", question: "Explain bank accounts, sub-accounts, card settlements and reimbursements, and how they fit into a household review.", history: [], pagePath: "/", pageTitle: "Home" });
+  assert.equal(result.answer.answer, explanation);
+  assert.equal(ensureCioDataDate(explanation, [{ ok: true, domain: "CIO", asOfDate: "2026-10-01" }]), `${explanation} Data date: 2026-10-01.`);
+  assert.deepEqual(providerCalls[0].tools, []);
+  assert.equal(providerCalls[0].tool_choice, "none");
+  assert.ok(providerCalls[0].text.format.schema.properties.answer.maxLength >= explanation.length);
 });
 
 test("paused Ask Nest stops before any provider or workspace work", async () => {
@@ -163,6 +246,14 @@ test("evaluation checks are meaningful for phrases, exact text and partial JSON"
   assert.equal(scoreAgentOutput('{"amount":"10","subject":"Bus"}', { expectedOutput: '{"amount":"10"}', matchMode: "EXACT" }), false);
 });
 
+test("empty-array expectations reject unwanted suggestions and nested evidence", () => {
+  const expectation = { expectedOutput: '{"accountCandidates":[]}', matchMode: "JSON_SUBSET" };
+  assert.equal(scoreAgentOutput('{"accountCandidates":[]}', expectation), true);
+  assert.equal(scoreAgentOutput('{"accountCandidates":["Invented account"]}', expectation), false);
+  assert.equal(scoreAgentOutput('{"accountCandidates":null}', expectation), false);
+  assert.equal(scoreAgentOutput('{"suggestions":[{"evidence":["invented"]}]}', { expectedOutput: '{"suggestions":[{"evidence":[]}]}', matchMode: "JSON_SUBSET" }), false);
+});
+
 test("transaction evaluations apply the same account-suggestion restrictions as live interpretation", async () => {
   client.responses.create = async (params) => { providerCalls.push(clone(params)); return { status: "completed", output: [], output_text: JSON.stringify({ ...intent, accountCandidates: ["Transit"] }) }; };
   const result = await runAgentExample({ ...defaultAgentConfiguration("transaction-assistant"), capabilities: ["create-transactions"] },
@@ -187,15 +278,32 @@ test("Smart Review evaluation filters forbidden candidates and unsupported model
   assert.equal(JSON.parse(result.actualOutput).suggestions.length, 1);
 });
 
+test("Smart Review rejects fabricated candidate keys even when budget suggestions are enabled", async () => {
+  client.responses.create = async (params) => {
+    providerCalls.push(clone(params));
+    return { status: "completed", output: [], output_text: JSON.stringify({ suggestions: [
+      { transactionId: "sample", normalizedMerchant: "Cafe", candidateKey: "BUDGET:invented", rationale: "MERCHANT_CATEGORY" },
+    ] }) };
+  };
+  const result = await runAgentExample(defaultAgentConfiguration("smart-review"), example({ agentId: "smart-review", purpose: "EVALUATION",
+    contextJson: JSON.stringify({ transactions: [{ transactionId: "sample", subject: "Cafe" }], candidates: [{ key: "BUDGET:food", label: "Food" }] }),
+    expectedOutput: JSON.stringify({ suggestions: [{ transactionId: "sample", candidateKey: "NO_MATCH", rationale: "NO_CLEAR_MATCH" }] }),
+  }), [], "admin");
+  assert.equal(result.passed, true);
+  assert.ok(JSON.parse(providerCalls[0].input[0].content).candidates.some(candidate => candidate.key === "BUDGET:food"));
+});
+
 test("evaluations replay supplied tools and never dispatch live workspace tools", async () => {
   let round = 0;
   client.responses.create = async (params) => {
     providerCalls.push(clone(params));
-    return round++ === 0 ? { status: "completed", output: [{ type: "function_call", name: "get_financial_snapshot", arguments: "{}", call_id: "sample-call" }] }
+    return round++ === 0 ? { status: "completed", output: [{ type: "reasoning", id: "sample-reasoning", summary: [], encrypted_content: "synthetic-encrypted-context" }, { type: "function_call", name: "get_financial_snapshot", arguments: "{}", call_id: "sample-call" }] }
       : { status: "completed", output: [], output_text: JSON.stringify(answer) };
   };
   const result = await runAgentExample(defaultAgentConfiguration("ask-nest"), example({ purpose: "EVALUATION", contextJson: '{"toolResults":{"get_financial_snapshot":{"ok":true,"sampleOnly":true}}}' }), [], "admin");
   assert.equal(result.passed, true); assert.deepEqual(result.toolsUsed, ["get_financial_snapshot"]);
+  assert.deepEqual(providerCalls[0].include, ["reasoning.encrypted_content"]);
+  assert.ok(providerCalls[1].input.some((item) => item.type === "reasoning" && item.encrypted_content === "synthetic-encrypted-context"));
   assert.ok(providerCalls[1].input.some((item) => item.type === "function_call_output" && item.output.includes("sampleOnly")));
 });
 

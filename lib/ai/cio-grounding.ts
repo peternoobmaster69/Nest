@@ -1,3 +1,5 @@
+import { ASK_NEST_ANSWER_MAX_LENGTH } from "./ask-nest-contracts";
+
 type GeneratedCioAnswer = {
   answer: string;
   highlights: Array<{ label: string; value: string }>;
@@ -125,7 +127,7 @@ export function findUnsupportedCioValue(
 export function ensureCioDataDate(
   answer: string,
   outputs: readonly Record<string, unknown>[],
-  maxLength = 1_600,
+  maxLength = ASK_NEST_ANSWER_MAX_LENGTH,
 ) {
   const dataDates = [...new Set(successfulCioOutputs(outputs).flatMap((output) => (
     isRecord(output) && typeof output.asOfDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(output.asOfDate)

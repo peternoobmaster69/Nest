@@ -1,0 +1,137 @@
+/* ============================================================
+   ASK NEST — NESTLING MASCOT AND MINIMIZED LAUNCHER
+   ============================================================ */
+
+.nestling { overflow: visible; }
+.nestling-shadow { fill: var(--text-primary); opacity: 0.12; transform-origin: 32px 59px; }
+.nestling-shell { fill: var(--bg-surface); stroke: var(--brand-800); stroke-width: 3; stroke-linejoin: round; }
+.nestling-shine { fill: none; stroke: var(--brand-100); stroke-width: 2.5; stroke-linecap: round; }
+.nestling-bars rect { fill: var(--brand-300); }
+.nestling-eyes ellipse { fill: var(--brand-800); }
+.nestling-eyes { transform-box: fill-box; transform-origin: center; animation: nestlingBlink 5.2s infinite; }
+.nestling-cheek { fill: var(--accent-500); opacity: 0.28; }
+.nestling-mouth { fill: none; stroke: var(--brand-800); stroke-width: 2.2; stroke-linecap: round; }
+.nestling-body { transform-origin: 32px 58px; }
+
+.nestling.is-thinking .nestling-body { animation: nestlingWobble 1.1s var(--ease-standard) infinite; }
+.nestling.is-thinking .nestling-bars rect { animation: nestlingBars 1.1s var(--ease-standard) infinite; transform-box: fill-box; transform-origin: bottom; }
+.nestling.is-thinking .nestling-bars rect:nth-child(2) { animation-delay: 0.15s; }
+.nestling.is-thinking .nestling-bars rect:nth-child(3) { animation-delay: 0.3s; }
+.nestling.is-news .nestling-body { animation: nestlingHop 2.4s var(--ease-decelerate) infinite; }
+.nestling.is-news .nestling-cheek { opacity: 0.5; }
+
+.ask-nest-fab {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right, 0px));
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: center;
+  flex-direction: row-reverse;
+  gap: 10px;
+  animation: askNestFabIn var(--duration-slow) var(--ease-decelerate) both;
+}
+
+.ask-nest-fab-button {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--brand-200);
+  border-radius: 50%;
+  background: var(--brand-50);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.ask-nest-fab-button:hover { transform: translateY(-2px) scale(1.04); }
+.ask-nest-fab-button:active { transform: scale(0.96); }
+.ask-nest-fab-button:focus-visible { outline: 3px solid var(--focus-ring-color); outline-offset: 3px; }
+
+.ask-nest-fab-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--bg-surface);
+  border-radius: 50%;
+  background: var(--accent-500);
+  animation: askNestFabPulse 1.8s var(--ease-standard) infinite;
+}
+
+.ask-nest-fab.is-drafting .ask-nest-fab-badge { background: var(--brand-500); }
+
+.ask-nest-fab-bubble {
+  max-width: min(220px, calc(100vw - 120px));
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px 14px 4px 14px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition: opacity var(--duration-base) var(--ease-standard), transform var(--duration-base) var(--ease-standard);
+}
+
+.ask-nest-fab:hover .ask-nest-fab-bubble,
+.ask-nest-fab:focus-within .ask-nest-fab-bubble,
+.ask-nest-fab.is-news .ask-nest-fab-bubble,
+.ask-nest-fab.is-drafting .ask-nest-fab-bubble,
+.ask-nest-fab.is-thinking .ask-nest-fab-bubble {
+  opacity: 1;
+  transform: none;
+}
+
+.ask-nest-fab-dismiss {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.ask-nest-fab:hover .ask-nest-fab-dismiss,
+.ask-nest-fab:focus-within .ask-nest-fab-dismiss { opacity: 1; }
+
+/* The launcher takes the bottom-right corner, so the desktop scroll-to-top button moves above it. */
+html[data-ask-nest-minimized="true"] .scroll-to-top-button { bottom: 96px; }
+html[data-mobile-more-open="true"] .ask-nest-fab,
+html[data-modal-scroll-lock="true"] .ask-nest-fab { display: none; }
+
+.ask-nest-minimize svg { transition: transform var(--duration-fast) var(--ease-standard); }
+.ask-nest-minimize:hover svg { transform: translateY(2px); }
+
+@keyframes nestlingBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes nestlingWobble { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+@keyframes nestlingHop { 0%, 70%, 100% { transform: translateY(0); } 80% { transform: translateY(-5px); } 90% { transform: translateY(0) scaleY(0.96); } }
+@keyframes nestlingBars { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.55); } }
+@keyframes askNestFabIn { from { opacity: 0; transform: translateY(16px) scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes askNestFabPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-500) 45%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }
+
+/* Dark theme keeps brand-800 dark green, so the face and outline switch to light tokens to stay legible. */
+[data-theme="dark"] .nestling-shell { fill: var(--bg-elevated); stroke: var(--brand-300); }
+[data-theme="dark"] .nestling-eyes ellipse { fill: var(--text-primary); }
+[data-theme="dark"] .nestling-mouth { stroke: var(--text-primary); }
+[data-theme="dark"] .nestling-bars rect { fill: var(--brand-500); }
+[data-theme="dark"] .nestling-shadow { fill: var(--bg-base); opacity: 0.5; }
+[data-theme="dark"] .ask-nest-fab-button { border-color: var(--brand-100); }

@@ -57,7 +57,6 @@ test("Smart Review remains read-only until the existing accounting route approve
   assert.match(reviewRoute, /requireWorkspaceAccess\(\)/);
   assert.match(reviewRoute, /transactionIds:[\s\S]*?max\(250\)/);
   assert.match(review, /store: false/);
-  assert.match(review, /Choose only a candidate key supplied in the input/);
   assert.doesNotMatch(review, /creditCardTransaction\.(?:create|update|delete)/);
   assert.doesNotMatch(reviewRoute, /creditCardTransaction\.(?:create|update|delete)/);
   assert.match(accountingRoute, /getSmartReviewFingerprint/);

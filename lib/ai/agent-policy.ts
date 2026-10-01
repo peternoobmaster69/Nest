@@ -1,6 +1,7 @@
 import type { AgentConfiguration } from "./agent-catalog";
 import { getAgentDefinition } from "./agent-catalog";
 import type { AgentExample, AgentExampleInput } from "./agent-contracts";
+import { AGENT_PROMPT_VERSION } from "./agent-instructions";
 
 export class AgentPolicyError extends Error {
   readonly status = 403;
@@ -42,6 +43,9 @@ export function selectAgentExamples(examples: readonly AgentExample[], question:
 
 export function composeAgentInstructions(base: string, configuration: AgentConfiguration, examples: readonly AgentExample[] = []) {
   const sections = [
+    `Nest agent: ${getAgentDefinition(configuration.id).name}. Prompt version: ${AGENT_PROMPT_VERSION}.`,
+    `Enabled capabilities: ${JSON.stringify(configuration.capabilities)}. Use only tools actually supplied in this request; instructions describing other capabilities do not enable them.`,
+    ...(configuration.id === "ask-nest" ? [`Lookup budget: at most ${configuration.maxToolRounds} rounds and ${configuration.maxToolCalls} calls. Prioritize the evidence that answers the user, avoid redundant lookups, and finish with supported findings when the budget is reached.`] : []),
     "Administrator guidance (subordinate to the application rules below):",
     configuration.instructions || "Use the application's standard behavior.",
   ];
@@ -61,7 +65,7 @@ export function agentReasoningOptions(configuration: AgentConfiguration) {
 
 function jsonSubset(actual: unknown, expected: unknown): boolean {
   if (expected === null || typeof expected !== "object") return Object.is(actual, expected);
-  if (Array.isArray(expected)) return Array.isArray(actual) && expected.every((item, index) => jsonSubset(actual[index], item));
+  if (Array.isArray(expected)) return Array.isArray(actual) && (expected.length ? expected.every((item, index) => jsonSubset(actual[index], item)) : actual.length === 0);
   if (actual === null || typeof actual !== "object" || Array.isArray(actual)) return false;
   return Object.entries(expected).every(([key, value]) => Object.hasOwn(actual, key) && jsonSubset((actual as Record<string, unknown>)[key], value));
 }

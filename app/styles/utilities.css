@@ -2179,6 +2179,21 @@ html[data-ask-nest-open="true"] {
     align-items: flex-end;
   }
 
+  /* Above the bottom navigation; scroll-to-top sits on the left on mobile. */
+  /* Prefixed so these win over the later mascot stylesheet. */
+  html .ask-nest-fab {
+    right: max(14px, env(safe-area-inset-right, 0px));
+    bottom: calc(var(--mobile-nav-height) + 12px);
+  }
+
+  :root[data-ask-nest-minimized="true"] .scroll-to-top-button {
+    bottom: calc(var(--mobile-nav-height) + 12px);
+  }
+
+  html .ask-nest-fab-dismiss {
+    opacity: 1;
+  }
+
   .ask-nest-panel {
     width: 100%;
     height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px)));
@@ -2228,8 +2243,12 @@ html[data-ask-nest-open="true"] {
 @media (prefers-reduced-motion: reduce) {
   .ask-nest-panel,
   .ask-nest-backdrop,
-  .ask-nest-spinner {
+  .ask-nest-spinner,
+  .ask-nest-fab,
+  .ask-nest-fab-badge,
+  .nestling * {
     animation-duration: 1ms;
+    animation-iteration-count: 1;
   }
 
   .ask-nest-prompts button:hover {

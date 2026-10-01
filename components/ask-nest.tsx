@@ -12,6 +12,7 @@ import {
   Brain,
   CircleAlert,
   LoaderCircle,
+  Minus,
   PencilLine,
   ReceiptText,
   RotateCcw,
@@ -33,7 +34,8 @@ import type {
   AskNestHistoryMessage,
 } from "@/lib/ai/ask-nest-types";
 import { Button } from "@/components/ui/button";
-import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { AskNestFab, type NestlingMood } from "@/components/ask-nest-mascot";
+import { askNestFlags, claimAskNestWorkspace, useAskNestLauncher, useAskNestState } from "@/components/ask-nest-store";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { Textarea } from "@/components/ui/controls";
 import { followUpToUserPrompt } from "@/lib/ai/follow-up-prompt.mjs";
@@ -124,6 +126,8 @@ const NOT_USEFUL_REASONS: Array<{ value: AskNestFeedbackReason; label: string }>
   { value: "OTHER", label: "Other" },
 ];
 
+const NO_TURNS: AskNestTurn[] = [];
+
 function getHistory(turns: AskNestTurn[]): AskNestHistoryMessage[] {
   return turns
     .filter((turn): turn is AskNestTurn & { answer: AskNestAnswer } => Boolean(turn.answer))
@@ -149,18 +153,23 @@ export function AskNest({
 }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
+  // Minimizing keeps the conversation (and any in-flight answer) alive behind a floating launcher
+  // that follows the user to every page until they dismiss it.
+  claimAskNestWorkspace(workspaceId);
+  const [minimized, setMinimized] = useAskNestLauncher();
+  const [hasNews, setHasNews] = useAskNestState("hasNews", false);
+  const fabRef = useRef<HTMLButtonElement>(null);
   const [question, setQuestion] = useState("");
-  const [turns, setTurns] = useState<AskNestTurn[]>([]);
+  const [turns, setTurns] = useAskNestState("turns", NO_TURNS);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useAskNestState<string | null>("nextCursor", null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memories, setMemories] = useState<AskNestMemoryItem[]>([]);
   const [memoryDrafts, setMemoryDrafts] = useState<Record<string, string>>({});
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
   const memoryLoadedRef = useRef(false);
-  const historyLoadedRef = useRef(false);
   const preserveScrollRef = useRef<{ height: number; top: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -169,7 +178,7 @@ export function AskNest({
   const abortRef = useRef<AbortController | null>(null);
   const prompts = useMemo(() => suggestedQuestions(currentPath), [currentPath]);
   const greetingName = userName?.trim().split(/\s+/)[0] || "";
-  const agent = useTransactionAgent(workspaceId, open);
+  const agent = useTransactionAgent(workspaceId, open || minimized);
   const activeDraft = agent.active;
   const isPending = turns.some((turn) => turn.pending);
   const composerLocked = isPending || historyLoading || agent.busy || Boolean(activeDraft?.needsReload);
@@ -179,12 +188,21 @@ export function AskNest({
     ...agent.sessions.map((session, index) => ({ kind: "draft" as const, at: session.createdAt, index: turns.length + index, session })),
   ].sort((a, b) => (a.at && b.at && a.at !== b.at ? a.at.localeCompare(b.at) : a.index - b.index)), [turns, agent.sessions]);
   const latestSessionKey = agent.sessions.at(-1)?.key;
+  const working = isPending || agent.busy;
+  const showFab = minimized && !open;
+  const fabMood: NestlingMood = working ? "thinking" : hasNews ? "news" : activeDraft ? "drafting" : "idle";
+  const fabStatus = working ? "Working on it…"
+    : hasNews ? "Your answer is ready"
+    : activeDraft ? `Draft waiting · ${draftSummary(activeDraft)}`
+    : "Our conversation is still here";
+  const wasWorkingRef = useRef(false);
 
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (!open || historyLoadedRef.current) return;
-    historyLoadedRef.current = true;
+    const historyKey = "history";
+    if (!open || askNestFlags.has(historyKey)) return;
+    askNestFlags.add(historyKey);
     setHistoryLoading(true);
     setHistoryError("");
     void workspaceFetch("/api/ai/history?limit=10", { cache: "no-store" })
@@ -197,11 +215,11 @@ export function AskNest({
         setNextCursor(payload.nextCursor);
       })
       .catch((error) => {
-        historyLoadedRef.current = false;
+        askNestFlags.delete(historyKey);
         setHistoryError(error instanceof Error ? error.message : "Could not load conversation history.");
       })
       .finally(() => setHistoryLoading(false));
-  }, [open]);
+  }, [open, setNextCursor, setTurns]);
 
   useEffect(() => {
     if (!open) return;
@@ -210,7 +228,7 @@ export function AskNest({
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        setOpen(false);
+        minimize();
         return;
       }
       if (event.key !== "Tab" || !panelRef.current) return;
@@ -238,9 +256,27 @@ export function AskNest({
     };
   }, [open]);
 
+
+  // Leaving the page with the panel open (back button, sidebar) still leaves the launcher behind.
   useEffect(() => {
-    setOpen(false);
-  }, [currentPath]);
+    if (open) return () => setMinimized(true);
+  }, [open, setMinimized]);
+
+  // An answer or draft that finishes while minimized gets a badge on the launcher.
+  useEffect(() => {
+    if (wasWorkingRef.current && !working && !open) setHasNews(true);
+    wasWorkingRef.current = working;
+  }, [working, open, setHasNews]);
+
+  useEffect(() => {
+    if (open) setHasNews(false);
+  }, [open, setHasNews]);
+
+  useEffect(() => {
+    if (!showFab) return;
+    document.documentElement.dataset.askNestMinimized = "true";
+    return () => { delete document.documentElement.dataset.askNestMinimized; };
+  }, [showFab]);
 
   useEffect(() => {
     if (!open) return;
@@ -262,12 +298,18 @@ export function AskNest({
     if (open && !composerLocked && !memoryOpen) inputRef.current?.focus();
   }, [open, composerLocked, memoryOpen]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // In-flight answers are not aborted on unmount: they land in the shared store on the next page.
 
-  const close = () => {
-    abortRef.current?.abort();
+  function minimize() {
     setMemoryOpen(false);
+    setMinimized(true);
     setOpen(false);
+    window.requestAnimationFrame(() => fabRef.current?.focus());
+  }
+
+  const reopen = () => {
+    setMinimized(false);
+    setOpen(true);
   };
 
   const loadMemories = async () => {
@@ -573,7 +615,7 @@ export function AskNest({
             </dl>
           ) : null}
           {turn.answer.visualization ? (
-            <AskNestVisualizationView visualization={turn.answer.visualization} workspaceId={workspaceId} onNavigate={() => setOpen(false)} />
+            <AskNestVisualizationView visualization={turn.answer.visualization} workspaceId={workspaceId} onNavigate={minimize} />
           ) : null}
           {turn.answer.evidence.length ? (
             <div className="ask-nest-evidence">
@@ -584,7 +626,7 @@ export function AskNest({
                   <ArrowUpRight size={15} aria-hidden="true" />
                 </a>
               ) : (
-                <Link key={item.id} href={workspaceId ? buildWorkspacePath(workspaceId, item.href) : item.href} onClick={() => setOpen(false)}>
+                <Link key={item.id} href={workspaceId ? buildWorkspacePath(workspaceId, item.href) : item.href} onClick={minimize}>
                   <span><strong>{item.label}</strong><small>{renderWithFormattedDates(item.detail)}</small></span>
                   <ArrowUpRight size={15} aria-hidden="true" />
                 </Link>
@@ -681,7 +723,7 @@ export function AskNest({
 
   const panel = open ? (
     <div className="ask-nest-layer">
-      <Button type="button" className="ask-nest-backdrop" onClick={close} aria-label="Close Ask Nest" />
+      <Button type="button" className="ask-nest-backdrop" onClick={minimize} aria-label="Minimize Ask Nest" />
       <section
         id="ask-nest-panel"
         ref={panelRef}
@@ -718,7 +760,9 @@ export function AskNest({
               Clear
             </Button>
           ) : null}
-          <ModalCloseButton onClick={close} label="Close Ask Nest" />
+          <Button type="button" className="modal-close ask-nest-minimize" iconOnly onClick={minimize} aria-label="Minimize Ask Nest" title="Minimize. Your conversation stays here.">
+            <Minus size={18} aria-hidden="true" />
+          </Button>
         </header>
 
         <div ref={contentRef} className="ask-nest-content" aria-live="polite" aria-busy={isPending || historyLoading || memoryLoading || undefined}>
@@ -819,7 +863,7 @@ export function AskNest({
               ) : null}
               {thread.map((item) => item.kind === "draft" ? (
                 <TransactionAgentCard key={item.session.key} session={item.session} agent={agent} latest={item.session.key === latestSessionKey}
-                  typing={Boolean(question.trim())} workspaceId={workspaceId} onNavigate={() => setOpen(false)} onAskInstead={(session) => void askInstead(session)} />
+                  typing={Boolean(question.trim())} workspaceId={workspaceId} onNavigate={minimize} onAskInstead={(session) => void askInstead(session)} />
               ) : renderTurn(item.turn))}
             </div>
           )}
@@ -879,7 +923,7 @@ export function AskNest({
         variant="ghost"
         size="sm"
         className="ask-nest-trigger"
-        onClick={() => setOpen(true)}
+        onClick={reopen}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls="ask-nest-panel"
@@ -888,6 +932,10 @@ export function AskNest({
         <span>Ask Nest</span>
       </Button>
       {mounted && panel ? createPortal(panel, document.body) : null}
+      {mounted && showFab ? createPortal(
+        <AskNestFab ref={fabRef} mood={fabMood} status={fabStatus} onOpen={reopen} onDismiss={() => { setMinimized(false); setHasNews(false); }} />,
+        document.body,
+      ) : null}
     </>
   );
 }

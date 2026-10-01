@@ -13,6 +13,7 @@ import {
 } from "../lib/domains/ledger/budget-plan/contracts.ts";
 import { CorrectTransactionSchema } from "../lib/domains/ledger/transaction-contracts.ts";
 import { TransactionAgentRequestSchema } from "../lib/ai/transaction-agent-contracts.ts";
+import { AskNestRequestSchema, ASK_NEST_HISTORY_MAX_LENGTH } from "../lib/ai/ask-nest-contracts.ts";
 import {
   AgentConfigurationUpdateSchema, AgentExampleSchema, AgentExampleUpdateSchema, AgentRevisionSchema,
   AgentEvaluationRequestSchema, AgentFineTuneRequestSchema, AgentFineTuneActionSchema,
@@ -46,6 +47,7 @@ const schemaRegistry = {
   BudgetPlanDeleteSchema,
   CorrectTransactionSchema,
   TransactionAgentRequestSchema,
+  AskNestRequestSchema,
   AgentConfigurationUpdateSchema, AgentExampleSchema, AgentExampleUpdateSchema, AgentRevisionSchema,
   AgentEvaluationRequestSchema, AgentFineTuneRequestSchema, AgentFineTuneActionSchema,
   CioProfileInputSchema,
@@ -68,6 +70,7 @@ const requestSchemaByOperation = {
   "POST /api/admin/agents/{agentId}/fine-tuning": "AgentFineTuneRequestSchema",
   "POST /api/admin/agents/{agentId}/fine-tuning/{jobId}": "AgentFineTuneActionSchema",
   "POST /api/ai/transactions": "TransactionAgentRequestSchema",
+  "POST /api/ai/ask": "AskNestRequestSchema",
   "POST /api/transactions/bulk-import": "BulkImportSchema",
   "POST /api/transactions/{id}/corrections": "CorrectTransactionSchema",
   "POST /api/credit-transactions/import-maybank": "ImportMaybankSchema",
@@ -128,7 +131,11 @@ function addSchemaAllOf(schema, conditions) {
 }
 
 function openApiSchema(name, zodSchema) {
-  const schema = z.toJSONSchema(zodSchema);
+  const schema = z.toJSONSchema(zodSchema, { io: name === "AskNestRequestSchema" ? "input" : "output" });
+
+  if (name === "AskNestRequestSchema") {
+    schema["x-runtime-refinements"] = [`Combined history content must not exceed ${ASK_NEST_HISTORY_MAX_LENGTH} characters.`];
+  }
 
   if (name === "CioProfileInputSchema") {
     const currentAge = {

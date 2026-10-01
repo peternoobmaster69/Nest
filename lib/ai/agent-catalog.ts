@@ -1,3 +1,5 @@
+import { DEFAULT_AGENT_INSTRUCTIONS } from "./agent-instructions";
+
 export const AGENT_IDS = ["ask-nest", "transaction-assistant", "smart-review"] as const;
 export type AgentId = typeof AGENT_IDS[number];
 export type AgentReasoningEffort = "default" | "low" | "medium" | "high";
@@ -56,7 +58,7 @@ export const AGENT_CATALOG: readonly AgentDefinition[] = [
     defaults: {
       ...sharedDefaults,
       maxOutputTokens: 4_000,
-      instructions: "Investigate the user's underlying question. For comparisons, check the relevant periods and explain the largest supported drivers. Use the available tools to resolve uncertainty before asking the user. State missing evidence plainly and offer a useful next action.",
+      instructions: DEFAULT_AGENT_INSTRUCTIONS["ask-nest"],
     },
     capabilities: [
       { id: "cash-flow", name: "Cash flow and spending", description: "Investigate income, spending, transactions, categories, and trips.", tools: ["get_financial_snapshot", "compare_spending", "get_category_spending", "find_transactions", "get_spending_breakdown", "get_trip_spending", "explain_cash_flow_change", "compare_income", "get_top_spending_drivers", "find_recurring_spend"] },
@@ -79,7 +81,7 @@ export const AGENT_CATALOG: readonly AgentDefinition[] = [
     defaults: {
       ...sharedDefaults,
       maxOutputTokens: 3_200,
-      instructions: "Understand informal wording and local merchant terminology. Preserve all details already supplied, distinguish corrections from new transactions, and ask only for information that is still missing or ambiguous.",
+      instructions: DEFAULT_AGENT_INSTRUCTIONS["transaction-assistant"],
     },
     capabilities: [
       { id: "create-transactions", name: "Create transaction drafts", description: "Prepare new income and expense entries for confirmation." },
@@ -96,7 +98,7 @@ export const AGENT_CATALOG: readonly AgentDefinition[] = [
     defaults: {
       ...sharedDefaults,
       maxOutputTokens: 4_000,
-      instructions: "Use merchant context carefully. Prefer no reliable match to an unsupported category. Distinguish reimbursable or shared spending from an ordinary purchase and preserve meaningful merchant names.",
+      instructions: DEFAULT_AGENT_INSTRUCTIONS["smart-review"],
     },
     capabilities: [
       { id: "merchant-names", name: "Merchant names", description: "Recommend clearer merchant descriptions." },

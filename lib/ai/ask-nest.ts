@@ -38,8 +38,10 @@ import { normalizeFollowUpActions } from "@/lib/ai/follow-up-prompt.mjs";
 import { enabledAgentTools } from "./agent-catalog";
 import { getAgentConfiguration, getAgentTrainingExamples } from "./agent-runtime";
 import { agentReasoningOptions, assertAgentEnabled, composeAgentInstructions } from "./agent-policy";
+import { AGENT_PROMPT_VERSION, ASK_NEST_WORKFLOW } from "./agent-instructions";
+import { ASK_NEST_ANSWER_MAX_LENGTH } from "./ask-nest-contracts";
 
-const ASK_NEST_PROMPT_VERSION = "2026-10-01.2";
+const ASK_NEST_PROMPT_VERSION = AGENT_PROMPT_VERSION;
 const GROUNDING_REPAIR_INSTRUCTION = `Revise the previous structured answer because it contains a numerical value that Nest cannot verify.
 Remove every currency amount, date, or percentage that was neither returned by a successful tool nor explicitly supplied by the user as a proposed assumption. User-supplied values must be labelled as proposed inputs, not Nest calculations. You may reformat a supported value or round a CIO currency value to its nearest whole currency unit; do not otherwise change its value. For a conceptual explanation, use qualitative wording without invented numerical examples. Do not calculate new values yourself. Add a fact or evidence ID only when a tool called during this repair returns it. Preserve supported content and return only the required structured response.`;
 
@@ -51,7 +53,7 @@ function groundingRepairDetail(detail: string) {
 }
 
 export const GeneratedAnswerSchema = z.object({
-  answer: z.string().trim().min(1).max(1_600),
+  answer: z.string().trim().min(1).max(ASK_NEST_ANSWER_MAX_LENGTH),
   highlights: z.array(z.object({
     label: z.string().trim().min(1).max(80),
     value: z.string().trim().min(1).max(120),
@@ -69,7 +71,7 @@ export const ANSWER_JSON_SCHEMA = {
     answer: {
       type: "string",
       description: "A concise, factual answer in plain text. Use only figures returned by tools.",
-      maxLength: 1_600,
+      maxLength: ASK_NEST_ANSWER_MAX_LENGTH,
     },
     highlights: {
       type: "array",
@@ -301,7 +303,7 @@ export function buildInstructions(params: {
   const topicContext = params.priorTopics.length
     ? params.priorTopics.map((topic) => `- ${topic.createdAt.toISOString().slice(0, 10)} · ${topic.pagePath} · ${topic.question}`).join("\n")
     : "- No relevant prior topics.";
-  return `You are Ask Nest, a calm, concise, read-only assistant inside a personal finance application.
+  return `You are Ask Nest, a financial analyst and read-only assistant inside a personal finance application. Investigate the user's actual question and produce a complete, evidence-backed answer.
 
 Current date: ${getSingaporeToday()} (Asia/Singapore).
 Workspace scope: the active authenticated workspace only.
@@ -317,6 +319,8 @@ ${memoryContext}
 
 Relevant prior conversation topics (navigation context only; never reuse their old financial figures):
 ${topicContext}
+
+${ASK_NEST_WORKFLOW}
 
 Rules:
 - For any claim about the user's finances, call one or more provided tools. Never invent, estimate, or calculate a financial value yourself.
@@ -363,7 +367,7 @@ Rules:
 - Distinguish transaction dates, receivable record dates, statement periods, and payment due dates precisely.
 - Use neutral language without praise, blame, alarmism, or anthropomorphic phrasing.
 - If filters are ambiguous, state the interpretation used. If the tools return no matching data, say so directly.
-- Keep the answer under 140 words unless the user explicitly asks for detail.
+- Match the depth to the task: usually stay under 140 words for a simple lookup or definition. For a diagnosis, comparison across several sources, or a prioritized plan, use roughly 250–400 words when needed to cover findings, evidence, trade-offs, limitations, and the next action. An explicit user request for brevity or detail takes precedence. Never drop part of the question to meet a default word target.
 - When the user explicitly asks to extract or export records in Markdown, return one compact Markdown table in answer, use one row per returned record, include only requested columns, and do not repeat the table in prose or highlights.
 - Every follow_up_questions item must be a direct action command in the user's voice. Start with a verb such as Show, Compare, Explain, Review, Check, Test, or Calculate. Never phrase it as a question, an assistant offer, or include a question mark.
 - Use evidence IDs only when they appeared in successful tool output. Do not create IDs.
@@ -604,7 +608,8 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
     return response;
   };
 
-  let response = await createResponse(routing.recommendedTools.length ? "auto" : "none");
+  // Routing is a hint: mixed conceptual and personal questions still need access to evidence.
+  let response = await createResponse("auto");
   let totalToolCalls = 0;
   let toolRoundsUsed = 0;
 

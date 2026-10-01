@@ -96,7 +96,7 @@ export async function runAgentExample(configuration: AgentConfiguration, example
       const response = await client.responses.create({
         model, ...agentReasoningOptions(configuration), instructions, input, tools,
         tool_choice: tools.length && round < configuration.maxToolRounds && toolsUsed.length < configuration.maxToolCalls ? "auto" : "none",
-        parallel_tool_calls: false, max_output_tokens: configuration.maxOutputTokens, store: false,
+        parallel_tool_calls: false, max_output_tokens: configuration.maxOutputTokens, store: false, include: ["reasoning.encrypted_content"],
         safety_identifier: createHash("sha256").update(`agent-evaluation:${actorUserId}`).digest("hex").slice(0, 32),
         text: { format: { type: "json_schema", name: "agent_evaluation", strict: true, schema: prompt.schema } },
       }, { signal, maxRetries: 0 });

@@ -18,6 +18,13 @@ Today is ${today} (yesterday ${shiftAgentDate(today, -1)}) in Asia/Singapore. Wo
 
 Return the COMPLETE updated intent. Keep fields from previousIntent unless the latest message changes them. Use null (or [] / false) for unknown. Never invent an amount, account, description, date, or currency conversion.
 
+Interpretation sequence:
+1. Establish whether the person is editing the current unsaved draft, identifying an existing saved entry, starting a different entry, or cancelling. Resolve references against the active draft first; lastSaved is a reference only when the person explicitly means the saved entry. Read all clauses before choosing an operation.
+2. For a continuation, merge only the explicitly changed fields into previousIntent. If the person says "start over", "new transaction instead", or otherwise explicitly replaces the draft, reset its fields first, including old date, currency, bank, target fields, and deferred requests. Then extract the new request.
+3. Resolve explicit corrections and negations before extracting values: "not twenty, twelve" means twelve. If the person remains uncertain ("twelve or twenty"), set amount null and use clarification to ask which amount. Apply the same rule to conflicting dates or transaction targets. Never select a value simply because it appeared first.
+4. Separate old-record search criteria from requested replacement fields. Preserve the difference between an account hint and the user's account wording. Handle only the first requested transaction now and preserve subsequent requests as deferred work.
+5. Check that the returned operation fits the lifecycle, each non-null value comes from the message or relevant prior state, and nothing implies a save or confirmation. Perform this check internally and return only the complete JSON object.
+
 operation:
 - CREATE: record a new expense (deduct, spent, paid, bought, withdrew, minus, "-$10" → DEBIT) or money in (add, deposit, received, got paid, salary, top up, refund → CREDIT). A refund is a new CREDIT unless the person explicitly wants to fix an existing record.
 - UPDATE: fix an existing, already-saved transaction ("change yesterday's lunch to $12", "that should be $15", "wrong account, it was Food", "rename it"). Changes to a draft that has not been saved yet stay CREATE.
@@ -41,7 +48,14 @@ Dates (YYYY-MM-DD): resolve today, yesterday, weekday names (the most recent pas
 
 UPDATE targets: targetQuery/targetDate/targetAmount describe the OLD saved record; amount/date/subject/accountQuery describe the new values. "Change yesterday's lunch from $10 to $12" → targetQuery "lunch", targetDate yesterday, targetAmount "10", amount "12", date null, subject null. If input.lastSaved exists and the person says "that", "it", "the last one", or otherwise means the transaction just saved, set targetLastSaved true and leave target fields null. If they name a different transaction, targetLastSaved false and fill the target fields.
 
-Several requests in one message ("deduct $10 transit and $5 food"): fill the intent for the FIRST only, and put the rest, rewritten as a standalone request ("Deduct $5 from Food"), in deferred. Otherwise keep previousIntent.deferred.
+Several requests in one message ("deduct $10 transit and $5 food"): fill the intent for the FIRST only, and put the rest, rewritten as a standalone request ("Deduct $5 from Food"), in deferred. Otherwise keep previousIntent.deferred, except when the person explicitly starts over.
+
+Examples of the decision boundary (illustrative values, not fields to copy):
+- Current unsaved CREATE draft + "make it nine instead" → CREATE, amount "9", preserve its other fields. Do not target lastSaved just because it exists.
+- No active draft + lastSaved + "the one we just saved should be nine" → UPDATE, amount "9", targetLastSaved true.
+- "Change the taxi on 2026-08-12 from 30 to 35, keep the date" → UPDATE, targetQuery "taxi", targetDate "2026-08-12", targetAmount "30", amount "35", date null. The old date identifies the record; it is not a request to overwrite its date.
+- "Record seven or seventeen for coffee; I am unsure" → CREATE, amount null, clarification asking which amount. Do not guess or create two entries.
+- "Not a debit, it was a refund" while editing a draft → keep its known amount and account, change direction to CREDIT. This changes a draft; it does not reverse a saved record.
 
 clarification: only for genuine ambiguity the fields cannot express, or the CLARIFY/UNSUPPORTED replies above. The server asks for missing fields itself, so do not ask for them. Never claim anything was saved.`;
 }

@@ -126,7 +126,9 @@ test("CIO answer grounding rejects unsupported dates and percentages and supplie
   const dated = ensureCioDataDate("The allocation is recorded in Nest.", outputs);
   assert.equal(dated, "The allocation is recorded in Nest. Data date: 2026-07-30.");
   assert.equal(ensureCioDataDate(dated, outputs), dated);
-  assert.ok(ensureCioDataDate("x ".repeat(1_000), outputs).length <= 1_600);
+  const bounded = ensureCioDataDate("x ".repeat(4_000), outputs);
+  assert.ok(bounded.length <= 6_000);
+  assert.ok(bounded.endsWith("Data date: 2026-07-30."));
 });
 
 test("CIO grounding accepts equivalent money formatting and user-labelled scenario inputs", () => {

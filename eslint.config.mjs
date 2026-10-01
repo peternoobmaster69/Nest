@@ -34,6 +34,10 @@ const eslintConfig = defineConfig([
     ".sfdx/**",
     "out/**",
     "build/**",
+    "coverage/**",
+    ".scannerwork/**",
+    "playwright-report/**",
+    "test-results/**",
     "next-env.d.ts",
   ]),
 ]);

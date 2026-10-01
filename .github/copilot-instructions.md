@@ -25,3 +25,12 @@
 - TypeScript strict mode enabled
 - Tailwind CSS with default configuration
 - Using import alias `@/*` for cleaner imports
+
+## Quality requirements for assisted changes
+
+- Follow `docs/operations/strict-quality-gate.md` and the versioned `quality/sonar-policy.json`.
+- Run `npm run check`, `npm run build`, `npm run audit:strict`, and `npm run sonar` before claiming completion; report any failures accurately.
+- Review generated tests independently of the generated implementation. Cover security boundaries and failure paths, including workspace isolation and financial mutation idempotency.
+- Verify new APIs and dependency provenance against authoritative documentation. Do not invent packages or methods.
+- Do not remove tests, add coverage exclusions, suppress findings, accept issues, or lower thresholds just to pass checks. Changes to the quality policy require an explicit rationale and human review.
+- AI review supplements accountable human review. A successful scan does not establish that business behavior is correct.

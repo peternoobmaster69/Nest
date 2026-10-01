@@ -18,10 +18,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -50,6 +50,9 @@ jobs:
       - name: Audit publishable files and production dependencies
         run: npm run audit:public
 
+      - name: Reject vulnerabilities at every severity, including development dependencies
+        run: npm run audit:strict
+
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -73,10 +76,10 @@ jobs:
       NEXTAUTH_SECRET: "phase9-ci-only-secret-with-at-least-32-characters"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -95,7 +98,7 @@ jobs:
 
       - name: Upload browser diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report
           path: |
@@ -125,10 +128,10 @@ jobs:
       RUN_PHASE4_DB_TESTS: "true"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -152,3 +155,89 @@ jobs:
 
       - name: Verify forward deploy is idempotent
         run: npm run prisma:migrate:deploy
+
+  sonarqube:
+    name: SonarQube strict AI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SONAR_HOST_URL: http://127.0.0.1:9000
+      SONAR_DISPOSABLE: "true"
+    steps:
+      - name: Check out the complete change and history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies and generate Prisma client
+        run: npm ci && npm run prisma:generate
+
+      - name: Measure coverage across all production sources
+        run: npm run test:coverage
+
+      - name: Start an isolated SonarQube Community server
+        run: |
+          sudo sysctl -w vm.max_map_count=524288
+          docker run --detach --name nest-sonarqube --publish 127.0.0.1:9000:9000 \
+            sonarqube:26.9.0.129388-community@sha256:4905574ab8584dcac1a06c01cdc43a4ce9e369723ac4a7ab1d029c1bf71e6fe9
+          node scripts/sonar-ci-bootstrap.mjs
+
+      - name: Apply and verify the versioned Nest policy
+        run: npm run sonar:configure
+
+      - name: Analyze and enforce the quality gate
+        # Community analyzes this checkout as a complete main project. No licensed PR parameters are used.
+        run: npm run sonar:scan
+
+      - name: Preserve coverage and quality gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: strict-quality-results
+          path: coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Collect server diagnostics and stop the disposable server
+        if: always()
+        run: |
+          if docker inspect nest-sonarqube > /dev/null 2>&1; then
+            docker logs nest-sonarqube
+            docker stop nest-sonarqube
+          fi
+
+  security:
+    uses: ./.github/workflows/security.yml
+
+  codeql:
+    uses: ./.github/workflows/codeql.yml
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+
+  quality-gate:
+    name: Strict quality gate
+    if: always()
+    needs: [validate, browser, sqlserver-baseline, sonarqube, security, codeql]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every quality and security job to succeed
+        env:
+          REQUIRED_JOBS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module -e '
+            const jobs = JSON.parse(process.env.REQUIRED_JOBS);
+            const failed = Object.entries(jobs).filter(([, job]) => job.result !== "success");
+            for (const [name, job] of failed) console.error(`${name}: ${job.result}`);
+            if (failed.length) process.exit(1);
+            console.log("Every required quality and security job passed.");
+          '

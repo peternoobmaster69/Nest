@@ -31,6 +31,23 @@ Application rules follow administrator instructions and demonstrations in the pr
 
 Settings use optimistic revisions and an audit history. Example creation, editing, or deletion also advances the agent revision. Stale saves return `409`. The browser preserves unsaved settings while switching agents or sections; loading saved settings discards those local edits. Loading an earlier history entry only populates the editor until the administrator saves it.
 
+### Recommended instructions
+
+Prompt version `2026-10-01.3` defines explicit investigation, interpretation, and completion steps for each agent in `lib/ai/agent-instructions.ts`. Ask Nest checks the scope and coverage of tool results, follows supported leads, distinguishes missing evidence from zero balances, and connects findings to the user's decision. Transaction instructions distinguish unsaved drafts from saved entries, separate correction targets from replacements, and resolve resets and ambiguity. Smart Review separates merchant evidence from payment processors, leaves ambiguous destinations unresolved, and requires explicit repayment evidence for receivables.
+
+The composed prompt includes the enabled capabilities and Ask Nest's lookup budget. Application instructions remain authoritative. Routing suggests a starting tool but keeps permitted tools available for mixed conceptual and personal questions. Simple answers are usually under 140 words; multi-part diagnoses and plans may use roughly 250–400 words. The structured answer and CIO date formatter allow up to 6,000 characters. Follow-up requests retain three full question/answer pairs, bounded to six messages and 19,800 characters, so longer replies do not break the next request. Questions remain limited to 600 characters.
+
+**Use recommended instructions** replaces only the editor's instruction draft. Review or customize it, then choose **Save configuration**. Deployment, capability, and other settings stay intact.
+
+Existing database rows retain their saved instructions when code defaults change. To upgrade untouched instructions from the first registry release:
+
+```sh
+npm run ai:prompts:upgrade
+npm run ai:prompts:upgrade -- --apply
+```
+
+The first command previews eligible rows. Applying changes only exact stock instructions, records an ordinary configuration revision under the configured `ADMIN` user, and preserves all other settings. Custom instructions are skipped. Concurrent administrator edits produce a conflict instead of being overwritten. Agents without saved settings immediately use the code defaults and need no database update. Restart a running production process after deploying the new code.
+
 ## Teaching with examples
 
 An example contains a title, user input, expected output, JSON context, purpose (`TRAINING` or `EVALUATION`), approval state, and an expectation check.
@@ -72,7 +89,7 @@ Missing fixtures produce an unavailable-data result. The current fixture runner 
 
 Choose up to five approved evaluation cases and run them against the saved configuration. Two cases run concurrently with a shared 120-second provider deadline. The runner uses real prompts, schemas, model settings, and capability restrictions, but never executes workspace tools or posts transactions.
 
-Text checks compare normalized answer text; JSON field checks compare a non-empty subset; exact checks compare all JSON fields or exact plain text. Example expectation for a transaction JSON field check:
+Text checks compare normalized answer text; JSON field checks compare a non-empty subset; exact checks compare all JSON fields or exact plain text. An expected empty array requires an actual empty array, so unwanted candidates cannot pass that assertion. Example expectation for a transaction JSON field check:
 
 ```json
 {"operation":"CREATE","direction":"DEBIT","amount":"10","accountQuery":"Transit"}
@@ -81,6 +98,8 @@ Text checks compare normalized answer text; JSON field checks compare a non-empt
 Results show actual and expected outputs, tools requested, timings, configuration revision, and dataset hash. Copy the complete output when building a structured training example. The check measures only the supplied assertion, not overall quality or end-to-end grounding and accounting behavior. Run the same held-out cases before and after changing instructions or deployments. Live provider calls incur provider usage.
 
 Evaluation submission uses a stable request ID. A retry retrieves the same run. Runs still marked running after three minutes are displayed as interrupted; starting a new run uses a new ID.
+
+The separate [agent prompt smoke suite](../../evals/agents/README.md) exercises code defaults with synthetic inputs and tool fixtures. `npm run ai:eval:agents` validates it without provider calls; live runs require `--live` and configured provider credentials. Saved prompt snapshots and rescoring allow comparisons with identical assertions. This suite checks raw model outputs before application postprocessing and does not execute workspace tools.
 
 ## Azure fine-tuning
 
@@ -104,7 +123,9 @@ Apply `20261001000000_admin_agents` using `npm run prisma:migrate:deploy`, then 
 ## Code and verification
 
 - `lib/ai/agent-{catalog,contracts,policy,runtime,store}.ts`: registry, boundaries, runtime loading, revisions and examples.
+- `lib/ai/agent-{instructions,prompt-upgrade}.ts`: versioned recommended instructions and audited stock-prompt upgrades.
 - `lib/ai/agent-{training,fine-tuning,admin-api}.ts`: isolated evaluation, export/provider jobs, authorization and rate limits.
 - `components/admin-agents/`: configuration, examples, evaluations, and jobs.
 - `tests/admin-agents.test.mjs` and `tests/transaction-agent-workflow.test.mjs`: isolated database/provider tests, revision conflicts, training separation, capability enforcement, and retry handling.
+- `evals/agents/prompts.json` and `scripts/evaluate-agent-prompts.mjs`: synthetic prompt regression cases, snapshots, live evaluation, and rescoring.
 - [AI API](../api/ai.md): admin endpoint contracts.

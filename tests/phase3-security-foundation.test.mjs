@@ -241,7 +241,7 @@ test("security headers, no-store API policy, CSP-safe assets, and CI scanners ar
   assert.match(css, /--font-dm-sans/);
   assert.match(securityWorkflow, /gitleaks\/gitleaks-action/);
   assert.match(securityWorkflow, /actions\/dependency-review-action/);
-  assert.match(codeqlWorkflow, /github\/codeql-action\/analyze@v4/);
+  assert.match(codeqlWorkflow, /github\/codeql-action\/analyze@[a-f0-9]{40}\s+# v4/);
 });
 
 test("production requires an integration key and verified SQL TLS", () => {

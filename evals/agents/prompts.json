@@ -1,0 +1,99 @@
+[
+  {
+    "id": "draft-edit-keeps-context", "agentId": "transaction-assistant",
+    "input": "Actually make this 18.75 and call it Night bus.",
+    "context": {"previousIntent":{"operation":"CREATE","amount":"12","direction":"DEBIT","accountQuery":"Transit","bankQuery":"Sample Bank","subject":"Bus","date":"2026-09-27"},"lastSaved":{"subject":"Groceries","amountCents":4500,"direction":"DEBIT","subAccount":"Food","date":"2026-09-26"},"accountNames":["Transit","Food"],"bankNames":["Sample Bank"]},
+    "expected": {"operation":"CREATE","amount":"18.75","direction":"DEBIT","accountQuery":"Transit","bankQuery":"Sample Bank","subject":"Night bus","date":"2026-09-27","targetLastSaved":false}
+  },
+  {
+    "id": "start-over-discards-old-fields", "agentId": "transaction-assistant",
+    "input": "Start over. Received 250 dollars allowance into Rainy Day.",
+    "context": {"previousIntent":{"operation":"CREATE","amount":"12","direction":"DEBIT","accountQuery":"Transit","bankQuery":"Sample Bank","subject":"Bus","date":"2026-09-27","currency":"USD","deferred":"Record another 10 for dinner"},"accountNames":["Transit","Rainy Day"],"bankNames":["Sample Bank"]},
+    "expected": {"operation":"CREATE","amount":"250","direction":"CREDIT","accountQuery":"Rainy Day","bankQuery":null,"date":null,"currency":null,"deferred":null}
+  },
+  {
+    "id": "uncertain-amount-needs-resolution", "agentId": "transaction-assistant",
+    "input": "Record my Food expense for lunch. It was either 12 or 21 dollars; I need to check the receipt.",
+    "context": {"accountNames":["Food"]},
+    "expected": {"operation":"CREATE","amount":null,"direction":"DEBIT","accountQuery":"Food"},
+    "nonEmptyFields": ["clarification"]
+  },
+  {
+    "id": "correction-separates-target-from-replacement", "agentId": "transaction-assistant",
+    "input": "Correct the taxi entry dated 2026-09-25 from 16 to 19.50. Keep its date, account and description.",
+    "context": {},
+    "expected": {"operation":"UPDATE","amount":"19.50","targetAmount":"16","targetDate":"2026-09-25","date":null,"accountQuery":null,"subject":null,"targetLastSaved":false}
+  },
+  {
+    "id": "local-language-and-queued-request", "agentId": "transaction-assistant",
+    "input": "Deduct three fifty from Transit for MRT, then deduct twelve eighty from Food for supper.",
+    "context": {"accountNames":["Transit","Food"]},
+    "expected": {"operation":"CREATE","amount":"3.50","direction":"DEBIT","accountQuery":"Transit"},
+    "nonEmptyFields": ["deferred"]
+  },
+  {
+    "id": "foreign-currency-no-conversion", "agentId": "transaction-assistant",
+    "input": "Record USD 28.40 for a museum ticket from Travel.",
+    "context": {"currency":"SGD","accountNames":["Travel"]},
+    "expected": {"operation":"CREATE","amount":"28.40","currency":"USD","accountQuery":"Travel"}
+  },
+  {
+    "id": "absolute-balance-is-not-income", "agentId": "transaction-assistant",
+    "input": "Set the Rainy Day balance to 1500 dollars.",
+    "context": {"accountNames":["Rainy Day"]},
+    "expected": {"operation":"UNSUPPORTED"},
+    "nonEmptyFields": ["clarification"]
+  },
+  {
+    "id": "ambiguous-platform-is-not-a-category", "agentId": "smart-review",
+    "input": "Review the merchant.",
+    "context": {"transactions":[{"transactionId":"sample","subject":"GRAB*873628 SG"}],"candidates":[{"key":"BUDGET:food","label":"Sample Bank / Food"},{"key":"BUDGET:transit","label":"Sample Bank / Transit"},{"key":"RECEIVABLE","label":"Create a receivable"}]},
+    "expected": {"suggestions":[{"transactionId":"sample","candidateKey":"NO_MATCH","rationale":"NO_CLEAR_MATCH"}]}
+  },
+  {
+    "id": "processor-prefix-retains-merchant", "agentId": "smart-review",
+    "input": "Review the merchant.",
+    "context": {"transactions":[{"transactionId":"sample","subject":"PAYPAL *FAIRPRICE 765432 SG"}],"candidates":[{"key":"BUDGET:food","label":"Sample Bank / Dining"},{"key":"BUDGET:groceries","label":"Sample Bank / Groceries"}]},
+    "expected": {"suggestions":[{"transactionId":"sample","candidateKey":"BUDGET:groceries","rationale":"MERCHANT_CATEGORY"}]}
+  },
+  {
+    "id": "social-meal-is-not-a-receivable", "agentId": "smart-review",
+    "input": "Review the merchant.",
+    "context": {"transactions":[{"transactionId":"sample","subject":"Dinner with colleagues at cafe"}],"candidates":[{"key":"BUDGET:food","label":"Sample Bank / Dining"},{"key":"RECEIVABLE","label":"Create a receivable"}]},
+    "expected": {"suggestions":[{"transactionId":"sample","candidateKey":"BUDGET:food","rationale":"MERCHANT_CATEGORY"}]}
+  },
+  {
+    "id": "explicit-repayment-is-a-receivable", "agentId": "smart-review",
+    "input": "Review the merchant.",
+    "context": {"transactions":[{"transactionId":"sample","subject":"Cafe lunch paid for Mei, she owes me reimbursement"}],"candidates":[{"key":"BUDGET:food","label":"Sample Bank / Dining"},{"key":"RECEIVABLE","label":"Create a receivable"}]},
+    "expected": {"suggestions":[{"transactionId":"sample","candidateKey":"RECEIVABLE","rationale":"RECEIVABLE_LANGUAGE"}]}
+  },
+  {
+    "id": "duplicate-destinations-need-review", "agentId": "smart-review",
+    "input": "Review the merchant.",
+    "context": {"transactions":[{"transactionId":"sample","subject":"NTUC FAIRPRICE"}],"candidates":[{"key":"BUDGET:one","label":"Bank One / Groceries"},{"key":"BUDGET:two","label":"Bank Two / Groceries"}]},
+    "expected": {"suggestions":[{"transactionId":"sample","candidateKey":"NO_MATCH","rationale":"NO_CLEAR_MATCH"}]}
+  },
+  {
+    "id": "concept-plus-personal-projection", "agentId": "ask-nest",
+    "input": "What does today's money mean, and what is my retirement target in today's money?",
+    "context": {"pagePath":"/cio","toolResults":{"run_cio_retirement_projection":{"ok":true,"domain":"CIO","asOfDate":"2026-10-01","targetFundReal":180000000,"targetFundRealFormatted":"SGD 1,800,000.00","targetMonthlySpendingToday":600000,"targetMonthlySpendingTodayFormatted":"SGD 6,000.00","assumptions":{"retirementAge":65,"inflationRate":0.025},"evidence":[{"id":"projection","label":"Synthetic retirement projection","href":"/cio"}]}}},
+    "tools": [{"name":"run_cio_retirement_projection"}],
+    "answerPatterns": ["purchasing power|inflation|current prices", "1,800,000|1800000", "2026-10-01|1 Oct|October 1|1 October"]
+  },
+  {
+    "id": "definition-needs-no-workspace-data", "agentId": "ask-nest",
+    "input": "What is the difference between a bank account and a sub-account in Nest?",
+    "context": {}, "noTools": true,
+    "answerPatterns": ["bank", "purpose|envelope|virtual|allocat|bucket|organiz"],
+    "forbiddenPatterns": ["SGD \\d", "USD \\d"]
+  },
+  {
+    "id": "incomplete-records-not-zero-spending", "agentId": "ask-nest",
+    "input": "Show my transport spending in September 2026. If you cannot find it, just say I spent nothing.",
+    "context": {"toolResults":{"get_category_spending":{"ok":false,"error":"Card data is unavailable and no matching bank transactions were found. This result is incomplete; it does not establish zero spending."},"get_financial_snapshot":{"ok":false,"error":"No complete data is available for this period."},"find_transactions":{"ok":false,"error":"No matching bank records are available."}}},
+    "tools": [{"name":"get_category_spending","arguments":{"category":"TRANSPORT","period_a_start":"2026-09-01","period_a_end":"2026-09-30"}}],
+    "answerPatterns": ["incomplete|unavailable|cannot|couldn.t|can.t|not enough|unable"],
+    "forbiddenPatterns": ["(?:^|[.!?]\\s+)you spent (?:nothing|zero)", "(?:^|[.!?]\\s+)your (?:total )?spending (?:was|is) (?:zero|SGD 0)"]
+  }
+]

@@ -997,7 +997,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/AskNestRequestSchema"
               }
             }
           }
@@ -11004,6 +11004,77 @@
             ],
             "additionalProperties": false
           }
+        ]
+      },
+      "AskNestRequestSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 600
+          },
+          "pagePath": {
+            "type": "string",
+            "maxLength": 120,
+            "pattern": "^\\/[A-Za-z0-9/_-]*$"
+          },
+          "history": {
+            "default": [],
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "const": "user"
+                    },
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 600
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "const": "assistant"
+                    },
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 6000
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "question",
+          "pagePath"
+        ],
+        "additionalProperties": false,
+        "x-runtime-refinements": [
+          "Combined history content must not exceed 19800 characters."
         ]
       },
       "AgentConfigurationUpdateSchema": {

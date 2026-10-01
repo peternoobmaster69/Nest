@@ -4,7 +4,7 @@ description: Endpoint contracts for grounded answers, history, feedback, memory,
 audience: [engineers, API-consumers, ai-safety-reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-10-01
 ---
 
 # Ask Nest and Smart Review API
@@ -21,7 +21,7 @@ Question, history, memory, feedback, and Smart Review routes require VIEWER work
 
 | Operation | Request | Success example | Errors/limits |
 | --- | --- | --- | --- |
-| `POST /api/ai/ask` | question 2–600; page path≤120 matching safe path regex; ≤6 history messages, each≤1,600 and total≤6,000 | Structured `AskNestAnswer` with summary/sections/evidence/optional visualization/turnId/memory updates | Distributed 20/10 min plus short process limit; 400, 429, 502/503/504, grounded-response codes |
+| `POST /api/ai/ask` | question 2–600; page path≤120 matching safe path regex; ≤6 history messages (user≤600, assistant≤6,000), total≤19,800 | Structured `AskNestAnswer` with answer≤6,000 characters, highlights, evidence, optional visualization, turnId, and memory updates | Distributed 20/10 min plus short process limit; 400, 429, 502/503/504, grounded-response codes |
 | `POST /api/ai/feedback` | turn≤1,000, HELPFUL with null reason or NOT_HELPFUL with one reason | `{"rating":"NOT_HELPFUL","reason":"WRONG_DATA"}` | 404 wrong user/workspace/expired turn |
 | `GET /api/ai/history` | optional cursor≤1,000; limit 1–20 default 10 | `{"turns":[...],"nextCursor":null}` | Malformed stored JSON is skipped |
 | `DELETE /api/ai/history` | No body | 204 | Archives usage before raw deletion |
@@ -117,6 +117,7 @@ Ask route distinguishes:
 ## Related Files
 
 - [`lib/ai/ask-nest-types.ts`](../../lib/ai/ask-nest-types.ts)
+- [`lib/ai/ask-nest-contracts.ts`](../../lib/ai/ask-nest-contracts.ts)
 - [`lib/ai/ask-nest.ts`](../../lib/ai/ask-nest.ts)
 - [AI module](../modules/ai.md)
 
@@ -138,4 +139,4 @@ Ask route distinguishes:
 
 ## Last Updated
 
-2026-07-28
+2026-10-01

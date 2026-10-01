@@ -51,6 +51,8 @@ For transaction creation and correction, Ask Nest starts a [transaction draft](t
 
 Question/history bounds → workspace rate limit → deterministic hint → Azure Responses call → tool-call loop → structured answer → evidence/visualization merge → value grounding → persist turn/usage/memory candidates → return.
 
+The panel never closes mid-conversation: the minimize button, Escape, the backdrop, and in-app navigation all collapse it to the **Nestling** launcher (bottom-right). The mascot blinks while idle, wobbles while an answer is still being prepared (the request keeps running), hops with a badge when an answer or transaction draft is ready, and shows a status bubble. The launcher persists on every page, and through reloads in the same tab, until its small × is pressed; the thread itself lives in a module-level store (`components/ask-nest-store.ts`) so page remounts and in-flight answers do not lose it.
+
 History is at most six client-provided messages plus server persistence rules. Tool errors are converted to safe model-visible summaries.
 
 ## Key function contracts
