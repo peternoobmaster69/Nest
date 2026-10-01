@@ -19,7 +19,8 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { formatMoney, formatMoneyShort, normalizeCurrency } from "@/lib/currency";
+import { normalizeCurrency } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SavingsSubAccountCheckbox } from "@/components/savings-sub-account-checkbox";
@@ -391,8 +392,7 @@ export function DashboardShell({
   const isDataReady = !isPending && data !== undefined;
 
   const baseCurrency = normalizeCurrency(contextQuery.data?.baseCurrency);
-  const formatCents = useCallback((value: number) => formatMoney(value, baseCurrency), [baseCurrency]);
-  const formatCentsShort = useCallback((value: number) => formatMoneyShort(value), []);
+  const { format: formatCents, formatShort: formatCentsShort } = useMoneyFormat(baseCurrency);
   const defaultUserId = contextQuery.data?.defaultUserId;
   const dashboardBankStorageKey = workspaceId ? `nest:selectedBank:${workspaceId}` : null;
   const sidebarMoneyPages = contextQuery.data?.sidebarMoneyPages;

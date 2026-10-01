@@ -56,24 +56,8 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    services:
-      sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          MSSQL_SA_PASSWORD: NestCi_2026_Strong
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P NestCi_2026_Strong -Q 'SELECT 1'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
     env:
-      DATABASE_URL: "sqlserver://localhost:1433;database=master;user=sa;password=NestCi_2026_Strong;encrypt=true;trustServerCertificate=true"
-      SHADOW_DATABASE_URL: "sqlserver://localhost:1433;database=master;user=sa;password=NestCi_2026_Strong;encrypt=true;trustServerCertificate=true"
       NEXTAUTH_URL: "http://127.0.0.1:3100"
-      NEXTAUTH_SECRET: "phase9-ci-only-secret-with-at-least-32-characters"
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -83,6 +67,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+
+      - name: Start SQL Server with credentials generated for this run
+        run: bash scripts/start-ci-sqlserver.sh
 
       - name: Install dependencies
         run: npm ci
@@ -106,25 +93,17 @@ jobs:
             test-results/
           retention-days: 14
 
+      - name: Stop the disposable SQL Server
+        if: always()
+        run: |
+          if docker inspect nest-ci-sqlserver > /dev/null 2>&1; then
+            docker stop nest-ci-sqlserver
+          fi
+
   sqlserver-baseline:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    services:
-      sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          MSSQL_SA_PASSWORD: NestCi_2026_Strong
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P NestCi_2026_Strong -Q 'SELECT 1'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
     env:
-      DATABASE_URL: "sqlserver://localhost:1433;database=master;user=sa;password=NestCi_2026_Strong;encrypt=true;trustServerCertificate=true"
-      SHADOW_DATABASE_URL: "sqlserver://localhost:1433;database=master;user=sa;password=NestCi_2026_Strong;encrypt=true;trustServerCertificate=true"
       RUN_PHASE4_DB_TESTS: "true"
     steps:
       - name: Check out repository
@@ -135,6 +114,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+
+      - name: Start SQL Server with credentials generated for this run
+        run: bash scripts/start-ci-sqlserver.sh
 
       - name: Install dependencies
         run: npm ci
@@ -155,6 +137,13 @@ jobs:
 
       - name: Verify forward deploy is idempotent
         run: npm run prisma:migrate:deploy
+
+      - name: Stop the disposable SQL Server
+        if: always()
+        run: |
+          if docker inspect nest-ci-sqlserver > /dev/null 2>&1; then
+            docker stop nest-ci-sqlserver
+          fi
 
   sonarqube:
     name: SonarQube strict AI

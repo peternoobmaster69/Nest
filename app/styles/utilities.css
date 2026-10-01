@@ -2186,6 +2186,12 @@ html[data-ask-nest-open="true"] {
     bottom: calc(var(--mobile-nav-height) + 12px);
   }
 
+  /* Pages with a floating + (create) button keep it in the corner; the launcher stacks above it. */
+  html:has(.mobile-primary-create) .ask-nest-fab {
+    right: max(10px, env(safe-area-inset-right, 0px));
+    bottom: calc(70px + var(--mobile-nav-safe-bottom) + 48px + 20px);
+  }
+
   :root[data-ask-nest-minimized="true"] .scroll-to-top-button {
     bottom: calc(var(--mobile-nav-height) + 12px);
   }

@@ -2,6 +2,8 @@
 
 Nest applies the same quality requirements to human and AI contributions. Generated code and generated tests require accountable human review. The policy is intentionally strict across the entire application: existing debt blocks the gate as well as new defects.
 
+The [2026-10-01 baseline](strict-quality-baseline-2026-10-01.md) records the initial scan results, validation, and activation status.
+
 ## Policy
 
 `quality/sonar-policy.json` is the source of truth for the dedicated **Nest strict AI** gate. `npm run sonar:configure` creates or updates only Nest's gate, project settings, and named language profiles. It does not change server defaults or other projects' gates.
@@ -49,9 +51,11 @@ Create an administrator **user token** to manage gates, profiles, and project se
 
 CI provisions a fresh, digest-pinned SonarQube Community Build 26.9 container, bound to runner loopback. It rotates the empty instance's default password and creates separate administrator and project analysis tokens that expire the next day. Bootstrap refuses an existing instance and is restricted to GitHub-hosted disposable runners. No production Sonar credentials or connectivity to a developer's laptop are required.
 
+Browser and database jobs also start loopback-only SQL Server containers with independently generated database and session credentials for each run. Credentials are masked in logs and passed through environment variables; the workflow contains no fixed database passwords.
+
 Each pull request checkout is analyzed as a complete main project. This supports Community's edition limits without pretending to offer licensed pull request decoration. The fresh database does not retain triage decisions or hotspot reviews between runs. Recurring findings must be resolved; persistent review history requires a separately managed Sonar server and appropriate branch-analysis support. Community lacks the licensed dependency-risk gate, so npm audit and GitHub dependency review enforce dependency checks independently.
 
-The **Strict quality gate** job waits for validation, browser checks, SQL checks, SonarQube, secret/dependency review, and CodeQL. Failure, cancellation, or skipping any required job prevents success. CodeQL's SARIF is checked explicitly because successful execution of the analyzer alone does not mean it found zero issues. Coverage and Sonar evidence are retained as CI artifacts for 14 days. Actions and the Sonar image are pinned; Dependabot proposes updates.
+The **Strict quality gate** job waits for validation, browser checks, SQL checks, SonarQube, secret/dependency review, and CodeQL. Failure, cancellation, or skipping any required job prevents success. CodeQL's SARIF is checked explicitly because successful execution of the analyzer alone does not mean it found zero issues. Coverage and Sonar evidence are retained as CI artifacts for 14 days. Actions and server images are pinned. Dependabot proposes npm and action updates; update server image digests explicitly.
 
 Workflow files alone do not enforce merges. In the GitHub ruleset for `main`, require:
 

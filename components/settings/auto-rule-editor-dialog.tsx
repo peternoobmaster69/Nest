@@ -2,7 +2,7 @@
 
 import { ArrowRight, ChevronDown, ChevronUp, Plus, Save, Trash2, X } from "lucide-react";
 
-import { formatMoney } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
@@ -87,6 +87,7 @@ export function AutoRuleEditorDialog({
   onSave,
   getDefaultSourceBudgetId,
 }: AutoRuleEditorDialogProps) {
+  const { format: formatMoney } = useMoneyFormat(baseCurrency);
   return (
     <Dialog open onClose={onClose} title="Edit auto-accounting rule" surface="custom" overlayClassName="auto-rule-modal-overlay">
       <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title" onClick={(event) => event.stopPropagation()}>

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { NotificationBell } from "@/components/notification-bell";
+import { PrivacyToggle } from "@/components/privacy-toggle";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { AskNest } from "@/components/ask-nest";
 import { useConfirmDialog } from "@/components/confirm-dialog";
@@ -370,7 +371,7 @@ export function AppShell({
               workspaceId={navigationWorkspaceId}
               userName={userName}
             />
-            <NotificationBell workspaceId={navigationWorkspaceId} />
+            <PrivacyToggle /><NotificationBell workspaceId={navigationWorkspaceId} />
           </div>
         </header>
         <div ref={bodyScrollRef} className="body">{children}</div>

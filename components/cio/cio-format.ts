@@ -1,7 +1,10 @@
 import { formatMoney } from "@/lib/currency";
+import { isPrivacyModeOn, MASKED_AMOUNT } from "@/lib/privacy-mode";
 
+// CIO views re-render on privacy changes through usePrivacyMode() in CioPage and its dialogs.
 export function formatCioMoney(cents: number | null | undefined, currency: string) {
-  return cents == null ? "Not set" : formatMoney(cents, currency);
+  if (cents == null) return "Not set";
+  return isPrivacyModeOn() ? MASKED_AMOUNT : formatMoney(cents, currency);
 }
 
 export function formatCioPercent(bps: number | null | undefined) {

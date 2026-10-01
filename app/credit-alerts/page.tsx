@@ -90,7 +90,7 @@ export default async function CreditAlertsRoute() {
                   <td>{row.bankName || "—"}</td>
                   <td>{row.cardLast4 ? `••${row.cardLast4}` : "—"}</td>
                   <td>{row.merchant || "—"}</td>
-                  <td>{formatAmount(row.amountCents, row.currency)}</td>
+                  <td className="privacy-sensitive">{formatAmount(row.amountCents, row.currency)}</td>
                   <td>{formatDateTime(row.transactionDate)}</td>
                   <td>
                     {row.failureReason || "—"}
@@ -122,7 +122,7 @@ export default async function CreditAlertsRoute() {
                   {row.parseStatus}
                 </span>
               </div>
-              <DataValue label="Amount" priority="high">{formatAmount(row.amountCents, row.currency)}</DataValue>
+              <DataValue label="Amount" priority="high"><span className="privacy-sensitive">{formatAmount(row.amountCents, row.currency)}</span></DataValue>
               <DataValue label="Card">{row.cardLast4 ? `••${row.cardLast4}` : "—"}</DataValue>
               <DataValue label="Created">{formatDateTime(row.createdAt)}</DataValue>
               {row.failureReason ? <DataValue label="Failure" priority="low">{row.failureReason}</DataValue> : null}

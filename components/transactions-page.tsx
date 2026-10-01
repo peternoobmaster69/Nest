@@ -2,7 +2,8 @@
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { normalizeCurrency } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
@@ -368,7 +369,7 @@ export function TransactionsPage() {
 
   const workspaceId = context.data?.workspaceId;
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
-  const formatCents = (value: number) => formatMoney(value, baseCurrency);
+  const { format: formatCents, format: formatMoney } = useMoneyFormat(baseCurrency);
   const txBankStorageKey = workspaceId ? `nest:selectedBank:${workspaceId}` : null;
 
   const budgets = useQuery({

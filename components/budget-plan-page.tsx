@@ -5,7 +5,8 @@ import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { BudgetPlanCompactCardsSkeleton } from "@/components/skeletons/BudgetPlanSkeleton";
-import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { normalizeCurrency } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { summarizeMonthlyBudgetPlan } from "@/lib/monthly-budget-plan.mjs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -216,7 +217,7 @@ export function BudgetPlanPage() {
   });
   const workspaceId = contextQuery.data?.workspaceId ?? null;
   const baseCurrency = normalizeCurrency(contextQuery.data?.baseCurrency);
-  const formatCents = (cents: number) => formatMoney(cents, baseCurrency);
+  const { format: formatCents } = useMoneyFormat(baseCurrency);
 
   const planQuery = useQuery({
     queryKey: queryKeys.key(["budget-plan", workspaceId, selectedYear, selectedMonth]),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CioRetirementScenario, CioRetirementScenarioName } from "@/lib/domains/cio/types";
+import { isPrivacyModeOn, MASKED_AMOUNT } from "@/lib/privacy-mode";
 import { formatCioDate, formatCioLabel, formatCioMoney, formatCioPercent } from "@/components/cio/cio-format";
 import { Button } from "@/components/ui/button";
 
@@ -112,6 +113,7 @@ export function RetirementProjectionChart({
 }
 
 function compactMoney(cents: number, currency: string) {
+  if (isPrivacyModeOn()) return MASKED_AMOUNT;
   return new Intl.NumberFormat("en-SG", {
     style: "currency",
     currency,

@@ -6,7 +6,8 @@ import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL } from "@/lib/credit-txn-auto-rules-config";
-import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -331,6 +332,7 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
 
   const workspaceId = context.data?.workspaceId ?? null;
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
+  const { format: formatMoney } = useMoneyFormat(baseCurrency);
   const defaultReceivableAccountId = context.data?.defaultAccountId ?? null;
   const defaultReceivableBudgetId = context.data?.defaultBudgetId ?? null;
   const savedPublicNetWorthEnabled = Boolean(context.data?.publicNetWorthEnabled);

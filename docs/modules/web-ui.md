@@ -36,6 +36,7 @@ Provide consistent authenticated navigation, accessible interactions, responsive
 | `components/page-frame.tsx` | `PageFrame` | Standard route wrapper |
 | `components/ui/dialog.tsx` | `Dialog` family | Owns accessibility/lifecycle; do not recreate per feature |
 | `components/ui/button.tsx` | `Button` | Feature actions must use it |
+| `lib/privacy-mode.ts`, `lib/use-money-format.ts`, `components/privacy-toggle.tsx` | `usePrivacyMode`, `useMoneyFormat`, `PrivacyToggle` | Privacy mode: a per-device eye toggle in the top bar masks amounts as `••••••`. Format money through `useMoneyFormat` (or `formatCioMoney`); free text and charts use the `privacy-sensitive` class or `app/styles/privacy-mode.css` blur. `public/theme-init.js` applies the stored choice before paint |
 | `components/ui/controls.tsx` | `Input`, `Select`, `Textarea` | Native feature controls are architecture violations |
 | `components/ui/form-field.tsx` | `FormField` | Label/error contract |
 | `components/ui/page-header.tsx` | `PageHeader` | Title/context/action order |

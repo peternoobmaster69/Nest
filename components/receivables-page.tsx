@@ -4,7 +4,8 @@ import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { normalizeCurrency } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -182,7 +183,7 @@ export function ReceivablesPage() {
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
   const receivableDefaultAccountId = context.data?.defaultAccountId ?? null;
   const receivableDefaultBudgetId = context.data?.defaultBudgetId ?? null;
-  const formatCents = (value: number) => formatMoney(value, baseCurrency);
+  const { format: formatCents } = useMoneyFormat(baseCurrency);
 
   const receivables = useQuery({
     queryKey: queryKeys.key(["receivables", workspaceId]),

@@ -4,9 +4,11 @@ import { useState, type FormEvent } from "react";
 import { Check, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
+import { isPrivacyModeOn, MASKED_AMOUNT, usePrivacyMode } from "@/lib/privacy-mode";
 import type { AgentEditField, TransactionAgentView } from "@/lib/ai/transaction-agent-contracts";
 
 export function agentMoney(cents: number, currency: string) {
+  if (isPrivacyModeOn()) return MASKED_AMOUNT;
   return new Intl.NumberFormat("en-SG", { style: "currency", currency, currencyDisplay: "code" }).format(cents / 100);
 }
 
@@ -24,6 +26,7 @@ const LABELS: Record<TextField, string> = { subject: "Description", amount: "Amo
 /** The human-in-the-loop checkpoint. Every value shown here is exactly what Confirm will save. */
 export function TransactionAgentReview({ draft, locked, typing, onEdit, onConfirm }: Props) {
   const review = draft.review!;
+  usePrivacyMode();
   const [editing, setEditing] = useState<TextField | null>(null);
   const [value, setValue] = useState("");
   const editable = draft.status === "REVIEW" && !locked;

@@ -6,7 +6,8 @@ import type { ListEnvelope } from "@/lib/api/contracts";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { normalizeCurrency } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui-skeleton";
@@ -289,10 +290,8 @@ export function RewardsPage({
     },
   });
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
-  const formatCurrency = (cents: number | null): string => {
-    if (cents === null) return formatMoney(0, baseCurrency);
-    return formatMoney(cents, baseCurrency);
-  };
+  const { format: formatMoneyValue } = useMoneyFormat(baseCurrency);
+  const formatCurrency = (cents: number | null): string => formatMoneyValue(cents ?? 0);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.key(["rewards", routeWorkspaceId]),

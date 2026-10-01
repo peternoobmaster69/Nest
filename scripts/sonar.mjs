@@ -28,7 +28,7 @@ async function runScan(api, token, verifier) {
   }
   try {
     const taskText = await readFile(taskFile, "utf8");
-    const taskId = taskText.match(/^ceTaskId=(.+)$/m)?.[1]?.trim();
+    const taskId = /^ceTaskId=(.+)$/m.exec(taskText)?.[1]?.trim();
     if (!taskId) throw new Error("Scanner did not produce a compute-engine task ID.");
     const { task } = await api("api/ce/task", { id: taskId });
     report.taskId = taskId;
@@ -45,6 +45,11 @@ async function runScan(api, token, verifier) {
     errors.push(...report.policyDrift);
   } catch (error) {
     errors.push(`Policy verification failed: ${error.message}`);
+  }
+  try {
+    await verifyCoverage();
+  } catch (error) {
+    errors.push(`Coverage verification failed: ${error.message}`);
   }
   const summary = JSON.parse(await readFile(path.join(root, "coverage/coverage-summary.json"), "utf8"));
   report.coverage = summary.total;
@@ -78,7 +83,9 @@ async function main() {
   console.log(`${policy.gateName}: gate, rule profiles, and small-change enforcement verified.`);
 }
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error(error.message);
   process.exitCode = 1;
-});
+}

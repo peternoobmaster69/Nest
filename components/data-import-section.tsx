@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { Upload, AlertCircle, CheckCircle, XCircle, Calculator } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/controls";
 import { bankAccountsQueryOptions } from "@/lib/accounts";
@@ -320,9 +321,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: DataImportSecti
     }
   };
 
-  const formatMoney = (cents: number) => {
-    return `${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  const { mask } = useMoneyFormat();
+  const formatMoney = (cents: number) => mask((cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
   // Determine if import button should be enabled
   const canImport =

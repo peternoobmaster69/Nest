@@ -68,6 +68,24 @@ function baseProfile(profiles, language) {
 
 const ruleFilter = (language, filter) => ({ languages: language, statuses: "READY", is_template: "false", ...filter });
 
+async function configureProfile(api, profiles, language) {
+  const parent = baseProfile(profiles, language);
+  let profile = profiles.find((entry) => entry.language === language && entry.name === policy.profileName);
+  if (!profile) {
+    ({ profile } = await api("api/qualityprofiles/create", { language, name: policy.profileName }, "POST"));
+  }
+  await api("api/qualityprofiles/change_parent", { language, qualityProfile: policy.profileName, parentQualityProfile: parent.name }, "POST");
+  for (const filter of policy.additionalRuleFilters) {
+    const result = await api("api/qualityprofiles/activate_rules", { targetKey: profile.key, ...ruleFilter(language, filter) }, "POST");
+    if (result.failed > 0) throw new Error(`Could not activate ${result.failed} rules for ${language}.`);
+  }
+  for (const rule of policy.explicitRules[language] || []) {
+    await api("api/qualityprofiles/activate_rule", { key: profile.key, rule }, "POST");
+  }
+  await api("api/qualityprofiles/add_project", { language, qualityProfile: policy.profileName, project: policy.projectKey }, "POST");
+  console.log(`${language}: ${policy.profileName} inherits ${parent.name} with additional security and reliability checks.`);
+}
+
 export async function configurePolicy(api) {
   const gates = await api("api/qualitygates/list");
   if (!gates.actions?.create) throw new Error("An administrator user token is required to configure Nest's quality gate and profiles.");
@@ -94,24 +112,29 @@ export async function configurePolicy(api) {
 
   const { profiles } = await api("api/qualityprofiles/search");
   for (const language of policy.languages) {
-    const parent = baseProfile(profiles, language);
-    let profile = profiles.find((entry) => entry.language === language && entry.name === policy.profileName);
-    if (!profile) {
-      ({ profile } = await api("api/qualityprofiles/create", { language, name: policy.profileName }, "POST"));
-    }
-    await api("api/qualityprofiles/change_parent", { language, qualityProfile: policy.profileName, parentQualityProfile: parent.name }, "POST");
-    for (const filter of policy.additionalRuleFilters) {
-      const result = await api("api/qualityprofiles/activate_rules", { targetKey: profile.key, ...ruleFilter(language, filter) }, "POST");
-      if (result.failed > 0) throw new Error(`Could not activate ${result.failed} rules for ${language}.`);
-    }
-    for (const rule of policy.explicitRules[language] || []) {
-      await api("api/qualityprofiles/activate_rule", { key: profile.key, rule }, "POST");
-    }
-    await api("api/qualityprofiles/add_project", { language, qualityProfile: policy.profileName, project: policy.projectKey }, "POST");
-    console.log(`${language}: ${policy.profileName} inherits ${parent.name} with additional security and reliability checks.`);
+    await configureProfile(api, profiles, language);
   }
   // Associate only after configuration succeeds. Never change the server's default gate or profiles.
   await api("api/qualitygates/select", { gateName: policy.gateName, projectKey: policy.projectKey }, "POST");
+}
+
+async function profileDrift(api, profiles, profile, language) {
+  const parent = baseProfile(profiles, language);
+  if (profile?.name !== policy.profileName || profile.parentKey !== parent.key) {
+    return [`${language} must use ${policy.profileName}, inheriting ${parent.name}.`];
+  }
+  const errors = [];
+  const comparison = await api("api/qualityprofiles/compare", { leftKey: parent.key, rightKey: profile.key });
+  if (comparison.inLeft?.length || comparison.modified?.length) errors.push(`${language} has missing or modified comprehensive rules.`);
+  for (const filter of policy.additionalRuleFilters) {
+    const missing = await api("api/rules/search", { qprofile: profile.key, activation: "false", ps: "1", ...ruleFilter(language, filter) });
+    if (missing.total > 0) errors.push(`${language} is missing ${missing.total} required security or reliability rules.`);
+  }
+  for (const rule of policy.explicitRules[language] || []) {
+    const active = await api("api/rules/search", { qprofile: profile.key, rule_key: rule, activation: "true", ps: "1" });
+    if (active.total !== 1) errors.push(`Required rule ${rule} is inactive.`);
+  }
+  return errors;
 }
 
 export async function verifyPolicy(api) {
@@ -127,22 +150,7 @@ export async function verifyPolicy(api) {
   const { profiles } = await api("api/qualityprofiles/search");
   const { profiles: assigned } = await api("api/qualityprofiles/search", { project: policy.projectKey });
   for (const language of policy.languages) {
-    const parent = baseProfile(profiles, language);
-    const profile = assigned.find((entry) => entry.language === language);
-    if (profile?.name !== policy.profileName || profile.parentKey !== parent.key) {
-      errors.push(`${language} must use ${policy.profileName}, inheriting ${parent.name}.`);
-      continue;
-    }
-    const comparison = await api("api/qualityprofiles/compare", { leftKey: parent.key, rightKey: profile.key });
-    if (comparison.inLeft?.length || comparison.modified?.length) errors.push(`${language} has missing or modified comprehensive rules.`);
-    for (const filter of policy.additionalRuleFilters) {
-      const missing = await api("api/rules/search", { qprofile: profile.key, activation: "false", ps: "1", ...ruleFilter(language, filter) });
-      if (missing.total > 0) errors.push(`${language} is missing ${missing.total} required security or reliability rules.`);
-    }
-    for (const rule of policy.explicitRules[language] || []) {
-      const active = await api("api/rules/search", { qprofile: profile.key, rule_key: rule, activation: "true", ps: "1" });
-      if (active.total !== 1) errors.push(`Required rule ${rule} is inactive.`);
-    }
+    errors.push(...await profileDrift(api, profiles, assigned.find((entry) => entry.language === language), language));
   }
   return errors;
 }
@@ -178,7 +186,7 @@ export function coverageFailures(summary) {
   return ["lines", "statements", "functions", "branches"].filter((metric) => {
     const value = summary.total?.[metric];
     return !value || !Number.isFinite(value.total) || value.total < 0 || (value.total === 0 && ["lines", "statements"].includes(metric)) || value.covered !== value.total || value.skipped !== 0;
-  }).map((metric) => `${metric} coverage must be exactly 100%, with no ignored coverage.`);
+  }).map((metric) => `${metric} coverage must be exactly 100%, with no skipped entries.`);
 }
 
 export function analysisFailures(task, status) {

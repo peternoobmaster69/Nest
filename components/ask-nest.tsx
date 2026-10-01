@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { AskNestFab, type NestlingMood } from "@/components/ask-nest-mascot";
 import { askNestFlags, claimAskNestWorkspace, useAskNestLauncher, useAskNestState } from "@/components/ask-nest-store";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
+import { usePrivacyMode } from "@/lib/privacy-mode";
 import { Textarea } from "@/components/ui/controls";
 import { followUpToUserPrompt } from "@/lib/ai/follow-up-prompt.mjs";
 
@@ -158,6 +159,7 @@ export function AskNest({
   claimAskNestWorkspace(workspaceId);
   const [minimized, setMinimized] = useAskNestLauncher();
   const [hasNews, setHasNews] = useAskNestState("hasNews", false);
+  usePrivacyMode(); // Draft summaries in the launcher bubble format money.
   const fabRef = useRef<HTMLButtonElement>(null);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useAskNestState("turns", NO_TURNS);

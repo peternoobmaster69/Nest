@@ -11,9 +11,11 @@ import { CioFlowsDialog } from "@/components/cio/dialogs/cio-flows-dialog";
 import { CioInvestmentProfileDialog } from "@/components/cio/dialogs/cio-investment-profile-dialog";
 import { QueryError } from "@/components/ui/query-state";
 import { useCioOverview } from "@/hooks/use-cio-overview";
+import { usePrivacyMode } from "@/lib/privacy-mode";
 
 export function CioPage() {
   const { overview, policy, workspaceId, canEdit, refresh } = useCioOverview();
+  usePrivacyMode(); // Re-renders CIO figures, which format through formatCioMoney, when privacy mode toggles.
   const [setupOpen, setSetupOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<CioSetupSection | null>(null);
 

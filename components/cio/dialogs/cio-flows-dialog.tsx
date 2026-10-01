@@ -8,6 +8,7 @@ import { centsFromMoneyInput, formatCioDate, formatCioLabel, formatCioMoney, mon
 import type { AppShellContext } from "@/components/app-shell-context";
 import { apiFetch, mutationFailureMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query-keys";
+import { usePrivacyMode } from "@/lib/privacy-mode";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }
 }) {
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
+  usePrivacyMode();
   const [form, setForm] = useState<FlowForm>(emptyFlow);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);

@@ -94,8 +94,8 @@
   position: absolute;
   top: -6px;
   right: -6px;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -106,12 +106,18 @@
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.75;
   transition: opacity var(--duration-fast) var(--ease-standard);
 }
 
+/* Shown quietly at rest so touch screens (no hover) can still find it. */
 .ask-nest-fab:hover .ask-nest-fab-dismiss,
 .ask-nest-fab:focus-within .ask-nest-fab-dismiss { opacity: 1; }
+
+/* The global touch rule makes every button 44px, which would cover the avatar. The visible dot
+   stays small; its tap area grows outward (up and right), away from the avatar. */
+.ask-nest-fab-dismiss { min-block-size: 0; min-inline-size: 0; }
+.ask-nest-fab-dismiss::before { content: ""; position: absolute; inset: -12px -12px -2px -2px; }
 
 /* The launcher takes the bottom-right corner, so the desktop scroll-to-top button moves above it. */
 html[data-ask-nest-minimized="true"] .scroll-to-top-button { bottom: 96px; }

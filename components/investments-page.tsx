@@ -4,7 +4,8 @@ import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { normalizeCurrency } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -179,7 +180,7 @@ export function InvestmentsPage() {
   });
   const workspaceId = context.data?.workspaceId;
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
-  const formatCents = (value: number) => formatMoney(value, baseCurrency);
+  const { format: formatCents } = useMoneyFormat(baseCurrency);
   const investmentsQueryKey = queryKeys.investments(workspaceId);
 
   const accounts = useQuery({

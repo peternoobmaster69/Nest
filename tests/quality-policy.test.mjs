@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { analysisFailures, checkLcov, configurePolicy, coverageFailures, createClient, gateDrift, policy, readToken } from "../scripts/sonar-policy.mjs";
+import { analysisFailures, checkLcov, configurePolicy, coverageFailures, createClient, gateDrift, policy, readToken, root, verifyPolicy } from "../scripts/sonar-policy.mjs";
 import { checkSarif } from "../scripts/check-codeql-results.mjs";
 
 test("quality gate detects relaxed, missing, and unexpected conditions regardless of order", () => {
@@ -129,4 +130,56 @@ test("CodeQL gate rejects missing or failed reports and counts even suppressed l
   assert.throws(() => checkSarif({ version: "2.1.0", runs: [] }), /valid SARIF/);
   assert.throws(() => checkSarif({ version: "2.1.0", runs: [{}] }), /results are missing/);
   assert.throws(() => checkSarif({ version: "2.1.0", runs: [{ results: [], invocations: [{ executionSuccessful: false }] }] }), /incomplete or failed/);
+});
+
+test("server verification detects changed assignment, small-change exemptions, and weakened profiles", async () => {
+  let tampered = false;
+  const parents = policy.languages.map((language) => ({ language, key: `${language}-base`, name: "Sonar way", isBuiltIn: true }));
+  const profiles = parents.map((parent) => ({ language: parent.language, key: `${parent.language}-custom`, parentKey: parent.key, name: policy.profileName }));
+  const api = async (endpoint, params = {}) => {
+    switch (endpoint) {
+      case "api/qualitygates/get_by_project": return { qualityGate: { name: tampered ? "Relaxed gate" : policy.gateName } };
+      case "api/qualitygates/show": return { conditions: policy.conditions };
+      case "api/settings/values": return { settings: [{ key: "sonar.qualitygate.ignoreSmallChanges", value: String(tampered) }] };
+      case "api/qualityprofiles/search": return { profiles: params.project ? profiles : parents };
+      case "api/qualityprofiles/compare": return { inLeft: tampered ? [{ key: "removed-rule" }] : [], modified: [] };
+      case "api/rules/search": return { total: params.activation === "false" ? Number(tampered) : 1 };
+      default: throw new Error(`Unexpected verification request: ${endpoint}`);
+    }
+  };
+  assert.deepEqual(await verifyPolicy(api), []);
+  tampered = true;
+  const failures = (await verifyPolicy(api)).join("\n");
+  assert.match(failures, /Assigned gate is Relaxed gate/);
+  assert.match(failures, /ignoreSmallChanges must be false/);
+  assert.match(failures, /missing or modified comprehensive rules/);
+  assert.match(failures, /missing 1 required security or reliability rules/);
+});
+
+test("SQL bootstrap generates masked per-run credentials without exposing them in Docker arguments", async (context) => {
+  const directory = await mkdtemp(path.join(tmpdir(), "nest-sql-ci-test-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const envFile = path.join(directory, "github-env");
+  const argsFile = path.join(directory, "docker-args");
+  await writeFile(path.join(directory, "docker"), '#!/bin/sh\nprintf "%s\\n" "$@" >> "$NEST_DOCKER_ARGS"\nexit 0\n', { mode: 0o700 });
+  const script = path.join(root, "scripts/start-ci-sqlserver.sh");
+  const denied = spawnSync("bash", [script], { env: { PATH: process.env.PATH }, encoding: "utf8", timeout: 5_000 });
+  assert.equal(denied.status, 1);
+  const run = spawnSync("bash", [script], {
+    env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, GITHUB_ACTIONS: "true", RUNNER_ENVIRONMENT: "github-hosted", GITHUB_ENV: envFile, NEST_DOCKER_ARGS: argsFile },
+    encoding: "utf8",
+    timeout: 5_000,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  const settings = Object.fromEntries((await readFile(envFile, "utf8")).trim().split("\n").map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
+  const password = /;password=([^;]+);/.exec(settings.DATABASE_URL)?.[1];
+  assert.ok(password?.length >= 64);
+  assert.equal(settings.DATABASE_URL, settings.SHADOW_DATABASE_URL);
+  assert.notEqual(password, settings.NEXTAUTH_SECRET);
+  const args = await readFile(argsFile, "utf8");
+  assert.match(args, /127\.0\.0\.1:1433:1433/);
+  for (const secret of [password, settings.NEXTAUTH_SECRET]) {
+    assert.ok(run.stdout.includes(`::add-mask::${secret}`));
+    assert.ok(!args.includes(secret));
+  }
 });

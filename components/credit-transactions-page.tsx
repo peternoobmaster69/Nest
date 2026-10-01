@@ -5,7 +5,8 @@ import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatMoney, normalizeCurrency } from "@/lib/currency";
+import { normalizeCurrency } from "@/lib/currency";
+import { useMoneyFormat } from "@/lib/use-money-format";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { ChangeEvent, FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -420,7 +421,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     queryFn: () => fetchJson<AppContext>("/api/context"),
   });
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
-  const formatCurrency = (cents: number) => formatMoney(cents, baseCurrency);
+  const { format: formatCurrency } = useMoneyFormat(baseCurrency);
   const defaultReceivableAccountId = context.data?.defaultAccountId ?? null;
   const defaultReceivableBudgetId = context.data?.defaultBudgetId ?? null;
 

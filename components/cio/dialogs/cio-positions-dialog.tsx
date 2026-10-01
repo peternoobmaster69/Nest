@@ -7,6 +7,7 @@ import { CIO_LIQUIDITY_CLASSES, CIO_POSITION_SIDES, type CioLiquidityClass, type
 import { centsFromMoneyInput, formatCioDate, formatCioLabel, formatCioMoney, moneyInputFromCents, toDateInput, toIsoDate } from "@/components/cio/cio-format";
 import { apiFetch, mutationFailureMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query-keys";
+import { usePrivacyMode } from "@/lib/privacy-mode";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSav
 }) {
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
+  usePrivacyMode();
   const [form, setForm] = useState<PositionForm>(emptyPosition);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);

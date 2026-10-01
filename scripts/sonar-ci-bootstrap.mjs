@@ -9,7 +9,10 @@ async function main() {
   if (process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted" || process.env.SONAR_DISPOSABLE !== "true" || process.env.SONAR_HOST_URL !== "http://127.0.0.1:9000" || !process.env.RUNNER_TEMP || !process.env.GITHUB_ENV) {
     throw new Error("Bootstrap is restricted to the disposable SonarQube container on a GitHub-hosted runner.");
   }
-  const basicClient = (password) => createClient({ authorization: `Basic ${Buffer.from(`admin:${password}`).toString("base64")}` });
+  const basicClient = (password) => {
+    const credentials = Buffer.from(`admin:${password}`).toString("base64");
+    return createClient({ authorization: `Basic ${credentials}` });
+  };
   const initial = basicClient("admin");
   const deadline = Date.now() + 300_000;
   let ready = false;
@@ -44,7 +47,9 @@ async function main() {
   console.log("Disposable SonarQube is ready; CI credentials expire tomorrow.");
 }
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error(error.message);
   process.exitCode = 1;
-});
+}

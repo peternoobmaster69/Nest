@@ -15317,6 +15317,11 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 @media (max-width: 768px), (max-width: 960px) and (max-height: 500px) and (pointer: coarse) {
   .topbar {
+    /* iOS 26 Safari colours the status-bar area from a fixed/sticky header touching the top edge;
+       a merely relative header gets a translucent blur instead. The shell does not scroll, so
+       sticky lays out exactly like relative here. */
+    position: sticky;
+    top: 0;
     height: calc(50px + env(safe-area-inset-top, 0px));
     padding: env(safe-area-inset-top, 0px) 14px 0;
   }

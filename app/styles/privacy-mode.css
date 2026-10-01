@@ -1,0 +1,68 @@
+/* ============================================================
+   PRIVACY MODE — HIDES BALANCES AND AMOUNTS ON SCREEN
+   ============================================================ */
+
+/* Amounts rendered through the money formatters are replaced with dots in JavaScript.
+   These rules cover figures that are not plain text (charts, bars, and free-form answers). */
+
+.privacy-toggle {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--t), background-color var(--t), border-color var(--t);
+}
+
+.privacy-toggle:hover { color: var(--text-primary); background: var(--bg-subtle); border-color: var(--border-subtle); }
+.privacy-toggle.is-on { color: var(--brand-600); background: var(--brand-50); border-color: var(--brand-200); }
+
+/* Free text from the assistant and notifications can quote figures, so it is blurred until hovered or focused. */
+[data-privacy="on"] .ask-nest-answer,
+[data-privacy="on"] .ask-nest-chart-values,
+[data-privacy="on"] .notification-message,
+[data-privacy="on"] .privacy-sensitive {
+  filter: blur(6px);
+  transition: filter var(--duration-fast) var(--ease-standard);
+}
+
+[data-privacy="on"] .ask-nest-answer:hover,
+[data-privacy="on"] .ask-nest-answer:focus-within,
+[data-privacy="on"] .notification-message:hover,
+[data-privacy="on"] .privacy-sensitive:hover {
+  filter: none;
+}
+
+/* Chart geometry reveals magnitudes, so plots fade to an outline while amounts are hidden. */
+[data-privacy="on"] .cash-flow-chart svg,
+[data-privacy="on"] .ask-nest-chart svg,
+[data-privacy="on"] .ask-nest-investment-bars,
+[data-privacy="on"] .cio-retirement-chart svg,
+[data-privacy="on"] .inv-chart svg {
+  filter: blur(5px) grayscale(1);
+  opacity: 0.55;
+}
+
+/* Toggling crossfades the page: the browser keeps unchanged pixels steady, so only the figures
+   visibly melt between digits and dots. Scoped to the privacy toggle so other view transitions keep
+   their defaults. Reduced motion skips the transition in lib/privacy-mode.ts. */
+html[data-privacy-transition]::view-transition-old(root),
+html[data-privacy-transition]::view-transition-new(root) {
+  animation-duration: 380ms;
+  animation-timing-function: var(--ease-standard);
+}
+
+/* Plots and blurred text ease in and out of their blur as well. */
+.cash-flow-chart svg,
+.ask-nest-chart svg,
+.ask-nest-investment-bars,
+.cio-retirement-chart svg,
+.inv-chart svg {
+  transition: filter var(--duration-base) var(--ease-standard), opacity var(--duration-base) var(--ease-standard);
+}
