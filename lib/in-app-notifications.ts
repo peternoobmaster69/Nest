@@ -2,6 +2,10 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import {
+  getOutstandingCreditCardStatements,
+  type OutstandingCreditCardStatement as DueCardRow,
+} from "@/lib/credit-card-statement-balances";
+import {
   addUtcDays,
   getDaysUntilDue,
   REMINDER_LEAD_DAYS,
@@ -24,17 +28,6 @@ import { decodeCursor, toListEnvelope } from "@/lib/api/pagination";
 const CREDIT_CARD_DUE_TYPE = "CREDIT_CARD_DUE";
 const WORKSPACE_INVITATION_TYPE = "WORKSPACE_INVITATION";
 const REMINDER_PUSH_JOB_TYPE = "CREDIT_CARD_PAYMENT_REMINDER_PUSH";
-
-type DueCardRow = {
-  workspaceId: string;
-  cardId: string;
-  cardName: string;
-  last4Digit: string;
-  statementMonth: number;
-  statementYear: number;
-  paymentDueDate: Date;
-  outstandingCents: number | bigint;
-};
 
 function formatMoney(cents: number) {
   return new Intl.NumberFormat("en-SG", {
@@ -64,32 +57,11 @@ function dueCopy(daysUntilDue: number) {
 async function findDueCards(workspaceId?: string) {
   const today = startOfUtcDay(new Date());
   const reminderThrough = addUtcDays(today, REMINDER_LEAD_DAYS + 1);
-  const workspaceFilter = workspaceId ? Prisma.sql`AND cct.[workspaceId] = ${workspaceId}` : Prisma.empty;
-  const rows = await prisma.$queryRaw<DueCardRow[]>(Prisma.sql`
-    SELECT
-      cct.[workspaceId] AS [workspaceId],
-      cct.[creditCardId] AS [cardId],
-      cc.[cardName] AS [cardName],
-      cc.[last4Digit] AS [last4Digit],
-      cct.[statementMonth] AS [statementMonth],
-      cct.[statementYear] AS [statementYear],
-      MIN(cct.[paymentDueDate]) AS [paymentDueDate],
-      SUM(CAST(cct.[amountCents] AS BIGINT)) AS [outstandingCents]
-    FROM [dbo].[CreditCardTransaction] cct
-    INNER JOIN [dbo].[CreditCardAccount] cc ON cc.[id] = cct.[creditCardId]
-    WHERE cct.[paymentDueDate] IS NOT NULL
-      AND cct.[paymentDueDate] < ${reminderThrough}
-      AND cc.[isActive] = 1
-      ${workspaceFilter}
-    GROUP BY
-      cct.[workspaceId],
-      cct.[creditCardId],
-      cc.[cardName],
-      cc.[last4Digit],
-      cct.[statementMonth],
-      cct.[statementYear]
-    HAVING SUM(CAST(cct.[amountCents] AS BIGINT)) > 0
-  `);
+  const rows = await getOutstandingCreditCardStatements(prisma, {
+    workspaceId,
+    activeOnly: true,
+    dueBefore: reminderThrough,
+  });
 
   return {
     today,
@@ -114,14 +86,16 @@ export async function processReminderPushDeliveryJob(jobId: string, prepared?: P
   if (!claimed) return { status: "skipped" as const };
   try {
     let payload = prepared;
-    if (!payload && claimed.job.userId) {
+    if (!payload && claimed.job.userId && claimed.job.workspaceId) {
+      // A payment may have settled the statement since this push was queued.
+      await syncCreditCardDueNotificationsForUser(claimed.job.userId, claimed.job.workspaceId);
       let dedupeKey = "";
       try {
         const stored = JSON.parse(claimed.job.payloadJson ?? "{}") as { dedupeKey?: unknown };
         if (typeof stored.dedupeKey === "string") dedupeKey = stored.dedupeKey;
       } catch {}
       const notification = dedupeKey ? await prisma.inAppNotification.findFirst({
-        where: { userId: claimed.job.userId, dedupeKey },
+        where: { userId: claimed.job.userId, workspaceId: claimed.job.workspaceId, dedupeKey },
         select: { title: true, message: true, href: true, dedupeKey: true },
       }) : null;
       if (notification) {
