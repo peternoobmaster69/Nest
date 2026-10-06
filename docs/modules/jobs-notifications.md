@@ -4,7 +4,7 @@ description: Durable job lifecycle, leases, retries, checkpoints, cancellation, 
 audience: [engineers, operators, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-10-05
 ---
 
 # Background jobs and notifications
@@ -34,6 +34,7 @@ Run long, scheduled, or provider-facing work reliably across serverless instance
 | --- | --- | --- |
 | `lib/background-jobs.ts` | enqueue/claim/heartbeat/continue/complete/fail/cancel/retry/find/map | Full job lifecycle |
 | `lib/credit-card-payment-reminders.ts` | reminder queue/worker | Due statement email preparation |
+| `lib/credit-card-statement-balances.ts` | `getOutstandingCreditCardStatements` | Shared net statement balances for reminders and dashboard |
 | `lib/in-app-notifications.ts` | sync/list/mark/process push | Durable user notification |
 | `lib/web-push.ts` | config/send | Push provider client |
 | `lib/cron-auth.ts` | `authorizeCronRequest` | Fail-closed scheduler auth |
@@ -61,6 +62,23 @@ Retry delay is bounded exponential backoff. Exact status/check constraints are S
 - **Side effects:** sanitizes error; schedules retry or dead-letters.
 - **Failure:** stale lease does not own completion.
 - **Complexity:** fixed number of SQL operations.
+
+## Credit-card reminder balances
+
+Email, push, in-app notifications, and the dashboard use the same statement
+balance query. For each workspace, card, statement month, and year, it sums every
+signed transaction amount, including refunds and partial payments with missing
+or later due dates. A statement with a zero or negative net balance is excluded.
+
+The scheduled due date comes from positive purchase rows only. Payment and refund
+dates cannot make the remaining balance due earlier. The reminder window is
+applied after the full statement is netted. Delivery retries refresh in-app
+notifications before rebuilding push payloads, removing reminders for statements
+that have since been settled. Existing in-app reminders are also removed on the
+next notification read or scheduled sync.
+
+Credits only offset their own card and statement period; this query does not move
+credits between statements or change recorded transactions.
 
 ## Configuration
 
@@ -122,4 +140,4 @@ Gmail slice caps, reminder delivery cap, retention windows, email/push keys, and
 
 ## Last Updated
 
-2026-07-28
+2026-10-05

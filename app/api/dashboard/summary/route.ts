@@ -1,4 +1,5 @@
 import { getBankConsistency } from "@/lib/bank-consistency";
+import { getOutstandingCreditCardStatements } from "@/lib/credit-card-statement-balances";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
@@ -91,39 +92,7 @@ export async function GET() {
         },
       }),
       getBankConsistency(prisma, workspaceId),
-      prisma.$queryRaw<
-        Array<{
-          cardId: string;
-          cardName: string;
-          bankName: string | null;
-          statementMonth: number;
-          statementYear: number;
-          paymentDueDate: Date;
-          outstandingCents: number | bigint;
-        }>
-      >(Prisma.sql`
-        SELECT TOP (500)
-          cct.[creditCardId] AS [cardId],
-          cc.[cardName] AS [cardName],
-          cc.[bankName] AS [bankName],
-          cct.[statementMonth] AS [statementMonth],
-          cct.[statementYear] AS [statementYear],
-          MIN(cct.[paymentDueDate]) AS [paymentDueDate],
-          SUM(CAST(cct.[amountCents] AS BIGINT)) AS [outstandingCents]
-        FROM [dbo].[CreditCardTransaction] cct
-        INNER JOIN [dbo].[CreditCardAccount] cc
-          ON cc.[id] = cct.[creditCardId]
-        WHERE cct.[workspaceId] = ${workspaceId}
-          AND cct.[paymentDueDate] IS NOT NULL
-        GROUP BY
-          cct.[creditCardId],
-          cc.[cardName],
-          cc.[bankName],
-          cct.[statementMonth],
-          cct.[statementYear]
-        HAVING SUM(CAST(cct.[amountCents] AS BIGINT)) > 0
-        ORDER BY MIN(cct.[paymentDueDate]) ASC
-      `),
+      getOutstandingCreditCardStatements(prisma, { workspaceId, limit: 500 }),
       prisma.$queryRaw<
         Array<{
           year: number;

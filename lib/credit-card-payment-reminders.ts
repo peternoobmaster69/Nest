@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import {
+  getOutstandingCreditCardStatements,
+  type OutstandingCreditCardStatement as ReminderRow,
+} from "@/lib/credit-card-statement-balances";
 import { EmailClient, KnownEmailSendStatus } from "@azure/communication-email";
 import { createHash } from "node:crypto";
 import {
@@ -26,18 +29,6 @@ function maxDeliveriesPerRun() {
   const parsed = Number(process.env.PAYMENT_REMINDER_MAX_DELIVERIES_PER_RUN);
   return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 500) : 100;
 }
-
-type ReminderRow = {
-  workspaceId: string;
-  workspaceName: string;
-  cardId: string;
-  cardName: string;
-  bankName: string | null;
-  statementMonth: number;
-  statementYear: number;
-  paymentDueDate: Date;
-  outstandingCents: number | bigint;
-};
 
 type ReminderRecipient = {
   workspaceId: string;
@@ -110,36 +101,10 @@ function escapeHtml(value: string) {
 async function findDueCreditCardPayments(today: Date) {
   const reminderThrough = addUtcDays(today, REMINDER_LEAD_DAYS + 1);
 
-  const rows = await prisma.$queryRaw<ReminderRow[]>(Prisma.sql`
-    SELECT
-      cct.[workspaceId] AS [workspaceId],
-      w.[name] AS [workspaceName],
-      cct.[creditCardId] AS [cardId],
-      cc.[cardName] AS [cardName],
-      cc.[bankName] AS [bankName],
-      cct.[statementMonth] AS [statementMonth],
-      cct.[statementYear] AS [statementYear],
-      MIN(cct.[paymentDueDate]) AS [paymentDueDate],
-      SUM(CAST(cct.[amountCents] AS BIGINT)) AS [outstandingCents]
-    FROM [dbo].[CreditCardTransaction] cct
-    INNER JOIN [dbo].[CreditCardAccount] cc
-      ON cc.[id] = cct.[creditCardId]
-    INNER JOIN [dbo].[Workspace] w
-      ON w.[id] = cct.[workspaceId]
-    WHERE cct.[paymentDueDate] IS NOT NULL
-      AND cct.[paymentDueDate] < ${reminderThrough}
-      AND cc.[isActive] = 1
-    GROUP BY
-      cct.[workspaceId],
-      w.[name],
-      cct.[creditCardId],
-      cc.[cardName],
-      cc.[bankName],
-      cct.[statementMonth],
-      cct.[statementYear]
-    HAVING SUM(CAST(cct.[amountCents] AS BIGINT)) > 0
-    ORDER BY MIN(cct.[paymentDueDate]) ASC
-  `);
+  const rows = await getOutstandingCreditCardStatements(prisma, {
+    activeOnly: true,
+    dueBefore: reminderThrough,
+  });
 
   return rows.filter((row) => shouldSendPaymentReminder(getDaysUntilDue(row.paymentDueDate, today)));
 }
