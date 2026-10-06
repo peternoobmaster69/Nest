@@ -12,7 +12,7 @@
   "components/data-import-section.tsx": { "maxLines": 712, "owner": "frontend", "reason": "Heavy import workflow is now route-lazy and isolated." },
   "components/app-shell.tsx": { "maxLines": 587, "owner": "frontend", "reason": "Shared responsive application shell." },
   "components/collaborators-page.tsx": { "maxLines": 565, "owner": "frontend", "reason": "Existing workspace collaboration controller." },
-  "components/settings-app-access.tsx": { "maxLines": 593, "owner": "frontend", "reason": "Optional app-access workflow is route-lazy and isolated; Phase 8 adds the signed-in user’s notification-device inventory and revocation controls." },
+  "components/settings-app-access.tsx": { "maxLines": 595, "owner": "frontend", "reason": "Optional app-access workflow is route-lazy and isolated; Phase 8 adds the signed-in user’s notification-device inventory and revocation controls. Mounts the extracted app-icon picker." },
   "components/app-sidebar.tsx": { "maxLines": 432, "owner": "frontend", "reason": "Shared desktop navigation shell." },
   "components/ui-skeleton.tsx": { "maxLines": 190, "owner": "frontend", "reason": "Shared loading shell and state primitives." }
 }

@@ -1,20 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Mono, DM_Sans } from "next/font/google";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { APP_ICON_COOKIE, appIconAssets, DEFAULT_APP_ICON, parseAppIcon } from "@/lib/app-icons";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
-export const metadata: Metadata = {
+const baseMetadata: Metadata = {
   title: "Nest Personal Finance Companion",
   description: "Manage bank cash, virtual budgets, credit-card payables, receivables, savings, and investments with full visibility.",
-  icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-    ],
-    shortcut: "/icon.svg",
-    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-  },
   appleWebApp: {
     capable: true,
     title: "Nest",
@@ -25,6 +18,28 @@ export const metadata: Metadata = {
   applicationName: "Nest",
   manifest: "/manifest.webmanifest",
 };
+
+// Icons follow the device's chosen variant (Settings → App icon). iOS reads the
+// apple-touch-icon once, at "Add to Home Screen", so it must be right on every page.
+// Default paths: /favicon.svg and /icons/apple-touch-icon.png.
+export async function generateMetadata(): Promise<Metadata> {
+  const iconId = parseAppIcon((await cookies()).get(APP_ICON_COOKIE)?.value);
+  const assets = appIconAssets(iconId);
+  return {
+    ...baseMetadata,
+    // Tab icon uses its own file names (not the in-app /icon.svg logo) so browsers
+    // drop any cached copy of the previous favicon.
+    icons: {
+      icon: [
+        ...(iconId === DEFAULT_APP_ICON ? [{ url: "/favicon.ico", sizes: "16x16 32x32 48x48" }] : []),
+        { url: assets.favicon, type: "image/svg+xml" },
+        { url: assets.icon192, sizes: "192x192", type: "image/png" },
+      ],
+      shortcut: iconId === DEFAULT_APP_ICON ? "/favicon.ico" : assets.favicon,
+      apple: [{ url: iconId === DEFAULT_APP_ICON ? "/icons/apple-touch-icon.png" : assets.appleTouch, sizes: "180x180", type: "image/png" }],
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",

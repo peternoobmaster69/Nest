@@ -3540,7 +3540,7 @@ html[data-ask-nest-open="true"] {
 }
 
 .lp-signin-story-logo img {
-  filter: brightness(0) invert(1);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .lp-signin-story-brand > span:last-child {

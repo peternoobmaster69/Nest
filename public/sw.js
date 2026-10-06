@@ -1,4 +1,4 @@
-const VERSION = "nest-v6";
+const VERSION = "nest-v8";
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_FALLBACK = "/offline.html";
@@ -7,6 +7,8 @@ const APP_SHELL = [
   OFFLINE_FALLBACK,
   "/manifest.webmanifest",
   "/icon.svg",
+  "/favicon.svg",
+  "/favicon.ico",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/icon-maskable-192.png",

@@ -16,6 +16,7 @@ import { describeClientDevice } from "@/lib/session-device";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
+import { SettingsAppIcon } from "@/components/settings-app-icon";
 
 type Passkey = {
   id: string;
@@ -379,6 +380,7 @@ export function SettingsAppAccess() {
           </div>
         ) : null}
       </div>
+      <SettingsAppIcon />
 
       <div className="card settings-card-block settings-passkeys-card">
         <div className="settings-row">
