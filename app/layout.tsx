@@ -18,10 +18,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Nest",
-    // black-translucent lets the app draw its own solid background under the
-    // status bar; iOS 26's Liquid Glass blur over a flat color is invisible,
-    // whereas "default" renders a black bar with a blur fade into the topbar.
-    statusBarStyle: "black-translucent",
+    // Let iOS reserve the status area so the fixed theme surface below can
+    // supply its colour without a native scroll-edge blur over the header.
+    statusBarStyle: "default",
   },
   applicationName: "Nest",
   manifest: "/manifest.webmanifest",
@@ -71,6 +70,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="antialiased">
+        <div className="pwa-status-bar-surface" aria-hidden="true" />
         <Providers>{children}</Providers>
       </body>
     </html>
