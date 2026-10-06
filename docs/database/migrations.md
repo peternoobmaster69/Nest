@@ -4,7 +4,7 @@ description: Frozen baseline, forward migrations, historical themes, legacy mapp
 audience: [engineers, database-operators, reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-30
+last_updated: 2026-10-07
 ---
 
 # Migration history
@@ -15,14 +15,16 @@ Preserve why the schema evolved and define how future changes are applied withou
 
 ## Scope
 
-The repository contains a frozen baseline plus 36 historical/forward migration directories. Directory names are not uniformly timestamped; ordering is preserved by Prisma migration records and the baseline manifest.
+The repository contains a baseline plus historical and forward migration directories. Directory names are not uniformly timestamped; ordering is preserved by Prisma migration records and the baseline manifest.
 
 ## Baseline model
 
 - `prisma/baseline/migration.sql` is the complete clean-install schema at the Phase 4 boundary.
-- `prisma/baseline/history.json` lists 30 historical migrations represented by that SQL.
+- `prisma/baseline/history.json` lists 31 historical migrations represented by that SQL.
 - `npm run db:bootstrap` requires an empty database, applies the baseline, marks those migrations applied, then deploys migrations after the boundary.
 - Never regenerate the baseline or append future migrations to its history.
+
+The 2026-10-07 clean-install repair adds the omitted `enforce_single_active_session` prerequisite to the baseline and its manifest. Its three legacy `User` columns are required by `20260722120000_multi_device_sessions`. Without this correction, Prisma sorts the timestamped migration before the untimestamped prerequisite and a fresh database fails with `Invalid column name 'activeSessionId'`. No previously applied migration file or existing database is changed by this baseline repair.
 
 ## Migration themes
 

@@ -19,6 +19,7 @@
     "add_transaction_groups",
     "backend_performance_jobs_and_indexes",
     "cleanup_auto_receivables",
+    "enforce_single_active_session",
     "fix_budget_monthly_snapshot_and_apply_once",
     "monthly_budget_plan_v2",
     "monthly_budget_plan_v2_reconciliation",

@@ -12,6 +12,10 @@ test("Phase 4 retains a complete baseline manifest and forward migration", async
   const migration = await read("prisma/migrations/20260721000000_phase_4_database_integrity/migration.sql");
 
   assert.ok(history.migrations.length >= 30);
+  assert.ok(history.migrations.includes("enforce_single_active_session"), "the session-audit migration requires the legacy session columns before forward migrations run");
+  for (const column of ["activeSessionId", "activeSessionExpiresAt", "lastSignedInAt"]) {
+    assert.ok(baseline.includes(`[${column}]`), `baseline is missing the session migration prerequisite ${column}`);
+  }
   for (const migrationName of history.migrations) {
     await fs.access(path.join(root, "prisma", "migrations", migrationName, "migration.sql"));
   }
