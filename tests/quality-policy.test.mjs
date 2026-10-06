@@ -174,10 +174,14 @@ test("SQL bootstrap generates masked per-run credentials without exposing them i
   const settings = Object.fromEntries((await readFile(envFile, "utf8")).trim().split("\n").map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
   const password = /;password=([^;]+);/.exec(settings.DATABASE_URL)?.[1];
   assert.ok(password?.length >= 64);
-  assert.equal(settings.DATABASE_URL, settings.SHADOW_DATABASE_URL);
+  assert.notEqual(settings.DATABASE_URL, settings.SHADOW_DATABASE_URL);
+  assert.match(settings.DATABASE_URL, /;database=nest_ci;/);
+  assert.match(settings.SHADOW_DATABASE_URL, /;database=nest_ci_shadow;/);
   assert.notEqual(password, settings.NEXTAUTH_SECRET);
   const args = await readFile(argsFile, "utf8");
   assert.match(args, /127\.0\.0\.1:1433:1433/);
+  assert.match(args, /-b[\s\S]*CREATE DATABASE \[nest_ci\]/);
+  assert.match(args, /-b[\s\S]*CREATE DATABASE \[nest_ci_shadow\]/);
   for (const secret of [password, settings.NEXTAUTH_SECRET]) {
     assert.ok(run.stdout.includes(`::add-mask::${secret}`));
     assert.ok(!args.includes(secret));

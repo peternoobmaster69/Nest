@@ -20,9 +20,13 @@ docker run --detach --name nest-ci-sqlserver --publish 127.0.0.1:1433:1433 \
 for ((attempt = 0; attempt < 60; attempt++)); do
   if docker exec --env SQLCMDPASSWORD nest-ci-sqlserver \
     /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -Q 'SELECT 1' > /dev/null 2>&1; then
+    docker exec --env SQLCMDPASSWORD nest-ci-sqlserver \
+      /opt/mssql-tools18/bin/sqlcmd -b -C -S localhost -U sa -Q 'CREATE DATABASE [nest_ci]'
+    docker exec --env SQLCMDPASSWORD nest-ci-sqlserver \
+      /opt/mssql-tools18/bin/sqlcmd -b -C -S localhost -U sa -Q 'CREATE DATABASE [nest_ci_shadow]'
     {
-      printf 'DATABASE_URL=sqlserver://127.0.0.1:1433;database=master;user=sa;password=%s;encrypt=true;trustServerCertificate=true\n' "$NEST_SQL_PASSWORD"
-      printf 'SHADOW_DATABASE_URL=sqlserver://127.0.0.1:1433;database=master;user=sa;password=%s;encrypt=true;trustServerCertificate=true\n' "$NEST_SQL_PASSWORD"
+      printf 'DATABASE_URL=sqlserver://127.0.0.1:1433;database=nest_ci;user=sa;password=%s;encrypt=true;trustServerCertificate=true\n' "$NEST_SQL_PASSWORD"
+      printf 'SHADOW_DATABASE_URL=sqlserver://127.0.0.1:1433;database=nest_ci_shadow;user=sa;password=%s;encrypt=true;trustServerCertificate=true\n' "$NEST_SQL_PASSWORD"
       printf 'NEXTAUTH_SECRET=%s\n' "$NEST_AUTH_SECRET"
     } >> "$GITHUB_ENV"
     exit 0
