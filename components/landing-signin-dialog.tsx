@@ -42,7 +42,7 @@ function sessionSummary(session: ActiveSession) {
   return `${country} · ${lastActive}`;
 }
 
-function SessionLimitPanel({ onCancel }: { onCancel: () => void }) {
+function SessionLimitPanel({ onCancel }: Readonly<{ onCancel: () => void }>) {
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -185,11 +185,11 @@ export function LandingSignInDialog({
   callbackUrl,
   serviceMessage,
   sessionLimitRequired = false,
-}: {
+}: Readonly<{
   callbackUrl: string;
   serviceMessage?: string | null;
   sessionLimitRequired?: boolean;
-}) {
+}>) {
   const router = useRouter();
 
   const cancelPendingSession = useCallback(() => {

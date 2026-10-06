@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { SubmitEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { CIO_FLOW_CADENCES, CIO_FLOW_TYPES, type CioFlowCadence, type CioFlowPayload, type CioFlowType, type CioRecurringFlow, type InvestmentOption } from "@/components/cio/types";
@@ -48,9 +48,9 @@ function emptyFlow(): FlowForm {
   return { type: "EXTERNAL_CONTRIBUTION", label: "", amount: "", cadence: "MONTHLY", startsOn: new Date().toISOString().slice(0, 10), endsOn: "", sourceFinancialAccountId: "", sourceInvestmentAccountId: "", destinationInvestmentAccountId: "", retirement: true, notes: "" };
 }
 
-export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }: {
+export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }: Readonly<{
   open: boolean; workspaceId: string | null | undefined; currency: string; onClose: () => void; onSaved: () => Promise<void> | void;
-}) {
+}>) {
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
   usePrivacyMode();
@@ -127,7 +127,7 @@ export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }
     clearErrors();
     setFormOpen(true);
   };
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     const amount = Number(form.amount);
     const amountCents = centsFromMoneyInput(form.amount) ?? 0;

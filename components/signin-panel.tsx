@@ -22,7 +22,7 @@ type ProviderMap = Record<
   }
 >;
 
-function ProviderMark({ providerId }: { providerId: string }) {
+function ProviderMark({ providerId }: Readonly<{ providerId: string }>) {
   if (providerId === "apple") return <Apple size={19} aria-hidden="true" />;
   if (providerId === "github") return <span aria-hidden="true">GH</span>;
   if (providerId === "facebook") return <span aria-hidden="true">f</span>;
@@ -34,11 +34,11 @@ export function SignInPanel({
   serviceMessage,
   callbackUrl = "/",
   embedded = false,
-}: {
+}: Readonly<{
   serviceMessage?: string | null;
   callbackUrl?: string;
   embedded?: boolean;
-}) {
+}>) {
   const [providers, setProviders] = useState<ProviderMap>({});
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(serviceMessage ?? null);

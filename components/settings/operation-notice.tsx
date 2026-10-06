@@ -11,11 +11,11 @@ export function SettingsOperationNotice({
   notice,
   className = "",
   requiresReauthentication = false,
-}: {
+}: Readonly<{
   notice: SettingsOperationNoticeData | null;
   className?: string;
   requiresReauthentication?: boolean;
-}) {
+}>) {
   if (!notice) return null;
   const NoticeIcon = notice.tone === "success" ? CheckCircle2 : notice.tone === "info" ? Info : CircleAlert;
   return (

@@ -24,7 +24,7 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { SubmitEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   AskNestAnswer,
@@ -145,13 +145,13 @@ export function AskNest({
   workspaceName,
   workspaceId,
   userName,
-}: {
+}: Readonly<{
   currentPath: string;
   pageTitle: string;
   workspaceName?: string | null;
   workspaceId?: string | null;
   userName?: string | null;
-}) {
+}>) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   // Minimizing keeps the conversation (and any in-flight answer) alive behind a floating launcher
@@ -505,7 +505,7 @@ export function AskNest({
     agent.reply(text);
   };
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = (event: SubmitEvent) => {
     event.preventDefault();
     submitComposer();
   };

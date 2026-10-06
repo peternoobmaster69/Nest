@@ -11,10 +11,10 @@ const WorkspaceSetupGuide = dynamic(
 export function WorkspaceSetupGuideBoundary({
   workspaceId,
   context,
-}: {
+}: Readonly<{
   workspaceId?: string | null;
   context?: AppShellContext;
-}) {
+}>) {
   const canEdit = context?.role === "OWNER" || context?.role === "EDITOR";
   if (!workspaceId || !context?.setupProgress || !canEdit) return null;
   return (

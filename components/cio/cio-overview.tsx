@@ -20,12 +20,12 @@ export function CioOverview({
   policy,
   canEdit,
   onConfigure,
-}: {
+}: Readonly<{
   overview: CioSnapshot;
   policy: CioPolicy | null | undefined;
   canEdit: boolean;
   onConfigure: (section?: CioSetupSection) => void;
-}) {
+}>) {
   const router = useRouter();
   const workspaceId = useWorkspaceId();
   const askCio = () => {

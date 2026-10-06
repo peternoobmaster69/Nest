@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runSonarScanner } from "./sonar-scanner.mjs";
+import { qualityGateSummary } from "./sonar-report.mjs";
 import { analysisFailures, configurePolicy, coverageFailures, createClient, policy, readToken, root, verifyCoverage, verifyPolicy } from "./sonar-policy.mjs";
 
 async function runScan(api, token, verifier) {
@@ -25,17 +26,18 @@ async function runScan(api, token, verifier) {
     if (!taskId) throw new Error("Scanner did not produce a compute-engine task ID.");
     const { task } = await api("api/ce/task", { id: taskId });
     report.taskId = taskId;
-    report.analysisId = task.analysisId;
+    report.analysisCompleted = task.status === "SUCCESS" && Boolean(task.analysisId);
     const result = task.analysisId ? await api("api/qualitygates/project_status", { analysisId: task.analysisId }) : {};
-    report.qualityGate = result.projectStatus;
+    report.qualityGate = qualityGateSummary(result.projectStatus);
     errors.push(...analysisFailures(task, result.projectStatus || {}));
     report.dashboard = `${api.serverUrl}/dashboard?id=${encodeURIComponent(policy.projectKey)}`;
   } catch (error) {
     errors.push(`Unable to verify this scan: ${error.message}`);
   }
   try {
-    report.policyDrift = await verifyPolicy(verifier);
-    errors.push(...report.policyDrift);
+    const drift = await verifyPolicy(verifier);
+    report.policyDriftCount = drift.length;
+    errors.push(...drift);
   } catch (error) {
     errors.push(`Policy verification failed: ${error.message}`);
   }
@@ -47,7 +49,7 @@ async function runScan(api, token, verifier) {
   const summary = JSON.parse(await readFile(path.join(root, "coverage/coverage-summary.json"), "utf8"));
   report.coverage = summary.total;
   errors.push(...coverageFailures(summary));
-  report.errors = errors;
+  report.errorCount = errors.length;
   report.passed = errors.length === 0;
   await mkdir(path.join(root, "coverage"), { recursive: true });
   await writeFile(path.join(root, "coverage/sonar-result.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -66,7 +68,7 @@ async function main() {
   if (!["configure", "verify", "scan"].includes(command)) throw new Error("Usage: node scripts/sonar.mjs configure|verify|scan|coverage");
   const token = await readToken(command === "configure" ? "SONAR_ADMIN_TOKEN" : "SONAR_TOKEN");
   const api = createClient({ token });
-  const verifier = process.env.SONAR_ADMIN_TOKEN || process.env.SONAR_ADMIN_TOKEN_FILE
+  const verifier = process.env.SONAR_ADMIN_TOKEN
     ? createClient({ token: await readToken("SONAR_ADMIN_TOKEN") })
     : api;
   if (command === "scan") return runScan(api, token, verifier);

@@ -42,11 +42,11 @@ function formatChartPeriodLabel(value: string, compact = false) {
   return compact ? `${month} ’${monthMatch[1]!.slice(2)}` : `${month} ${monthMatch[1]}`;
 }
 
-export function AskNestVisualizationView({ visualization, onNavigate, workspaceId }: {
+export function AskNestVisualizationView({ visualization, onNavigate, workspaceId }: Readonly<{
   visualization: AskNestVisualization;
   onNavigate: () => void;
   workspaceId?: string | null;
-}) {
+}>) {
   if (visualization.type === "trip_cards") {
     if (!visualization.items.length) return null;
     return (

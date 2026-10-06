@@ -25,13 +25,13 @@ export function AdminPagination({
   page,
   pageSize = ADMIN_PAGE_SIZE,
   onPageChange,
-}: {
+}: Readonly<{
   label: string;
   totalItems: number;
   page: number;
   pageSize?: number;
   onPageChange: (page: number) => void;
-}) {
+}>) {
   if (totalItems <= pageSize) return null;
 
   const pageCount = Math.ceil(totalItems / pageSize);

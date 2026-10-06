@@ -11,7 +11,7 @@ import { normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { useMoneyFormat } from "@/lib/use-money-format";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
@@ -169,10 +169,9 @@ function getAutoRuleValidationMessage(rules: AutoRule[]) {
 }
 
 function createEmptyAutoRule(destination: { sourceBudgetId?: string; destinationBudgetId?: string } = {}): AutoRule {
-  const id =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const id = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `rule-${Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16).padStart(8, "0")).join("")}`;
   return {
     id,
     name: "New rule",
@@ -184,7 +183,7 @@ function createEmptyAutoRule(destination: { sourceBudgetId?: string; destination
   };
 }
 
-export function SettingsPage({ section }: { section: SettingsTab }) {
+export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
@@ -773,13 +772,13 @@ export function SettingsPage({ section }: { section: SettingsTab }) {
     setEditingUpdatedAt("");
   };
 
-  const onSubmitAdd = (event: FormEvent) => {
+  const onSubmitAdd = (event: SubmitEvent) => {
     event.preventDefault();
     if (!name.trim() && !selectedBankName) return;
     createAccount.mutate();
   };
 
-  const onSubmitEdit = (event: FormEvent) => {
+  const onSubmitEdit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!editingAccountId) return;
     updateAccount.mutate({

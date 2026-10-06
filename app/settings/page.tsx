@@ -8,9 +8,9 @@ import { parseSettingsTab, SETTINGS_TAB_COOKIE } from "@/lib/settings-tabs";
 
 export default async function SettingsRoute({
   searchParams,
-}: {
+}: Readonly<{
   searchParams?: Promise<{ tab?: string }>;
-}) {
+}>) {
   const [session, params, cookieStore] = await Promise.all([
     requireSession(),
     searchParams ?? Promise.resolve<{ tab?: string }>({}),

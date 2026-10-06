@@ -33,17 +33,20 @@ Use Node 22.13 or newer and the official SonarScanner CLI (CI pins 8.1.0.6389). 
 
 ```sh
 export SONAR_HOST_URL=http://localhost:9000
-export SONAR_ADMIN_TOKEN_FILE="$HOME/.config/sonarqube/nest-admin-token"
-export SONAR_TOKEN_FILE="$HOME/.config/sonarqube/nest-analysis-token"
+IFS= read -r SONAR_ADMIN_TOKEN < "$HOME/.config/sonarqube/nest-admin-token"
+IFS= read -r SONAR_TOKEN < "$HOME/.config/sonarqube/nest-analysis-token"
+export SONAR_ADMIN_TOKEN SONAR_TOKEN
 npm run sonar:configure
 npm run sonar
 ```
 
-Create an administrator **user token** to manage gates, profiles, and project settings. A global or project **analysis token** can scan but cannot administer quality policy. A token that verifies gate assignment also needs project Browse permission; the scripts use the administrator token for verification when available. `SONAR_ADMIN_TOKEN` and `SONAR_TOKEN` environment variables are also supported. Use HTTPS for a remote server. Tokens must stay in private files outside the repository, ideally mode `0600`.
+Create an administrator **user token** to manage gates, profiles, and project settings. A global or project **analysis token** can scan but cannot administer quality policy. A token that verifies gate assignment also needs project Browse permission; the scripts use the administrator token for verification when available. The scripts accept only the `SONAR_ADMIN_TOKEN` and `SONAR_TOKEN` environment variables; they no longer open paths supplied through `*_TOKEN_FILE`. Load credentials from your secret manager or private files as shown above. Use HTTPS for a remote server. Token files must stay outside the repository with mode `0600`.
 
 `npm run test:coverage` runs the real test suite with c8, source maps, and `all: true`. Unloaded production files count as uncovered. The scope includes application code, components, hooks, libraries, the service worker, scripts, Prisma seed code, and executable root configuration. Declaration files and generated SQL migrations are outside executable JavaScript coverage. Reading source text in a contract test does not count as executing that source.
 
 `npm run sonar` generates fresh coverage and scans the current workspace. `npm run sonar:scan` reuses coverage only if every production source is present and none has changed since the report. The scanner waits up to ten minutes for the server's gate result; the wrapper also verifies policy and exact coverage counts. Missing LCOV, incomplete analysis, connection failures, insufficient verification permissions, or a failed gate return a nonzero exit code. Results are written to ignored `coverage/sonar-result.json` and `coverage/lcov.info`.
+
+The JSON evidence contains known metric names, numeric measurements, enumerated statuses, and error counts. Detailed errors remain in the job log. Arbitrary server response fields and messages are not copied into local report files.
 
 `npm run coverage:check` enforces the coverage requirement separately. `npm run sonar:verify` detects server configuration drift. Do not round a coverage percentage up to pass, exclude untested modules, or reset the baseline to conceal debt.
 

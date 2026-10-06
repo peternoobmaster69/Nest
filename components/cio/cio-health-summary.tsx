@@ -8,12 +8,12 @@ export function CioHealthSummary({
   onConfigure,
   onOpenBankControls,
   onOpenSubAccounts,
-}: {
+}: Readonly<{
   overview: CioSnapshot;
   onConfigure: (section: CioSetupSection) => void;
   onOpenBankControls: () => void;
   onOpenSubAccounts: () => void;
-}) {
+}>) {
   const { dataQuality, totals, baseCurrency } = overview;
   const criticalCount = dataQuality.warnings.filter((warning) => warning.severity === "CRITICAL").length;
   const statusLabel = criticalCount > 0 ? "Action required" : dataQuality.warnings.length ? "Review recommended" : "Ready";
@@ -85,7 +85,7 @@ export function CioHealthSummary({
   );
 }
 
-function Metric({ label, value, hint, tone = "normal" }: { label: string; value: string; hint: string; tone?: "normal" | "warning" }) {
+function Metric({ label, value, hint, tone = "normal" }: Readonly<{ label: string; value: string; hint: string; tone?: "normal" | "warning" }>) {
   return (
     <article className={`cio-metric-card is-${tone}`}>
       <span>{label}</span>

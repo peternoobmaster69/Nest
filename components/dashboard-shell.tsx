@@ -4,7 +4,7 @@ import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SubmitEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -345,11 +345,11 @@ export function DashboardShell({
   userName,
   userEmail,
   userImage,
-}: {
+}: Readonly<{
   userName: string;
   userEmail: string;
   userImage?: string | null;
-}) {
+}>) {
   const routeWorkspaceId = useWorkspaceId();
   const workspaceHref = useCallback(
     (path: string) => routeWorkspaceId ? buildWorkspacePath(routeWorkspaceId, path) : path,
@@ -488,7 +488,7 @@ export function DashboardShell({
     setEditBankBalance("");
   };
 
-  const onSubmitBankBalance = async (event: FormEvent) => {
+  const onSubmitBankBalance = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!editingBankAccount || !editBankBalance) return;
     const nextBalanceCents = Math.round(Number(editBankBalance) * 100);
@@ -563,7 +563,7 @@ export function DashboardShell({
     onSettled: refreshAll,
   });
 
-  const onCreateBudget = (event: FormEvent) => {
+  const onCreateBudget = (event: SubmitEvent) => {
     event.preventDefault();
     if (!workspaceId || !budgetAccountId || !defaultUserId || !budgetName.trim()) return;
     const parsedTarget = budgetTarget.trim() ? Number(budgetTarget) : 0;

@@ -14,7 +14,7 @@ type Invite = {
   invitedBy: { name: string | null; email: string | null };
 };
 
-export function InvitationResponse({ token }: { token: string }) {
+export function InvitationResponse({ token }: Readonly<{ token: string }>) {
   const router = useRouter();
   const [invite, setInvite] = useState<Invite | null>(null);
   const [message, setMessage] = useState("Loading invitation…");

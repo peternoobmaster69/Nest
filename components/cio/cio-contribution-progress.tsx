@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { formatCioDate, formatCioMoney, formatCioPercent } from "@/components/cio/cio-format";
 import type { CioSnapshot } from "@/components/cio/types";
 
-export function CioContributionProgressCard({ overview }: { overview: CioSnapshot }) {
+export function CioContributionProgressCard({ overview }: Readonly<{ overview: CioSnapshot }>) {
   const progress = overview.contributionProgress;
   if (!progress) return null;
 

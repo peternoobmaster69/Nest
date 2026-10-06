@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 export function CioLiquidityCard({
   overview,
   onConfigure,
-}: {
+}: Readonly<{
   overview: CioSnapshot;
   onConfigure: (section: CioSetupSection) => void;
-}) {
+}>) {
   const { liquidity, recurringFlows, baseCurrency } = overview;
   const totalLiquidity = liquidity.immediateCents + liquidity.liquidCents + liquidity.restrictedCents + liquidity.lockedCents;
   const runwayDescription = liquidityRunwayDescription(
@@ -63,7 +63,7 @@ export function liquidityRunwayDescription(
     : `${emergencyRunwayMonths.toFixed(1)} months of essential spending is readily available.`;
 }
 
-function LiquidityRow({ label, value, total, currency }: { label: string; value: number; total: number; currency: string }) {
+function LiquidityRow({ label, value, total, currency }: Readonly<{ label: string; value: number; total: number; currency: string }>) {
   const percentage = total ? Math.round((value / total) * 100) : 0;
   return (
     <div>
@@ -73,6 +73,6 @@ function LiquidityRow({ label, value, total, currency }: { label: string; value:
   );
 }
 
-function FlowMetric({ icon, label, value, currency }: { icon: React.ReactNode; label: string; value: number; currency: string }) {
+function FlowMetric({ icon, label, value, currency }: Readonly<{ icon: React.ReactNode; label: string; value: number; currency: string }>) {
   return <div><span aria-hidden="true">{icon}</span><small>{label}</small><strong>{formatCioMoney(value, currency)}/yr</strong></div>;
 }

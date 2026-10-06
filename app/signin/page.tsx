@@ -7,9 +7,9 @@ import { getSignInErrorMessage } from "@/lib/signin-error";
 
 export default async function SignInPage({
   searchParams,
-}: {
+}: Readonly<{
   searchParams?: Promise<{ error?: string; callbackUrl?: string }>;
-}) {
+}>) {
   const params = (await searchParams) ?? {};
   const signInErrorMessage = getSignInErrorMessage(params.error);
   const callbackUrl = normalizeInternalAppPath(params.callbackUrl);

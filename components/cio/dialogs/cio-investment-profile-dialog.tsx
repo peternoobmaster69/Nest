@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import {
@@ -62,10 +62,10 @@ const DIMENSION_HINTS: Record<CioExposureDimension, string> = {
   SECURITY: "The individual funds, stocks, or other securities inside it.",
 };
 
-export function CioInvestmentProfileDialog({ open, workspaceId, investments: snapshots, onClose, onSaved }: {
+export function CioInvestmentProfileDialog({ open, workspaceId, investments: snapshots, onClose, onSaved }: Readonly<{
   open: boolean; workspaceId: string | null | undefined; investments: CioSnapshot["investments"];
   onClose: () => void; onSaved: () => Promise<void> | void;
-}) {
+}>) {
   const queryClient = useQueryClient();
   const initialId = snapshots.find((item) => item.classificationStatus !== "USER_CONFIRMED")?.id ?? snapshots[0]?.id ?? "";
   const [selectedId, setSelectedId] = useState(initialId);
@@ -127,7 +127,7 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
     return result;
   }, {}), [form.exposures]);
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     if (form.lockUntil && !isValidDateInput(form.lockUntil)) return setFormError("Choose a valid date for when this investment becomes available.");
     if (form.exposures.length > 100) return setFormError("Keep the breakdown to 100 rows or fewer.");
@@ -218,7 +218,7 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
   );
 }
 
-function ExposureKeyField({ row, onChange }: { row: ExposureForm; onChange: (value: string) => void }) {
+function ExposureKeyField({ row, onChange }: Readonly<{ row: ExposureForm; onChange: (value: string) => void }>) {
   if (row.dimension === "ASSET_CLASS") return <SelectField label="What does it own?" hint="Choose the broad type of investment." value={row.key} onChange={(event) => onChange(event.target.value)}>{CIO_ASSET_CLASSES.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>;
   if (row.dimension === "GEOGRAPHY") return <SelectField label="Where is it exposed?" hint="Choose the region represented by this share." value={row.key} onChange={(event) => onChange(event.target.value)}>{CIO_GEOGRAPHIES.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>;
   return <TextField label="Ticker or security code" hint="Use the code shown on the statement, such as VWRA." value={row.key} onChange={(event) => onChange(event.target.value.toUpperCase())} placeholder="e.g. VWRA" maxLength={32} required />;

@@ -4,10 +4,10 @@ import { SelectField } from "@/components/ui/form-field";
 export function CioProfileScopeField({
   value,
   onChange,
-}: {
+}: Readonly<{
   value: CioPlanningScope;
   onChange: (value: CioPlanningScope) => void;
-}) {
+}>) {
   return (
     <SelectField
       label="Who are these calculations for?"

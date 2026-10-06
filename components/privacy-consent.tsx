@@ -30,7 +30,7 @@ type PrivacyConsentContextValue = {
 
 const PrivacyConsentContext = createContext<PrivacyConsentContextValue | null>(null);
 
-export function PrivacyConsentProvider({ children }: { children: ReactNode }) {
+export function PrivacyConsentProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [consent, setConsent] = useState<PrivacyConsent | null>(null);
   const [ready, setReady] = useState(false);
 

@@ -11,14 +11,14 @@ export function CreditTransactionSummary({
   defaultSubaccountBalance,
   shortfall,
   formatCurrency,
-}: {
+}: Readonly<{
   total: number;
   receivableTotal: number;
   defaultSubaccountName: string;
   defaultSubaccountBalance: number;
   shortfall: number;
   formatCurrency: (value: number) => string;
-}) {
+}>) {
   return (
     <div className="cct-summary">
       <div className="cct-summary-left">

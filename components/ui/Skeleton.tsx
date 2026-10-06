@@ -9,7 +9,7 @@ interface SkeletonProps {
   className?: string;
 }
 
-export function Skeleton({ width, height, borderRadius, className = "" }: SkeletonProps) {
+export function Skeleton({ width, height, borderRadius, className = "" }: Readonly<SkeletonProps>) {
   const style: CSSProperties = {
     width,
     height,

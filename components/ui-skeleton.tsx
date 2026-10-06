@@ -3,7 +3,7 @@
 import React from "react";
 
 // Skeleton pulse animation wrapper
-function SkeletonPulse({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+function SkeletonPulse({ children, className = "", style }: Readonly<{ children: React.ReactNode; className?: string; style?: React.CSSProperties }>) {
   return (
     <div className={`skeleton-pulse ${className}`} style={style}>
       {children}

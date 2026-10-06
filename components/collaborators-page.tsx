@@ -3,7 +3,7 @@
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, type ReactNode, useEffect, useState } from "react";
+import { SubmitEvent, type ReactNode, useEffect, useState } from "react";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { CollaboratorsAuditSkeleton, CollaboratorsInvitesSkeleton, CollaboratorsRowsSkeleton } from "@/components/skeletons/CollaboratorsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -70,7 +70,7 @@ type CollaboratorData = {
   }>;
 };
 
-export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: ReactNode }) {
+export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSettings?: ReactNode }>) {
   const routeWorkspaceId = useWorkspaceId();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -262,19 +262,19 @@ export function CollaboratorsPage({ workspaceSettings }: { workspaceSettings?: R
     onError: (error) => setMessage(error instanceof Error ? error.message : "Failed to revoke invitation."),
   });
 
-  const onCreateWorkspace = (event: FormEvent) => {
+  const onCreateWorkspace = (event: SubmitEvent) => {
     event.preventDefault();
     if (!newWorkspaceName.trim()) return;
     createWorkspace.mutate();
   };
 
-  const onUpdateWorkspace = (event: FormEvent) => {
+  const onUpdateWorkspace = (event: SubmitEvent) => {
     event.preventDefault();
     if (!workspaceMeta?.id) return;
     updateWorkspace.mutate();
   };
 
-  const onInvite = (event: FormEvent) => {
+  const onInvite = (event: SubmitEvent) => {
     event.preventDefault();
     if (!workspaceMeta?.id || !inviteEmail.trim()) return;
     inviteMutation.mutate();

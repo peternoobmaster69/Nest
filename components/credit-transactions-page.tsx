@@ -9,7 +9,7 @@ import { normalizeCurrency } from "@/lib/currency";
 import { useMoneyFormat } from "@/lib/use-money-format";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { ChangeEvent, FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, SubmitEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
@@ -201,7 +201,7 @@ function scrollSelectedFilterIntoView(container: HTMLDivElement | null, selected
   });
 }
 
-export function CreditTransactionsPage({ initialCards }: { initialCards: CreditCard[] }) {
+export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards: CreditCard[] }>) {
   const routeWorkspaceId = useWorkspaceId();
   const searchParams = useSearchParams();
   const creditTransactionsUrlKey = searchParams.toString();
@@ -288,20 +288,20 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       if (queryMonth === "all" || queryMonth === "-1") {
         setSelectedMonth(-1);
       } else {
-        const parsedMonth = parseInt(queryMonth, 10);
+        const parsedMonth = Number.parseInt(queryMonth, 10);
         if (parsedMonth >= 1 && parsedMonth <= 12) {
           setSelectedMonth(parsedMonth - 1);
         }
       }
     } else if (savedMonth !== null) {
-      const parsedSavedMonth = parseInt(savedMonth, 10);
+      const parsedSavedMonth = Number.parseInt(savedMonth, 10);
       if (parsedSavedMonth >= -1 && parsedSavedMonth <= 11) {
         setSelectedMonth(parsedSavedMonth);
       }
     }
 
     if (queryYear !== null) {
-      const parsedYear = parseInt(queryYear, 10);
+      const parsedYear = Number.parseInt(queryYear, 10);
       if (parsedYear >= 2020 && parsedYear <= 2100) {
         setSelectedYear(parsedYear);
       }
@@ -1221,7 +1221,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     [budgets.data, deductDestinationAccountId],
   );
 
-  const onSubmitDeduct = async (event: FormEvent) => {
+  const onSubmitDeduct = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!accountingTarget || !deductAccountId || !deductBudgetId) return;
     const sourceAccount = bankAccounts.data?.find((account) => account.id === deductAccountId);
@@ -1256,7 +1256,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     });
   };
 
-  const onSubmitReceivable = (event: FormEvent) => {
+  const onSubmitReceivable = (event: SubmitEvent) => {
     event.preventDefault();
     if (!receivableTarget || !receivableDate || !receivableAmount) return;
     const accountId = useCrossWorkspaceReceivableSource
@@ -1306,7 +1306,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
     setSharedPaymentDueDate(earliestPaymentDueDate ? toDateInputValue(earliestPaymentDueDate) : "");
   }, [earliestPaymentDueDate, selectedCardId, selectedMonth, selectedYear]);
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = (e: SubmitEvent) => {
     e.preventDefault();
     if (!formCardId || !formDate || !formSubject || !formAmount || !formStatementMonth || !formStatementYear) return;
 
@@ -1314,9 +1314,9 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       creditCardId: formCardId,
       transactionDate: new Date(formDate).toISOString(),
       paymentDueDate: formPaymentDue ? new Date(formPaymentDue).toISOString() : null,
-      statementMonth: parseInt(formStatementMonth, 10),
-      statementYear: parseInt(formStatementYear, 10),
-      amountCents: Math.round(parseFloat(formAmount) * 100),
+      statementMonth: Number.parseInt(formStatementMonth, 10),
+      statementYear: Number.parseInt(formStatementYear, 10),
+      amountCents: Math.round(Number.parseFloat(formAmount) * 100),
       subject: formSubject,
     };
 
@@ -1922,7 +1922,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
             max="2100"
             allowDecimal={false}
             value={selectedYear}
-            onValueChange={(value) => setSelectedYear(parseInt(value || String(new Date().getFullYear()), 10))}
+            onValueChange={(value) => setSelectedYear(Number.parseInt(value || String(new Date().getFullYear()), 10))}
           />
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { SubmitEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { CIO_LIQUIDITY_CLASSES, CIO_POSITION_SIDES, type CioLiquidityClass, type CioPlanningPosition, type CioPositionPayload, type CioPositionSide } from "@/components/cio/types";
@@ -31,9 +31,9 @@ function emptyPosition(): PositionForm {
   return { side: "ASSET", category: "OTHER", label: "", amount: "", asOfDate: new Date().toISOString().slice(0, 10), liquidityClass: "RESTRICTED", investable: false, retirement: false, notes: "" };
 }
 
-export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSaved }: {
+export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSaved }: Readonly<{
   open: boolean; workspaceId: string | null | undefined; currency: string; onClose: () => void; onSaved: () => Promise<void> | void;
-}) {
+}>) {
   const queryClient = useQueryClient();
   const { confirm } = useConfirmDialog();
   usePrivacyMode();
@@ -92,7 +92,7 @@ export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSav
     clearErrors();
     setFormOpen(true);
   };
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     const category = form.category.trim().toUpperCase().replaceAll(/[^A-Z0-9_-]/g, "_").replaceAll(/^_+|_+$/g, "");
     const amount = Number(form.amount);

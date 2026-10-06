@@ -13,7 +13,7 @@ const SECTIONS: Array<{ id: CioSetupSection; title: string; description: string;
   { id: "positions", title: "Add other assets or debts", description: "Only add items not already tracked in Nest, such as property, CPF, or a mortgage.", stage: "If needed", icon: <Landmark size={21} /> },
 ];
 
-export function CioSetupDialog({ open, onClose, onSelect }: { open: boolean; onClose: () => void; onSelect: (section: CioSetupSection) => void }) {
+export function CioSetupDialog({ open, onClose, onSelect }: Readonly<{ open: boolean; onClose: () => void; onSelect: (section: CioSetupSection) => void }>) {
   return (
     <Dialog open={open} onClose={onClose} title="Set up Nest CIO" description="Build a useful plan in a few guided steps. You can save what you know and return later." size="lg" contentClassName="cio-dialog">
       <div className="cio-setup-guide" role="note">

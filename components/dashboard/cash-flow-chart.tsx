@@ -23,11 +23,11 @@ export function CashFlowChart({
   points,
   formatShort,
   formatFull,
-}: {
+}: Readonly<{
   points: CashFlowPoint[];
   formatShort: (value: number) => string;
   formatFull: (value: number) => string;
-}) {
+}>) {
   const shellRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const [measuredWidth, setMeasuredWidth] = useState(0);

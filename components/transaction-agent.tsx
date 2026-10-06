@@ -191,7 +191,7 @@ type CardProps = {
   onAskInstead: (session: AgentSession) => void;
 };
 
-export function TransactionAgentCard({ session, agent, latest, typing, workspaceId, onNavigate, onAskInstead }: CardProps) {
+export function TransactionAgentCard({ session, agent, latest, typing, workspaceId, onNavigate, onAskInstead }: Readonly<CardProps>) {
   const [filter, setFilter] = useState("");
   const draft = session.view;
   const active = isActiveDraft(session);

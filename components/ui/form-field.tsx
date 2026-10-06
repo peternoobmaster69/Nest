@@ -10,7 +10,7 @@ type FieldShellProps = {
   children: ReactNode;
 };
 
-function FieldShell({ label, hint, error, required, htmlFor, children }: FieldShellProps) {
+function FieldShell({ label, hint, error, required, htmlFor, children }: Readonly<FieldShellProps>) {
   return (
     <div className={`form-group${error ? " has-error" : ""}`}>
       <label className="label" htmlFor={htmlFor}>

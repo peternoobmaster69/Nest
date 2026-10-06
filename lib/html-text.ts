@@ -53,7 +53,7 @@ export function extractHtmlText(html: string) {
   return {
     title,
     sections,
-    text: text.join("").replace(/[^\S\n]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim(),
+    text: text.join("").replace(/[^\S\n]+/g, " ").split("\n").map((line) => line.trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim(),
   };
 }
 

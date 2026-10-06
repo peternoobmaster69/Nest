@@ -71,12 +71,9 @@ test("SonarQube handles successful empty mutation responses while rejecting empt
   await assert.rejects(api("api/system/status"), /did not return valid JSON/);
 });
 
-test("credentials load from a local file without becoming command arguments", async (context) => {
-  const directory = await mkdtemp(path.join(tmpdir(), "nest-token-test-"));
-  context.after(() => rm(directory, { recursive: true, force: true }));
-  const file = path.join(directory, "token");
-  await writeFile(file, "fixture-only\n", { mode: 0o600 });
-  assert.equal(await readToken("SONAR_TOKEN", { SONAR_TOKEN_FILE: file }), "fixture-only");
+test("credentials come from the environment without opening arbitrary local files", async () => {
+  assert.equal(await readToken("SONAR_TOKEN", { SONAR_TOKEN: " fixture-only\n" }), "fixture-only");
+  await assert.rejects(readToken("SONAR_TOKEN", { SONAR_TOKEN_FILE: "/private-token" }), /Set SONAR_TOKEN/);
   await assert.rejects(readToken("SONAR_TOKEN", {}), /Set SONAR_TOKEN/);
   await assert.rejects(readToken("SONAR_TOKEN", { SONAR_TOKEN: "two tokens" }), /valid token/);
 });

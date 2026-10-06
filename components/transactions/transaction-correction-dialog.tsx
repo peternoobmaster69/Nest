@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEventHandler } from "react";
+import type { SubmitEventHandler } from "react";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { LoadingDots } from "@/components/ui-skeleton";
@@ -48,7 +48,7 @@ export function TransactionCorrectionDialog({
   onReasonChange,
   onSubjectChange,
   onSubmit,
-}: {
+}: Readonly<{
   amount: string;
   budgets: CorrectionBudget[];
   budgetId: string;
@@ -79,8 +79,8 @@ export function TransactionCorrectionDialog({
   onOperationChange: (value: "DEDUCT" | "ADD") => void;
   onReasonChange: (value: string) => void;
   onSubjectChange: (value: string) => void;
-  onSubmit: FormEventHandler<HTMLFormElement>;
-}) {
+  onSubmit: SubmitEventHandler<HTMLFormElement>;
+}>) {
   return (
     <Dialog open onClose={onClose} title="Correct transaction" surface="custom" overlayClassName="profile-modal-overlay">
       <div className="profile-modal txn-modal txn-entry-modal" onClick={(event) => event.stopPropagation()}>

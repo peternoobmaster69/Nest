@@ -51,11 +51,11 @@ export async function GET(request: Request) {
     }
 
     if (year) {
-      where.statementYear = parseInt(year, 10);
+      where.statementYear = Number.parseInt(year, 10);
     }
 
     if (month) {
-      where.statementMonth = parseInt(month, 10);
+      where.statementMonth = Number.parseInt(month, 10);
     }
 
     const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
@@ -70,11 +70,11 @@ export async function GET(request: Request) {
     };
 
     if (year) {
-      cardCountWhere.statementYear = parseInt(year, 10);
+      cardCountWhere.statementYear = Number.parseInt(year, 10);
     }
 
     if (month) {
-      cardCountWhere.statementMonth = parseInt(month, 10);
+      cardCountWhere.statementMonth = Number.parseInt(month, 10);
     }
 
     const unaccountedWhere: Prisma.CreditCardTransactionWhereInput = {

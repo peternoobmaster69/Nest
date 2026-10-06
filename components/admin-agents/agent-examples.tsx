@@ -14,7 +14,7 @@ import { useToast } from "@/components/toast-provider";
 
 const emptyExample = (): AgentExampleInput => ({ title: "", input: "", expectedOutput: "", contextJson: "{}", purpose: "TRAINING", status: "DRAFT", matchMode: "CONTAINS" });
 
-export function AgentExamples({ detail, onChanged }: { detail: AgentDetail; onChanged: () => Promise<void> }) {
+export function AgentExamples({ detail, onChanged }: Readonly<{ detail: AgentDetail; onChanged: () => Promise<void> }>) {
   const [editing, setEditing] = useState<AgentExample | "new" | null>(null);
   const [form, setForm] = useState<AgentExampleInput>(emptyExample);
   const [deleting, setDeleting] = useState<AgentExample | null>(null);

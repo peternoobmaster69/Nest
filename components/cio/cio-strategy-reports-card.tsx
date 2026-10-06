@@ -61,12 +61,12 @@ async function downloadReportPdf(report: CioStrategyReportSummary) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
 }
 
-function StrategyReportSnapshot({ report, latest, downloading, onDownload }: {
+function StrategyReportSnapshot({ report, latest, downloading, onDownload }: Readonly<{
   report: CioStrategyReportSummary;
   latest: boolean;
   downloading: boolean;
   onDownload: () => void;
-}) {
+}>) {
   const headingId = `cio-report-snapshot-${report.id}`;
   return (
     <article className={`cio-report-snapshot${latest ? " is-latest" : ""}`} aria-labelledby={headingId}>
@@ -107,7 +107,7 @@ function StrategyReportSnapshot({ report, latest, downloading, onDownload }: {
   );
 }
 
-export function CioStrategyReportsCard({ canEdit }: { canEdit: boolean }) {
+export function CioStrategyReportsCard({ canEdit }: Readonly<{ canEdit: boolean }>) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const toast = useToast();

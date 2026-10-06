@@ -8,7 +8,7 @@ import { normalizeCurrency } from "@/lib/currency";
 import { useMoneyFormat } from "@/lib/use-money-format";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { ReceivablesListSkeleton, ReceivablesSummarySkeleton } from "@/components/skeletons/ReceivablesSkeleton";
@@ -480,7 +480,7 @@ export function ReceivablesPage() {
     setIsModalOpen(true);
   };
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!workspaceId || !formReceivableDate || !formAmount) return;
 

@@ -6,13 +6,13 @@ export function PageHeader({
   eyebrow,
   actions,
   filters,
-}: {
+}: Readonly<{
   title: string;
   description?: ReactNode;
   eyebrow?: ReactNode;
   actions?: ReactNode;
   filters?: ReactNode;
-}) {
+}>) {
   return (
     <header className="page-header">
       <div className="page-header-main">

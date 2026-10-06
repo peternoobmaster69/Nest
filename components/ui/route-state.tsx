@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AlertTriangle, FileQuestion, LoaderCircle } from "lucide-react";
 import { Button } from "./button";
 
-export function RouteLoadingState({ label = "Loading your workspace" }: { label?: string }) {
+export function RouteLoadingState({ label = "Loading your workspace" }: Readonly<{ label?: string }>) {
   return (
     <main className="route-state" aria-busy="true" aria-live="polite">
       <LoaderCircle className="route-state-spinner" size={28} aria-hidden="true" />
@@ -17,10 +17,10 @@ export function RouteLoadingState({ label = "Loading your workspace" }: { label?
 export function RouteErrorState({
   reset,
   title = "This screen could not be loaded",
-}: {
+}: Readonly<{
   reset: () => void;
   title?: string;
-}) {
+}>) {
   return (
     <main className="route-state" role="alert">
       <AlertTriangle size={30} aria-hidden="true" />

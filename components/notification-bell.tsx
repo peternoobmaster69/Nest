@@ -49,7 +49,7 @@ function relativeTime(value: string) {
   return new Intl.DateTimeFormat("en-SG", { day: "numeric", month: "short" }).format(new Date(value));
 }
 
-export function NotificationBell({ workspaceId }: { workspaceId?: string | null }) {
+export function NotificationBell({ workspaceId }: Readonly<{ workspaceId?: string | null }>) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();

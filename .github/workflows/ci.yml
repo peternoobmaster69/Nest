@@ -26,11 +26,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - name: Configure isolated build credentials
-        run: node scripts/configure-ci-build-env.mjs
-
       - name: Install dependencies
         run: npm ci
+
+      - name: Configure isolated build credentials
+        run: node scripts/configure-ci-build-env.mjs
 
       - name: Generate and validate Prisma client
         run: npm run prisma:generate && npm run prisma:validate
@@ -168,11 +168,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Configure isolated build credentials
         run: node scripts/configure-ci-build-env.mjs
 
-      - name: Install dependencies and generate Prisma client
-        run: npm ci && npm run prisma:generate
+      - name: Generate Prisma client
+        run: npm run prisma:generate
 
       - name: Install verified SonarScanner CLI
         run: bash scripts/install-sonar-scanner.sh

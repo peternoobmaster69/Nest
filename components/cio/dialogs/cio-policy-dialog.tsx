@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { SubmitEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import {
@@ -34,9 +34,9 @@ const EMPTY_POLICY: PolicyForm = {
   bands: [], geographies: [],
 };
 
-export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: {
+export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: Readonly<{
   open: boolean; workspaceId: string | null | undefined; onClose: () => void; onSaved: () => Promise<void> | void;
-}) {
+}>) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<PolicyForm>(EMPTY_POLICY);
   const [formError, setFormError] = useState("");
@@ -70,7 +70,7 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: {
   const updateBand = (index: number, patch: Partial<BandForm>) => set("bands", form.bands.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
   const updateGeography = (index: number, patch: Partial<GeographyForm>) => set("geographies", form.geographies.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     const duplicateBand = findDuplicate(form.bands.map((band) => band.assetClass));
     if (duplicateBand) return setFormError(`${formatCioLabel(duplicateBand)} has been added more than once. Keep one target range for each asset class.`);
@@ -188,7 +188,7 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: {
   );
 }
 
-function TriStateField({ label, hint, value, onChange }: { label: string; hint: string; value: string; onChange: (value: string) => void }) {
+function TriStateField({ label, hint, value, onChange }: Readonly<{ label: string; hint: string; value: string; onChange: (value: string) => void }>) {
   return <SelectField label={label} hint={hint} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Not decided yet</option><option value="true">Fits our policy</option><option value="false">Outside our policy</option></SelectField>;
 }
 function triState(value: string) { return value === "true" ? true : value === "false" ? false : null; }

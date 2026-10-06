@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { SubmitEvent, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Calculator, Info } from "lucide-react";
 import type { CioRetirementProjection, CioRetirementStatus } from "@/lib/domains/cio/types";
@@ -14,10 +14,10 @@ import { TextField } from "@/components/ui/form-field";
 export function CioRetirementCard({
   overview,
   onConfigure,
-}: {
+}: Readonly<{
   overview: CioSnapshot;
   onConfigure: (section: CioSetupSection) => void;
-}) {
+}>) {
   const [mode, setMode] = useState<"nominal" | "real">("real");
   const [scenarioOpen, setScenarioOpen] = useState(false);
   const savedAssets = moneyInputFromCents(overview.totals.retirementIncludedAssetsCents);
@@ -58,7 +58,7 @@ export function CioRetirementCard({
     setScenarioOpen(true);
   };
 
-  const submitScenario = (event: FormEvent) => {
+  const submitScenario = (event: SubmitEvent) => {
     event.preventDefault();
     mutation.mutate();
   };

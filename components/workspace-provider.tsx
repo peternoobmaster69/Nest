@@ -9,10 +9,10 @@ const WorkspaceIdContext = createContext<string | null>(null);
 export function WorkspaceProvider({
   workspaceId,
   children,
-}: {
+}: Readonly<{
   workspaceId: string;
   children: ReactNode;
-}) {
+}>) {
   return (
     <WorkspaceIdContext.Provider value={workspaceId}>
       <Fragment key={workspaceId}>{children}</Fragment>

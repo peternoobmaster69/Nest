@@ -6,11 +6,11 @@ export function MutationErrorSummary({
   error,
   onReload,
   className = "",
-}: {
+}: Readonly<{
   error: unknown;
   onReload?: () => void | Promise<void>;
   className?: string;
-}) {
+}>) {
   if (!error) return null;
   const kind = classifyMutationFailure(error);
   const stale = kind === "stale" || kind === "conflict";

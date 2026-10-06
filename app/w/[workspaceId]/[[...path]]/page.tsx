@@ -19,7 +19,7 @@ type WorkspacePageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function WorkspacePage({ params, searchParams }: WorkspacePageProps) {
+export default async function WorkspacePage({ params, searchParams }: Readonly<WorkspacePageProps>) {
   const { workspaceId, path = [] } = await params;
   const route = path.join("/");
 

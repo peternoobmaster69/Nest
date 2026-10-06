@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { Check, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
@@ -24,7 +24,7 @@ type TextField = Extract<AgentEditField, "amount" | "subject" | "date">;
 const LABELS: Record<TextField, string> = { subject: "Description", amount: "Amount", date: "Date" };
 
 /** The human-in-the-loop checkpoint. Every value shown here is exactly what Confirm will save. */
-export function TransactionAgentReview({ draft, locked, typing, onEdit, onConfirm }: Props) {
+export function TransactionAgentReview({ draft, locked, typing, onEdit, onConfirm }: Readonly<Props>) {
   const review = draft.review!;
   usePrivacyMode();
   const [editing, setEditing] = useState<TextField | null>(null);
@@ -35,7 +35,7 @@ export function TransactionAgentReview({ draft, locked, typing, onEdit, onConfir
   const current: Record<TextField, string> = { subject: after.subject, amount: (after.amountCents / 100).toFixed(2), date: after.date.slice(0, 10) };
 
   const start = (field: TextField) => { setEditing(field); setValue(current[field]); };
-  const save = (event: FormEvent) => {
+  const save = (event: SubmitEvent) => {
     event.preventDefault();
     if (!editing) return;
     const field = editing;

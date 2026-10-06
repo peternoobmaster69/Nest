@@ -13,7 +13,7 @@ const MOUTHS: Record<NestlingMood, string> = {
 };
 
 /** Nestling: the Nest egg with a face. Purely decorative; the button carries the accessible name. */
-export function Nestling({ mood = "idle", size = 44 }: { mood?: NestlingMood; size?: number }) {
+export function Nestling({ mood = "idle", size = 44 }: Readonly<{ mood?: NestlingMood; size?: number }>) {
   return (
     <svg className={`nestling is-${mood}`} width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
       <ellipse className="nestling-shadow" cx="32" cy="59" rx="14" ry="2.6" />

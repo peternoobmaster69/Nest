@@ -86,7 +86,7 @@ export function AutoRuleEditorDialog({
   onClose,
   onSave,
   getDefaultSourceBudgetId,
-}: AutoRuleEditorDialogProps) {
+}: Readonly<AutoRuleEditorDialogProps>) {
   const { format: formatMoney } = useMoneyFormat(baseCurrency);
   return (
     <Dialog open onClose={onClose} title="Edit auto-accounting rule" surface="custom" overlayClassName="auto-rule-modal-overlay">

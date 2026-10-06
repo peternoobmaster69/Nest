@@ -61,7 +61,7 @@ export function AppSidebar({
   onSidebarChange,
   contextData,
   contextLoading,
-}: {
+}: Readonly<{
   userName: string;
   userEmail?: string;
   userImage?: string | null;
@@ -83,7 +83,7 @@ export function AppSidebar({
     isAdmin?: boolean;
   };
   contextLoading?: boolean;
-}) {
+}>) {
   const routeWorkspaceId = useWorkspaceId();
   const context = useQuery({
     queryKey: queryKeys.key(["app-context", routeWorkspaceId]),

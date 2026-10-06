@@ -28,7 +28,7 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import { queryKeys } from "@/lib/query-keys";
@@ -150,12 +150,12 @@ function ModalShell({
   onClose,
   children,
   closeDisabled = false,
-}: {
+}: Readonly<{
   title: string;
   onClose: () => void;
   children: ReactNode;
   closeDisabled?: boolean;
-}) {
+}>) {
   return (
     <Dialog open onClose={onClose} title={title} closeDisabled={closeDisabled} surface="custom" overlayClassName="st-modal-overlay">
       <div className="st-modal" onClick={(event) => event.stopPropagation()}>
@@ -169,7 +169,7 @@ function ModalShell({
   );
 }
 
-function IconTile({ icon: Icon, tone }: { icon: LucideIcon; tone: "source" | "item" }) {
+function IconTile({ icon: Icon, tone }: Readonly<{ icon: LucideIcon; tone: "source" | "item" }>) {
   return (
     <span
       className="st-bank-fallback"
@@ -186,7 +186,7 @@ function IconTile({ icon: Icon, tone }: { icon: LucideIcon; tone: "source" | "it
   );
 }
 
-function ErrorMessage({ error }: { error: Error | null | undefined }) {
+function ErrorMessage({ error }: Readonly<{ error: Error | null | undefined }>) {
   if (!error) return null;
   return <div className="st-error">{error.message}</div>;
 }
@@ -519,7 +519,7 @@ export function BudgetPlanPage() {
     setSourceOwnerId("");
   };
 
-  const saveItem = (event: FormEvent) => {
+  const saveItem = (event: SubmitEvent) => {
     event.preventDefault();
     if (!itemModal || !workspaceId) return;
     const amountCents = toCents(itemAmount);
@@ -549,7 +549,7 @@ export function BudgetPlanPage() {
     }
   };
 
-  const saveSource = (event: FormEvent) => {
+  const saveSource = (event: SubmitEvent) => {
     event.preventDefault();
     if (!sourceModal || !workspaceId) return;
     const amountCents = toCents(sourceAmount);

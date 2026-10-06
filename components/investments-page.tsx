@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { normalizeCurrency } from "@/lib/currency";
 import { useMoneyFormat } from "@/lib/use-money-format";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { EmptyState } from "@/components/ui-skeleton";
 import { InvestmentsAccountGridSkeleton, InvestmentsPortfolioHeaderSkeleton } from "@/components/skeletons/InvestmentsSkeleton";
@@ -1166,7 +1166,7 @@ export function InvestmentsPage() {
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
               <ModalCloseButton onClick={closeAccountModal} label={`Close ${accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}`} />
             </div>
-            <form className="modal-form-shell" onSubmit={(event: FormEvent) => {
+            <form className="modal-form-shell" onSubmit={(event: SubmitEvent) => {
               event.preventDefault();
               if (!workspaceId) {
                 setAccountError("Workspace is not ready. Please wait and try again.");
@@ -1253,7 +1253,7 @@ export function InvestmentsPage() {
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
               <ModalCloseButton onClick={closeEntryModal} label={`Close ${entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}`} />
             </div>
-            <form className="modal-form-shell" onSubmit={(event: FormEvent) => {
+            <form className="modal-form-shell" onSubmit={(event: SubmitEvent) => {
               event.preventDefault();
               if (entryModalMode === "edit" && editingEntryId) {
                 updateEntry.mutate(editingEntryId);

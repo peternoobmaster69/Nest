@@ -13,12 +13,12 @@ import { useToast } from "@/components/toast-provider";
 
 export type AgentSettingsDraft = { settings: AgentSettings; revision: number };
 
-export function AgentSettingsEditor({ detail, model, draft, onDraftChange, onSaved, onChanged }: {
+export function AgentSettingsEditor({ detail, model, draft, onDraftChange, onSaved, onChanged }: Readonly<{
   detail: AgentDetail; model: string | null; draft?: AgentSettingsDraft;
   onDraftChange: (draft: AgentSettingsDraft | undefined) => void;
   onSaved: (submitted: AgentSettingsDraft, revision: number) => void;
   onChanged: () => Promise<void>;
-}) {
+}>) {
   const definition = getAgentDefinition(detail.configuration.id);
   const settings = draft?.settings ?? AgentSettingsSchema.strip().parse(detail.configuration);
   const setSettings = (next: AgentSettings) => onDraftChange({ settings: next, revision: draft?.revision ?? detail.configuration.revision });

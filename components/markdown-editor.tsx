@@ -196,7 +196,7 @@ export function MarkdownEditor({
   maxLines = 15,
   className,
   calculator = false,
-}: NotesInputProps) {
+}: Readonly<NotesInputProps>) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const calculatorTotal = useMemo(
     () => (calculator ? getCalculatorTotal(value) : null),

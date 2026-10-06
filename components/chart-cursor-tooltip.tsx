@@ -72,11 +72,11 @@ export function ChartCursorTooltip({
   position,
   className,
   children,
-}: {
+}: Readonly<{
   position: ChartCursorTooltipPosition;
   className?: string;
   children: ReactNode;
-}) {
+}>) {
   return (
     <div
       className={`chart-cursor-tooltip ${position.side}${className ? ` ${className}` : ""}`}

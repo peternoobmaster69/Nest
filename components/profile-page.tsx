@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { SubmitEvent, useState } from "react";
 import { ArrowRight, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
@@ -23,11 +23,11 @@ export function ProfilePage({
   userName,
   userEmail,
   userImage,
-}: {
+}: Readonly<{
   userName: string;
   userEmail?: string;
   userImage?: string | null;
-}) {
+}>) {
   const workspaceId = useWorkspaceId();
   const router = useRouter();
   const [displayName, setDisplayName] = useState(userName);
@@ -37,7 +37,7 @@ export function ProfilePage({
   const [isError, setIsError] = useState(false);
   const avatarAlt = savedName || userEmail || "User";
 
-  const saveProfile = async (event: FormEvent) => {
+  const saveProfile = async (event: SubmitEvent) => {
     event.preventDefault();
     const nextName = displayName.trim();
     if (!nextName) {

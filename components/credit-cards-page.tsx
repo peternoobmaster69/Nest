@@ -7,7 +7,7 @@ import { buildWorkspacePath } from "@/lib/workspace-entry";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton";
@@ -301,7 +301,7 @@ export function CreditCardsPage() {
     resetForm();
   };
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!workspaceId || !cardName.trim()) return;
     if (editingCardId) {

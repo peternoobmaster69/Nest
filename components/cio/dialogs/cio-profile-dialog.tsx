@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { SubmitEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CioPlanningScope, CioProfile, CioProfilePayload } from "@/components/cio/types";
 import {
@@ -68,12 +68,12 @@ export function CioProfileDialog({
   workspaceId,
   onClose,
   onSaved,
-}: {
+}: Readonly<{
   open: boolean;
   workspaceId: string | null | undefined;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
-}) {
+}>) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ProfileForm>(EMPTY_FORM);
   const [showValidation, setShowValidation] = useState(false);
@@ -120,7 +120,7 @@ export function CioProfileDialog({
       primaryAgeAsOfDate: value ? current.primaryAgeAsOfDate || today : "",
     }));
   };
-  const submit = (event: FormEvent) => {
+  const submit = (event: SubmitEvent) => {
     event.preventDefault();
     const errors = validateProfileForm(form, today);
     if (Object.keys(errors).length > 0) {

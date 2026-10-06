@@ -15,11 +15,11 @@ export function RetirementProjectionChart({
   scenarios,
   mode,
   currency,
-}: {
+}: Readonly<{
   scenarios: CioRetirementScenario[];
   mode: ValueMode;
   currency: string;
-}) {
+}>) {
   const [tableScenarioName, setTableScenarioName] = useState<CioRetirementScenarioName>("BASE");
   const allPoints = scenarios.flatMap((scenario) => scenario.points);
   if (!allPoints.length) return <p className="cio-chart-empty">No projection points are available.</p>;

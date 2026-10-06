@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { AlertTriangle, Inbox } from "lucide-react";
 import { Button } from "./button";
 
-export function QueryError({ title = "Something went wrong", message, onRetry }: { title?: string; message?: string; onRetry?: () => void }) {
+export function QueryError({ title = "Something went wrong", message, onRetry }: Readonly<{ title?: string; message?: string; onRetry?: () => void }>) {
   return (
     <section className="state-panel state-panel-error" role="alert">
       <AlertTriangle size={24} aria-hidden="true" />
@@ -15,7 +15,7 @@ export function QueryError({ title = "Something went wrong", message, onRetry }:
   );
 }
 
-export function EmptyState({ title, description, action, icon }: { title: string; description?: string; action?: ReactNode; icon?: ReactNode }) {
+export function EmptyState({ title, description, action, icon }: Readonly<{ title: string; description?: string; action?: ReactNode; icon?: ReactNode }>) {
   return (
     <section className="empty-state">
       <div className="empty-state-icon" aria-hidden="true">{icon || <Inbox size={28} />}</div>

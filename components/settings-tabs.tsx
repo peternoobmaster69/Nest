@@ -50,10 +50,10 @@ function rememberTab(tab: SettingsTab) {
 export function SettingsTabs({
   activeTab,
   children,
-}: {
+}: Readonly<{
   activeTab: SettingsTab;
   children: ReactNode;
-}) {
+}>) {
   const router = useRouter();
   const workspaceId = useWorkspaceId();
   const settingsHref = (tab: SettingsTab) =>

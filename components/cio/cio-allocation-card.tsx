@@ -10,11 +10,11 @@ export function CioAllocationCard({
   overview,
   policy,
   onConfigure,
-}: {
+}: Readonly<{
   overview: CioSnapshot;
   policy: CioPolicy | null | undefined;
   onConfigure: (section: CioSetupSection) => void;
-}) {
+}>) {
   const [view, setView] = useState<"asset" | "geography">("asset");
   const buckets = view === "asset" ? overview.allocation.assetClasses : overview.allocation.geographies;
 

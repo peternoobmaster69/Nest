@@ -61,6 +61,9 @@ Direct `dependencies`, `devDependencies`, and security overrides from `package.j
 | `@playwright/test` | Browser, mobile, and visual regression tests | Browser revisions and platform-specific snapshots |
 | `@axe-core/playwright` | Browser accessibility checks | Rule changes and accessible interactions |
 | `c8` | V8 coverage with all production sources included | Source maps and exact line/branch/function counts |
+| `happy-dom` | Isolated DOM for interactive component tests | Browser API fidelity; browser tests still validate real rendering |
+| `@testing-library/react`, `@testing-library/dom`, `@testing-library/user-event` | Exercise rendered controls and user interactions | Accessible queries, event ordering, and React effects |
+| `@actions/core` | GitHub's supported secret masking and environment APIs | Workflow command escaping and runner compatibility |
 
 ## Overrides
 

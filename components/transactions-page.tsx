@@ -8,7 +8,7 @@ import { useMoneyFormat } from "@/lib/use-money-format";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, SubmitEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -1159,7 +1159,7 @@ export function TransactionsPage() {
     }
   };
 
-  const onSubmit = async (event: FormEvent) => {
+  const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     const selectedBudget = budgets.data?.find((b) => b.id === budgetId);
     const accountId = selectedBudget?.accountId || effectiveSelectedBankId;
@@ -1384,7 +1384,7 @@ export function TransactionsPage() {
     }
   }, [editingTxId, editFormGroups.data, editGroupId]);
 
-  const onSubmitEdit = async (event: FormEvent) => {
+  const onSubmitEdit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!editingTransaction || !editSubject || !editAmount || !editTransactionDate || !editBudgetId) return;
     const amountCents = Math.round(Number(editAmount) * 100);
@@ -1507,7 +1507,7 @@ export function TransactionsPage() {
     setEditBankBalance("");
   };
 
-  const onSubmitBankBalance = async (event: FormEvent) => {
+  const onSubmitBankBalance = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!editingBankAccount || !editBankBalance) return;
     const nextBalanceCents = Math.round(Number(editBankBalance) * 100);
@@ -1533,7 +1533,7 @@ export function TransactionsPage() {
     });
   };
 
-  const onSubmitTransfer = async (event: FormEvent) => {
+  const onSubmitTransfer = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!workspaceId || !transferTitle || !transferAmount || !transferSourceBudgetId || !transferDestinationBudgetId) return;
     const sourceBudget = budgets.data?.find((budget) => budget.id === transferSourceBudgetId);
@@ -1621,7 +1621,7 @@ export function TransactionsPage() {
     setCreateBudgetIsSavings(false);
   };
 
-  const onCreateBudget = (event: FormEvent) => {
+  const onCreateBudget = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     if (!workspaceId || !createBudgetAccountId || !createBudgetName.trim()) return;
     const parsedTarget = createBudgetTarget.trim() ? Number(createBudgetTarget) : 0;
@@ -1702,7 +1702,7 @@ export function TransactionsPage() {
     setEditingGroupMembershipChanges((current) => ({ ...current, [transactionId]: !isSelected }));
   };
 
-  const submitEditingGroup = (event: FormEvent) => {
+  const submitEditingGroup = (event: SubmitEvent) => {
     event.preventDefault();
     if (!editingGroup || !editingGroupName.trim()) return;
     const addTransactionIds: string[] = [];
@@ -1740,7 +1740,7 @@ export function TransactionsPage() {
     setIsGroupModalOpen(true);
   };
 
-  const submitGrouping = (event: FormEvent) => {
+  const submitGrouping = (event: SubmitEvent) => {
     event.preventDefault();
     if (!selectedTransactionIds.length) return;
     if (groupDestinationId === "NEW" && !groupName.trim()) return;

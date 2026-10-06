@@ -13,7 +13,7 @@ export function isRecentAuthenticationRequired(message?: string | null) {
   return message ? RECENT_AUTHENTICATION_MESSAGES.has(message.trim()) : false;
 }
 
-export function ReauthenticateButton({ className = "btn btn-primary btn-xs" }: { className?: string }) {
+export function ReauthenticateButton({ className = "btn btn-primary btn-xs" }: Readonly<{ className?: string }>) {
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   const reauthenticate = async () => {
@@ -39,11 +39,11 @@ export function ActionableAuthenticationMessage({
   message,
   className,
   role = "status",
-}: {
+}: Readonly<{
   message?: string | null;
   className: string;
   role?: "alert" | "status";
-}) {
+}>) {
   if (!message) return null;
 
   const requiresReauthentication = isRecentAuthenticationRequired(message);

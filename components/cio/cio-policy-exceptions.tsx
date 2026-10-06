@@ -8,10 +8,10 @@ const SEVERITY_ORDER = { CRITICAL: 0, WARNING: 1, INFO: 2 } as const;
 export function CioPolicyExceptions({
   overview,
   onConfigure,
-}: {
+}: Readonly<{
   overview: CioSnapshot;
   onConfigure: (section: CioSetupSection) => void;
-}) {
+}>) {
   const exceptions = [...overview.policyExceptions].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 
   return (

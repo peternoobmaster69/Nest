@@ -78,7 +78,7 @@ type RecalculateResult = {
 
 const CHUNK_SIZE = MAX_IMPORT_ROWS_PER_CHUNK;
 
-export function DataImportSection({ workspaceId, baseCurrency }: DataImportSectionProps) {
+export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataImportSectionProps>) {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const importRunRef = useRef<{ fingerprint: string; id: string } | null>(null);

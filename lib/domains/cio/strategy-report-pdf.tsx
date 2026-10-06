@@ -111,7 +111,7 @@ function metricValue(metric: CioStrategyRecommendation["current"], currency: str
   return String(metric.value);
 }
 
-function Header({ report }: { report: CioStrategyReportModel }) {
+function Header({ report }: Readonly<{ report: CioStrategyReportModel }>) {
   return (
     <View style={styles.header} fixed>
       <Text>{report.workspaceName.toUpperCase()} · HOUSEHOLD CIO STRATEGY</Text>
@@ -120,7 +120,7 @@ function Header({ report }: { report: CioStrategyReportModel }) {
   );
 }
 
-function Footer({ report }: { report: CioStrategyReportModel }) {
+function Footer({ report }: Readonly<{ report: CioStrategyReportModel }>) {
   return (
     <View style={styles.footer} fixed>
       <Text>CONFIDENTIAL · DETERMINISTIC STRATEGY PLANNING</Text>
@@ -129,7 +129,7 @@ function Footer({ report }: { report: CioStrategyReportModel }) {
   );
 }
 
-function ReportPage({ report, children }: { report: CioStrategyReportModel; children: React.ReactNode }) {
+function ReportPage({ report, children }: Readonly<{ report: CioStrategyReportModel; children: React.ReactNode }>) {
   return (
     <Page size="A4" style={styles.page} wrap>
       <Header report={report} />
@@ -139,7 +139,7 @@ function ReportPage({ report, children }: { report: CioStrategyReportModel; chil
   );
 }
 
-function PageHeading({ eyebrow, title, lead }: { eyebrow: string; title: string; lead: string }) {
+function PageHeading({ eyebrow, title, lead }: Readonly<{ eyebrow: string; title: string; lead: string }>) {
   return (
     <View>
       <Text style={styles.eyebrow}>{eyebrow}</Text>
@@ -149,7 +149,7 @@ function PageHeading({ eyebrow, title, lead }: { eyebrow: string; title: string;
   );
 }
 
-function MetricCard({ value, label: itemLabel }: { value: string; label: string }) {
+function MetricCard({ value, label: itemLabel }: Readonly<{ value: string; label: string }>) {
   return (
     <View style={styles.metricCard}>
       <View style={styles.metricInner}>
@@ -160,7 +160,7 @@ function MetricCard({ value, label: itemLabel }: { value: string; label: string 
   );
 }
 
-function RecommendationCard({ item, currency }: { item: CioStrategyRecommendation; currency: string }) {
+function RecommendationCard({ item, currency }: Readonly<{ item: CioStrategyRecommendation; currency: string }>) {
   const severityStyle = item.severity === "CRITICAL"
     ? styles.recommendationCritical
     : item.severity === "HIGH"
@@ -184,7 +184,7 @@ function RecommendationCard({ item, currency }: { item: CioStrategyRecommendatio
   );
 }
 
-function TableHeader({ cells }: { cells: Array<{ label: string; style: Style }> }) {
+function TableHeader({ cells }: Readonly<{ cells: Array<{ label: string; style: Style }> }>) {
   return (
     <View style={[styles.tableRow, styles.tableHeader]} fixed>
       {cells.map((cell) => <Text key={cell.label} style={[styles.cell, cell.style]}>{cell.label}</Text>)}
@@ -192,7 +192,7 @@ function TableHeader({ cells }: { cells: Array<{ label: string; style: Style }> 
   );
 }
 
-function AllocationTable({ report }: { report: CioStrategyReportModel }) {
+function AllocationTable({ report }: Readonly<{ report: CioStrategyReportModel }>) {
   const targetByAsset = new Map(report.policy.assetClassBands.map((band) => [band.assetClass, band]));
   return (
     <View style={styles.table}>
@@ -217,7 +217,7 @@ function AllocationTable({ report }: { report: CioStrategyReportModel }) {
   );
 }
 
-function InvestmentsTable({ report }: { report: CioStrategyReportModel }) {
+function InvestmentsTable({ report }: Readonly<{ report: CioStrategyReportModel }>) {
   return (
     <View style={styles.table}>
       <TableHeader cells={[
@@ -241,7 +241,7 @@ function InvestmentsTable({ report }: { report: CioStrategyReportModel }) {
   );
 }
 
-function RetirementTable({ report }: { report: CioStrategyReportModel }) {
+function RetirementTable({ report }: Readonly<{ report: CioStrategyReportModel }>) {
   return (
     <View style={styles.table}>
       <TableHeader cells={[
@@ -264,7 +264,7 @@ function RetirementTable({ report }: { report: CioStrategyReportModel }) {
   );
 }
 
-export function CioStrategyReportDocument({ report }: { report: CioStrategyReportModel }) {
+export function CioStrategyReportDocument({ report }: Readonly<{ report: CioStrategyReportModel }>) {
   return (
     <Document title={report.title} author="Nest CIO" subject="Household investment and retirement strategy">
       <Page size="A4" style={styles.cover}>

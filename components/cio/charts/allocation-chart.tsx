@@ -7,12 +7,12 @@ export function AllocationChart({
   buckets,
   currency,
   targetBands = [],
-}: {
+}: Readonly<{
   title: string;
   buckets: CioAllocationBucket[];
   currency: string;
   targetBands?: CioPolicyBand[];
-}) {
+}>) {
   const bandByClass = new Map(targetBands.map((band) => [band.assetClass, band]));
   const visible = buckets.filter((bucket) => bucket.valueCents !== 0 || bucket.allocationBps !== 0);
 

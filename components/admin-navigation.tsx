@@ -5,7 +5,7 @@ import { Bot, LayoutDashboard } from "lucide-react";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 
-export function AdminNavigation({ current }: { current: "overview" | "agents" }) {
+export function AdminNavigation({ current }: Readonly<{ current: "overview" | "agents" }>) {
   const workspaceId = useWorkspaceId();
   const href = (path: string) => workspaceId ? buildWorkspacePath(workspaceId, path) : path;
   return (

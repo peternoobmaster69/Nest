@@ -94,7 +94,7 @@ export async function generateMetadata({ searchParams }: HomeProps): Promise<Met
   return metadata;
 }
 
-export default async function Home({ searchParams }: HomeProps) {
+export default async function Home({ searchParams }: Readonly<HomeProps>) {
   const params = (await searchParams) ?? {};
   const showSignIn = params.login === "1" || Boolean(params.error);
   const callbackUrl = normalizeInternalAppPath(params.callbackUrl);

@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { normalizeCurrency } from "@/lib/currency";
 import { useMoneyFormat } from "@/lib/use-money-format";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { SubmitEvent, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui-skeleton";
 import { RewardsCardGridSkeleton, RewardsRowsSkeleton } from "@/components/skeletons/RewardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -191,13 +191,13 @@ export function RewardsPage({
   initialHotelRewards,
   initialConversions,
   availableCards,
-}: {
+}: Readonly<{
   initialCreditCards: CreditCardReward[];
   initialFrequentFlyers: FrequentFlyer[];
   initialHotelRewards: HotelReward[];
   initialConversions: PointConversion[];
   availableCards: AvailableCard[];
-}) {
+}>) {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -624,15 +624,15 @@ export function RewardsPage({
     },
   });
 
-  const onCreateCardReward = (e: FormEvent) => {
+  const onCreateCardReward = (e: SubmitEvent) => {
     e.preventDefault();
     if (!newCardId || !newCardPoints) return;
     createCardReward.mutate({
       creditCardId: newCardId,
-      currentPoints: parseInt(newCardPoints),
-      pointsValueCents: newCardValue ? Math.round(parseFloat(newCardValue) * 100) : undefined,
-      conversionFromPoints: parseInt(newCardConvPoints),
-      conversionToMiles: parseInt(newCardConvMiles),
+      currentPoints: Number.parseInt(newCardPoints, 10),
+      pointsValueCents: newCardValue ? Math.round(Number.parseFloat(newCardValue) * 100) : undefined,
+      conversionFromPoints: Number.parseInt(newCardConvPoints, 10),
+      conversionToMiles: Number.parseInt(newCardConvMiles, 10),
       conversionDescription: newCardConvDesc || undefined,
     });
   };
@@ -656,14 +656,14 @@ export function RewardsPage({
     resetCardRewardForm();
   };
 
-  const onCreateConversion = (e: FormEvent) => {
+  const onCreateConversion = (e: SubmitEvent) => {
     e.preventDefault();
     if (!convCardId || !convFFId || !convPoints || !convMiles) return;
     createConversion.mutate({
       creditCardRewardId: convCardId,
       frequentFlyerId: convFFId,
-      fromPoints: parseInt(convPoints),
-      toMiles: parseInt(convMiles),
+      fromPoints: Number.parseInt(convPoints, 10),
+      toMiles: Number.parseInt(convMiles, 10),
       description: convDesc || undefined,
     });
   };
@@ -732,18 +732,18 @@ export function RewardsPage({
     setIsFFModalOpen(true);
   };
 
-  const onSubmitFF = (e: FormEvent) => {
+  const onSubmitFF = (e: SubmitEvent) => {
     e.preventDefault();
     if (!ffFormProgram || !ffFormAirline) return;
     const payload = {
       programName: ffFormProgram,
       airlineName: ffFormAirline,
       accountNumber: ffFormNumber || undefined,
-      currentMiles: parseInt(ffFormMiles) || 0,
-      targetMiles: ffFormTarget ? parseInt(ffFormTarget) : undefined,
-      expiryWarning: parseInt(ffFormExpiry) || 6,
+      currentMiles: Number.parseInt(ffFormMiles, 10) || 0,
+      targetMiles: ffFormTarget ? Number.parseInt(ffFormTarget, 10) : undefined,
+      expiryWarning: Number.parseInt(ffFormExpiry, 10) || 6,
       mileNeverExpire: ffFormMileNeverExpire,
-      validityPeriodYears: parseInt(ffFormValidityPeriodYears, 10) || 3,
+      validityPeriodYears: Number.parseInt(ffFormValidityPeriodYears, 10) || 3,
       notes: ffFormNotes || undefined,
     };
     if (editingFFId) {
@@ -787,17 +787,17 @@ export function RewardsPage({
     setIsHotelModalOpen(true);
   };
 
-  const onSubmitHotel = (e: FormEvent) => {
+  const onSubmitHotel = (e: SubmitEvent) => {
     e.preventDefault();
     if (!hotelFormProgram || !hotelFormBrand || !hotelFormPoints || !hotelFormCentsPerPoint) return;
-    const targetPoints = hotelFormTarget.trim() === "" ? null : parseInt(hotelFormTarget, 10);
+    const targetPoints = hotelFormTarget.trim() === "" ? null : Number.parseInt(hotelFormTarget, 10);
     const payload = {
       programName: hotelFormProgram,
       hotelBrand: hotelFormBrand,
       accountNumber: hotelFormNumber || undefined,
-      currentPoints: parseInt(hotelFormPoints, 10) || 0,
+      currentPoints: Number.parseInt(hotelFormPoints, 10) || 0,
       targetPoints: targetPoints && targetPoints > 0 ? targetPoints : null,
-      centsPerPoint: parseFloat(hotelFormCentsPerPoint) || 0,
+      centsPerPoint: Number.parseFloat(hotelFormCentsPerPoint) || 0,
       notes: hotelFormNotes || undefined,
     };
     if (editingHotelId) {
@@ -1101,7 +1101,7 @@ export function RewardsPage({
                       onClick={() =>
                         updateCardReward.mutate({
                           id: card.id,
-                          currentPoints: parseInt(editingCardPoints || "0"),
+                          currentPoints: Number.parseInt(editingCardPoints || "0", 10),
                         })
                       }
                     >
@@ -1352,7 +1352,7 @@ export function RewardsPage({
                                   frequentFlyerId: selectedHistoryFrequentFlyer.id,
                                   id: entry.id,
                                   date: editingEarnDate,
-                                  miles: parseInt(editingEarnMiles || "0", 10),
+                                  miles: Number.parseInt(editingEarnMiles || "0", 10),
                                   title: editingEarnTitle || undefined,
                                   expiryDate: editingEarnExpiryDate || undefined,
                                 })
@@ -1567,8 +1567,8 @@ export function RewardsPage({
                       onClick={() =>
                         updateConversion.mutate({
                           id: conv.id,
-                          fromPoints: parseInt(editingConvPoints || "0"),
-                          toMiles: parseInt(editingConvMiles || "0"),
+                          fromPoints: Number.parseInt(editingConvPoints || "0", 10),
+                          toMiles: Number.parseInt(editingConvMiles || "0", 10),
                           description: editingConvDesc || undefined,
                         })
                       }
@@ -2102,7 +2102,7 @@ export function RewardsPage({
                 createEarnTransaction.mutate({
                   frequentFlyerId: openHistoryFFId,
                   date: earnDate,
-                  miles: parseInt(earnMiles, 10),
+                  miles: Number.parseInt(earnMiles, 10),
                   title: earnTitle || undefined,
                   expiryDate: earnExpiryDate || undefined,
                 });
@@ -2190,7 +2190,7 @@ export function RewardsPage({
                   frequentFlyerId: openHistoryFFId,
                   date: redeemDate,
                   redemptionTitle: redeemTitle,
-                  milesToRedeem: parseInt(redeemMiles, 10),
+                  milesToRedeem: Number.parseInt(redeemMiles, 10),
                 });
               }}
             >

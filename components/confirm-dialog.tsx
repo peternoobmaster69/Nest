@@ -19,7 +19,7 @@ type ConfirmDialogState = ConfirmDialogOptions & {
   open: boolean;
 };
 
-export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
+export function ConfirmDialogProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [dialog, setDialog] = useState<ConfirmDialogState>({
     open: false,
     title: "",

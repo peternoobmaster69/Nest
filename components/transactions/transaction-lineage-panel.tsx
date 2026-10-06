@@ -96,13 +96,13 @@ export function TransactionLineagePanel({
   lineage,
   loading,
   onRetry,
-}: {
+}: Readonly<{
   error: Error | null;
   formatAmount: (value: number) => string;
   lineage: TransactionLineageResponse | null;
   loading: boolean;
   onRetry: () => void;
-}) {
+}>) {
   return (
     <details
       className="tx-lineage-panel modal-grid-span-2"

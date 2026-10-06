@@ -11,7 +11,7 @@ import { useToast } from "@/components/toast-provider";
 
 const finalStatuses = ["SUCCEEDED", "FAILED", "CANCELLED"];
 
-export function AgentFineTuning({ detail, configured, onChanged }: { detail: AgentDetail; configured: boolean; onChanged: () => Promise<void> }) {
+export function AgentFineTuning({ detail, configured, onChanged }: Readonly<{ detail: AgentDetail; configured: boolean; onChanged: () => Promise<void> }>) {
   const [baseModel, setBaseModel] = useState("");
   const [trainingType, setTrainingType] = useState("Standard");
   const [epochs, setEpochs] = useState("auto");

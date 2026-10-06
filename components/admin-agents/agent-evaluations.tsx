@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/controls";
 import { EmptyState } from "@/components/ui/query-state";
 import { useToast } from "@/components/toast-provider";
 
-export function AgentEvaluations({ detail, configured, onChanged }: { detail: AgentDetail; configured: boolean; onChanged: () => Promise<void> }) {
+export function AgentEvaluations({ detail, configured, onChanged }: Readonly<{ detail: AgentDetail; configured: boolean; onChanged: () => Promise<void> }>) {
   const cases = detail.examples.filter((example) => example.purpose === "EVALUATION" && example.status === "APPROVED");
   const [selected, setSelected] = useState(() => cases.slice(0, 5).map((example) => example.id));
   const request = useRef<{ signature: string; id: string } | null>(null);

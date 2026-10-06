@@ -24,7 +24,7 @@ export function PageFrame({
   userImage,
   badgeCounts,
   children,
-}: {
+}: Readonly<{
   title: string;
   current: string;
   userName: string;
@@ -35,7 +35,7 @@ export function PageFrame({
     receivables?: number;
   };
   children: ReactNode;
-}) {
+}>) {
   const workspaceId = useWorkspaceId();
   const contextQuery = useQuery({
     queryKey: queryKeys.context(workspaceId),

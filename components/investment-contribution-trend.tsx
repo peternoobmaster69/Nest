@@ -2,11 +2,11 @@ export function ContributionTrendIndicator({
   currentCents,
   previousCents,
   previousYear,
-}: {
+}: Readonly<{
   currentCents: number;
   previousCents: number | undefined;
   previousYear: number;
-}) {
+}>) {
   if (previousCents === undefined || currentCents === previousCents) return null;
   const increased = currentCents > previousCents;
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, CreditCard, Landmark, Layers3, Sparkles } from "lucide-react";
 
@@ -29,12 +29,12 @@ export function WorkspaceSetupGuide({
   baseCurrency,
   accounts,
   progress,
-}: {
+}: Readonly<{
   workspaceId: string;
   baseCurrency: string;
   accounts: SetupAccount[];
   progress: WorkspaceSetupProgress;
-}) {
+}>) {
   const queryClient = useQueryClient();
   const preferenceKey = `nest:workspace-setup:${SETUP_VERSION}:${workspaceId}`;
   const snoozeKey = `${preferenceKey}:snoozed`;
@@ -200,7 +200,7 @@ export function WorkspaceSetupGuide({
     setOpen(true);
   };
 
-  const submitBank = (event: FormEvent) => {
+  const submitBank = (event: SubmitEvent) => {
     event.preventDefault();
     const amount = Number(startingBalance || "0");
     if (!Number.isFinite(amount) || amount < 0) return setValidationError("Enter a valid starting balance.");
@@ -208,7 +208,7 @@ export function WorkspaceSetupGuide({
     createBank.mutate();
   };
 
-  const submitSubAccount = (event: FormEvent) => {
+  const submitSubAccount = (event: SubmitEvent) => {
     event.preventDefault();
     const target = Number(monthlyTarget || "0");
     if (!subAccountName.trim()) return setValidationError("Give the sub-account a name.");
@@ -218,7 +218,7 @@ export function WorkspaceSetupGuide({
     createSubAccount.mutate();
   };
 
-  const submitCard = (event: FormEvent) => {
+  const submitCard = (event: SubmitEvent) => {
     event.preventDefault();
     const statement = Number(statementDay);
     const due = Number(paymentDueDay);

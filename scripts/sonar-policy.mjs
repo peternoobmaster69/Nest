@@ -7,8 +7,8 @@ export const root = fileURLToPath(new URL("../", import.meta.url));
 export const policy = versionedPolicy;
 
 export async function readToken(name, env = process.env) {
-  const token = env[name]?.trim() || (env[`${name}_FILE`] && (await readFile(env[`${name}_FILE`], "utf8")).trim());
-  if (!token || /\s/.test(token)) throw new Error(`Set ${name} or ${name}_FILE to a valid token. Do not commit credentials.`);
+  const token = env[name]?.trim();
+  if (!token || /\s/.test(token)) throw new Error(`Set ${name} to a valid token in the process environment. Do not commit credentials.`);
   return token;
 }
 

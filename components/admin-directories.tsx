@@ -27,10 +27,10 @@ function loginLocation(countryCode: string | null, ipAddress: string | null) {
 export function AdminDirectories({
   users,
   workspaces,
-}: {
+}: Readonly<{
   users: AdminOverview["users"];
   workspaces: AdminOverview["workspaces"];
-}) {
+}>) {
   const [openDirectory, setOpenDirectory] = useState<Directory | null>(null);
   const userPagination = useAdminPagination(users.length);
   const workspacePagination = useAdminPagination(workspaces.length);

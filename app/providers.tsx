@@ -13,7 +13,7 @@ import { DeviceIntegration } from "@/components/device-integration";
 import { mutationFailureMessage } from "@/lib/api/client";
 import { PrivacyConsentProvider } from "@/components/privacy-consent";
 
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({ children }: Readonly<{ children: ReactNode }>) {
   const [queryClient] = useState(
     () => {
       const client = new QueryClient({

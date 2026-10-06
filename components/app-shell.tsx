@@ -94,7 +94,7 @@ export function AppShell({
   contextLoading,
   topbarTitle,
   children,
-}: {
+}: Readonly<{
   title: string;
   currentPath: string;
   userName: string;
@@ -105,7 +105,7 @@ export function AppShell({
   contextLoading?: boolean;
   topbarTitle?: ReactNode;
   children: ReactNode;
-}) {
+}>) {
   const routeWorkspaceId = useWorkspaceId();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);

@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { appendFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { exportVariable, setSecret } from "@actions/core";
 import { setTimeout } from "node:timers/promises";
 import { createClient, policy } from "./sonar-policy.mjs";
 
@@ -29,7 +28,7 @@ async function main() {
   const projects = await initial("api/projects/search", { ps: "1" });
   if (projects.paging.total !== 0) throw new Error("Refusing to bootstrap an existing SonarQube instance.");
   const password = `Nest_${randomBytes(32).toString("hex")}Aa1!`;
-  console.log(`::add-mask::${password}`);
+  setSecret(password);
   await initial("api/users/change_password", { login: "admin", previousPassword: "admin", password }, "POST");
   const admin = basicClient(password);
   await admin("api/projects/create", { project: policy.projectKey, name: policy.projectName, visibility: "private" }, "POST");
@@ -39,10 +38,8 @@ async function main() {
     if (type === "PROJECT_ANALYSIS_TOKEN") params.projectKey = policy.projectKey;
     const { token } = await admin("api/user_tokens/generate", params, "POST");
     if (!token) throw new Error("SonarQube did not return a CI token.");
-    console.log(`::add-mask::${token}`);
-    const filename = path.join(process.env.RUNNER_TEMP, `${name.toLowerCase()}.txt`);
-    await writeFile(filename, `${token}\n`, { mode: 0o600, flag: "wx" });
-    await appendFile(process.env.GITHUB_ENV, `${name}_FILE=${filename}\n`);
+    setSecret(token);
+    exportVariable(name, token);
   }
   console.log("Disposable SonarQube is ready; CI credentials expire tomorrow.");
 }

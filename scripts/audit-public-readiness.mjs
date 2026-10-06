@@ -3,11 +3,12 @@ import { closeSync, existsSync, fstatSync, openSync, readFileSync } from "node:f
 import path from "node:path";
 
 const root = process.cwd();
-const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+const gitExecutable = process.platform === "win32" ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git";
+const tracked = execFileSync(gitExecutable, ["ls-files", "-z"], { encoding: "utf8" })
   .split("\0")
   .filter(Boolean);
 const untracked = execFileSync(
-  "git",
+  gitExecutable,
   ["ls-files", "--others", "--exclude-standard", "-z"],
   { encoding: "utf8" },
 )

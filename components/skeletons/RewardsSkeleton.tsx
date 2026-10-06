@@ -69,7 +69,7 @@ export function RewardsSummarySkeleton() {
   );
 }
 
-export function RewardsCardGridSkeleton({ variant = "standard" }: { variant?: "standard" | "hotel" }) {
+export function RewardsCardGridSkeleton({ variant = "standard" }: Readonly<{ variant?: "standard" | "hotel" }>) {
   if (variant === "hotel") {
     return (
       <>

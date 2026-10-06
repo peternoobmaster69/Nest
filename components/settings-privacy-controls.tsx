@@ -24,7 +24,7 @@ async function responseError(response: Response, fallback: string) {
   return payload.message || payload.error || fallback;
 }
 
-export function SettingsPrivacyControls({ view = "privacy" }: { view?: "privacy" | "data" }) {
+export function SettingsPrivacyControls({ view = "privacy" }: Readonly<{ view?: "privacy" | "data" }>) {
   const router = useRouter();
   const { consent, updateConsent } = usePrivacyConsent();
   const [offlineSummary, setOfflineSummary] = useState(EMPTY_OFFLINE_SUMMARY);

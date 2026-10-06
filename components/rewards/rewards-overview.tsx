@@ -14,7 +14,7 @@ export function RewardsOverview({
   hotelValue,
   combinedMiles,
   formatCurrency,
-}: {
+}: Readonly<{
   loading: boolean;
   cardMiles: number;
   cardCount: number;
@@ -25,7 +25,7 @@ export function RewardsOverview({
   hotelValue: number;
   combinedMiles: number;
   formatCurrency: (value: number) => string;
-}) {
+}>) {
   return (
     <section className="rewards-overview">
       {loading ? <RewardsSummarySkeleton /> : (

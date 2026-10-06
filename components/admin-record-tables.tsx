@@ -16,9 +16,9 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-SG", {
 
 export function AdminRecentActivityTable({
   turns,
-}: {
+}: Readonly<{
   turns: AdminOverview["recentTurns"];
-}) {
+}>) {
   const pagination = useAdminPagination(turns.length);
   const visibleTurns = turns.slice(pagination.startIndex, pagination.endIndex);
 
@@ -59,9 +59,9 @@ export function AdminRecentActivityTable({
 
 export function AdminBackgroundJobsTable({
   jobs,
-}: {
+}: Readonly<{
   jobs: AdminOverview["backgroundJobs"]["recent"];
-}) {
+}>) {
   const pagination = useAdminPagination(jobs.length);
   const visibleJobs = jobs.slice(pagination.startIndex, pagination.endIndex);
 
