@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WORKSPACE_ID_HEADER, WORKSPACE_PATH_HEADER } from "@/lib/workspace-request";
+import { shouldNoIndexRequest } from "@/lib/seo";
 
 const LEGACY_WORKSPACE_PATHS = [
   "/admin",
@@ -52,7 +53,7 @@ function contentSecurityPolicy(nonce: string) {
   return directives.join("; ");
 }
 
-function applySecurityHeaders(response: NextResponse, csp: string, isApi: boolean) {
+function applySecurityHeaders(response: NextResponse, csp: string, isApi: boolean, noIndex: boolean) {
   response.headers.set("Content-Security-Policy", csp);
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
@@ -62,6 +63,7 @@ function applySecurityHeaders(response: NextResponse, csp: string, isApi: boolea
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
   );
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  if (noIndex) response.headers.set("X-Robots-Tag", "noindex, nofollow");
   if (process.env.NODE_ENV === "production") {
     response.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   }
@@ -81,6 +83,7 @@ export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const csp = contentSecurityPolicy(nonce);
   const isApi = request.nextUrl.pathname.startsWith("/api/");
+  const noIndex = shouldNoIndexRequest(request.nextUrl.pathname, request.nextUrl.searchParams.keys());
   const method = request.method.toUpperCase();
   const unsafeMethod = !["GET", "HEAD", "OPTIONS"].includes(method);
 
@@ -90,7 +93,7 @@ export function proxy(request: NextRequest) {
     entryUrl.pathname = "/entry";
     entryUrl.search = "";
     entryUrl.searchParams.set("next", destination);
-    return applySecurityHeaders(NextResponse.redirect(entryUrl), csp, false);
+    return applySecurityHeaders(NextResponse.redirect(entryUrl), csp, false, noIndex);
   }
 
   if (isApi && unsafeMethod) {
@@ -101,6 +104,7 @@ export function proxy(request: NextRequest) {
         NextResponse.json({ error: "Cross-origin request denied" }, { status: 403 }),
         csp,
         true,
+        noIndex,
       );
     }
   }
@@ -117,7 +121,7 @@ export function proxy(request: NextRequest) {
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-  return applySecurityHeaders(response, csp, isApi);
+  return applySecurityHeaders(response, csp, isApi, noIndex);
 }
 
 export const config = {

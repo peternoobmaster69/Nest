@@ -1,8 +1,11 @@
 import { LandingScrollMotion } from "@/components/landing-scroll-motion";
 import { LandingSignInDialog } from "@/components/landing-signin-dialog";
+import { SiteStructuredData } from "@/components/site-structured-data";
 import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { getSignInErrorMessage } from "@/lib/signin-error";
 import { normalizeInternalAppPath } from "@/lib/workspace-entry";
+import { hasSignInQuery, NO_INDEX_ROBOTS, publicPageMetadata, PUBLIC_PAGES } from "@/lib/seo";
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -77,11 +80,19 @@ const RHYTHM = [
   { title: "Reconcile and review", body: "Refresh bank balances, explain discrepancies, and update investment values." },
 ] as const;
 
-export default async function Home({
-  searchParams,
-}: {
+type HomeProps = {
   searchParams?: Promise<{ login?: string; error?: string; callbackUrl?: string }>;
-}) {
+};
+
+export async function generateMetadata({ searchParams }: HomeProps): Promise<Metadata> {
+  const metadata = publicPageMetadata(PUBLIC_PAGES.home);
+  if (hasSignInQuery(Object.keys((await searchParams) ?? {}))) {
+    metadata.robots = NO_INDEX_ROBOTS;
+  }
+  return metadata;
+}
+
+export default async function Home({ searchParams }: HomeProps) {
   const params = (await searchParams) ?? {};
   const showSignIn = params.login === "1" || Boolean(params.error);
   const callbackUrl = normalizeInternalAppPath(params.callbackUrl);
@@ -90,6 +101,7 @@ export default async function Home({
   if (!session?.user) {
     return (
       <main className="lp" data-landing>
+        <SiteStructuredData />
         <LandingScrollMotion />
         {showSignIn || session?.sessionLimitRequired ? (
           <LandingSignInDialog
@@ -120,14 +132,15 @@ export default async function Home({
         <section className="lp-hero" data-scene="exit" aria-labelledby="hero-title">
           <div className="lp-hero-glow" aria-hidden="true" />
           <div className="lp-hero-copy">
-            <span className="lp-hero-kicker">Personal finance, made explainable</span>
+            <span className="lp-hero-kicker">Personal budgeting &amp; expense tracking</span>
             <h1 id="hero-title">
-              Every dollar.<br />
+              Every dollar.{" "}<br />
               <span className="lp-gradient-text">Fully explained.</span>
             </h1>
             <p>
-              Know what you have, what it is for, and what comes next. Nest brings bank cash, virtual budgets, card payments,
-              receivables, savings, and investments into one clear money map—without pretending they are all the same thing.
+              Nest is a personal finance app for planning budgets, tracking expenses, and managing savings and investments.
+              Organize your bank balances, credit card payments, and money owed to you in one clear view, on your own or
+              in a shared workspace.
             </p>
             <div className="lp-hero-actions">
               <Link href="/login" className="lp-btn-primary">
@@ -385,7 +398,7 @@ export default async function Home({
                 <p>Deploy Nest yourself and keep control of the infrastructure, database, and operating costs.</p>
               </div>
               <div className="lp-use-card-footer">
-                <small>The GitHub repository will be public soon.</small>
+                <small>The source and setup instructions are available on GitHub.</small>
                 <a
                   href="https://github.com/peternoobmaster69/SaveTogether"
                   className="lp-btn-secondary"

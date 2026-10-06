@@ -1,3 +1,7 @@
+import { publicPageMetadata, PUBLIC_PAGES } from "@/lib/seo";
+
+export const metadata = publicPageMetadata(PUBLIC_PAGES.terms);
+
 export default function TermsOfServicePage() {
   return (
     <main className="legal-shell">

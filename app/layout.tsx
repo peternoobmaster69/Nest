@@ -3,11 +3,16 @@ import { DM_Mono, DM_Sans } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import { APP_ICON_COOKIE, appIconAssets, DEFAULT_APP_ICON, parseAppIcon } from "@/lib/app-icons";
 import { Providers } from "@/app/providers";
+import { NO_INDEX_ROBOTS, SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const baseMetadata: Metadata = {
-  title: "Nest Personal Finance Companion",
-  description: "Manage bank cash, virtual budgets, credit-card payables, receivables, savings, and investments with full visibility.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: "%s | Nest" },
+  description: SITE_DESCRIPTION,
+  // Public pages opt in individually; application pages are not search landing pages.
+  robots: NO_INDEX_ROBOTS,
+  verification: { google: process.env.GOOGLE_SITE_VERIFICATION },
   appleWebApp: {
     capable: true,
     title: "Nest",
