@@ -1161,7 +1161,7 @@ export function InvestmentsPage() {
 
       {accountModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeAccountModal} title="Investment account" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal inv-modal">
             <div className="profile-modal-head">
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
               <ModalCloseButton onClick={closeAccountModal} label={`Close ${accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}`} />
@@ -1179,26 +1179,26 @@ export function InvestmentsPage() {
               createAccount.mutate();
             }}>
               <div className="profile-modal-body inv-modal-body">
-              <div className="profile-field">
+              <label className="profile-field" htmlFor="investment-display-name">
                 <span>Display Name of the Account</span>
-                <Input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-              </div>
-              <div className="profile-field">
+                <Input id="investment-display-name" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+              </label>
+              <label className="profile-field" htmlFor="investment-institution-name">
                 <span>Financial Institution Name</span>
-                <Input className="input" value={institutionName} onChange={(e) => setInstitutionName(e.target.value)} required />
-              </div>
-              <div className="profile-field">
+                <Input id="investment-institution-name" className="input" value={institutionName} onChange={(e) => setInstitutionName(e.target.value)} required />
+              </label>
+              <label className="profile-field" htmlFor="investment-product-name">
                 <span>Product Name</span>
-                <Input className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required />
-              </div>
-              <div className="profile-field">
+                <Input id="investment-product-name" className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required />
+              </label>
+              <label className="profile-field" htmlFor="investment-inception-date">
                 <span>Inception Date</span>
-                <Input className="input" type="date" value={inceptionDate} onChange={(e) => setInceptionDate(e.target.value)} required />
-              </div>
-              <div className="profile-field">
+                <Input id="investment-inception-date" className="input" type="date" value={inceptionDate} onChange={(e) => setInceptionDate(e.target.value)} required />
+              </label>
+              <label className="profile-field" htmlFor="investment-divested-date">
                 <span>Divested Date (Optional)</span>
-                <Input className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
-              </div>
+                <Input id="investment-divested-date" className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
+              </label>
               <div className="profile-field">
                 <span>Is liquid (Available to withdraw anytime?)</span>
                 <div className="segmented-toggle inv-liquidity-toggle" role="group" aria-label="Is liquid">
@@ -1248,7 +1248,7 @@ export function InvestmentsPage() {
 
       {entryModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeEntryModal} title="Investment entry" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal inv-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal inv-modal">
             <div className="profile-modal-head">
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
               <ModalCloseButton onClick={closeEntryModal} label={`Close ${entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}`} />

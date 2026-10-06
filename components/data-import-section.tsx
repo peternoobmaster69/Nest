@@ -381,8 +381,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
         {/* Workspace */}
         {workspaces.length > 1 && (
           <div className="settings-field">
-            <label>Workspace</label>
-            <Select
+            <label htmlFor="data-import-section-selected-workspace-id-workspace-id">Workspace</label>
+            <Select id="data-import-section-selected-workspace-id-workspace-id"
               className="input"
               value={selectedWorkspaceId || workspaceId || ""}
               onChange={(e) => {
@@ -411,8 +411,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
 
         {/* Bank Account */}
         <div className="settings-field">
-          <label>Bank Account</label>
-          <Select
+          <label htmlFor="data-import-section-selected-account-id">Bank Account</label>
+          <Select id="data-import-section-selected-account-id"
             className="input"
             value={selectedAccountId}
             onChange={(e) => {
@@ -433,8 +433,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
 
         {/* Sub Account (Budget) */}
         <div className="settings-field">
-          <label>Sub Account (Budget)</label>
-          <Select
+          <label htmlFor="data-import-section-selected-budget-id">Sub Account (Budget)</label>
+          <Select id="data-import-section-selected-budget-id"
             className="input"
             value={selectedBudgetId}
             onChange={(e) => {
@@ -460,8 +460,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
 
         {/* Kind */}
         <div className="settings-field">
-          <label>Transaction Kind</label>
-          <Select className="input" value={kind} onChange={(e) => setKind(e.target.value)} disabled={isImporting}>
+          <label htmlFor="data-import-section-kind">Transaction Kind</label>
+          <Select id="data-import-section-kind" className="input" value={kind} onChange={(e) => setKind(e.target.value)} disabled={isImporting}>
             <option value="Migration">Migration</option>
             <option value="Adjustment">Adjustment</option>
             <option value="EXPENSE">Expense</option>

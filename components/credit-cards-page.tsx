@@ -548,7 +548,7 @@ export function CreditCardsPage() {
       {/* Add Card Modal */}
       {isModalOpen && (
         <Dialog open onClose={closeModal} title="Credit card" surface="custom" overlayClassName="cc-modal-overlay">
-          <div className="cc-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="cc-modal">
             <div className="cc-modal-header">
               <h3>{editingCardId ? "Edit Credit Card" : "Add Credit Card"}</h3>
               <ModalCloseButton onClick={closeModal} label={`Close ${editingCardId ? "Edit Credit Card" : "Add Credit Card"}`} />
@@ -581,8 +581,8 @@ export function CreditCardsPage() {
 
               <div className="cc-form-grid">
                 <div className="form-group">
-                  <label className="label">Card Name</label>
-                  <Input
+                  <label htmlFor="credit-cards-card-name" className="label">Card Name</label>
+                  <Input id="credit-cards-card-name"
                     className="input"
                     placeholder="e.g., DBS Altitude"
                     value={cardName}
@@ -592,8 +592,8 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="label">Bank</label>
-                  <Select className="input" value={bankName} onChange={(e) => setBankName(e.target.value)}>
+                  <label htmlFor="credit-cards-bank-name" className="label">Bank</label>
+                  <Select id="credit-cards-bank-name" className="input" value={bankName} onChange={(e) => setBankName(e.target.value)}>
                     {SINGAPORE_BANKS.map((bank) => (
                       <option key={bank.code} value={bank.name}>
                         {bank.name}
@@ -603,8 +603,8 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group cc-span-2">
-                  <label className="label">Last 4 digits</label>
-                  <Input
+                  <label htmlFor="credit-cards-card-last4" className="label">Last 4 digits</label>
+                  <Input id="credit-cards-card-last4"
                     className="input"
                     placeholder="3456"
                     value={cardLast4}
@@ -665,8 +665,8 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="label">Expiry Month</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="credit-cards-expiry-month" className="label">Expiry Month</label>
+                  <NumericCalculatorInput id="credit-cards-expiry-month"
                     min="1"
                     max="12"
                     placeholder="MM"
@@ -677,8 +677,8 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="label">Expiry Year</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="credit-cards-expiry-year" className="label">Expiry Year</label>
+                  <NumericCalculatorInput id="credit-cards-expiry-year"
                     min="2024"
                     max="2100"
                     placeholder="YYYY"
@@ -689,8 +689,8 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="label">Statement Day</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="credit-cards-statement-day" className="label">Statement Day</label>
+                  <NumericCalculatorInput id="credit-cards-statement-day"
                     min="1"
                     max="31"
                     value={statementDay}
@@ -701,8 +701,8 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="label">Payment Due Day</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="credit-cards-payment-due-day" className="label">Payment Due Day</label>
+                  <NumericCalculatorInput id="credit-cards-payment-due-day"
                     min="1"
                     max="31"
                     value={paymentDueDay}
@@ -713,8 +713,8 @@ export function CreditCardsPage() {
                 </div>
 
                 <div className="form-group cc-span-2">
-                  <label className="label">Notes (optional)</label>
-                  <Input
+                  <label htmlFor="credit-cards-notes" className="label">Notes (optional)</label>
+                  <Input id="credit-cards-notes"
                     className="input"
                     placeholder="Additional notes..."
                     value={notes}

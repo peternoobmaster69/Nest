@@ -11,6 +11,25 @@ const { renderToStaticMarkup } = require("react-dom/server");
 afterEach(cleanup);
 after(() => ui.dispose());
 
+test("an initially open dialog hydrates without replacing server-rendered page content", async () => {
+  const errors = [];
+  const content = h("main", null,
+    h("h1", null, "Welcome to Nest"),
+    h(Dialog, { open: true, title: "Sign in to Nest", onClose: () => {} }, h("button", null, "Continue")),
+    h("p", null, "Public landing content"),
+  );
+  const container = document.createElement("div");
+  container.innerHTML = renderToStaticMarkup(content);
+  assert.doesNotMatch(container.innerHTML, /role="dialog"/);
+  document.body.append(container);
+  const heading = container.querySelector("h1");
+  const view = render(content, { container, baseElement: document.body, hydrate: true, onRecoverableError: (error) => errors.push(error) });
+  await view.findByRole("dialog", { name: "Sign in to Nest" });
+  assert.equal(view.getByRole("heading", { name: "Welcome to Nest" }), heading);
+  assert.ok(view.getByText("Public landing content"));
+  assert.deepEqual(errors, []);
+});
+
 test("closed and server-rendered dialogs do not render or lock scrolling", () => {
   const view = render(h(Dialog, { open: false, onClose: () => {}, title: "Closed" }, "Content"));
   assert.equal(view.queryByRole("dialog"), null);

@@ -147,30 +147,6 @@
       </div>
       <p id="status" role="status" aria-live="polite">Waiting for a connection…</p>
     </main>
-    <script>
-      (() => {
-        const status = document.getElementById("status");
-        const retry = document.getElementById("retry");
-        const back = document.getElementById("back");
-
-        const reconnect = () => {
-          status.textContent = "Connection restored. Reloading…";
-          window.location.reload();
-        };
-
-        retry.addEventListener("click", () => {
-          status.textContent = navigator.onLine ? "Checking connection…" : "Still offline. We’ll retry when you reconnect.";
-          window.location.reload();
-        });
-
-        back.addEventListener("click", () => {
-          if (window.history.length > 1) window.history.back();
-          else status.textContent = "No earlier screen is available in this window.";
-        });
-
-        window.addEventListener("online", reconnect);
-        if (navigator.onLine) reconnect();
-      })();
-    </script>
+    <script src="/offline.js" integrity="sha256-ZQIEPExNqdmGu/RY3I/w5LgmU/ukXWkkYPFpqxTuw88=" defer></script>
   </body>
 </html>

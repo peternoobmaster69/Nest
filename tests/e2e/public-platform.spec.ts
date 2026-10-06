@@ -25,10 +25,12 @@ test("offline fallback is keyboard operable and has no serious axe violations", 
 
 test("style guide reflows and renders consistently in both themes", async ({ page }, testInfo) => {
   await page.goto("/style-guide.html");
-  await page.evaluate((theme) => {
-    document.documentElement.dataset.theme = theme;
-  }, testInfo.project.name.includes("mobile") ? "dark" : "light");
+  const theme = testInfo.project.name.includes("mobile") ? "dark" : "light";
+  await page.getByRole("button", { name: theme === "dark" ? "🌙 Dark" : "☀️ Light" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+  await page.mouse.move(0, 0);
   await expect(page.locator("body")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
   await expect(page).toHaveScreenshot("style-guide.png", {
     fullPage: false,
     animations: "disabled",

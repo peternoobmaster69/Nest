@@ -1467,7 +1467,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
       {/* Add Account Modal */}
       {isAddModalOpen && (
         <Dialog open onClose={closeAddModal} title="Add bank account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>Add Bank Account</h3>
               <ModalCloseButton onClick={closeAddModal} label="Close Add Bank Account" />
@@ -1475,8 +1475,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
             <form className="st-modal-form" onSubmit={onSubmitAdd}>
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
-                  <label className="label">Bank</label>
-                  <Select
+                  <label htmlFor="settings-selected-bank-name" className="label">Bank</label>
+                  <Select id="settings-selected-bank-name"
                     className="input"
                     value={selectedBankName}
                     onChange={(e) => setSelectedBankName(e.target.value)}
@@ -1489,8 +1489,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                   </Select>
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Account Name</label>
-                  <Input
+                  <label htmlFor="settings-name" className="label">Account Name</label>
+                  <Input id="settings-name"
                     className="input"
                     placeholder="e.g., DBS Savings"
                     value={name}
@@ -1499,8 +1499,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                   <span className="st-hint">If left empty, the bank name will be used</span>
                 </div>
                 <div className="form-group">
-                  <label className="label">Starting Balance</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="settings-balance" className="label">Starting Balance</label>
+                  <NumericCalculatorInput id="settings-balance"
                     min="0"
                     step="0.01"
                     placeholder="0.00"
@@ -1509,8 +1509,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Description</label>
-                  <Input
+                  <label htmlFor="settings-description" className="label">Description</label>
+                  <Input id="settings-description"
                     className="input"
                     placeholder="Optional"
                     value={description}
@@ -1539,7 +1539,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
       {/* Edit Account Modal */}
       {isEditModalOpen && editingAccountId && (
         <Dialog open onClose={closeEditModal} title="Edit bank account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>Edit Bank Account</h3>
               <ModalCloseButton onClick={closeEditModal} label="Close Edit Bank Account" />
@@ -1547,8 +1547,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
             <form className="st-modal-form" onSubmit={onSubmitEdit}>
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
-                  <label className="label">Bank</label>
-                  <Select
+                  <label htmlFor="settings-editing-bank-name" className="label">Bank</label>
+                  <Select id="settings-editing-bank-name"
                     className="input"
                     value={editingBankName}
                     onChange={(e) => setEditingBankName(e.target.value)}
@@ -1561,8 +1561,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                   </Select>
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Account Name</label>
-                  <Input
+                  <label htmlFor="settings-editing-name" className="label">Account Name</label>
+                  <Input id="settings-editing-name"
                     className="input"
                     placeholder="Account name"
                     value={editingName}
@@ -1570,8 +1570,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Balance</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="settings-editing-balance" className="label">Balance</label>
+                  <NumericCalculatorInput id="settings-editing-balance"
                     min="0"
                     step="0.01"
                     value={editingBalance}
@@ -1579,8 +1579,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Status</label>
-                  <Select
+                  <label htmlFor="settings-editing-is-active-active-inactive" className="label">Status</label>
+                  <Select id="settings-editing-is-active-active-inactive"
                     className="input"
                     value={editingIsActive ? "ACTIVE" : "INACTIVE"}
                     onChange={(e) => setEditingIsActive(e.target.value === "ACTIVE")}
@@ -1590,8 +1590,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                   </Select>
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Description</label>
-                  <Input
+                  <label htmlFor="settings-editing-description" className="label">Description</label>
+                  <Input id="settings-editing-description"
                     className="input"
                     placeholder="Optional"
                     value={editingDescription}

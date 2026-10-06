@@ -2336,7 +2336,7 @@ export function TransactionsPage() {
         {/* Custom Month Popover */}
         {isCustomMonthOpen && typeof document !== "undefined" && createPortal(
           <Dialog open onClose={() => setIsCustomMonthOpen(false)} title="Select months" surface="custom" overlayClassName="tx-popover-overlay">
-            <div className="tx-month-popover" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="tx-month-popover">
               <div className="tx-popover-header">
                 <div>
                   <h4>Select months</h4>
@@ -2503,7 +2503,7 @@ export function TransactionsPage() {
 
       {isGroupModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={() => setIsGroupModalOpen(false)} title="Create transaction group" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal tx-group-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal tx-group-modal">
             <div className="profile-modal-head">
               <h3>Group {selectedTransactionIds.length} transactions</h3>
               <ModalCloseButton onClick={() => setIsGroupModalOpen(false)} label="Close Group Transactions" />
@@ -2566,7 +2566,7 @@ export function TransactionsPage() {
 
       {editingGroup && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeEditingGroupModal} title="Edit transaction group" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal tx-group-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal tx-group-modal">
             <div className="profile-modal-head">
               <h3>Edit group</h3>
               <ModalCloseButton onClick={closeEditingGroupModal} label="Close Edit Group" />
@@ -2657,7 +2657,7 @@ export function TransactionsPage() {
 
       {isCreateModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={() => setIsCreateModalOpen(false)} title="Add transaction" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal txn-modal txn-entry-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal txn-entry-modal">
             <div className="profile-modal-head">
               <h3>Add Transaction</h3>
               <ModalCloseButton onClick={() => setIsCreateModalOpen(false)} label="Close Add Transaction" />
@@ -2822,7 +2822,7 @@ export function TransactionsPage() {
 
       {editingBankAccount && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeEditBankBalance} title="Edit bank balance" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal">
             <div className="profile-modal-head">
               <h3>Edit Bank Balance</h3>
               <ModalCloseButton onClick={closeEditBankBalance} label="Close Edit Bank Balance" />
@@ -2830,8 +2830,8 @@ export function TransactionsPage() {
             <form className="modal-form-shell" onSubmit={onSubmitBankBalance}>
               <div className="profile-modal-body txn-modal-body txn-modal-form txn-bank-balance-form">
               <div className="form-group">
-                <label className="label">Bank Account</label>
-                <Input className="input" value={editingBankAccount.name} disabled />
+                <label htmlFor="transactions-editing-bank-account-name" className="label">Bank Account</label>
+                <Input id="transactions-editing-bank-account-name" className="input" value={editingBankAccount.name} disabled />
               </div>
               <div className="form-group">
                 <label className="label">Balance ({baseCurrency})</label>
@@ -2863,7 +2863,7 @@ export function TransactionsPage() {
 
       {isTransferModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeTransferModal} title="Transfer between sub-accounts" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal">
             <div className="profile-modal-head">
               <h3>Transfer Between Sub-Accounts</h3>
               <ModalCloseButton onClick={closeTransferModal} label="Close Transfer Between Sub-Accounts" />
@@ -2940,7 +2940,7 @@ export function TransactionsPage() {
 
       {receivableInfoBudgetId && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={() => setReceivableInfoBudgetId(null)} title="Receivable details" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal">
             <div className="profile-modal-head">
               <h3>{receivableInfoBudget?.name || "Receivable Breakdown"}</h3>
               <ModalCloseButton onClick={() => setReceivableInfoBudgetId(null)} label="Close Receivable Breakdown" />
@@ -2993,7 +2993,7 @@ export function TransactionsPage() {
 
       {isBudgetModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeBudgetModal} title="Sub-account" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal txn-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal txn-modal">
             <div className="profile-modal-head">
               <h3>{editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}</h3>
               <ModalCloseButton onClick={closeBudgetModal} label={`Close ${editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}`} />

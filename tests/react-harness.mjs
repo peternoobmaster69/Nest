@@ -19,6 +19,8 @@ export async function createReactHarness() {
     KeyboardEvent: window.KeyboardEvent,
     MouseEvent: window.MouseEvent,
     MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    IntersectionObserver: window.IntersectionObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),

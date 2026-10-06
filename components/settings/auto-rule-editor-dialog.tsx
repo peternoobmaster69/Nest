@@ -90,7 +90,7 @@ export function AutoRuleEditorDialog({
   const { format: formatMoney } = useMoneyFormat(baseCurrency);
   return (
     <Dialog open onClose={onClose} title="Edit auto-accounting rule" surface="custom" overlayClassName="auto-rule-modal-overlay">
-      <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title" onClick={(event) => event.stopPropagation()}>
+      <div className="auto-rule-modal" role="dialog" aria-modal="true" aria-labelledby="auto-rule-modal-title">
         <div className="auto-rule-modal-header">
           <div className="auto-rule-modal-title-wrap">
             <span className="auto-rule-number">{displayIndex}</span>

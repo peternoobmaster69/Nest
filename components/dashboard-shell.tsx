@@ -1184,7 +1184,7 @@ export function DashboardShell({
 
         {createBudgetOpen && (
           <Dialog open onClose={() => setCreateBudgetOpen(false)} title="Create sub-account" surface="custom" overlayClassName="profile-modal-overlay">
-            <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="profile-modal">
               <div className="profile-modal-head">
                 <h3>New Sub-Account</h3>
                 <ModalCloseButton onClick={() => setCreateBudgetOpen(false)} label="Close New Sub-Account" />
@@ -1234,7 +1234,7 @@ export function DashboardShell({
 
         {editingBankAccount && (
           <Dialog open onClose={closeEditBankBalance} title="Edit bank balance" surface="custom" overlayClassName="profile-modal-overlay txn-contained-modal-overlay">
-            <div className="profile-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal">
               <div className="profile-modal-head">
                 <h3>Edit Bank Balance</h3>
                 <ModalCloseButton onClick={closeEditBankBalance} label="Close Edit Bank Balance" />

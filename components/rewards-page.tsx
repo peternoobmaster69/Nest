@@ -1633,7 +1633,7 @@ export function RewardsPage({
       {/* Credit Card Rewards Modal */}
       {isCardRewardModalOpen && data?.cardsWithoutRewards.length ? (
         <Dialog open onClose={closeCardRewardModal} title="Add card rewards" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>Add Credit Card Rewards</h3>
               <ModalCloseButton onClick={closeCardRewardModal} label="Close Add Credit Card Rewards" />
@@ -1733,7 +1733,7 @@ export function RewardsPage({
       {/* Conversion Rate Modal */}
       {isConversionModalOpen && data?.creditCards.length && data?.frequentFlyers.length ? (
         <Dialog open onClose={closeConversionModal} title="Add point conversion" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>Add Conversion Rate</h3>
               <ModalCloseButton onClick={closeConversionModal} label="Close Add Conversion Rate" />
@@ -1831,7 +1831,7 @@ export function RewardsPage({
       {/* Hotel Rewards Modal */}
       {isHotelModalOpen && (
         <Dialog open onClose={closeHotelModal} title="Hotel reward account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>{editingHotelId ? "Edit Hotel Rewards" : "Add Hotel Rewards"}</h3>
               <ModalCloseButton onClick={closeHotelModal} label={`Close ${editingHotelId ? "Edit Hotel Program" : "Add Hotel Program"}`} />
@@ -1839,8 +1839,8 @@ export function RewardsPage({
             <form className="st-modal-form" onSubmit={onSubmitHotel}>
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
-                  <label className="label">Program Name</label>
-                  <Input
+                  <label htmlFor="rewards-hotel-form-program" className="label">Program Name</label>
+                  <Input id="rewards-hotel-form-program"
                     className="input"
                     type="text"
                     placeholder="e.g., Marriott Bonvoy"
@@ -1850,8 +1850,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Hotel Brand</label>
-                  <Input
+                  <label htmlFor="rewards-hotel-form-brand" className="label">Hotel Brand</label>
+                  <Input id="rewards-hotel-form-brand"
                     className="input"
                     type="text"
                     placeholder="e.g., Marriott"
@@ -1861,8 +1861,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Account Number</label>
-                  <Input
+                  <label htmlFor="rewards-hotel-form-number" className="label">Account Number</label>
+                  <Input id="rewards-hotel-form-number"
                     className="input"
                     type="text"
                     placeholder="Optional"
@@ -1871,8 +1871,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Current Points</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-hotel-form-points" className="label">Current Points</label>
+                  <NumericCalculatorInput id="rewards-hotel-form-points"
                     min="1"
                     allowDecimal={false}
                     placeholder="0"
@@ -1882,8 +1882,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Target Points</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-hotel-form-target" className="label">Target Points</label>
+                  <NumericCalculatorInput id="rewards-hotel-form-target"
                     min="0"
                     allowDecimal={false}
                     placeholder="Optional"
@@ -1892,8 +1892,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Cents Per Point</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-hotel-form-cents-per-point" className="label">Cents Per Point</label>
+                  <NumericCalculatorInput id="rewards-hotel-form-cents-per-point"
                     min="0"
                     step="0.001"
                     placeholder="0.700"
@@ -1944,7 +1944,7 @@ export function RewardsPage({
       {/* Frequent Flyer Modal */}
       {isFFModalOpen && (
         <Dialog open onClose={closeFFModal} title="Frequent flyer account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>{editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}</h3>
               <ModalCloseButton onClick={closeFFModal} label={`Close ${editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}`} />
@@ -1952,8 +1952,8 @@ export function RewardsPage({
             <form className="st-modal-form" onSubmit={onSubmitFF}>
               <div className="st-form-grid">
                 <div className="form-group st-span-2">
-                  <label className="label">Program Name</label>
-                  <Input
+                  <label htmlFor="rewards-ff-form-program" className="label">Program Name</label>
+                  <Input id="rewards-ff-form-program"
                     className="input"
                     type="text"
                     placeholder="e.g., KrisFlyer"
@@ -1963,8 +1963,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Airline Name</label>
-                  <Input
+                  <label htmlFor="rewards-ff-form-airline" className="label">Airline Name</label>
+                  <Input id="rewards-ff-form-airline"
                     className="input"
                     type="text"
                     placeholder="e.g., Singapore Airlines"
@@ -1974,8 +1974,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Account Number</label>
-                  <Input
+                  <label htmlFor="rewards-ff-form-number" className="label">Account Number</label>
+                  <Input id="rewards-ff-form-number"
                     className="input"
                     type="text"
                     placeholder="Optional"
@@ -1984,8 +1984,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Current Miles</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-ff-form-miles" className="label">Current Miles</label>
+                  <NumericCalculatorInput id="rewards-ff-form-miles"
                     min="0"
                     allowDecimal={false}
                     placeholder="0"
@@ -1994,8 +1994,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Target Miles</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-ff-form-target" className="label">Target Miles</label>
+                  <NumericCalculatorInput id="rewards-ff-form-target"
                     min="0"
                     allowDecimal={false}
                     placeholder="Optional"
@@ -2004,8 +2004,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Expiry Warning (months)</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-ff-form-expiry" className="label">Expiry Warning (months)</label>
+                  <NumericCalculatorInput id="rewards-ff-form-expiry"
                     min="1"
                     max="24"
                     allowDecimal={false}
@@ -2036,8 +2036,8 @@ export function RewardsPage({
                 </div>
                 {!ffFormMileNeverExpire && (
                   <div className="form-group st-span-2">
-                    <label className="label">Validity Period (years)</label>
-                    <NumericCalculatorInput
+                    <label htmlFor="rewards-ff-form-validity-period-years" className="label">Validity Period (years)</label>
+                    <NumericCalculatorInput id="rewards-ff-form-validity-period-years"
                       min="1"
                       allowDecimal={false}
                       placeholder="3"
@@ -2089,7 +2089,7 @@ export function RewardsPage({
       {/* Add Earn Transaction Modal */}
       {isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
         <Dialog open onClose={() => setIsAddEarnModalOpen(false)} title="Add miles earned" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>Add Earn Transaction</h3>
               <ModalCloseButton onClick={() => setIsAddEarnModalOpen(false)} label="Close Add Earn Transaction" />
@@ -2110,8 +2110,8 @@ export function RewardsPage({
             >
               <div className="st-form-grid">
                 <div className="form-group">
-                  <label className="label">Date</label>
-                  <Input
+                  <label htmlFor="rewards-earn-date" className="label">Date</label>
+                  <Input id="rewards-earn-date"
                     className="input"
                     type="date"
                     value={earnDate}
@@ -2120,8 +2120,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Miles Earned</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-earn-miles" className="label">Miles Earned</label>
+                  <NumericCalculatorInput id="rewards-earn-miles"
                     min="1"
                     allowDecimal={false}
                     placeholder="0"
@@ -2131,8 +2131,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Title (optional)</label>
-                  <Input
+                  <label htmlFor="rewards-earn-title" className="label">Title (optional)</label>
+                  <Input id="rewards-earn-title"
                     className="input"
                     type="text"
                     placeholder="e.g., Flight credit, Bonus miles"
@@ -2141,8 +2141,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Expiry Date</label>
-                  <Input
+                  <label htmlFor="rewards-earn-expiry-date" className="label">Expiry Date</label>
+                  <Input id="rewards-earn-expiry-date"
                     className="input"
                     type="date"
                     value={earnExpiryDate}
@@ -2176,7 +2176,7 @@ export function RewardsPage({
       {/* Redeem Miles Modal */}
       {isRedeemModalOpen && selectedHistoryFrequentFlyer && (
         <Dialog open onClose={() => setIsRedeemModalOpen(false)} title="Redeem miles" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="st-modal">
             <div className="st-modal-header">
               <h3>Redeem Miles</h3>
               <ModalCloseButton onClick={() => setIsRedeemModalOpen(false)} label="Close Redeem Miles" />
@@ -2196,8 +2196,8 @@ export function RewardsPage({
             >
               <div className="st-form-grid">
                 <div className="form-group">
-                  <label className="label">Date</label>
-                  <Input
+                  <label htmlFor="rewards-redeem-date" className="label">Date</label>
+                  <Input id="rewards-redeem-date"
                     className="input"
                     type="date"
                     value={redeemDate}
@@ -2206,8 +2206,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Miles to Redeem</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="rewards-redeem-miles" className="label">Miles to Redeem</label>
+                  <NumericCalculatorInput id="rewards-redeem-miles"
                     min="1"
                     allowDecimal={false}
                     placeholder="0"
@@ -2217,8 +2217,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Redemption Title</label>
-                  <Input
+                  <label htmlFor="rewards-redeem-title" className="label">Redemption Title</label>
+                  <Input id="rewards-redeem-title"
                     className="input"
                     type="text"
                     placeholder="e.g., Flight award, Upgrade"

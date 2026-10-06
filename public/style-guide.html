@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nest — Style Guide</title>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,300&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/fonts/style-guide.css" />
   <style>
     /* ============================================================
        NEST DESIGN SYSTEM — CSS CUSTOM PROPERTIES
@@ -639,8 +639,8 @@
       box-shadow: var(--shadow-sm);
     }
 
-    .toggle.on { background: var(--brand-500); }
-    .toggle.on::after { transform: translateX(20px); }
+    .toggle:checked { background: var(--brand-500); }
+    .toggle:checked::after { transform: translateX(20px); }
 
     /* Checkbox */
     .checkbox-wrap {
@@ -661,12 +661,12 @@
       flex-shrink: 0;
     }
 
-    .checkbox.checked {
+    .checkbox:checked {
       background: var(--brand-500);
       border-color: var(--brand-500);
     }
 
-    .checkbox.checked::after {
+    .checkbox:checked::after {
       content: '';
       position: absolute;
       left: 3px;
@@ -981,6 +981,22 @@
     .mb-8 { margin-bottom: 8px; }
     .mb-16 { margin-bottom: 16px; }
 
+
+    .toggle-option { border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+    input.toggle, input.checkbox { appearance: none; margin: 0; }
+    input.toggle:focus-visible, input.checkbox:focus-visible, .toggle-option:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 3px; }
+    @media (prefers-reduced-motion: reduce) {
+      .sg-section { animation: none; }
+      *, *::before, *::after { transition: none; }
+    }
+    @media (max-width: 640px) {
+      .sg-header { flex-wrap: wrap; gap: 20px; }
+      .type-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .type-meta { width: auto; }
+      .type-row > * { min-width: 0; overflow-wrap: anywhere; }
+      .t-display-2xl { font-size: 40px; }
+      .sg-header-meta { white-space: nowrap; }
+    }
   </style>
 </head>
 <body>
@@ -1091,9 +1107,9 @@
     </div>
     <div style="display:flex;align-items:center;gap:20px;">
       <div class="sg-header-meta">Design System v1.0</div>
-      <div class="theme-toggle" onclick="toggleTheme()">
-        <div class="toggle-option" id="opt-light">☀️ Light</div>
-        <div class="toggle-option" id="opt-dark">🌙 Dark</div>
+      <div class="theme-toggle" aria-label="Color theme">
+        <button type="button" class="toggle-option" id="opt-light" data-theme-option="light" aria-pressed="true">☀️ Light</button>
+        <button type="button" class="toggle-option" id="opt-dark" data-theme-option="dark" aria-pressed="false">🌙 Dark</button>
       </div>
     </div>
   </div>
@@ -1310,23 +1326,23 @@
         <textarea class="input" placeholder="Add a note to this transaction…"></textarea>
       </div>
     </div>
-    <div style="margin-top:24px;" class="sg-row" style="flex-wrap:wrap;gap:24px;">
-      <div class="toggle-wrap" onclick="this.querySelector('.toggle').classList.toggle('on')">
-        <div class="toggle on"></div>
+    <div class="sg-row" style="margin-top:24px;flex-wrap:wrap;gap:24px;">
+      <label class="toggle-wrap">
+        <input type="checkbox" class="toggle" checked />
         <span class="t-label">Auto-sync transactions</span>
-      </div>
-      <div class="toggle-wrap" onclick="this.querySelector('.toggle').classList.toggle('on')">
-        <div class="toggle"></div>
+      </label>
+      <label class="toggle-wrap">
+        <input type="checkbox" class="toggle" />
         <span class="t-label">Email notifications</span>
-      </div>
-      <div class="checkbox-wrap" onclick="this.querySelector('.checkbox').classList.toggle('checked')">
-        <div class="checkbox checked"></div>
+      </label>
+      <label class="checkbox-wrap">
+        <input type="checkbox" class="checkbox" checked />
         <span class="t-label">Include in budget total</span>
-      </div>
-      <div class="checkbox-wrap" onclick="this.querySelector('.checkbox').classList.toggle('checked')">
-        <div class="checkbox"></div>
+      </label>
+      <label class="checkbox-wrap">
+        <input type="checkbox" class="checkbox" />
         <span class="t-label">Mark as recurring</span>
-      </div>
+      </label>
     </div>
   </div>
 
@@ -1547,19 +1563,7 @@
 
 </div>
 
-<script>
-  function toggleTheme() {
-    const html = document.documentElement;
-    const current = html.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
-    html.setAttribute('data-theme', next);
-    document.getElementById('opt-light').classList.toggle('active', next === 'light');
-    document.getElementById('opt-dark').classList.toggle('active', next === 'dark');
-  }
-
-  // Set initial toggle state
-  document.getElementById('opt-light').classList.add('active');
-</script>
+<script src="/style-guide.js" integrity="sha256-qa8KDE+UqyL8GBAwDZ2pN8U6FA3jOvvn7OrEV/RC58s=" defer></script>
 
 </body>
 </html>

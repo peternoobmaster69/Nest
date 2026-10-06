@@ -158,7 +158,7 @@ function ModalShell({
 }>) {
   return (
     <Dialog open onClose={onClose} title={title} closeDisabled={closeDisabled} surface="custom" overlayClassName="st-modal-overlay">
-      <div className="st-modal" onClick={(event) => event.stopPropagation()}>
+      <div className="st-modal">
         <div className="st-modal-header">
           <h3>{title}</h3>
           <ModalCloseButton onClick={onClose} disabled={closeDisabled} label={`Close ${title}`} />
@@ -663,8 +663,8 @@ export function BudgetPlanPage() {
               </Select>
             </div>
             <div className="form-group">
-              <label className="label">Year</label>
-              <NumericCalculatorInput
+              <label htmlFor="budget-plan-selected-year" className="label">Year</label>
+              <NumericCalculatorInput id="budget-plan-selected-year"
                 value={selectedYear}
                 allowDecimal={false}
                 min={2024}
@@ -1091,8 +1091,8 @@ export function BudgetPlanPage() {
                 <Input id="budget-item-title" className="input" value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} maxLength={200} required autoFocus />
               </div>
               <div className="form-group st-span-2">
-                <label className="label">Amount</label>
-                <NumericCalculatorInput value={itemAmount} onValueChange={setItemAmount} min="0" step="0.01" placeholder="0.00" required />
+                <label htmlFor="budget-plan-item-amount" className="label">Amount</label>
+                <NumericCalculatorInput id="budget-plan-item-amount" value={itemAmount} onValueChange={setItemAmount} min="0" step="0.01" placeholder="0.00" required />
               </div>
               {itemModal.scope === "template" && (
                 <div className="form-group st-span-2">
@@ -1144,8 +1144,8 @@ export function BudgetPlanPage() {
                 <Input id="budget-source-title" className="input" value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} maxLength={200} required autoFocus />
               </div>
               <div className="form-group st-span-2">
-                <label className="label">Amount</label>
-                <NumericCalculatorInput value={sourceAmount} onValueChange={setSourceAmount} min="0" step="0.01" placeholder="0.00" required />
+                <label htmlFor="budget-plan-source-amount" className="label">Amount</label>
+                <NumericCalculatorInput id="budget-plan-source-amount" value={sourceAmount} onValueChange={setSourceAmount} min="0" step="0.01" placeholder="0.00" required />
               </div>
               <div className="form-group st-span-2">
                 <label className="label" htmlFor="budget-source-owner">Owner</label>

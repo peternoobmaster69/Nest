@@ -9,6 +9,7 @@ import {
   useId,
   useLayoutEffect,
   useRef,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { ModalCloseButton } from "./modal-close-button";
@@ -21,6 +22,10 @@ const FOCUSABLE = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
+
+const subscribeToClientReady = () => () => {};
+const clientReadySnapshot = () => true;
+const serverReadySnapshot = () => false;
 
 let viewportLockCount = 0;
 let lockedScrollY = 0;
@@ -104,6 +109,7 @@ export function Dialog({
 }) {
   const titleId = useId();
   const descriptionId = useId();
+  const clientReady = useSyncExternalStore(subscribeToClientReady, clientReadySnapshot, serverReadySnapshot);
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -115,7 +121,7 @@ export function Dialog({
   }, [closeDisabled, onClose]);
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open || !clientReady) return;
     lockViewport();
     syncVisualViewport();
     window.addEventListener("resize", syncVisualViewport);
@@ -131,10 +137,10 @@ export function Dialog({
         document.documentElement.style.removeProperty("--visual-viewport-offset-top");
       }
     };
-  }, [open]);
+  }, [open, clientReady]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !clientReady) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const container = surface === "custom"
       ? overlayRef.current?.firstElementChild as HTMLElement | null
@@ -174,9 +180,9 @@ export function Dialog({
       document.removeEventListener("keydown", onKeyDown);
       previousFocus?.focus();
     };
-  }, [open, surface]);
+  }, [open, surface, clientReady]);
 
-  if (!open || typeof document === "undefined") return null;
+  if (!open || !clientReady) return null;
 
   const customSurface = surface === "custom" && isValidElement(children)
     ? cloneElement(children as ReactElement<Record<string, unknown>>, {
@@ -191,6 +197,7 @@ export function Dialog({
   return createPortal(
     <div
       ref={overlayRef}
+      role="presentation"
       className={`${surface === "standard" ? "modal-overlay" : ""} ${overlayClassName}`.trim()}
       onMouseDown={(event) => {
         if (!closeDisabled && event.target === event.currentTarget) onClose();

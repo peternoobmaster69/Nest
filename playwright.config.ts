@@ -15,6 +15,7 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    contextOptions: { reducedMotion: "reduce" },
   },
   expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.01 } },
   projects: [

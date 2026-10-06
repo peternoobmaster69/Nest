@@ -21,6 +21,7 @@ test("manifest ships standard, Apple, and maskable production icons", async () =
 test("service worker caches only GET resources and never queues financial mutations", async () => {
   const worker = await source("public/sw.js");
   const offline = await source("public/offline.html");
+  const offlineScript = await source("public/offline.js");
   const integration = await source("components/device-integration.tsx");
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /queued:\s*false/);
@@ -32,7 +33,9 @@ test("service worker caches only GET resources and never queues financial mutati
   assert.match(worker, /cache\.add\(new Request\(OFFLINE_FALLBACK/);
   assert.match(worker, /if \(isLocalDevelopment\) return/);
   assert.match(worker, /networkFirst\(request, STATIC_CACHE\)/);
-  assert.match(offline, /window\.addEventListener\("online", reconnect\)/);
+  assert.match(offline, /src="\/offline\.js"/);
+  assert.match(worker, /"\/offline\.js"/);
+  assert.match(offlineScript, /window\.addEventListener\("online", reconnect\)/);
   assert.match(offline, /financial pages are not stored/i);
   assert.match(integration, /This change was not submitted or queued/);
   assert.match(integration, /keepCurrentScreenAvailable/);

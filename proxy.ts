@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WORKSPACE_ID_HEADER, WORKSPACE_PATH_HEADER } from "@/lib/workspace-request";
 import { shouldNoIndexRequest } from "@/lib/seo";
+import { staticPageScriptIntegrity } from "@/lib/static-page-csp";
 
 const LEGACY_WORKSPACE_PATHS = [
   "/admin",
@@ -33,11 +34,13 @@ function workspaceIdFromPath(pathname: string) {
   }
 }
 
-function contentSecurityPolicy(nonce: string) {
+function contentSecurityPolicy(nonce: string, pathname: string) {
   const development = process.env.NODE_ENV === "development";
+  const staticIntegrity = staticPageScriptIntegrity(pathname);
+  const trustedScript = staticIntegrity ? `'${staticIntegrity}'` : `'nonce-${nonce}'`;
   const directives = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' ${trustedScript} 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://lh3.googleusercontent.com",
     "font-src 'self' data:",
@@ -81,7 +84,7 @@ function canonicalOrigin(request: NextRequest) {
 
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = contentSecurityPolicy(nonce);
+  const csp = contentSecurityPolicy(nonce, request.nextUrl.pathname);
   const isApi = request.nextUrl.pathname.startsWith("/api/");
   const noIndex = shouldNoIndexRequest(request.nextUrl.pathname, request.nextUrl.searchParams.keys());
   const method = request.method.toUpperCase();
@@ -93,7 +96,11 @@ export function proxy(request: NextRequest) {
     entryUrl.pathname = "/entry";
     entryUrl.search = "";
     entryUrl.searchParams.set("next", destination);
-    return applySecurityHeaders(NextResponse.redirect(entryUrl), csp, false, noIndex);
+    const redirect = new NextResponse(null, {
+      status: 307,
+      headers: { Location: `${entryUrl.pathname}${entryUrl.search}` },
+    });
+    return applySecurityHeaders(redirect, csp, false, noIndex);
   }
 
   if (isApi && unsafeMethod) {

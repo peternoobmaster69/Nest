@@ -2384,7 +2384,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
       {/* Add Transaction Modal */}
       {isModalOpen && (
         <Dialog open onClose={closeModal} title="Credit card transaction" surface="custom" overlayClassName="cct-modal-overlay">
-          <div className="cct-modal cct-modal-wide" onClick={(e) => e.stopPropagation()}>
+          <div className="cct-modal cct-modal-wide">
             <div className="cct-modal-header">
               <h3>{editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}</h3>
               <ModalCloseButton onClick={closeModal} label={`Close ${editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}`} />
@@ -2392,8 +2392,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
             <form className="cct-modal-form" onSubmit={onSubmit}>
               <div className="cct-form-grid">
                 <div className="form-group cct-span-2">
-                  <label className="label">Credit Card</label>
-                  <Select className="input" value={formCardId} onChange={(e) => setFormCardId(e.target.value)} required>
+                  <label htmlFor="credit-transactions-form-card-id" className="label">Credit Card</label>
+                  <Select id="credit-transactions-form-card-id" className="input" value={formCardId} onChange={(e) => setFormCardId(e.target.value)} required>
                     {sortedCards.map((card) => (
                       <option key={card.id} value={card.id}>
                         {card.cardName} ••{card.last4Digit}
@@ -2402,8 +2402,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   </Select>
                 </div>
                 <div className="form-group">
-                  <label className="label">Transaction Date</label>
-                  <Input
+                  <label htmlFor="credit-transactions-form-date" className="label">Transaction Date</label>
+                  <Input id="credit-transactions-form-date"
                     type="date"
                     className="input"
                     value={formDate}
@@ -2412,13 +2412,13 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Payment Due Date</label>
-                  <Input type="date" className="input" value={formPaymentDue} onChange={(e) => setFormPaymentDue(e.target.value)} />
+                  <label htmlFor="credit-transactions-form-payment-due" className="label">Payment Due Date</label>
+                  <Input id="credit-transactions-form-payment-due" type="date" className="input" value={formPaymentDue} onChange={(e) => setFormPaymentDue(e.target.value)} />
                 </div>
                 <div className="cct-statement-period">
                   <div className="form-group">
-                    <label className="label">Statement Month</label>
-                    <Select
+                    <label htmlFor="credit-transactions-form-statement-month" className="label">Statement Month</label>
+                    <Select id="credit-transactions-form-statement-month"
                       className="input"
                       value={formStatementMonth}
                       onChange={(e) => setFormStatementMonth(e.target.value)}
@@ -2432,8 +2432,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                     </Select>
                   </div>
                   <div className="form-group">
-                    <label className="label">Statement Year</label>
-                    <NumericCalculatorInput
+                    <label htmlFor="credit-transactions-form-statement-year" className="label">Statement Year</label>
+                    <NumericCalculatorInput id="credit-transactions-form-statement-year"
                       min="2020"
                       max="2100"
                       allowDecimal={false}
@@ -2444,8 +2444,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   </div>
                 </div>
                 <div className="form-group cct-span-2">
-                  <label className="label">Subject</label>
-                  <Input
+                  <label htmlFor="credit-transactions-form-subject" className="label">Subject</label>
+                  <Input id="credit-transactions-form-subject"
                     type="text"
                     className="input"
                     placeholder="e.g., Grocery shopping"
@@ -2455,8 +2455,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   />
                 </div>
                 <div className="form-group">
-                  <label className="label">Amount ($)</label>
-                  <NumericCalculatorInput
+                  <label htmlFor="credit-transactions-form-amount" className="label">Amount ($)</label>
+                  <NumericCalculatorInput id="credit-transactions-form-amount"
                     step="0.01"
                     min="0"
                     placeholder="0.00"
@@ -2508,7 +2508,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
 
       {isAccountingModalOpen && accountingTarget && (
         <Dialog open onClose={closeAccountingModal} title="Account for transaction" surface="custom" overlayClassName="cct-modal-overlay">
-          <div className="cct-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="cct-modal">
             <div className="cct-modal-header">
               <h3>Deduct Credit Transaction</h3>
               <ModalCloseButton onClick={closeAccountingModal} label="Close Deduct Credit Transaction" />
@@ -2522,8 +2522,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   </div>
                 </div>
                 <div className="form-group cct-span-2">
-                  <label className="label">Bank Account</label>
-                  <Select
+                  <label htmlFor="credit-transactions-deduct-account-id" className="label">Bank Account</label>
+                  <Select id="credit-transactions-deduct-account-id"
                     className="input"
                     value={deductAccountId}
                     onChange={(e) => {
@@ -2543,8 +2543,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   </Select>
                 </div>
                 <div className="form-group cct-span-2">
-                  <label className="label">Sub Account</label>
-                  <Select
+                  <label htmlFor="credit-transactions-deduct-budget-id" className="label">Sub Account</label>
+                  <Select id="credit-transactions-deduct-budget-id"
                     className="input"
                     value={deductBudgetId}
                     onChange={(e) => setDeductBudgetId(e.target.value)}
@@ -2563,8 +2563,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   <small>Creates the matching credit entry. Nest uses the workspace default when configured.</small>
                 </div>
                 <div className="form-group cct-span-2">
-                  <label className="label">Destination Account</label>
-                  <Select
+                  <label htmlFor="credit-transactions-deduct-destination-account-id" className="label">Destination Account</label>
+                  <Select id="credit-transactions-deduct-destination-account-id"
                     className="input"
                     value={deductDestinationAccountId}
                     onChange={(event) => {
@@ -2583,8 +2583,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                 </div>
                 {deductDestinationAccountId ? (
                   <div className="form-group cct-span-2">
-                    <label className="label">Destination Sub Account</label>
-                    <Select
+                    <label htmlFor="credit-transactions-deduct-destination-budget-id" className="label">Destination Sub Account</label>
+                    <Select id="credit-transactions-deduct-destination-budget-id"
                       className="input"
                       value={deductDestinationBudgetId}
                       onChange={(event) => setDeductDestinationBudgetId(event.target.value)}
@@ -2613,7 +2613,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
 
       {isReceivableModalOpen && receivableTarget && (
         <Dialog open onClose={closeReceivableModal} title="Create receivable" surface="custom" overlayClassName="cct-modal-overlay">
-          <div className="cct-modal cct-receivable-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="cct-modal cct-receivable-modal">
             <div className="cct-modal-header">
               <h3>Create Receivable</h3>
               <ModalCloseButton onClick={closeReceivableModal} label="Close Create Receivable" />
@@ -2627,20 +2627,20 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                   </div>
                 </div>
                 <div className="form-group cct-receivable-title">
-                  <label className="label">Title</label>
-                  <Input className="input" type="text" value={receivableTitle} onChange={(e) => setReceivableTitle(e.target.value)} required />
+                  <label htmlFor="credit-transactions-receivable-title" className="label">Title</label>
+                  <Input id="credit-transactions-receivable-title" className="input" type="text" value={receivableTitle} onChange={(e) => setReceivableTitle(e.target.value)} required />
                 </div>
                 <div className="form-group cct-receivable-amount">
-                  <label className="label">Amount ($)</label>
-                  <NumericCalculatorInput step="0.01" min="0.01" value={receivableAmount} onValueChange={setReceivableAmount} required />
+                  <label htmlFor="credit-transactions-receivable-amount" className="label">Amount ($)</label>
+                  <NumericCalculatorInput id="credit-transactions-receivable-amount" step="0.01" min="0.01" value={receivableAmount} onValueChange={setReceivableAmount} required />
                 </div>
                 <div className="form-group cct-receivable-date">
-                  <label className="label">Receivable Date</label>
-                  <Input className="input" type="date" value={receivableDate} onChange={(e) => setReceivableDate(e.target.value)} required />
+                  <label htmlFor="credit-transactions-receivable-date" className="label">Receivable Date</label>
+                  <Input id="credit-transactions-receivable-date" className="input" type="date" value={receivableDate} onChange={(e) => setReceivableDate(e.target.value)} required />
                 </div>
                 <div className="form-group cct-receivable-txn-date">
-                  <label className="label">Txn Date</label>
-                  <Input className="input" type="date" value={receivableTxnDate} onChange={(e) => setReceivableTxnDate(e.target.value)} />
+                  <label htmlFor="credit-transactions-receivable-txn-date" className="label">Txn Date</label>
+                  <Input id="credit-transactions-receivable-txn-date" className="input" type="date" value={receivableTxnDate} onChange={(e) => setReceivableTxnDate(e.target.value)} />
                 </div>
                 <label className="form-group cct-cross-workspace-toggle">
                   <Input
@@ -2661,8 +2661,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                 {useCrossWorkspaceReceivableSource && (
                   <>
                     <div className="form-group cct-receivable-source-workspace">
-                      <label className="label">Deduction Workspace</label>
-                      <Select
+                      <label htmlFor="credit-transactions-receivable-source-workspace-id" className="label">Deduction Workspace</label>
+                      <Select id="credit-transactions-receivable-source-workspace-id"
                         className="input"
                         value={receivableSourceWorkspaceId}
                         onChange={(e) => {
@@ -2681,8 +2681,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                       </Select>
                     </div>
                     <div className="form-group cct-receivable-source-account">
-                      <label className="label">Bank Account</label>
-                      <Select
+                      <label htmlFor="credit-transactions-receivable-source-account-id" className="label">Bank Account</label>
+                      <Select id="credit-transactions-receivable-source-account-id"
                         className="input"
                         value={receivableSourceAccountId}
                         onChange={(e) => {
@@ -2704,8 +2704,8 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                       </Select>
                     </div>
                     <div className="form-group cct-receivable-source-budget">
-                      <label className="label">Sub Account</label>
-                      <Select
+                      <label htmlFor="credit-transactions-receivable-source-budget-id" className="label">Sub Account</label>
+                      <Select id="credit-transactions-receivable-source-budget-id"
                         className="input"
                         value={receivableSourceBudgetId}
                         onChange={(e) => {

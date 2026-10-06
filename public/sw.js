@@ -1,10 +1,11 @@
-const VERSION = "nest-v8";
+const VERSION = "nest-v9";
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_FALLBACK = "/offline.html";
 
 const APP_SHELL = [
   OFFLINE_FALLBACK,
+  "/offline.js",
   "/manifest.webmanifest",
   "/icon.svg",
   "/favicon.svg",

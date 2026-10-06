@@ -444,7 +444,7 @@ test("compact dialog and form contract is keyboard-aware and uniform", async () 
   assert.match(dialog, /const onCloseRef = useRef\(onClose\)/);
   assert.match(dialog, /onCloseRef\.current\(\)/);
   assert.match(dialog, /preferredInitialFocus \|\| firstFocusable \|\| container/);
-  assert.match(dialog, /\}, \[open, surface\]\);/);
+  assert.match(dialog, /\}, \[open, surface, clientReady\]\);/);
   assert.doesNotMatch(dialog, /\[closeDisabled, onClose, open, surface\]/);
   assert.match(dialog, /window\.visualViewport\?\.addEventListener\("resize", syncVisualViewport\)/);
   assert.match(layout, /interactiveWidget:\s*"resizes-content"/);
