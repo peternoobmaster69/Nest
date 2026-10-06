@@ -50,18 +50,43 @@ body[data-modal-scroll-lock="true"] {
   overflow: hidden;
 }
 
-/* WebKit can under-report 100dvh by the home-indicator safe area for
-   installed standalone PWAs using viewport-fit=cover. In standalone mode
-   there is no browser chrome, so 100vh is the reliable full-screen shell. */
+/* Use the actual layout viewport: iOS reserves the status area with the
+   default status-bar style, but standalone viewport units can include it. */
 @media (display-mode: standalone) {
   html,
   body {
-    height: 100vh;
-    min-height: 100vh;
+    height: 100%;
+    min-height: 100%;
   }
 
   .app-shell {
-    height: 100vh;
+    height: 100%;
   }
 }
 
+.pwa-status-bar-surface {
+  display: none;
+}
+
+/* WebKit's top-edge colour sampler needs a real fixed element taller than
+   its 10px border threshold. Clipping the empty element's paint to text
+   keeps it invisible while retaining an opaque computed background colour.
+   This lets iOS extend the theme colour instead of blurring header content.
+   See https://zenn.dev/uakihir0/articles/260920-ios27-pwa-blur */
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) {
+    .pwa-status-bar-surface {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 11px;
+      z-index: 2147483647;
+      pointer-events: none;
+      background-color: var(--bg-elevated);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+  }
+}
