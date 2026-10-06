@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const CreateInvestmentEntrySchema = z.object({
-  date: z.string().datetime(),
+  date: z.iso.datetime(),
   investedCents: z.number().int(),
   currentValueCents: z.number().int(),
 });
@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const parsed = CreateInvestmentEntrySchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const account = await prisma.investmentAccount.findUnique({

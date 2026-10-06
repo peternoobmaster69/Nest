@@ -7,9 +7,9 @@ const CreateReceivableSchema = z.object({
   workspaceId: z.string().min(1),
   title: z.string().min(1).max(120).optional(),
   amountCents: z.number().int().positive(),
-  date: z.string().datetime().optional(),
-  receivableDate: z.string().datetime().optional(),
-  transactionDate: z.string().datetime().optional(),
+  date: z.iso.datetime().optional(),
+  receivableDate: z.iso.datetime().optional(),
+  transactionDate: z.iso.datetime().optional(),
   remarks: z.string().max(500).optional(),
   notes: z.string().optional(),
   accountId: z.string().optional(),
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
   try {
     const parsed = CreateReceivableSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");

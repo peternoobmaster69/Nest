@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
+        { error: "Invalid data", details: z.flattenError(parsed.error) },
         { status: 400 },
       );
     }

@@ -5,11 +5,11 @@ import { z } from "zod";
 import { staleWriteResponse } from "@/lib/concurrency";
 
 const UpdateReceivableSchema = z.object({
-  expectedUpdatedAt: z.string().datetime(),
+  expectedUpdatedAt: z.iso.datetime(),
   title: z.string().min(1).max(120).optional(),
   amountCents: z.number().int().positive().optional(),
-  date: z.string().datetime().optional(),
-  transactionDate: z.string().datetime().nullable().optional(),
+  date: z.iso.datetime().optional(),
+  transactionDate: z.iso.datetime().nullable().optional(),
   remarks: z.string().max(500).optional(),
   notes: z.string().nullable().optional(),
   status: z.enum(["OPEN", "PARTIAL", "PAID", "VOID"]).optional(),
@@ -24,7 +24,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const parsed = UpdateReceivableSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.receivable.findUnique({

@@ -6,10 +6,10 @@ import { z } from "zod";
 import { staleWriteResponse } from "@/lib/concurrency";
 
 const UpdateTransactionSchema = z.object({
-  expectedUpdatedAt: z.string().datetime(),
+  expectedUpdatedAt: z.iso.datetime(),
   creditCardId: z.string().optional(),
-  transactionDate: z.string().datetime().optional(),
-  paymentDueDate: z.string().datetime().optional().nullable(),
+  transactionDate: z.iso.datetime().optional(),
+  paymentDueDate: z.iso.datetime().optional().nullable(),
   statementMonth: z.number().int().min(1).max(12).optional(),
   statementYear: z.number().int().min(2020).max(2100).optional(),
   amountCents: z.number().int().optional(),
@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
+        { error: "Invalid data", details: z.flattenError(parsed.error) },
         { status: 400 }
       );
     }

@@ -7,8 +7,8 @@ import { z } from "zod";
 
 const CreateTransactionSchema = z.object({
   creditCardId: z.string().trim().min(1).max(191),
-  transactionDate: z.string().datetime(),
-  paymentDueDate: z.string().datetime().optional(),
+  transactionDate: z.iso.datetime(),
+  paymentDueDate: z.iso.datetime().optional(),
   statementMonth: z.number().int().min(1).max(12),
   statementYear: z.number().int().min(2020).max(2100),
   amountCents: z.number().int(),
@@ -172,7 +172,7 @@ export async function POST(request: Request) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
+        { error: "Invalid data", details: z.flattenError(parsed.error) },
         { status: 400 }
       );
     }

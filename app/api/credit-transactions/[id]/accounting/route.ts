@@ -14,12 +14,12 @@ const CreditTxnAccountingSchema = z.discriminatedUnion("action", [
     destinationAccountId: z.string().min(1).optional(),
     destinationBudgetId: z.string().min(1).optional(),
     smartReviewFingerprint: z.string().length(64).optional(),
-    smartReviewGeneratedAt: z.string().datetime().optional(),
+    smartReviewGeneratedAt: z.iso.datetime().optional(),
   }),
   z.object({
     action: z.literal("RECEIVABLE"),
-    receivableDate: z.string().datetime(),
-    transactionDate: z.string().datetime().optional(),
+    receivableDate: z.iso.datetime(),
+    transactionDate: z.iso.datetime().optional(),
     title: z.string().min(1).max(120),
     amountCents: z.number().int().positive(),
     remarks: z.string().max(500).optional(),
@@ -27,7 +27,7 @@ const CreditTxnAccountingSchema = z.discriminatedUnion("action", [
     accountId: z.string().min(1).optional(),
     budgetId: z.string().min(1).optional(),
     smartReviewFingerprint: z.string().length(64).optional(),
-    smartReviewGeneratedAt: z.string().datetime().optional(),
+    smartReviewGeneratedAt: z.iso.datetime().optional(),
   }),
 ]).superRefine((value, context) => {
   if (Boolean(value.smartReviewFingerprint) !== Boolean(value.smartReviewGeneratedAt)) {
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const parsed = CreditTxnAccountingSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.creditCardTransaction.findUnique({

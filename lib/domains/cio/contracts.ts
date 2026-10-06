@@ -20,7 +20,7 @@ export const CIO_MAX_PROJECTION_YEARS = 100;
 export const CIO_MAX_EXPOSURES = 100;
 export const CIO_MAX_LIST_ITEMS = 500;
 
-const NullableDateTimeSchema = z.string().datetime().nullable();
+const NullableDateTimeSchema = z.iso.datetime().nullable();
 const NullableCentsSchema = z.number().int().min(0).max(CIO_MAX_CENTS).nullable();
 const NullableRateBpsSchema = z.number().int().min(CIO_MIN_RATE_BPS).max(CIO_MAX_RATE_BPS).nullable();
 const NullableInflationRateBpsSchema = z.number().int().min(CIO_MIN_RATE_BPS + 1).max(CIO_MAX_RATE_BPS).nullable();
@@ -186,7 +186,7 @@ const CioRecurringFlowFields = {
   destinationInvestmentAccountId: CioBoundedIdSchema.nullable().optional(),
   amountCents: z.number().int().min(1).max(CIO_MAX_CENTS),
   cadence: z.enum(CIO_FLOW_CADENCES),
-  startsOn: z.string().datetime(),
+  startsOn: z.iso.datetime(),
   endsOn: NullableDateTimeSchema.optional(),
   includeInRetirementProjection: z.boolean(),
   label: z.string().trim().min(1).max(160),
@@ -241,7 +241,7 @@ const CioPlanningPositionFields = {
   category: z.string().trim().min(1).max(48).regex(/^[A-Z0-9_-]+$/),
   label: z.string().trim().min(1).max(160),
   currentValueCents: z.number().int().min(0).max(CIO_MAX_CENTS),
-  asOfDate: z.string().datetime(),
+  asOfDate: z.iso.datetime(),
   liquidityClass: z.enum(CIO_LIQUIDITY_CLASSES),
   includeInInvestableAllocation: z.boolean(),
   includeInRetirementProjection: z.boolean(),
@@ -272,7 +272,7 @@ export const CioRetirementProjectionInputSchema = z.object({
   bearReturnBps: z.number().int().min(CIO_MIN_RATE_BPS).max(CIO_MAX_RATE_BPS).optional(),
   baseReturnBps: z.number().int().min(CIO_MIN_RATE_BPS).max(CIO_MAX_RATE_BPS).optional(),
   bullReturnBps: z.number().int().min(CIO_MIN_RATE_BPS).max(CIO_MAX_RATE_BPS).optional(),
-  targetRetirementDate: z.string().datetime().optional(),
+  targetRetirementDate: z.iso.datetime().optional(),
   targetRetirementAge: z.number().int().min(18).max(120).optional(),
   targetMonthlySpendingTodayCents: z.number().int().min(0).max(CIO_MAX_CENTS).optional(),
   sustainableWithdrawalRateBps: z.number().int().min(1).max(10_000).optional(),

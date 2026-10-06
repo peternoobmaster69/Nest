@@ -47,7 +47,7 @@ import { BudgetPlanRequestError } from "@/lib/domains/ledger/budget-plan/support
 
 function validationError(error: z.ZodError) {
   return NextResponse.json(
-    { error: "Invalid budget plan request", code: "UNPROCESSABLE_ENTITY", details: error.flatten() },
+    { error: "Invalid budget plan request", code: "UNPROCESSABLE_ENTITY", details: z.flattenError(error) },
     { status: 422 },
   );
 }

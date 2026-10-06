@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const parsed = RecalculateSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const { workspaceId, budgetId, accountId } = parsed.data;

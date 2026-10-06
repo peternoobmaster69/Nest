@@ -7,7 +7,7 @@ export const CorrectTransactionSchema = z.object({
   kind: z.enum(["EXPENSE", "INCOME", "ADJUSTMENT"]).optional(),
   details: z.string().max(500).nullable().optional(),
   notes: z.string().nullable().optional(),
-  date: z.string().datetime().optional(),
+  date: z.iso.datetime().optional(),
   budgetId: z.string().min(1).nullable().optional(),
   groupId: z.string().min(1).nullable().optional(),
   reason: z.string().trim().min(1).max(500).optional(),

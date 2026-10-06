@@ -56,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   try {
     const user = await loadIdentity(await requireRecentAuthentication());
     const parsed = RespondSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     const { token } = await params;
     const tokenHash = hashToken(token);
     const invite = await prisma.workspaceInvite.findFirst({

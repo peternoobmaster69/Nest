@@ -15,7 +15,7 @@ const UpdateTransactionSchema = z.object({
     .optional(),
   details: z.string().max(500).nullable().optional(),
   notes: z.string().nullable().optional(),
-  date: z.string().datetime().optional(),
+  date: z.iso.datetime().optional(),
   budgetId: z.string().min(1),
   groupId: z.string().min(1).nullable().optional(),
 });
@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const parsed = UpdateTransactionSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.transaction.findUnique({

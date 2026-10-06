@@ -150,7 +150,7 @@ const PublicFinancialSearchArgsSchema = z.object({
 }).strict();
 
 const AuthoritativeFinancialSourceArgsSchema = z.object({
-  url: z.string().trim().url().max(2_048),
+  url: z.string().trim().pipe(z.url().max(2_048)),
 }).strict();
 
 const TripSpendingArgsSchema = z.object({

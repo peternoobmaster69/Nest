@@ -8,7 +8,7 @@ import { z } from "zod";
 
 const InviteSchema = z.object({
   workspaceId: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   role: z.enum(["EDITOR", "VIEWER"]).default("EDITOR"),
 });
 
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   try {
     const parsed = InviteSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const { workspaceId, userId } = await requireSensitiveWorkspaceAction(parsed.data.workspaceId);

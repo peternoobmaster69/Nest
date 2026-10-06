@@ -5,7 +5,7 @@ import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { getPushConfiguration } from "@/lib/web-push";
 
 const SubscriptionSchema = z.object({
-  endpoint: z.string().url().max(1000),
+  endpoint: z.url().max(1000),
   expirationTime: z.number().nullable().optional(),
   keys: z.object({ p256dh: z.string().min(1).max(1000), auth: z.string().min(1).max(1000) }),
 });

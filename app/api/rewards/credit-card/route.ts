@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const parsed = CreateCreditCardRewardSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: "Invalid data", details: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const {
@@ -88,7 +88,7 @@ export async function PATCH(request: Request) {
     const parsed = UpdateCreditCardRewardSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: "Invalid data", details: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.creditCardReward.findFirst({

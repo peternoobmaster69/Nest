@@ -8,8 +8,8 @@ const CreateInvestmentAccountSchema = z.object({
   displayName: z.string().max(160).optional(),
   institutionName: z.string().min(1).max(160),
   productName: z.string().min(1).max(160),
-  inceptionDate: z.string().datetime(),
-  divestedDate: z.string().datetime().nullable().optional(),
+  inceptionDate: z.iso.datetime(),
+  divestedDate: z.iso.datetime().nullable().optional(),
   isLiquid: z.boolean().optional(),
 });
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   try {
     const parsed = CreateInvestmentAccountSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");

@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const CloseReceivableSchema = z.object({
-  closeDate: z.string().datetime().optional(),
+  closeDate: z.iso.datetime().optional(),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

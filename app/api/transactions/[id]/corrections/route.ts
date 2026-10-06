@@ -7,6 +7,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 const CORRECTION_VALIDATION_ERRORS = new Set([
   "A transaction group requires a selected sub-account.",
@@ -19,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const parsed = CorrectTransactionSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.transaction.findUnique({

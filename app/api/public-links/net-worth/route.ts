@@ -12,7 +12,7 @@ const LinkSchema = z.object({
 export async function POST(request: Request) {
   try {
     const parsed = LinkSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     const auth = await requireSensitiveWorkspaceAction(parsed.data.workspaceId);
     const existing = await prisma.workspace.findUnique({
       where: { id: auth.workspaceId },
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const parsed = LinkSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     const auth = await requireSensitiveWorkspaceAction(parsed.data.workspaceId);
     const workspace = await prisma.workspace.update({
       where: { id: auth.workspaceId },

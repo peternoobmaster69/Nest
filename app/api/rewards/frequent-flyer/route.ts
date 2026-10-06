@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const parsed = CreateFrequentFlyerSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: "Invalid data", details: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const {
@@ -92,7 +92,7 @@ export async function PATCH(request: Request) {
     const parsed = UpdateFrequentFlyerSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: "Invalid data", details: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const { id, ...data } = parsed.data;

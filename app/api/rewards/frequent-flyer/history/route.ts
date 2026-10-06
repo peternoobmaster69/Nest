@@ -9,18 +9,18 @@ import { ApiRequestError } from "@/lib/api-security";
 const CreateEarnSchema = z.object({
   type: z.literal("earn"),
   frequentFlyerId: z.string().min(1),
-  date: z.string().datetime(),
+  date: z.iso.datetime(),
   miles: z.number().int().positive(),
   title: z.string().trim().min(1).optional(),
-  expiryDate: z.string().datetime().optional().nullable(),
-  firstRedeemedDate: z.string().datetime().optional().nullable(),
+  expiryDate: z.iso.datetime().optional().nullable(),
+  firstRedeemedDate: z.iso.datetime().optional().nullable(),
 });
 
 const CreateRedeemSchema = z.object({
   type: z.literal("redeem"),
   frequentFlyerId: z.string().min(1),
   redemptionTitle: z.string().trim().min(1),
-  dateTime: z.string().datetime(),
+  dateTime: z.iso.datetime(),
   milesToRedeem: z.number().int().positive(),
 });
 
@@ -28,11 +28,11 @@ const UpdateEarnSchema = z.object({
   type: z.literal("earn"),
   frequentFlyerId: z.string().min(1),
   id: z.string().min(1),
-  date: z.string().datetime().optional(),
+  date: z.iso.datetime().optional(),
   miles: z.number().int().positive().optional(),
   title: z.string().trim().min(1).optional().nullable(),
-  expiryDate: z.string().datetime().optional().nullable(),
-  firstRedeemedDate: z.string().datetime().optional().nullable(),
+  expiryDate: z.iso.datetime().optional().nullable(),
+  firstRedeemedDate: z.iso.datetime().optional().nullable(),
 });
 
 const UpdateRedeemSchema = z.object({
@@ -40,7 +40,7 @@ const UpdateRedeemSchema = z.object({
   frequentFlyerId: z.string().min(1),
   id: z.string().min(1),
   redemptionTitle: z.string().trim().min(1).optional(),
-  dateTime: z.string().datetime().optional(),
+  dateTime: z.iso.datetime().optional(),
 });
 
 const PostSchema = z.union([CreateEarnSchema, CreateRedeemSchema]);
@@ -178,7 +178,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const parsed = PostSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: "Invalid data", details: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const payload = parsed.data;
@@ -236,7 +236,7 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: "Invalid data", details: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const payload = parsed.data;

@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const userId = await requireSessionUserId();
     const parsed = CreateWorkspaceSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const workspace = await prisma.workspace.create({

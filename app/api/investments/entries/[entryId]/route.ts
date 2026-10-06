@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const UpdateInvestmentEntrySchema = z.object({
-  date: z.string().datetime().optional(),
+  date: z.iso.datetime().optional(),
   investedCents: z.number().int().optional(),
   currentValueCents: z.number().int().optional(),
 });
@@ -14,7 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ en
     const { entryId } = await params;
     const parsed = UpdateInvestmentEntrySchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.investmentEntry.findUnique({

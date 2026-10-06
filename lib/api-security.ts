@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ZodError, type ZodType } from "zod";
+import { z, ZodError, type ZodType } from "zod";
 import { isDatabaseWakeTransientError } from "@/lib/database-errors";
 import { rateLimitResponse } from "@/lib/security-rate-limit";
 import { ApiRequestError, apiErrorCodeForStatus } from "@/lib/api/contracts";
@@ -148,7 +148,7 @@ export async function runSecureApiRoute(
     if (error instanceof ZodError) {
       return secureHeaders(
         Response.json(
-          { error: "Invalid request", code: "UNPROCESSABLE_ENTITY", issues: error.flatten(), requestId },
+          { error: "Invalid request", code: "UNPROCESSABLE_ENTITY", issues: z.flattenError(error), requestId },
           { status: 422 },
         ),
         requestId,

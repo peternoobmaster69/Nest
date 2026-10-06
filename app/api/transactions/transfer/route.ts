@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try {
     const parsed = TransferSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const { workspaceId, sourceBudgetId, destinationBudgetId, title, amountCents } = parsed.data;

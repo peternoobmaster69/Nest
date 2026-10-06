@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     await requireSessionUserId();
     const parsed = SwitchWorkspaceSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     await requireWorkspaceAccess(parsed.data.workspaceId);

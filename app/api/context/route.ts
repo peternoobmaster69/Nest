@@ -262,7 +262,7 @@ export async function PATCH(request: Request) {
   try {
     const parsed = UpdateContextSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     if (parsed.data.activeWorkspaceId) {

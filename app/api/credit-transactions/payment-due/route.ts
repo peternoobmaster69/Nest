@@ -7,7 +7,7 @@ const UpdatePaymentDueSchema = z.object({
   cardId: z.string().optional(),
   statementMonth: z.number().int().min(1).max(12),
   statementYear: z.number().int().min(2020).max(2100),
-  paymentDueDate: z.string().datetime().nullable(),
+  paymentDueDate: z.iso.datetime().nullable(),
 });
 
 const PaymentDueMonthsQuerySchema = z.object({
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid query", details: parsed.error.flatten() },
+        { error: "Invalid query", details: z.flattenError(parsed.error) },
         { status: 400 },
       );
     }
@@ -97,7 +97,7 @@ export async function PATCH(request: Request) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid data", details: parsed.error.flatten() },
+        { error: "Invalid data", details: z.flattenError(parsed.error) },
         { status: 400 },
       );
     }

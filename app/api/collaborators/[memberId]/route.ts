@@ -16,7 +16,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ me
   try {
     const { memberId } = await params;
     const parsed = UpdateMemberSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     const member = await findMember(memberId);
     if (!member) return NextResponse.json({ error: "Collaborator not found" }, { status: 404 });
     const auth = await requireSensitiveWorkspaceAction(member.workspaceId);

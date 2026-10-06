@@ -20,7 +20,7 @@ const CreateTransactionSchema = z.object({
     "RECEIVABLE_PAYMENT",
     "ADJUSTMENT",
   ]),
-  date: z.string().datetime(),
+  date: z.iso.datetime(),
   details: z.string().max(500).optional(),
   notes: z.string().optional(),
   budgetId: z.string().min(1),
@@ -235,7 +235,7 @@ export async function POST(request: Request) {
     const parsed = CreateTransactionSchema.safeParse(await request.json());
 
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const { budgetId, groupId, budgetOperation, ...txPayload } = parsed.data;

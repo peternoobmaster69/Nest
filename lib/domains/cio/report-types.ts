@@ -36,7 +36,7 @@ const ReportEvidenceSchema = z.object({
   kind: z.string().min(1).max(64),
   label: z.string().min(1).max(240),
   href: z.string().min(1).max(1_000),
-  asOfDate: z.string().date(),
+  asOfDate: z.iso.date(),
 }).strict();
 
 const ReportPolicySchema = z.object({
@@ -61,7 +61,7 @@ const ReportPolicySchema = z.object({
 const ReportRetirementSchema = z.object({
   status: z.enum(["READY", "NOT_READY"]),
   missingFields: z.array(z.string().min(1).max(120)).max(40),
-  retirementDate: z.string().date().nullable(),
+  retirementDate: z.iso.date().nullable(),
   targetMonthlySpendingCents: z.number().int().nullable(),
   currentAnnualContributionCents: z.number().int().nullable(),
   requiredAnnualContributionCents: z.number().int().nullable(),
@@ -80,9 +80,9 @@ const ReportRetirementSchema = z.object({
 export const CioStrategyReportModelSchema = z.object({
   schemaVersion: z.literal("1.0"),
   rendererVersion: z.literal("1.0"),
-  generatedAt: z.string().datetime(),
-  asOfDate: z.string().date(),
-  reviewByDate: z.string().date(),
+  generatedAt: z.iso.datetime(),
+  asOfDate: z.iso.date(),
+  reviewByDate: z.iso.date(),
   title: z.string().min(1).max(240),
   workspaceName: z.string().min(1).max(240),
   baseCurrency: z.string().min(3).max(3),
@@ -139,8 +139,8 @@ export const CioStrategyReportModelSchema = z.object({
   }).strict()).max(30),
   dataQuality: z.object({
     completenessBps: z.number().int().min(0).max(10_000),
-    latestValuationDate: z.string().date().nullable(),
-    oldestValuationDate: z.string().date().nullable(),
+    latestValuationDate: z.iso.date().nullable(),
+    oldestValuationDate: z.iso.date().nullable(),
     warnings: z.array(z.object({
       code: z.string().min(1).max(80),
       severity: z.enum(["INFO", "WARNING", "CRITICAL"]),
@@ -155,8 +155,8 @@ export const CioStrategyReportModelSchema = z.object({
 export const CioStrategyReportSummarySchema = z.object({
   id: z.string().min(1).max(1_000),
   title: z.string().min(1).max(240),
-  asOfDate: z.string().date(),
-  generatedAt: z.string().datetime(),
+  asOfDate: z.iso.date(),
+  generatedAt: z.iso.datetime(),
   strategyStatus: z.enum(["SETUP_REQUIRED", "ACTION_REQUIRED", "ON_TRACK"]),
   completenessBps: z.number().int().min(0).max(10_000),
   recommendationCount: z.number().int().min(0).max(12),

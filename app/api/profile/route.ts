@@ -21,7 +21,7 @@ export async function PATCH(request: Request) {
 
   const parsed = UpdateProfileSchema.safeParse(await request.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
   }
 
   const user = await prisma.user.update({

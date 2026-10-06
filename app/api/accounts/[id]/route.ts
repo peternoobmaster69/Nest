@@ -5,7 +5,7 @@ import { z } from "zod";
 import { staleWriteResponse } from "@/lib/concurrency";
 
 const UpdateAccountSchema = z.object({
-  expectedUpdatedAt: z.string().datetime(),
+  expectedUpdatedAt: z.iso.datetime(),
   name: z.string().min(1).max(120).optional(),
   bankName: z.string().min(1).max(120).nullable().optional(),
   description: z.string().max(500).nullable().optional(),
@@ -18,7 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const parsed = UpdateAccountSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.financialAccount.findUnique({

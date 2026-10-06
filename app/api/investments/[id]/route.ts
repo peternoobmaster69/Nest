@@ -7,8 +7,8 @@ const UpdateInvestmentAccountSchema = z.object({
   displayName: z.string().max(160).optional(),
   institutionName: z.string().min(1).max(160).optional(),
   productName: z.string().min(1).max(160).optional(),
-  inceptionDate: z.string().datetime().optional(),
-  divestedDate: z.string().datetime().nullable().optional(),
+  inceptionDate: z.iso.datetime().optional(),
+  divestedDate: z.iso.datetime().nullable().optional(),
   isLiquid: z.boolean().optional(),
 });
 
@@ -17,7 +17,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const parsed = UpdateInvestmentAccountSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
 
     const existing = await prisma.investmentAccount.findUnique({
