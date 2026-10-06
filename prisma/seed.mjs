@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 function loadDotEnv(dotenvPath) {
   if (!fs.existsSync(dotenvPath)) return;
@@ -56,21 +57,11 @@ function resolveDatabaseUrl(env) {
   return `sqlserver://${hostWithPort};database=${database};user=${user};password=${password};encrypt=${encrypt};trustServerCertificate=${trustServerCertificate}`;
 }
 
-loadDotEnv(path.join(process.cwd(), ".env"));
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: resolveDatabaseUrl(process.env),
-    },
-  },
-});
-
 function cents(amount) {
   return Math.round(amount * 100);
 }
 
-async function main() {
+export async function seedDatabase(prisma) {
   const email = "owner@nest.local";
 
   let user = await prisma.user.findUnique({ where: { email } });
@@ -208,23 +199,29 @@ async function main() {
 
   const budgets = {};
   for (const b of budgetDefs) {
-    const row = await prisma.budgetEnvelope.upsert({
-      where: { workspaceId_name: { workspaceId: workspace.id, name: b.name } },
-      update: {
-        targetCents: b.targetCents,
-        availableCents: b.availableCents,
-        isActive: true,
-      },
-      create: {
+    const existing = await prisma.budgetEnvelope.findFirst({
+      where: {
         workspaceId: workspace.id,
         accountId: accounts["Envelope Wallet"].id,
         name: b.name,
-        targetCents: b.targetCents,
-        availableCents: b.availableCents,
-        isActive: true,
-        createdById: user.id,
       },
     });
+    const data = {
+      targetCents: b.targetCents,
+      availableCents: b.availableCents,
+      isActive: true,
+    };
+    const row = existing
+      ? await prisma.budgetEnvelope.update({ where: { id: existing.id }, data })
+      : await prisma.budgetEnvelope.create({
+          data: {
+            ...data,
+            workspaceId: workspace.id,
+            accountId: accounts["Envelope Wallet"].id,
+            name: b.name,
+            createdById: user.id,
+          },
+        });
     budgets[b.name] = row;
   }
 
@@ -430,30 +427,34 @@ async function main() {
     prisma.receivable.count(),
   ]);
 
-  console.log(
-    JSON.stringify(
-      {
-        userCount: summary[0],
-        workspaceCount: summary[1],
-        accountCount: summary[2],
-        budgetCount: summary[3],
-        transactionCount: summary[4],
-        receivableCount: summary[5],
-        seededWorkspaceId: workspace.id,
-        seededUserId: user.id,
-        salaryTransactionId: salaryTx.id,
-      },
-      null,
-      2,
-    ),
-  );
+  return {
+    userCount: summary[0],
+    workspaceCount: summary[1],
+    accountCount: summary[2],
+    budgetCount: summary[3],
+    transactionCount: summary[4],
+    receivableCount: summary[5],
+    seededWorkspaceId: workspace.id,
+    seededUserId: user.id,
+    salaryTransactionId: salaryTx.id,
+  };
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
+async function main() {
+  loadDotEnv(path.join(process.cwd(), ".env"));
+  const prisma = new PrismaClient({
+    datasources: { db: { url: resolveDatabaseUrl(process.env) } },
   });
+  try {
+    console.log(JSON.stringify(await seedDatabase(prisma), null, 2));
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
