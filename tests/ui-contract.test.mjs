@@ -10,7 +10,7 @@ test("public landing page offers self-hosted and best-effort hosted paths", asyn
   const landing = await readFile(path.join(root, "app/page.tsx"), "utf8");
 
   assert.match(landing, /Host it yourself/);
-  assert.match(landing, /https:\/\/github\.com\/peternoobmaster69\/SaveTogether/);
+  assert.match(landing, /https:\/\/github\.com\/peternoobmaster69\/Nest"/);
   assert.match(landing, /Use the hosted version/);
   assert.match(landing, /No SLA/);
   assert.match(landing, /cloud spending reaches its ceiling/);

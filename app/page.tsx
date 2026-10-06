@@ -1,3 +1,4 @@
+import { LandingContact } from "@/components/landing-contact";
 import { LandingScrollMotion } from "@/components/landing-scroll-motion";
 import { LandingSignInDialog } from "@/components/landing-signin-dialog";
 import { SiteStructuredData } from "@/components/site-structured-data";
@@ -20,6 +21,7 @@ import {
   ExternalLink,
   GitFork,
   Landmark,
+  Mail,
   Layers3,
   PiggyBank,
   ReceiptText,
@@ -103,6 +105,7 @@ export default async function Home({ searchParams }: HomeProps) {
       <main className="lp" data-landing>
         <SiteStructuredData />
         <LandingScrollMotion />
+        <LandingContact />
         {showSignIn || session?.sessionLimitRequired ? (
           <LandingSignInDialog
             callbackUrl={callbackUrl}
@@ -123,6 +126,7 @@ export default async function Home({ searchParams }: HomeProps) {
             <a href="#money-flows">Money flows</a>
             <a href="#monthly-rhythm">Monthly rhythm</a>
             <a href="#use-nest">Use Nest</a>
+            <a href="#contact">Contact</a>
           </nav>
           <Link href="/login" className="lp-nav-signin">
             Sign in <ArrowRight size={15} aria-hidden="true" />
@@ -152,8 +156,8 @@ export default async function Home({ searchParams }: HomeProps) {
 
           <div className="lp-hero-stage">
             <div className="lp-hero-chip is-left" aria-hidden="true">
-              <span className="lp-signal is-positive">+$350</span>
-              <span><strong>Salary arrived</strong><small>Waiting for a job</small></span>
+              <span className="lp-signal is-positive">+$3500</span>
+              <span><strong>Salary arrived</strong><small>Waiting to be allocated</small></span>
             </div>
             <div className="lp-hero-chip is-right" aria-hidden="true">
               <span className="lp-icon-tile is-amber"><CreditCard size={16} /></span>
@@ -400,7 +404,7 @@ export default async function Home({ searchParams }: HomeProps) {
               <div className="lp-use-card-footer">
                 <small>The source and setup instructions are available on GitHub.</small>
                 <a
-                  href="https://github.com/peternoobmaster69/SaveTogether"
+                  href="https://github.com/peternoobmaster69/Nest"
                   className="lp-btn-secondary"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -425,6 +429,16 @@ export default async function Home({ searchParams }: HomeProps) {
               </div>
             </article>
           </div>
+          <div className="lp-contact-strip" data-reveal>
+            <span className="lp-icon-tile is-amber"><Mail size={20} aria-hidden="true" /></span>
+            <div>
+              <strong>Questions before you start?</strong>
+              <p>Ask about hosting, share feedback, or report something that isn&apos;t working.</p>
+            </div>
+            <a href="#contact" className="lp-btn-secondary">
+              Contact me <ArrowRight size={15} aria-hidden="true" />
+            </a>
+          </div>
         </section>
 
         <section className="lp-footer-cta" data-scene="track" aria-labelledby="cta-title">
@@ -446,6 +460,7 @@ export default async function Home({ searchParams }: HomeProps) {
           <div>
             <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer">Privacy</Link>
             <Link href="/terms-of-service" target="_blank" rel="noopener noreferrer">Terms</Link>
+            <a href="#contact">Contact</a>
             <Link href="/login">Sign in</Link>
           </div>
         </footer>

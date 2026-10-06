@@ -12,6 +12,7 @@ import {
   DeleteSchema as BudgetPlanDeleteSchema,
 } from "../lib/domains/ledger/budget-plan/contracts.ts";
 import { CorrectTransactionSchema } from "../lib/domains/ledger/transaction-contracts.ts";
+import { ContactRequestSchema } from "../lib/domains/contact/contracts.ts";
 import { TransactionAgentRequestSchema } from "../lib/ai/transaction-agent-contracts.ts";
 import { AskNestRequestSchema, ASK_NEST_HISTORY_MAX_LENGTH } from "../lib/ai/ask-nest-contracts.ts";
 import {
@@ -46,6 +47,7 @@ const schemaRegistry = {
   BudgetPlanPatchSchema,
   BudgetPlanDeleteSchema,
   CorrectTransactionSchema,
+  ContactRequestSchema,
   TransactionAgentRequestSchema,
   AskNestRequestSchema,
   AgentConfigurationUpdateSchema, AgentExampleSchema, AgentExampleUpdateSchema, AgentRevisionSchema,
@@ -71,6 +73,7 @@ const requestSchemaByOperation = {
   "POST /api/admin/agents/{agentId}/fine-tuning/{jobId}": "AgentFineTuneActionSchema",
   "POST /api/ai/transactions": "TransactionAgentRequestSchema",
   "POST /api/ai/ask": "AskNestRequestSchema",
+  "POST /api/public/contact": "ContactRequestSchema",
   "POST /api/transactions/bulk-import": "BulkImportSchema",
   "POST /api/transactions/{id}/corrections": "CorrectTransactionSchema",
   "POST /api/credit-transactions/import-maybank": "ImportMaybankSchema",

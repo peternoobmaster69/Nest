@@ -6367,6 +6367,139 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   font-size: 13px;
 }
 
+.lp-contact-strip {
+  margin-top: 14px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px dashed color-mix(in srgb, var(--accent-500) 40%, var(--border-subtle));
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--accent-500) 5%, var(--bg-elevated));
+}
+
+.lp-contact-strip > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.lp-contact-strip strong {
+  font-size: 15px;
+}
+
+.lp-contact-strip p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lp-contact-strip .lp-btn-secondary {
+  flex: 0 0 auto;
+  min-height: 42px;
+  font-size: 13px;
+}
+
+/* Contact popup (rendered in a portal, so not scoped under .lp) */
+/* While any modal is open, the consent banner steps aside so it can't cover the form. */
+html[data-modal-scroll-lock="true"] .privacy-consent-banner {
+  visibility: hidden;
+}
+
+.lp-contact-dialog {
+  max-width: 560px;
+}
+
+.lp-contact-form {
+  display: grid;
+  gap: 4px;
+}
+
+.lp-contact-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lp-contact-form .textarea {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.lp-contact-trap {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.lp-contact-error {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: var(--text-base);
+}
+
+.lp-contact-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lp-contact-actions small {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.lp-contact-actions .lp-btn-primary {
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+
+.lp-contact-actions .lp-btn-primary:disabled {
+  opacity: 0.7;
+  transform: none;
+  cursor: progress;
+}
+
+.lp-contact-sent {
+  padding: 12px 4px 4px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.lp-contact-sent-icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.lp-contact-sent h3 {
+  margin: 6px 0 0;
+  font-size: 20px;
+}
+
+.lp-contact-sent p {
+  max-width: 40ch;
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- Closing CTA and footer ---------- */
 
 .lp-footer-cta {
@@ -6734,6 +6867,25 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
   .lp-use-card {
     min-height: 0;
+  }
+
+  .lp-contact-strip {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .lp-contact-strip .lp-btn-secondary {
+    width: 100%;
+  }
+
+  .lp-contact-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .lp-contact-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
   }
 
   .lp-footer {
