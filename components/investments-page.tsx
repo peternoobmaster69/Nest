@@ -1,4 +1,5 @@
 "use client";
+import { ContributionTrendIndicator } from "@/components/investment-contribution-trend";
 
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
@@ -92,29 +93,6 @@ function formatInceptionBadge(value: string) {
     full: `Since ${year}`,
     compact: `Since ’${year.slice(-2)}`,
   };
-}
-
-function ContributionTrendIndicator({
-  currentCents,
-  previousCents,
-  previousYear,
-}: {
-  currentCents: number;
-  previousCents: number | undefined;
-  previousYear: number;
-}) {
-  if (previousCents === undefined || currentCents === previousCents) return null;
-  const increased = currentCents > previousCents;
-  return (
-    <span
-      className={`inv-contribution-trend ${increased ? "is-up" : "is-down"}`}
-      role="img"
-      aria-label={`${increased ? "Increased" : "Decreased"} from ${previousYear}`}
-      title={`${increased ? "Increased" : "Decreased"} from ${previousYear}`}
-    >
-      {increased ? "▲" : "▼"}
-    </span>
-  );
 }
 
 function buildLinePath(points: Array<{ x: number; y: number }>) {

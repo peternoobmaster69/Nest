@@ -495,7 +495,7 @@ export function ReceivablesPage() {
         id: activeId,
         receivableDate: toIsoFromDateInput(formReceivableDate),
         transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : null,
-        amountCents: Math.round(Number(formAmount || "0") * 100),
+        amountCents: Math.round(Number(formAmount) * 100),
         title: formTitle.trim() || "Receivable",
         notes: formNotes.trim() || null,
         status: formStatus,

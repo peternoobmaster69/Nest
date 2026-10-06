@@ -1,9 +1,10 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import versionedPolicy from "../quality/sonar-policy.json" with { type: "json" };
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
-export const policy = JSON.parse(await readFile(new URL("../quality/sonar-policy.json", import.meta.url), "utf8"));
+export const policy = versionedPolicy;
 
 export async function readToken(name, env = process.env) {
   const token = env[name]?.trim() || (env[`${name}_FILE`] && (await readFile(env[`${name}_FILE`], "utf8")).trim());

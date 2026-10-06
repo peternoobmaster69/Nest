@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import sharp from "sharp";
+import { SINGAPORE_BANKS } from "../lib/singapore-banks.ts";
 
 const ROOT = process.cwd();
-const BANKS_FILE = path.join(ROOT, "lib", "singapore-banks.ts");
 const OUTPUT_DIR = path.join(ROOT, "public", "banks");
 const token = process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN;
 
@@ -16,15 +17,8 @@ if (!token.startsWith("pk_")) {
   process.exit(1);
 }
 
-const banksSource = await readFile(BANKS_FILE, "utf8");
-const bankRegex = /\{\s*code:\s*"([^"]+)"[\s\S]*?logoDomain:\s*"([^"]+)"/g;
-const banks = [];
-
-for (const match of banksSource.matchAll(bankRegex)) {
-  const code = match[1];
-  const domain = match[2];
-  banks.push({ code, domain });
-}
+const banks = SINGAPORE_BANKS.filter((bank) => bank.logoDomain)
+  .map((bank) => ({ code: bank.code, domain: bank.logoDomain }));
 
 if (!banks.length) {
   console.error("No banks found in lib/singapore-banks.ts.");
@@ -37,13 +31,16 @@ let ok = 0;
 let failed = 0;
 
 for (const bank of banks) {
+  if (!/^[A-Z0-9]+$/.test(bank.code) || !/^[a-z0-9.-]+$/.test(bank.domain)) {
+    throw new Error("Bank logo metadata contains an invalid code or domain.");
+  }
   const url = new URL(`https://img.logo.dev/${bank.domain}`);
   url.searchParams.set("token", token);
   url.searchParams.set("size", "256");
   url.searchParams.set("format", "png");
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const contentType = res.headers.get("content-type") || "";
@@ -51,7 +48,19 @@ for (const bank of banks) {
       throw new Error(`Unexpected content-type: ${contentType}`);
     }
 
-    const bytes = Buffer.from(await res.arrayBuffer());
+    if (!res.body) throw new Error("Logo response is empty.");
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of res.body) {
+      size += chunk.byteLength;
+      if (size > 1_000_000) throw new Error("Logo response exceeds the size limit.");
+      chunks.push(chunk);
+    }
+    // Decode and re-encode provider data before serving it as a local PNG.
+    const bytes = await sharp(Buffer.concat(chunks), { limitInputPixels: 4_000_000 })
+      .resize(256, 256, { fit: "inside", withoutEnlargement: true })
+      .png()
+      .toBuffer();
     const outFile = path.join(OUTPUT_DIR, `${bank.code}.png`);
     await writeFile(outFile, bytes);
     ok += 1;

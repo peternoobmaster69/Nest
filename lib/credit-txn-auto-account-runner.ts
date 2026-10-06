@@ -31,7 +31,6 @@ type RunnerOptions = {
 };
 
 const CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE = "CREDIT_TXN_AUTO_ACCOUNT";
-const CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY = "global";
 
 function formatAutoReceivableGroupTitle(ruleName: string, transactionDate: Date) {
   const monthLabel = transactionDate.toLocaleString("en-US", {
@@ -304,7 +303,7 @@ export async function runCreditTxnAutoAccounting(
     return combined;
   }
 
-  const jobKey = workspaceId ? `workspace:${workspaceId}` : CREDIT_TXN_AUTO_ACCOUNT_JOB_KEY;
+  const jobKey = `workspace:${workspaceId}`;
   const queued = retryJob ? { job: retryJob, created: true } : await enqueueBackgroundJob({
       type: CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE,
       key: jobKey,
@@ -330,7 +329,7 @@ export async function runCreditTxnAutoAccounting(
     const workspaces = await db.workspace.findMany({
       where: {
         creditCardAutoRules: { not: null },
-        ...(workspaceId ? { id: workspaceId } : {}),
+        id: workspaceId,
       },
       select: { id: true, creditCardAutoRules: true },
     });

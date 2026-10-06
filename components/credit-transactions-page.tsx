@@ -1271,7 +1271,7 @@ export function CreditTransactionsPage({ initialCards }: { initialCards: CreditC
       action: "RECEIVABLE",
       receivableDate: new Date(`${receivableDate}T00:00:00.000Z`).toISOString(),
       transactionDate: receivableTxnDate ? new Date(`${receivableTxnDate}T00:00:00.000Z`).toISOString() : undefined,
-      amountCents: Math.round(Number(receivableAmount || "0") * 100),
+      amountCents: Math.round(Number(receivableAmount) * 100),
       title: receivableTitle || receivableTarget.subject,
       notes: receivableNotes || undefined,
       accountId,

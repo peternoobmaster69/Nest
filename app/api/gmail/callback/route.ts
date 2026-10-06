@@ -106,14 +106,12 @@ export async function GET(request: Request) {
             field: "accessToken",
             value: tokens.access_token,
           }),
-          refreshToken: refreshToken
-            ? sealGmailCredential({
-                integrationId: existing.id,
-                workspaceId: auth.workspaceId,
-                field: "refreshToken",
-                value: refreshToken,
-              })
-            : null,
+          refreshToken: sealGmailCredential({
+            integrationId: existing.id,
+            workspaceId: auth.workspaceId,
+            field: "refreshToken",
+            value: refreshToken,
+          }),
           tokenType: tokens.token_type,
           scope: tokens.scope,
           expiryDate,

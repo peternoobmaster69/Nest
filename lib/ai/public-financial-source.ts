@@ -1,3 +1,4 @@
+import { extractHtmlText } from "@/lib/html-text";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { extractNormalizedFinancialValues } from "@/lib/ai/serpapi-news";
@@ -134,63 +135,26 @@ async function readBoundedBody(response: Response) {
   return result + decoder.decode();
 }
 
-function decodeHtmlEntities(value: string) {
-  const named: Record<string, string> = {
-    amp: "&",
-    apos: "'",
-    gt: ">",
-    hellip: "…",
-    ldquo: "“",
-    lsquo: "‘",
-    lt: "<",
-    nbsp: " ",
-    quot: '"',
-    rdquo: "”",
-    rsquo: "’",
-    ndash: "–",
-    mdash: "—",
-  };
-  return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (entity, key: string) => {
-    if (key.startsWith("#")) {
-      const hexadecimal = key[1]?.toLocaleLowerCase() === "x";
-      const codePoint = Number.parseInt(key.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
-      return Number.isFinite(codePoint) && codePoint > 0 && codePoint <= 0x10ffff
-        ? String.fromCodePoint(codePoint)
-        : entity;
-    }
-    return named[key.toLocaleLowerCase()] ?? entity;
-  });
-}
-
-function plainHtmlText(value: string) {
-  return decodeHtmlEntities(
-    value
-      .replace(/<!--[\s\S]*?-->/g, " ")
-      .replace(/<(?:script|style|noscript|svg)\b[\s\S]*?<\/(?:script|style|noscript|svg)>/gi, " ")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<[^>]+>/g, " "),
-  ).replace(/[\t\f\v ]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
-}
-
 function extractHtmlDocument(html: string) {
+  const document = extractHtmlText(html);
   const lines: string[] = [];
   const seen = new Set<string>();
-  const push = (value: string) => {
-    const text = plainHtmlText(value).replace(/\s+/g, " ").trim();
-    if (text.length < 2 || seen.has(text)) return;
-    seen.add(text);
-    lines.push(text);
-  };
-
-  const titleMatch = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html);
-  if (titleMatch) push(titleMatch[1]);
-  for (const match of html.matchAll(/<(h[1-6]|p|li|caption|th|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
-    push(match[2]);
-    if (lines.join("\n").length >= MAX_EXCERPT_CHARACTERS) break;
+  let length = 0;
+  for (const candidate of [document.title, ...document.sections]) {
+    if (candidate.length < 2 || seen.has(candidate)) continue;
+    seen.add(candidate);
+    lines.push(candidate);
+    length += candidate.length + 1;
+    if (length >= MAX_EXCERPT_CHARACTERS) break;
   }
-  if (lines.length < 2) push(html);
-  const title = lines[0] || "Authoritative public financial source";
-  return { title: title.slice(0, 300), excerpt: lines.join("\n").slice(0, MAX_EXCERPT_CHARACTERS) };
+  if (lines.length < 2) {
+    const fallback = document.text.replace(/\s+/g, " ").trim();
+    if (fallback && !seen.has(fallback)) lines.push(fallback);
+  }
+  return {
+    title: (document.title || lines[0] || "Authoritative public financial source").slice(0, 300),
+    excerpt: lines.join("\n").slice(0, MAX_EXCERPT_CHARACTERS),
+  };
 }
 
 async function fetchAuthoritativeSource(initialUrl: URL) {

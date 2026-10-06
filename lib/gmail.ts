@@ -1,3 +1,4 @@
+import { htmlToText } from "@/lib/html-text";
 import { prisma } from "@/lib/prisma";
 import {
   decryptCredential,
@@ -277,26 +278,6 @@ type GmailPayload = {
   body?: { data?: string };
   parts?: GmailPayload[];
 };
-
-function htmlToText(input: string) {
-  return input
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<\/div>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#39;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-}
 
 function extractTextPart(payload: GmailPayload | null): string {
   if (!payload) return "";

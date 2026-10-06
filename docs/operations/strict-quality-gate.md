@@ -29,7 +29,7 @@ The verifier rejects missing conditions, altered thresholds, a different assigne
 
 ## Local use
 
-Use Node 22.13 or newer. Start your SonarQube server, then configure credentials without adding them to source control or command arguments:
+Use Node 22.13 or newer and the official SonarScanner CLI (CI pins 8.1.0.6389). Install the scanner for your operating system from [SonarSource](https://docs.sonarsource.com/sonarqube-server/analyzing-source-code/scanners/sonarscanner), then put `sonar-scanner` on `PATH` or set `SONAR_SCANNER_PATH` to its executable. Start your SonarQube server, then configure credentials without adding them to source control or command arguments:
 
 ```sh
 export SONAR_HOST_URL=http://localhost:9000
@@ -53,6 +53,8 @@ CI provisions a fresh, digest-pinned SonarQube Community Build 26.9 container, b
 
 Browser and database jobs also start loopback-only SQL Server containers with independently generated database and session credentials for each run. Credentials are masked in logs and passed through environment variables; the workflow contains no fixed database passwords.
 
+Validation and coverage jobs generate separate loopback build credentials before Prisma generation. They need schema configuration without access to a real database. The scanner installer verifies the pinned official archive's SHA-256 checksum before adding it to the runner's path; scanner tokens are supplied only through its environment.
+
 Each pull request checkout is analyzed as a complete main project. This supports Community's edition limits without pretending to offer licensed pull request decoration. The fresh database does not retain triage decisions or hotspot reviews between runs. Recurring findings must be resolved; persistent review history requires a separately managed Sonar server and appropriate branch-analysis support. Community lacks the licensed dependency-risk gate, so npm audit and GitHub dependency review enforce dependency checks independently.
 
 The **Strict quality gate** job waits for validation, browser checks, SQL checks, SonarQube, secret/dependency review, and CodeQL. Failure, cancellation, or skipping any required job prevents success. CodeQL's SARIF is checked explicitly because successful execution of the analyzer alone does not mean it found zero issues. Coverage and Sonar evidence are retained as CI artifacts for 14 days. Actions and server images are pinned. Dependabot proposes npm and action updates; update server image digests explicitly.
@@ -69,7 +71,7 @@ The repository's existing CODEOWNERS file names its owner. Add another trusted c
 The importable `.github/rulesets/strict-quality.json` contains these settings and restricts the required check to the GitHub Actions app. A repository administrator can import it in **Settings → Rules → Rulesets**, or create the ruleset with authenticated GitHub CLI access:
 
 ```sh
-gh api --method POST repos/peternoobmaster69/SaveTogether/rulesets \
+gh api --method POST repos/peternoobmaster69/Nest/rulesets \
   --input .github/rulesets/strict-quality.json
 ```
 

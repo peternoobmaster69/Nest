@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { countSourceLines } from "./source-lines.mjs";
 
 const root = process.cwd();
 const read = (file) => readFile(path.join(root, file), "utf8");
@@ -15,7 +16,7 @@ async function walk(directory) {
 }
 
 const globals = await read("app/globals.css");
-const globalLines = globals.split(/\r?\n/).length;
+const globalLines = countSourceLines(globals);
 assert.ok(globalLines <= Math.floor(23_795 * 0.6), `globals.css must stay at least 40% below its Phase 7 baseline; found ${globalLines} lines`);
 for (const layer of ["tokens", "base", "features", "components", "utilities"]) {
   assert.match(globals, new RegExp(`@import ["']\\./styles/${layer}\\.css["']`));
@@ -37,7 +38,7 @@ assert.match(await read("app/layout.tsx"), /from "next\/font\/google"/);
 
 const exceptions = JSON.parse(await read("docs/ui-component-exceptions.json"));
 for (const file of componentFiles) {
-  const lines = (await read(file)).split(/\r?\n/).length;
+  const lines = countSourceLines(await read(file));
   if (lines <= 400) continue;
   const exception = exceptions[file];
   assert.ok(exception, `${file} exceeds 400 lines without a documented exception`);

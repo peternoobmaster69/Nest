@@ -6,6 +6,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "postinstall": "node scripts/patch-argparse-compatibility.mjs",
     "predev": "npm run prisma:generate",
     "dev": "node scripts/run-next-with-system-ca.mjs dev",
     "test": "node --import tsx --test tests/*.test.mjs",
@@ -47,7 +48,7 @@
     "db:phase4:domain-report": "node scripts/report-phase4-domain-values.mjs",
     "db:migration:report": "node scripts/report-migration-state.mjs",
     "db:migration:dry-run": "node scripts/dry-run-sql-migration.mjs",
-    "banks:cache-logos": "node scripts/cache-bank-logos.mjs",
+    "banks:cache-logos": "node --import tsx scripts/cache-bank-logos.mjs",
     "legacy:import-kf-miles": "node scripts/import-kf-miles.mjs",
     "legacy:reconcile-ff-balances": "node scripts/reconcile-ff-balances.mjs",
     "icons:generate": "node scripts/generate-app-icons.mjs",
@@ -66,6 +67,7 @@
     "@tanstack/react-query": "^5.90.21",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "htmlparser2": "^12.0.0",
     "lucide-react": "^1.7.0",
     "next": "^16.3.3",
     "next-auth": "^4.24.15",
@@ -80,7 +82,6 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.62.1",
-    "@sonar/scan": "5.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.1",
     "@types/react": "^19",
@@ -95,12 +96,19 @@
     "typescript": "^5"
   },
   "overrides": {
+    "@next/eslint-plugin-next": {
+      "fast-glob": "npm:tinyglobby@0.2.15"
+    },
     "@simplewebauthn/server": "$@simplewebauthn/server",
     "@prisma/config": {
       "deepmerge-ts": "8.0.0"
     },
     "js-yaml": "4.3.2",
     "postcss": "8.5.23",
+    "remarkable": {
+      "argparse": "2.0.1"
+    },
+    "source-map-js": "1.2.2",
     "sharp": "$sharp"
   }
 }

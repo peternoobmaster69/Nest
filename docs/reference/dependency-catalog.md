@@ -4,7 +4,7 @@ description: Purpose, boundary, and upgrade risk for every direct npm package.
 audience: [engineers, maintainers, security-reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-10-07
 ---
 
 # Package dependency catalog
@@ -38,6 +38,8 @@ Direct `dependencies`, `devDependencies`, and security overrides from `package.j
 | `@azure/communication-email` | Reminder/invite email delivery | Provider request/status behavior |
 | `web-push` | VAPID push delivery | Subscription and encryption behavior |
 | `swagger-ui-react` | Interactive API documentation | Client bundle and production exposure |
+| `htmlparser2` | Plain-text extraction from Gmail alerts and financial-source HTML | Hidden elements, malformed HTML, entity decoding, and financial amounts |
+| `@react-pdf/renderer` | CIO strategy report PDFs | Server rendering, fonts, and layout |
 | `lucide-react` | UI icons | Bundle/import pattern |
 | `@vercel/analytics` | Hosting analytics | Privacy and client instrumentation |
 | `@vercel/speed-insights` | Web performance telemetry | Privacy and client instrumentation |
@@ -56,13 +58,25 @@ Direct `dependencies`, `devDependencies`, and security overrides from `package.j
 | `@types/node` | Node typings | Runtime/type version mismatch |
 | `@types/react`, `@types/react-dom` | React typings | JSX/component API type drift |
 | `@types/web-push` | Push library typings | Type/runtime mismatch |
+| `@playwright/test` | Browser, mobile, and visual regression tests | Browser revisions and platform-specific snapshots |
+| `@axe-core/playwright` | Browser accessibility checks | Rule changes and accessible interactions |
+| `c8` | V8 coverage with all production sources included | Source maps and exact line/branch/function counts |
 
 ## Overrides
 
 | Package | Pinned version | Intent |
 | --- | --- | --- |
-| `js-yaml` | `4.3.0` | Security/compatibility override; exact originating advisory is unknown from source code |
-| `postcss` | `8.5.20` | Security/compatibility override; exact originating advisory is unknown from source code |
+| `js-yaml` | `4.3.2` | Patched YAML parser |
+| `postcss` | `8.5.23` | Patched CSS parser |
+| `source-map-js` | `1.2.2` | Patched source-map implementation |
+| `@prisma/config` → `deepmerge-ts` | `8.0.0` | Patched configuration merge dependency |
+| `@next/eslint-plugin-next` → `fast-glob` | Alias to `tinyglobby@0.2.15` | Removes vulnerable `braces`; verifies Next's directory-glob behavior |
+| `remarkable` → `argparse` | `2.0.1` | Removes vulnerable `sprintf-js`; retains Markdown CLI compatibility |
+| `@simplewebauthn/server`, `sharp` | Same as direct dependency | Keep all consumers on the reviewed direct version |
+
+`argparse` 2.0.1 has a bug in its deprecated `ArgumentParser({ version })` option, which Remarkable still uses: `--version` prints nothing. The postinstall script `scripts/patch-argparse-compatibility.mjs` corrects that single argument. It verifies SHA-256 hashes before and after the change, is idempotent, and refuses changed dependency code. Runtime tests cover stdin, file input, version output, rejected options, and patch integrity. Remove the patch when Remarkable adopts argparse's current API.
+
+SonarScanner is installed independently of npm. CI uses the official Linux CLI archive pinned to version 8.1.0.6389 and verifies its SHA-256 checksum. This replaces `@sonar/scan`, whose dependency tree included vulnerable `node-forge`. Local scans require `sonar-scanner` on `PATH` or `SONAR_SCANNER_PATH` pointing to the official executable.
 
 ## Upgrade Protocol
 
@@ -75,12 +89,9 @@ Direct `dependencies`, `devDependencies`, and security overrides from `package.j
 
 ## Current Audit Status
 
-On 2026-07-28, the public-readiness repository scan passed, but `npm audit --omit=dev --audit-level=high` reported 7 production advisories:
+On 2026-10-07, a clean install and `npm audit --audit-level=low` reported zero vulnerabilities, including development dependencies. The public-readiness audit and production-only audit also passed. These results concern the installed dependency tree; they do not establish that application security checks or the strict coverage gate pass.
 
-- Critical: transitive `@auth/core` through `@auth/prisma-adapter`.
-- High: `brace-expansion`, `immutable`, `next`, and `sharp`.
-
-See the [security review](../reviews/security-review.md) for advisory themes and response priority. The dependency tree needs a reviewed upgrade; the repository should not be described as audit-clean.
+The [security review](../reviews/security-review.md) retains the older findings and advisory themes as historical evidence.
 
 ## External Systems Without Direct Dedicated Package
 
@@ -106,7 +117,7 @@ See the [security review](../reviews/security-review.md) for advisory themes and
 
 ## Known Limitations
 
-- Transitive dependencies are not exhaustively cataloged; the current high/critical audit status is summarized above.
+- Transitive dependencies are not exhaustively cataloged; their current audit status is summarized above.
 - Package choice rationale is unknown where no ADR or source boundary establishes it.
 
 ## Future Improvements
@@ -116,4 +127,4 @@ See the [security review](../reviews/security-review.md) for advisory themes and
 
 ## Last Updated
 
-2026-07-28
+2026-10-07

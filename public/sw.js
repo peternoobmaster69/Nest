@@ -42,6 +42,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (event.origin !== self.location.origin) return;
   if (event.data?.type !== "PURGE_PRIVATE_CACHES" && event.data?.type !== "PURGE_ALL_CACHES") return;
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(

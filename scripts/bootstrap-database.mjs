@@ -43,7 +43,7 @@ try {
 }
 
 console.log("Applying committed SQL Server baseline...");
-runPrisma(["db", "execute", "--file", baselineFile]);
+runPrisma(["db", "execute", "--schema", path.join(projectRoot, "prisma", "schema.prisma"), "--file", baselineFile]);
 
 console.log(`Recording ${historicalMigrations.length} retained historical migrations...`);
 for (const migration of historicalMigrations) {

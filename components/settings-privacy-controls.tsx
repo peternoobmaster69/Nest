@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePrivacyConsent } from "@/components/privacy-consent";
@@ -24,6 +25,7 @@ async function responseError(response: Response, fallback: string) {
 }
 
 export function SettingsPrivacyControls({ view = "privacy" }: { view?: "privacy" | "data" }) {
+  const router = useRouter();
   const { consent, updateConsent } = usePrivacyConsent();
   const [offlineSummary, setOfflineSummary] = useState(EMPTY_OFFLINE_SUMMARY);
   const [message, setMessage] = useState("");
@@ -94,8 +96,10 @@ export function SettingsPrivacyControls({ view = "privacy" }: { view?: "privacy"
       } catch {
         // Server-side deletion has already succeeded; browser storage is best effort.
       }
-      await signOut({ redirect: false }).catch(() => undefined);
-      window.location.assign("/");
+      await signOut({ callbackUrl: "/" }).catch(() => {
+        router.replace("/");
+        router.refresh();
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Your account could not be deleted.");
       setDeleteDialogOpen(false);

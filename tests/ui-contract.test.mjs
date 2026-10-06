@@ -658,9 +658,10 @@ test("settings uses the shared typography and layout contract", async () => {
 });
 
 test("settings groups related controls into focused tabs", async () => {
-  const [settings, privacyControls, styles] = await Promise.all([
+  const [settings, privacyControls, notices, styles] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
     readFile(path.join(root, "components/settings-privacy-controls.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings/operation-notices.ts"), "utf8"),
     readAppStyles(root),
   ]);
 
@@ -678,7 +679,7 @@ test("settings groups related controls into focused tabs", async () => {
   assert.ok(automationLayout.indexOf("Run Now") < automationLayout.indexOf("notice={autoRuleNotice}"));
   assert.ok(automationLayout.indexOf("notice={autoRuleNotice}") < automationLayout.indexOf("autoRules.isLoading"));
   assert.match(settings, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
-  assert.match(settings, /No transactions auto-accounted[\s\S]*?No unaccounted transactions matched your enabled rules/);
+  assert.match(notices, /No transactions auto-accounted[\s\S]*?No unaccounted transactions matched your enabled rules/);
   assert.match(styles, /\.settings-auto-notice\s*\{[^}]*margin-bottom:\s*18px/s);
   assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display/);
   assert.match(settings, /section === "workspaces"[\s\S]*?Bank accounts/);
@@ -760,11 +761,12 @@ test("workspace settings flow from selection through configuration and access", 
 });
 
 test("Gmail sync uses one responsive status surface", async () => {
-  const [settings, styles, summary, notice] = await Promise.all([
+  const [settings, styles, summary, notice, notices] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
     readAppStyles(root),
     readFile(path.join(root, "lib/gmail-sync-summary.ts"), "utf8"),
     readFile(path.join(root, "components/settings/operation-notice.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings/operation-notices.ts"), "utf8"),
   ]);
 
   assert.match(settings, /const isGmailSyncActive = Boolean/);
@@ -775,11 +777,11 @@ test("Gmail sync uses one responsive status surface", async () => {
   assert.match(notice, /className=\{`settings-operation-notice is-\$\{notice\.tone\}/);
   assert.match(styles, /\.gmail-sync-progress-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/s);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-operation-notice-copy\s*\{[^}]*display:\s*grid/s);
-  assert.match(settings, /hasProcessingIssues[\s\S]*?\? "warning"/);
+  assert.match(notices, /hasProcessingIssues[\s\S]*?\? "warning"/);
   assert.match(styles, /\.settings-operation-notice\.is-warning\s*\{[^}]*background:\s*var\(--warning-bg\)/s);
   assert.match(summary, /Inbox is up to date\. No new card alert emails were found\./);
   assert.doesNotMatch(summary, /Synced \$\{data\.scannedMessages\} emails/);
-  assert.match(settings, /!\/\\b0 failed\\b\/i\.test\(normalized\)/);
+  assert.match(notices, /!\/\\b0 failed\\b\/i\.test\(normalized\)/);
 });
 
 test("recent authentication errors provide a return-safe re-authentication action", async () => {
@@ -838,6 +840,7 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   const dialog = await readFile(path.join(root, "components/ui/dialog.tsx"), "utf8");
   const navigationLoader = await readFile(path.join(root, "components/navigation-loader.tsx"), "utf8");
   const investments = await readFile(path.join(root, "components/investments-page.tsx"), "utf8");
+  const contributionTrend = await readFile(path.join(root, "components/investment-contribution-trend.tsx"), "utf8");
   const motion = await readFile(path.join(root, "lib/motion.ts"), "utf8");
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
   const providers = await readFile(path.join(root, "app/providers.tsx"), "utf8");
@@ -878,7 +881,8 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(investments, /calculateAnnualInvestmentContributions/);
   assert.match(investments, /id="inv-annual-contributions"[\s\S]*?role="tooltip"/);
   assert.doesNotMatch(investments, /Opening snapshots/);
-  assert.match(investments, /inv-contribution-trend[\s\S]*?is-up[\s\S]*?is-down/);
+  assert.match(investments, /<ContributionTrendIndicator/);
+  assert.match(contributionTrend, /inv-contribution-trend[\s\S]*?is-up[\s\S]*?is-down/);
   assert.match(styles, /\.inv-contribution-tooltip-shell:focus-within \.inv-contribution-tooltip/);
   assert.match(styles, /\.inv-contribution-trend\.is-up\s*\{[^}]*var\(--amount-positive\)/s);
   assert.match(styles, /\.inv-contribution-trend\.is-down\s*\{[^}]*var\(--amount-negative\)/s);

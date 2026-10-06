@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { scan } from "@sonar/scan";
+import { runSonarScanner } from "./sonar-scanner.mjs";
 import { analysisFailures, configurePolicy, coverageFailures, createClient, policy, readToken, root, verifyCoverage, verifyPolicy } from "./sonar-policy.mjs";
 
 async function runScan(api, token, verifier) {
@@ -10,18 +10,11 @@ async function runScan(api, token, verifier) {
   const taskFile = path.join(root, ".scannerwork/report-task.txt");
   await rm(taskFile, { force: true });
   try {
-    await scan({
+    await runSonarScanner({
       serverUrl: api.serverUrl,
       token,
-      options: {
-        "sonar.projectKey": policy.projectKey,
-        "sonar.projectBaseDir": root,
-        "sonar.javascript.node.executable": process.execPath,
-        "sonar.qualitygate.wait": "true",
-        "sonar.qualitygate.timeout": "600",
-        "sonar.verbose": "false",
-        "sonar.log.level": "INFO",
-      },
+      projectKey: policy.projectKey,
+      root,
     });
   } catch {
     errors.push("Scanner failed or its quality gate did not pass. See the scanner output above.");

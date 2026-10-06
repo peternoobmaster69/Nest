@@ -62,8 +62,8 @@ test("manual auto-accounting is role-protected and filters the runner to one wor
   assert.match(route, /requireWorkspaceRole\(parsed\.data\.workspaceId, "EDITOR"\)/);
   assert.match(route, /runCreditTxnAutoAccounting\(prisma, \{ workspaceId \}\)/);
   assert.match(auth, /hasMinimumWorkspaceRole\(role, minimumRole\)/);
-  assert.match(runner, /\.\.\.\(workspaceId \? \{ id: workspaceId \} : \{\}\)/);
-  assert.match(runner, /workspaceId \? `workspace:\$\{workspaceId\}`/);
+  assert.match(runner, /if \(!workspaceId\)[\s\S]*?id: workspaceId/);
+  assert.match(runner, /const jobKey = `workspace:\$\{workspaceId\}`/);
 });
 
 test("service worker caches static assets only and private read caches are purged on upgrade and logout", async () => {

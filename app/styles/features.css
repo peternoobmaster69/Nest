@@ -4,7 +4,7 @@
 
 .sidebar {
   position: relative;
-  z-index: 10;
+  z-index: var(--z-raised);
   width: 216px;
   flex-shrink: 0;
   background: var(--bg-elevated);
@@ -1044,7 +1044,7 @@
 
 .main {
   position: relative;
-  z-index: 0;
+  z-index: var(--z-base);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -8118,8 +8118,25 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   content: "";
 }
 
+/* Hover must stay visually distinct from .is-active (and only exist on
+   devices with real hover): touch leaves :hover stuck on the tapped card,
+   which read as "still selected" when both shared the brand border. */
+
 @media (hover: hover) {
+  .tx-group-picker-option:hover {
+    background: var(--bg-subtle);
+  }
+
   .tx-group-picker-trigger:hover {
+    background: var(--bg-subtle);
+  }
+
+  .tx-group-card:hover {
+    border-color: var(--border-default);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tx-group-member-row:hover {
     background: var(--bg-subtle);
   }
 }
@@ -8229,12 +8246,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
-}
-
-@media (hover: hover) {
-  .tx-group-picker-option:hover {
-    background: var(--bg-subtle);
-  }
 }
 
 .tx-group-picker-option:focus-visible,
@@ -8355,16 +8366,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   cursor: pointer;
   flex: 0 0 auto;
   text-align: left;
-}
-
-/* Hover must stay visually distinct from .is-active (and only exist on
-   devices with real hover): touch leaves :hover stuck on the tapped card,
-   which read as "still selected" when both shared the brand border. */
-@media (hover: hover) {
-  .tx-group-card:hover {
-    border-color: var(--border-default);
-    box-shadow: var(--shadow-sm);
-  }
 }
 
 .tx-group-card.is-active {
@@ -8562,12 +8563,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   border-bottom: 0;
 }
 
-@media (hover: hover) {
-  .tx-group-member-row:hover {
-    background: var(--bg-subtle);
-  }
-}
-
 .tx-group-member-row.is-selected {
   background: color-mix(in srgb, var(--brand-500) 6%, var(--bg-surface));
 }
@@ -8697,35 +8692,12 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   min-width: 0;
 }
 
-@media (min-width: 768px) {
-  .tx-filter-bar {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .tx-filter-controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex: 1 1 auto;
-    width: auto;
-  }
-}
-
 .tx-filter-pills {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
   width: 100%;
-}
-
-@media (min-width: 768px) {
-  .tx-filter-pills {
-    width: auto;
-  }
 }
 
 .tx-filter-pill {
@@ -8790,10 +8762,29 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 @media (min-width: 768px) {
+  .tx-filter-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .tx-filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1 1 auto;
+    width: auto;
+  }
+
   .tx-search-box {
     flex: 1;
     max-width: 280px;
     min-width: 160px;
+    width: auto;
+  }
+
+  .tx-filter-pills {
     width: auto;
   }
 }
@@ -10502,87 +10493,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   gap: 8px;
 }
 
-@media (max-width: 600px) {
-  .settings-hub {
-    gap: var(--space-3);
-  }
-
-  .settings-tabs {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0;
-    padding: 0;
-  }
-
-  .settings-tab {
-    min-height: 58px;
-    min-width: 0;
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px 2px 9px;
-    font-size: 11px;
-  }
-
-  .settings-tab-label {
-    display: none;
-  }
-
-  .settings-tab-mobile-label {
-    display: block;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .workspace-settings-page {
-    gap: 10px;
-  }
-
-  .workspace-settings-page > .card {
-    padding: 14px;
-  }
-
-  .workspace-settings-page form {
-    width: 100%;
-    max-width: none !important;
-  }
-
-  .workspace-settings-page form[style*="display: flex"] {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .workspace-settings-page form .input {
-    width: 100%;
-    max-width: none !important;
-  }
-
-  .workspace-settings-page form .btn {
-    width: 100%;
-    min-height: 44px;
-    justify-content: center;
-  }
-
-  .workspace-settings-page .crud-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .workspace-settings-page .crud-row > div {
-    width: 100%;
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .workspace-create-form,
-  .workspace-details-form,
-  .workspace-invite-form,
-  .workspace-money-page-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .settings-card-block {
   margin-bottom: 0;
   padding: 20px;
@@ -10925,6 +10835,85 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 @media (max-width: 600px) {
+  .settings-hub {
+    gap: var(--space-3);
+  }
+
+  .settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+  }
+
+  .settings-tab {
+    min-height: 58px;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 2px 9px;
+    font-size: 11px;
+  }
+
+  .settings-tab-label {
+    display: none;
+  }
+
+  .settings-tab-mobile-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-settings-page {
+    gap: 10px;
+  }
+
+  .workspace-settings-page > .card {
+    padding: 14px;
+  }
+
+  .workspace-settings-page form {
+    width: 100%;
+    max-width: none !important;
+  }
+
+  .workspace-settings-page form[style*="display: flex"] {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-settings-page form .input {
+    width: 100%;
+    max-width: none !important;
+  }
+
+  .workspace-settings-page form .btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .workspace-settings-page .crud-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-settings-page .crud-row > div {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workspace-create-form,
+  .workspace-details-form,
+  .workspace-invite-form,
+  .workspace-money-page-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .reauthentication-message {
     align-items: stretch;
     flex-direction: column;
@@ -11961,7 +11950,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   border-radius: var(--r-pill);
   font-size: 13px;
   font-weight: 500;
-  z-index: 100;
+  z-index: var(--z-dropdown);
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: var(--shadow-md);
   animation: toastSlide 0.3s ease;
@@ -11994,7 +11983,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: var(--z-sticky);
   padding: 20px;
   padding-left: 236px;
   animation: fadeIn 0.2s ease;
@@ -12771,7 +12760,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 
 .cct-mobile-period-picker {
   position: relative;
-  z-index: 0;
+  z-index: var(--z-base);
   min-width: 0;
 }
 
@@ -17502,7 +17491,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 9999;
+  z-index: var(--z-maximum);
   pointer-events: none;
 }
 

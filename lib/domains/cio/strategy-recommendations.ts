@@ -378,7 +378,7 @@ export function buildCioStrategyRecommendations(params: {
         evidenceIds: sharedEvidence,
         requiresUserConfirmation: true,
       });
-    } else if (requiredAnnual !== null) {
+    } else {
       recommendations.push({
         id: recommendationId("MAINTAIN_RETIREMENT_CONTRIBUTIONS"),
         code: "MAINTAIN_RETIREMENT_CONTRIBUTIONS",

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
@@ -63,14 +63,18 @@ for (const file of tracked) {
 
 for (const file of files) {
   const absolute = path.join(root, file);
-  let stat;
+  let descriptor;
+  let bytes;
   try {
-    stat = statSync(absolute);
+    descriptor = openSync(absolute, "r");
+    const stat = fstatSync(descriptor);
+    if (!stat.isFile() || stat.size > 5_000_000) continue;
+    bytes = readFileSync(descriptor);
   } catch {
     continue;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
-  if (!stat.isFile() || stat.size > 5_000_000) continue;
-  const bytes = readFileSync(absolute);
   if (bytes.includes(0)) continue;
   const content = bytes.toString("utf8");
   for (const [rule, pattern] of contentRules) {
