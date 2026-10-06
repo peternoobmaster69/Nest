@@ -4,7 +4,7 @@ description: Canonical navigation for the Nest engineering knowledge base.
 audience: [engineers, operators, reviewers, ai-assistants]
 status: living
 source_of_truth: false
-last_updated: 2026-07-28
+last_updated: 2026-10-06
 ---
 
 # Documentation table of contents
@@ -21,6 +21,10 @@ Provide deterministic navigation to every maintained knowledge-base topic.
 - [Documentation standards](documentation-standards.md)
 - [Glossary](glossary.md)
 - [FAQ](faq.md)
+
+### Releases
+
+- [0.1.0 prerelease notes — October 6, 2026](releases/0.1.0-prerelease.md)
 
 ### Architecture
 
@@ -168,4 +172,4 @@ Provide deterministic navigation to every maintained knowledge-base topic.
 
 ## Last Updated
 
-2026-07-28
+2026-10-06

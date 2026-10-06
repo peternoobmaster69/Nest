@@ -10,6 +10,9 @@ Nest is a personal finance web application focused on:
 Read [guide.md](guide.md) for the account, budgeting, payable, receivable,
 savings, and investment model.
 
+Read the [0.1.0 prerelease notes](docs/releases/0.1.0-prerelease.md) for the
+October 6, 2026 feature snapshot, setup requirements, and known limitations.
+
 Stack:
 
 - Next.js + React + TypeScript
