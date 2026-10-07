@@ -5260,6 +5260,30 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   box-shadow: 0 10px 35px rgba(18, 40, 30, 0.08);
   backdrop-filter: saturate(180%) blur(18px);
   -webkit-backdrop-filter: saturate(180%) blur(18px);
+  transition:
+    transform 500ms var(--lp-ease, ease),
+    box-shadow 500ms var(--lp-ease, ease),
+    background-color 500ms var(--lp-ease, ease);
+}
+
+.lp-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: var(--z-overlay);
+  height: 3px;
+  pointer-events: none;
+}
+
+.lp-progress span {
+  height: 100%;
+  display: block;
+  background: linear-gradient(90deg, var(--brand-400), var(--lp-blue), var(--lp-purple));
+  transform: scaleX(var(--page, 0));
+  transform-origin: 0 50%;
+}
+
+.lp-intro-word {
+  display: inline-block;
 }
 
 .lp-brand {
@@ -5476,11 +5500,17 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .lp-gradient-text {
-  background: linear-gradient(100deg, var(--brand-500) 10%, var(--lp-blue) 55%, var(--lp-purple) 90%);
+  background-image: linear-gradient(100deg, var(--brand-500) 0%, var(--lp-blue) 55%, var(--lp-purple) 100%);
+  /* Each word is clipped separately (an animated child breaks a shared text clip),
+     so the gradient spans both words: "Fully" shows its first half, "explained." the rest. */
+  background-size: 260% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
+
+.lp-gradient-text.is-start { background-position: 0% 50%; }
+.lp-gradient-text.is-end { background-position: 100% 50%; }
 
 .lp-hero-copy > p {
   max-width: 60ch;
@@ -6642,6 +6672,12 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   transition: opacity 120ms linear;
 }
 
+/* The closing band sits at the end of the page, so it never scrolls past the top:
+   light its headline sooner so the last word is fully lit before the page ends. */
+.lp[data-motion="on"] .lp-footer-cta .lp-words span {
+  opacity: clamp(0.16, calc((var(--p, 0) - 0.06) * 4.5 * var(--n) - var(--i)), 1);
+}
+
 /* Money flows: a horizontal track driven by vertical scroll. */
 .lp[data-motion="on"] .lp-flows {
   --card: clamp(320px, 46vw, 680px);
@@ -6699,6 +6735,134 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   transform-origin: 0 50%;
 }
 
+/* Nav: floats free at the top, then tucks in tighter with a firmer surface once scrolling. */
+.lp[data-motion="on"] .lp-nav[data-scrolled="true"] {
+  transform: translate3d(0, -4px, 0) scale(0.985);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  box-shadow: 0 14px 40px rgba(18, 40, 30, 0.14);
+}
+
+/* Hero intro: words rise in sequence, then the copy, buttons and product follow.
+   Runs once, after first paint (data-intro is set by the motion engine). */
+.lp[data-intro="on"] .lp-hero-kicker,
+.lp[data-intro="on"] .lp-intro-word,
+.lp[data-intro="on"] .lp-hero-copy > p,
+.lp[data-intro="on"] .lp-hero-actions,
+.lp[data-intro="on"] .lp-hero-stage {
+  animation: lp-rise 1000ms var(--lp-ease) both;
+}
+
+.lp[data-intro="on"] .lp-intro-word {
+  animation-delay: calc(120ms + var(--w) * 90ms);
+}
+
+.lp[data-intro="on"] .lp-hero-copy > p { animation-delay: 520ms; }
+.lp[data-intro="on"] .lp-hero-actions { animation-delay: 640ms; }
+
+.lp[data-intro="on"] .lp-hero-stage {
+  animation-name: lp-stage-in;
+  animation-duration: 1400ms;
+  animation-delay: 420ms;
+}
+
+.lp[data-intro="on"] .lp-hero-chip {
+  animation: lp-chip-in 900ms var(--lp-ease) both;
+  animation-delay: 1100ms;
+}
+
+.lp[data-intro="on"] .lp-hero-chip.is-right {
+  animation-delay: 1250ms;
+}
+
+
+/* Floating chips bob gently while the hero is on screen. */
+.lp[data-motion="on"] .lp-hero-chip > span:first-child {
+  animation: lp-bob 4.5s ease-in-out infinite;
+}
+
+.lp[data-motion="on"] .lp-hero-chip.is-right > span:first-child {
+  animation-delay: -2.2s;
+}
+
+/* The money map's rows slide in after the card itself lands. */
+.lp[data-motion="on"] .lp-hero-shot .lp-mock-list div {
+  transition: opacity 700ms var(--lp-ease), transform 700ms var(--lp-ease);
+}
+
+.lp[data-motion="on"] .lp-hero-shot:not(.is-revealed) .lp-mock-list div {
+  opacity: 0;
+  transform: translate3d(-14px, 0, 0);
+}
+
+.lp[data-motion="on"] .lp-hero-shot .lp-mock-list div:nth-child(2) { transition-delay: 90ms; }
+.lp[data-motion="on"] .lp-hero-shot .lp-mock-list div:nth-child(3) { transition-delay: 180ms; }
+.lp[data-motion="on"] .lp-hero-shot .lp-mock-list div:nth-child(4) { transition-delay: 270ms; }
+
+/* The hero shot itself must not use the generic rise (it has its own tilt). */
+.lp[data-motion="on"] .lp-hero-shot[data-reveal]:not(.is-revealed) {
+  opacity: 1;
+  translate: none;
+}
+
+/* Money flows: each card's steps light up one after another as it slides in. */
+.lp[data-motion="on"] .lp-flow-card[data-reveal]:not(.is-revealed) {
+  opacity: 1;
+  translate: none;
+}
+
+.lp[data-motion="on"] .lp-flow-steps > div {
+  transition: opacity 600ms var(--lp-ease), transform 600ms var(--lp-ease), border-color 400ms ease, background-color 400ms ease;
+}
+
+.lp[data-motion="on"] .lp-flow-card:not(.is-revealed) .lp-flow-steps > div {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0) scale(0.97);
+}
+
+.lp[data-motion="on"] .lp-flow-steps > div:nth-child(2) { transition-delay: 160ms; }
+.lp[data-motion="on"] .lp-flow-steps > div:nth-child(3) { transition-delay: 320ms; }
+
+/* Monthly rhythm: a progress line runs across the four steps as the section scrolls. */
+.lp[data-motion="on"] .lp-rhythm {
+  position: relative;
+}
+
+.lp[data-motion="on"] .lp-rhythm::before {
+  content: "";
+  position: absolute;
+  inset: -14px 0 auto;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--brand-400), var(--brand-600));
+  transform: scaleX(clamp(0, calc((var(--p, 0) - 0.15) * 2.4), 1));
+  transform-origin: 0 50%;
+}
+
+.lp[data-motion="on"] .lp-rhythm li > span {
+  display: inline-block;
+  transition: transform 700ms var(--lp-ease);
+}
+
+.lp[data-motion="on"] .lp-rhythm li:not(.is-revealed) > span {
+  transform: translate3d(0, 10px, 0) scale(0.6);
+}
+
+/* Cards lift and glow on hover across the page. */
+.lp[data-motion="on"] .lp-assets-grid article,
+.lp[data-motion="on"] .lp-rhythm li,
+.lp[data-motion="on"] .lp-reconcile-signals > div {
+  transition-property: opacity, translate, transform, box-shadow, border-color;
+  transition-duration: 900ms, 900ms, 300ms, 300ms, 300ms;
+  transition-timing-function: var(--lp-ease);
+}
+
+.lp[data-motion="on"] .lp-assets-grid article:hover,
+.lp[data-motion="on"] .lp-rhythm li:hover {
+  transform: translate3d(0, -4px, 0);
+  border-color: color-mix(in srgb, var(--brand-500) 35%, var(--border-subtle));
+  box-shadow: var(--shadow-lg);
+}
+
 /* Assets: big numbers drift at a different speed from their cards. */
 .lp[data-motion="on"] .lp-asset-value {
   transform: translate3d(0, calc((0.5 - var(--p, 0)) * 50px), 0);
@@ -6710,8 +6874,40 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   will-change: transform;
 }
 
+.lp[data-motion="on"] .lp-footer-cta::before {
+  content: "";
+  position: absolute;
+  inset: auto -10% -60%;
+  height: 120%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-400) 45%, transparent), transparent);
+  opacity: calc(0.2 + min(1, var(--p, 0) * 2) * 0.8);
+  transform: translate3d(0, calc((1 - min(1, var(--p, 0) * 2)) * 30%), 0);
+  pointer-events: none;
+}
+
 .lp[data-motion="on"] .lp-footer-cta-inner {
+  position: relative;
   transform: translate3d(0, calc((1 - min(1, var(--p, 0) * 2)) * 60px), 0);
+}
+
+@keyframes lp-rise {
+  from { opacity: 0; transform: translate3d(0, 28px, 0); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes lp-stage-in {
+  from { opacity: 0; transform: translate3d(0, 80px, 0) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes lp-chip-in {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.9); }
+}
+
+@keyframes lp-bob {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -4px, 0); }
 }
 
 @media (max-width: 1080px) {

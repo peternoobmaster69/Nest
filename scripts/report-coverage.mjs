@@ -1,5 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { decode, encode } from "@jridgewell/sourcemap-codec";
@@ -42,34 +41,49 @@ function terminateCommonJSAnnotationMap(entry) {
   entry.sourceMap.mappings = encode(mappings);
 }
 
-function normalizeCoverageURLs(data) {
-  if (data.url) data.url = canonicalFileURL(data.url);
-  if (!Array.isArray(data.result)) return false;
-  const sourceMaps = data["source-map-cache"] ?? {};
-  const mapsByPath = new Map(Object.entries(sourceMaps)
-    .filter(([url]) => url.startsWith("file:"))
-    .map(([url, sourceMap]) => [canonicalFileURL(url), sourceMap]));
-  for (const entry of data.result) {
-    entry.url = canonicalFileURL(entry.url);
-    const sourceMap = mapsByPath.get(entry.url);
-    // V8 may leave route brackets literal while Node encodes them in its source-map cache.
-    if (sourceMap) sourceMaps[entry.url] = sourceMap;
-  }
-  return data.result.length > 0;
-}
-
 function canonicalFileURL(url) {
   return url.startsWith("file:") ? pathToFileURL(fileURLToPath(url)).href : url;
 }
 
-async function normalizeSourceMapURLs(collectedDirectory, normalizedDirectory) {
+function compiledSource(entry, sourceMap, sources) {
+  // A module can be native ESM in one test process and compiled CommonJS in
+  // another. The URL alone cannot identify the JavaScript that V8 measured.
+  const lengths = JSON.stringify(sourceMap.lineLengths);
+  const candidates = sources.filter((source) => JSON.stringify(source.split("\n").map((line) => line.length)) === lengths);
+  if (candidates.length !== 1) throw new Error(`Missing compiled coverage source or multiple matching versions: ${entry.url}`);
+  return candidates[0];
+}
+
+async function addCollectedCoverage(report, collectedDirectory, includesSource) {
   const filenames = await readdir(collectedDirectory);
-  let hasCoverage = false;
-  for (const filename of filenames.filter((name) => name.endsWith(".json"))) {
+  const sources = new Map();
+  for (const filename of filenames.filter((name) => name.startsWith("source-") && name.endsWith(".json"))) {
     const data = JSON.parse(await readFile(path.join(collectedDirectory, filename), "utf8"));
-    const collected = normalizeCoverageURLs(data);
-    hasCoverage ||= collected;
-    await writeFile(path.join(normalizedDirectory, filename), JSON.stringify(data));
+    const url = canonicalFileURL(data.url);
+    const versions = sources.get(url) ?? new Set();
+    versions.add(data.source);
+    sources.set(url, versions);
+  }
+  let hasCoverage = false;
+  for (const filename of filenames.filter((name) => !name.startsWith("source-") && name.endsWith(".json"))) {
+    const data = JSON.parse(await readFile(path.join(collectedDirectory, filename), "utf8"));
+    if (!Array.isArray(data.result)) continue;
+    hasCoverage ||= data.result.length > 0;
+    const sourceMaps = new Map(Object.entries(data["source-map-cache"] ?? {})
+      .map(([url, sourceMap]) => [canonicalFileURL(url), sourceMap]));
+    const entries = data.result.filter((entry) => entry.url.startsWith("file:") && includesSource(entry.url));
+    for (const entry of entries) {
+      // V8 may leave route brackets literal while Node encodes its cache keys.
+      entry.url = canonicalFileURL(entry.url);
+      const sourceMap = sourceMaps.get(entry.url);
+      if (sourceMap?.data) {
+        entry.source = compiledSource(entry, sourceMap, [...sources.get(entry.url) ?? []]);
+        entry.sourceMap = sourceMap.data;
+      } else {
+        entry.source = await readFile(fileURLToPath(entry.url), "utf8");
+      }
+    }
+    if (entries.length) await report.add(entries);
   }
   if (!hasCoverage) throw new Error("No V8 coverage was collected; run the test suite before reporting.");
 }
@@ -111,13 +125,7 @@ const report = new CoverageReport({
   },
 });
 report.cleanCache();
-const normalizedDirectory = await mkdtemp(path.join(tmpdir(), "nest-coverage-input-"));
-try {
-  await normalizeSourceMapURLs(collectedDirectory, normalizedDirectory);
-  await report.addFromDir(normalizedDirectory);
-} finally {
-  await rm(normalizedDirectory, { recursive: true, force: true });
-}
+await addCollectedCoverage(report, collectedDirectory, includesSource);
 const results = await report.generate();
 const reportedFiles = new Set(results.files.map((file) => path.resolve(cwd, file.sourcePath)));
 const expectedFiles = await scope.glob(cwd);

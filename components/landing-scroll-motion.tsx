@@ -8,7 +8,8 @@ const clamp = (value: number) => Math.min(1, Math.max(0, value));
  * Drives the landing page's scroll choreography with one passive, rAF-throttled
  * listener. Scenes receive a `--p` progress variable (0–1) that CSS maps to
  * compositor-only properties (transform/opacity); reveal targets toggle a class
- * via IntersectionObserver. Nothing runs when the user prefers reduced motion.
+ * via IntersectionObserver. It also runs the hero intro, number count-ups, the nav
+ * condense state and a page progress bar. Nothing runs when the user prefers reduced motion.
  */
 export function LandingScrollMotion() {
   useEffect(() => {
@@ -30,10 +31,45 @@ export function LandingScrollMotion() {
     }
     root.dataset.motion = "on";
 
+    // Hero intro runs after the first paint, so the server-rendered hero stays the LCP
+    // frame. Keyframes start from hidden and end at the resting state.
+    const introFrame = window.requestAnimationFrame(() => {
+      if (window.scrollY < window.innerHeight * 0.5) root.dataset.intro = "on";
+    });
+    const introDone = window.setTimeout(() => delete root.dataset.intro, 2400);
+
+    // Count-up numbers: final values are in the HTML; only the visible text animates.
+    const counted = new WeakSet<Element>();
+    const countUp = (element: HTMLElement) => {
+      if (counted.has(element)) return;
+      counted.add(element);
+      const finalText = element.textContent ?? "";
+      const match = finalText.match(/-?[\d,]+(?:\.\d+)?/);
+      if (!match) return;
+      const target = Number(match[0].replace(/,/g, ""));
+      const decimals = match[0].includes(".") ? match[0].split(".")[1].length : 0;
+      const grouped = match[0].includes(",");
+      const format = (value: number) => {
+        const fixed = value.toFixed(decimals);
+        return grouped ? Number(fixed).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : fixed;
+      };
+      const duration = 1100;
+      const start = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        element.textContent = finalText.replace(match[0], format(target * eased));
+        if (t < 1) window.requestAnimationFrame(tick);
+        else element.textContent = finalText;
+      };
+      window.requestAnimationFrame(tick);
+    };
+
     const revealObserver = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         entry.target.classList.add("is-revealed");
+        entry.target.querySelectorAll<HTMLElement>("[data-count]").forEach(countUp);
         revealObserver.unobserve(entry.target);
       }
     }, { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
@@ -46,9 +82,28 @@ export function LandingScrollMotion() {
     const lastProgress = new WeakMap<HTMLElement, number>();
     let frame = 0;
 
+    const nav = root.querySelector<HTMLElement>(".lp-nav");
+    // Write page progress on the bar itself: a custom property set on the page root
+    // would invalidate style for the whole page on every scroll frame.
+    const progressBar = root.querySelector<HTMLElement>(".lp-progress");
+    let lastPage = -1;
+    let scrolled = false;
+
     const update = () => {
       frame = 0;
       const height = window.innerHeight;
+      // Page-level progress drives the thin reading bar; the nav condenses after the first screen.
+      const max = Math.max(1, document.documentElement.scrollHeight - height);
+      const page = Math.round(clamp(window.scrollY / max) * 1000) / 1000;
+      if (page !== lastPage) {
+        lastPage = page;
+        progressBar?.style.setProperty("--page", String(page));
+      }
+      const nextScrolled = window.scrollY > 24;
+      if (nav && nextScrolled !== scrolled) {
+        scrolled = nextScrolled;
+        nav.dataset.scrolled = scrolled ? "true" : "false";
+      }
       // Read every rect first, then write, so the frame never thrashes layout.
       const measured = Array.from(active, (scene) => ({ scene, rect: scene.getBoundingClientRect() }));
       for (const { scene, rect } of measured) {
@@ -87,11 +142,15 @@ export function LandingScrollMotion() {
 
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule, { passive: true });
+    schedule();
 
     return () => {
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       if (frame) window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(introFrame);
+      window.clearTimeout(introDone);
+      delete root.dataset.intro;
       revealObserver.disconnect();
       sceneObserver.disconnect();
       delete root.dataset.motion;

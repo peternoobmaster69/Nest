@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectAnalysisFindings, qualityGateSummary } from "../scripts/sonar-report.mjs";
+import { collectAnalysisFindings, collectDuplicationFindings, qualityGateSummary } from "../scripts/sonar-report.mjs";
 
 test("quality evidence preserves recognized measurements without copying arbitrary server content", () => {
   const summary = qualityGateSummary({
@@ -58,4 +58,48 @@ test("empty findings remain explicit and malformed or failed collection cannot l
     await assert.rejects(collectAnalysisFindings(async (endpoint) => endpoint === "api/issues/search" ? invalid : empty, "nest"), /Invalid|Incomplete/);
   }
   await assert.rejects(collectAnalysisFindings(async () => { throw new Error("Connection failed"); }, "nest"), /Connection failed/);
+});
+
+test("duplication diagnostics traverse all file measures and keep only the locations needed for refactoring", async () => {
+  const calls = [];
+  const api = async (endpoint, parameters) => {
+    calls.push({ endpoint, parameters });
+    if (endpoint === "api/measures/component_tree") {
+      return { paging: { total: 501 }, components: parameters.p === 1
+        ? Array.from({ length: 500 }, (_, i) => ({ key: `nest:lib/clean-${i}.ts`, measures: [{ metric: "duplicated_blocks", value: "0" }] }))
+        : [{ key: "nest:lib/repeated.ts", measures: [{ metric: "duplicated_blocks", value: "1" }] }] };
+    }
+    return {
+      duplications: [{ blocks: [{ _ref: "1", from: 12, size: 15 }, { _ref: "2", from: 23, size: 15 }], source: "private-source" }],
+      files: { "1": { key: "nest:lib/repeated.ts", author: "private-author" }, "2": { key: "nest:lib/other.ts", projectName: "private-project-name" } },
+    };
+  };
+  const result = await collectDuplicationFindings(api, "nest");
+  assert.deepEqual(result, [{ component: "nest:lib/repeated.ts", groups: [[
+    { component: "nest:lib/repeated.ts", startLine: 12, lineCount: 15 },
+    { component: "nest:lib/other.ts", startLine: 23, lineCount: 15 },
+  ]] }]);
+  assert.doesNotMatch(JSON.stringify(result), /private-/);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[1].parameters, { component: "nest", metricKeys: "duplicated_blocks", qualifiers: "FIL", strategy: "leaves", ps: 500, p: 2 });
+  assert.deepEqual(calls[2], { endpoint: "api/duplications/show", parameters: { key: "nest:lib/repeated.ts" } });
+});
+
+test("missing duplication metadata fails explicitly and files with zero duplication need no detail requests", async () => {
+  assert.deepEqual(await collectDuplicationFindings(async () => ({ total: 3, components: [
+    { key: "nest:a" }, { key: "nest:b", measures: [{ metric: "lines", value: "10" }] },
+    { key: "nest:c", measures: [{ metric: "duplicated_blocks", value: "0" }] },
+  ] }), "nest"), []);
+  const duplicated = { total: 1, components: [{ key: "nest:source", measures: [{ metric: "duplicated_blocks", value: "1" }] }] };
+  const valid = { duplications: [{ blocks: [{ _ref: "1", from: 1, size: 10 }] }], files: { "1": { key: "nest:source" } } };
+  const invalid = [
+    {}, { duplications: [], files: null }, { duplications: [], files: "invalid" }, { ...valid, duplications: [{ blocks: null }] },
+    ...[
+      { _ref: "missing", from: 1, size: 1 }, { _ref: "1", from: 0, size: 1 },
+      { _ref: "1", from: "1", size: 1 }, { _ref: "1", from: 1, size: 0 }, { _ref: "1", from: 1, size: "1" },
+    ].map((block) => ({ ...valid, duplications: [{ blocks: [block] }] })),
+  ];
+  for (const response of invalid) {
+    await assert.rejects(collectDuplicationFindings(async (endpoint) => endpoint === "api/measures/component_tree" ? duplicated : response, "nest"), /Invalid duplication/);
+  }
 });

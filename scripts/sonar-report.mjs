@@ -58,3 +58,29 @@ export async function collectAnalysisFindings(api, projectKey) {
     })),
   };
 }
+
+function duplicationBlocks(blocks, files) {
+  if (!Array.isArray(blocks)) throw new Error("Invalid duplication blocks from SonarQube.");
+  return blocks.map(({ _ref, from, size }) => {
+    const component = files[_ref]?.key;
+    if (typeof component !== "string" || !Number.isSafeInteger(from) || from < 1 || !Number.isSafeInteger(size) || size < 1) {
+      throw new Error("Invalid duplication location from SonarQube.");
+    }
+    return { component, startLine: from, lineCount: size };
+  });
+}
+
+/** Retain cross-file duplication locations so an isolated CI server is not needed for diagnosis. */
+export async function collectDuplicationFindings(api, projectKey) {
+  const components = await readFindingPages(api, "api/measures/component_tree", {
+    component: projectKey, metricKeys: "duplicated_blocks", qualifiers: "FIL", strategy: "leaves",
+  }, "components");
+  const duplicated = components.filter((component) => component.measures?.some((measure) => measure.metric === "duplicated_blocks" && Number(measure.value) > 0));
+  return Promise.all(duplicated.map(async ({ key }) => {
+    const result = await api("api/duplications/show", { key });
+    if (!Array.isArray(result.duplications) || !result.files || typeof result.files !== "object") {
+      throw new Error("Invalid duplication response from SonarQube.");
+    }
+    return { component: key, groups: result.duplications.map(({ blocks }) => duplicationBlocks(blocks, result.files)) };
+  }));
+}

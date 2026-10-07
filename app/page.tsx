@@ -74,6 +74,7 @@ const LENSES = [
 ] as const;
 
 const RECONCILE_WORDS = "A discrepancy is a useful signal—not a mystery.".split(" ");
+const CTA_WORDS = "One home for the money you have, owe, expect, and invest.".split(" ");
 
 const RHYTHM = [
   { title: "Plan the month", body: "Balance income sources against budget items, then fund the linked sub-accounts." },
@@ -113,6 +114,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
             sessionLimitRequired={session?.sessionLimitRequired}
           />
         ) : null}
+        <div className="lp-progress" aria-hidden="true"><span /></div>
         <header className="lp-nav">
           <Link href="/" className="lp-brand" aria-label="Nest home">
             <Image src="/icon.svg" alt="" width={30} height={30} priority />
@@ -137,9 +139,11 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
           <div className="lp-hero-glow" aria-hidden="true" />
           <div className="lp-hero-copy">
             <span className="lp-hero-kicker">Personal budgeting &amp; expense tracking</span>
-            <h1 id="hero-title">
-              Every dollar.{" "}<br />
-              <span className="lp-gradient-text">Fully explained.</span>
+            <h1 id="hero-title" className="lp-hero-title">
+              <span className="lp-intro-word" style={{ ["--w" as string]: 0 }}>Every</span>{" "}
+              <span className="lp-intro-word" style={{ ["--w" as string]: 1 }}>dollar.</span>{" "}<br />
+              <span className="lp-intro-word lp-gradient-text is-start" style={{ ["--w" as string]: 2 }}>Fully</span>{" "}
+              <span className="lp-intro-word lp-gradient-text is-end" style={{ ["--w" as string]: 3 }}>explained.</span>
             </h1>
             <p>
               Nest is a personal finance app for planning budgets, tracking expenses, and managing savings and investments.
@@ -163,7 +167,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
               <span className="lp-icon-tile is-amber"><CreditCard size={16} /></span>
               <span><strong>Card reserved</strong><small>$600 set aside</small></span>
             </div>
-            <div className="lp-hero-shot" aria-label="Example Nest money map">
+            <div className="lp-hero-shot" aria-label="Example Nest money map" data-reveal>
               <div className="lp-mock-top">
                 <span><span className="lp-live-dot" /> Your money map</span>
                 <small>Example</small>
@@ -172,7 +176,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
               <div className="lp-mock-balance">
                 <div>
                   <small>Available bank balance</small>
-                  <strong>$5,000.00</strong>
+                  <strong data-count>$5,000.00</strong>
                 </div>
                 <div className="lp-mock-balance-meta">
                   <span>Allocated <strong>$4,800</strong></span>
@@ -303,7 +307,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
             </div>
 
             <div className="lp-flow-track">
-              <article className="lp-flow-card is-budget">
+              <article className="lp-flow-card is-budget" data-reveal>
                 <header>
                   <span className="lp-icon-tile is-green"><CircleDollarSign size={21} aria-hidden="true" /></span>
                   <div><small>Monthly budget</small><h3>Give incoming money a plan</h3></div>
@@ -316,7 +320,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
                 <p className="lp-flow-note"><BarChart3 size={15} aria-hidden="true" /> Sources must equal items. Bank cash changes only when income actually arrives.</p>
               </article>
 
-              <article className="lp-flow-card is-credit-payable">
+              <article className="lp-flow-card is-credit-payable" data-reveal>
                 <header>
                   <span className="lp-icon-tile is-amber"><CreditCard size={21} aria-hidden="true" /></span>
                   <div><small>Credit-card payable</small><h3>Reserve now, pay later</h3></div>
@@ -329,7 +333,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
                 <p className="lp-flow-note"><RefreshCw size={15} aria-hidden="true" /> Resolve every charge, then refresh the bank balance after payment posts.</p>
               </article>
 
-              <article className="lp-flow-card is-receivable">
+              <article className="lp-flow-card is-receivable" data-reveal>
                 <header>
                   <span className="lp-icon-tile is-blue"><ReceiptText size={21} aria-hidden="true" /></span>
                   <div><small>Receivable</small><h3>Keep expected money visible</h3></div>
@@ -355,7 +359,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
           <div className="lp-assets-grid">
             <article data-reveal>
               <span className="lp-icon-tile is-green"><PiggyBank size={21} aria-hidden="true" /></span>
-              <strong className="lp-asset-value">$12,400 <small>saved</small></strong>
+              <strong className="lp-asset-value"><span data-count>$12,400</span> <small>saved</small></strong>
               <div>
                 <h3>Savings stays connected to cash</h3>
                 <p>Use a Savings sub-account to show which bank money is protected for emergencies or goals.</p>
@@ -363,7 +367,7 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
             </article>
             <article data-reveal>
               <span className="lp-icon-tile is-purple"><TrendingUp size={21} aria-hidden="true" /></span>
-              <strong className="lp-asset-value is-positive">+8.4% <small>return</small></strong>
+              <strong className="lp-asset-value is-positive"><span data-count>+8.4%</span> <small>return</small></strong>
               <div>
                 <h3>Investments show current value</h3>
                 <p>Track invested capital, market value, gain or loss, and what can be withdrawn.</p>
@@ -444,7 +448,11 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
         <section className="lp-footer-cta" data-scene="track" aria-labelledby="cta-title">
           <div className="lp-footer-cta-inner">
             <span className="lp-eyebrow">Make every amount explainable</span>
-            <h2 id="cta-title">One home for the money you have, owe, expect, and invest.</h2>
+            <h2 id="cta-title" className="lp-words" style={{ ["--n" as string]: CTA_WORDS.length }}>
+              {CTA_WORDS.map((word, index) => (
+                <span key={index} style={{ ["--i" as string]: index }}>{word} </span>
+              ))}
+            </h2>
             <p>Start with one bank account and a few meaningful sub-accounts. Nest helps the rest of the picture come into focus.</p>
             <Link href="/login" className="lp-btn-primary">
               Continue to sign in <ArrowRight size={16} aria-hidden="true" />
