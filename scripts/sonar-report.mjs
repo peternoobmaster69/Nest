@@ -27,3 +27,34 @@ export function qualityGateSummary(status) {
     }),
   };
 }
+
+async function readFindingPages(api, endpoint, parameters, field) {
+  const findings = [];
+  for (let page = 1; ; page += 1) {
+    const result = await api(endpoint, { ...parameters, ps: 500, p: page });
+    const total = result.paging?.total ?? result.total;
+    const rows = result[field];
+    if (!Number.isSafeInteger(total) || total < 0 || !Array.isArray(rows)) {
+      throw new Error(`Invalid ${field} response from SonarQube.`);
+    }
+    findings.push(...rows);
+    if (findings.length >= total) return findings;
+    if (!rows.length) throw new Error(`Incomplete ${field} response from SonarQube.`);
+  }
+}
+
+/** Keep diagnostic locations and messages, without account metadata or source excerpts. */
+export async function collectAnalysisFindings(api, projectKey) {
+  const [issues, hotspots] = await Promise.all([
+    readFindingPages(api, "api/issues/search", { componentKeys: projectKey, resolved: "false" }, "issues"),
+    readFindingPages(api, "api/hotspots/search", { projectKey }, "hotspots"),
+  ]);
+  return {
+    issues: issues.map(({ key, rule, component, line, textRange, message, severity, type }) => ({
+      key, rule, component, line, textRange, message, severity, type,
+    })),
+    hotspots: hotspots.map(({ key, component, line, message, status, vulnerabilityProbability, securityCategory }) => ({
+      key, component, line, message, status, vulnerabilityProbability, securityCategory,
+    })),
+  };
+}

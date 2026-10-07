@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runSonarScanner } from "./sonar-scanner.mjs";
-import { qualityGateSummary } from "./sonar-report.mjs";
+import { collectAnalysisFindings, qualityGateSummary } from "./sonar-report.mjs";
 import { analysisFailures, configurePolicy, coverageFailures, createClient, policy, readToken, root, verifyCoverage, verifyPolicy } from "./sonar-policy.mjs";
 
 async function runScan(api, token, verifier) {
@@ -31,6 +31,11 @@ async function runScan(api, token, verifier) {
     report.qualityGate = qualityGateSummary(result.projectStatus);
     errors.push(...analysisFailures(task, result.projectStatus || {}));
     report.dashboard = `${api.serverUrl}/dashboard?id=${encodeURIComponent(policy.projectKey)}`;
+    if (report.analysisCompleted) {
+      const findings = await collectAnalysisFindings(api, policy.projectKey);
+      report.findings = { issues: findings.issues.length, hotspots: findings.hotspots.length };
+      await writeFile(path.join(root, "coverage/sonar-findings.json"), `${JSON.stringify(findings, null, 2)}\n`);
+    }
   } catch (error) {
     errors.push(`Unable to verify this scan: ${error.message}`);
   }
