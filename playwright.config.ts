@@ -8,8 +8,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 2 : undefined,
+  timeout: 60_000,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
-  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}{ext}",
+  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-{platform}{ext}",
   use: {
     baseURL,
     trace: "retain-on-failure",

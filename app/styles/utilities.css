@@ -4047,8 +4047,7 @@ html[data-ask-nest-open="true"] {
   }
 
   .lp-signin-story-copy > p,
-  .lp-signin-story ul,
-  .lp-signin-security {
+  .lp-signin-story ul {
     display: none;
   }
 

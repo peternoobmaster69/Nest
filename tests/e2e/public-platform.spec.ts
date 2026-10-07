@@ -1,6 +1,18 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+test("sign-in offers passkey fallback without a password flow", async ({ page }) => {
+  const [providers] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/providers", { timeout: 30_000 }),
+    page.goto("/?login=1"),
+  ]);
+  expect(providers.status()).toBe(200);
+  await expect(page.getByRole("dialog", { name: "Sign in to Nest" })).toBeVisible();
+  await expect(page.getByText("OAuth and passkeys only. Nest does not store passwords.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with a passkey" })).toBeEnabled();
+  await expect(page.getByLabel(/password/i)).toHaveCount(0);
+});
+
 test("liveness is public, minimal, and never cached", async ({ request }) => {
   const response = await request.get("/api/health/live");
   expect(response.status()).toBe(200);
