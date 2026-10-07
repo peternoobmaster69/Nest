@@ -17,8 +17,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminEmail } from "@/lib/admin-auth";
 import { WORKSPACE_ID_HEADER } from "@/lib/workspace-request";
-import { randomUUID } from "node:crypto";
 import { withQueryTelemetry } from "@/lib/observability/query-telemetry";
+import { runSecureApiRoute } from "@/lib/api-security";
 
 const UpdateContextSchema = z.object({
   workspaceId: z.string().min(1).optional(),
@@ -81,8 +81,13 @@ function parseSidebarMoneyPages(value: string | null | undefined) {
 }
 
 export async function GET(request: Request) {
+  return runSecureApiRoute(request, { errorMessage: "Failed to load context" }, ({ requestId }) =>
+    getContext(request, requestId),
+  );
+}
+
+async function getContext(request: Request, requestId: string) {
   try {
-    const requestId = randomUUID();
     const session = await getDatabaseReadyServerSession();
     const email = session?.user?.email?.toLowerCase();
     const isAdmin = isAdminEmail(email);
@@ -253,12 +258,17 @@ export async function GET(request: Request) {
       );
     }
 
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to load context", message }, { status: 500 });
+    throw error;
   }
 }
 
 export async function PATCH(request: Request) {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update context" }, () =>
+    updateContext(request),
+  );
+}
+
+async function updateContext(request: Request) {
   try {
     const parsed = UpdateContextSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -378,7 +388,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
 
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to update context", message }, { status: 500 });
+    throw error;
   }
 }

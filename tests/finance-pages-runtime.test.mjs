@@ -16,6 +16,7 @@ mock.module("next/navigation", { namedExports: {
   useRouter: () => router,
 } });
 const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
+const { queryKeys } = require("../lib/query-keys.ts");
 const { TransactionsPage } = require("../components/transactions-page.tsx");
 const { CreditCardsPage } = require("../components/credit-cards-page.tsx");
 const { InvestmentsPage } = require("../components/investments-page.tsx");
@@ -23,6 +24,8 @@ const { ReceivablesPage } = require("../components/receivables-page.tsx");
 const { CreditTransactionsPage } = require("../components/credit-transactions-page.tsx");
 const { RewardsPage } = require("../components/rewards-page.tsx");
 const { BudgetPlanPage } = require("../components/budget-plan-page.tsx");
+const { SettingsPage } = require("../components/settings-page.tsx");
+const { CollaboratorsPage } = require("../components/collaborators-page.tsx");
 const { ConfirmDialogProvider } = require("../components/confirm-dialog.tsx");
 
 const card = { id: "card-one", cardName: "Daily card", bankName: "DBS", last4Digit: "1234" };
@@ -53,6 +56,8 @@ beforeEach(() => {
     ["/api/credit-transactions/payment-due", { months: [] }],
     ["/api/rewards", { creditCards: [], frequentFlyers: [], hotelRewards: [], conversions: [], cardsWithoutRewards: [] }],
     ["/api/budgets/plan", { setup: { items: [], sources: [] }, monthlyPlan: null, members: [], subAccounts: [] }],
+    ["/api/gmail/status", { connected: false, requiresReconnect: false, integration: null }],
+    ["/api/credit-transactions/auto-rules", { workspaceId: "fixture-workspace", rules: [] }],
   ]);
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3100");
@@ -187,3 +192,118 @@ test("budget setup is separate from a monthly plan and supports cancelling both 
   await view.findByRole("heading", { name: "No monthly budget" });
   assert.ok(requests.every((request) => request.method === "GET"));
 });
+
+test("bank account creation preserves the entered balance on failure and converts dollars to cents on retry", async () => {
+  fixtures.set("POST /api/accounts", () => Response.json({ error: "Bank temporarily unavailable" }, { status: 503 }));
+  const view = show(SettingsPage, "settings", { section: "workspaces" });
+  await view.findByRole("heading", { name: "No bank accounts yet" });
+  fireEvent.click(view.getByRole("button", { name: "Add Account", exact: true }));
+  const dialog = await view.findByRole("dialog", { name: "Add bank account" });
+  fireEvent.change(within(dialog).getByLabelText("Account Name"), { target: { value: "Household" } });
+  fireEvent.change(within(dialog).getByLabelText("Starting Balance"), { target: { value: "1234.56" } });
+  fireEvent.change(within(dialog).getByLabelText("Description"), { target: { value: "Daily expenses" } });
+  fireEvent.submit(dialog.querySelector("form"));
+  await within(dialog).findByText("Failed to save: Bank temporarily unavailable");
+  assert.equal(within(dialog).getByLabelText("Starting Balance").value, "1234.56");
+  fixtures.set("POST /api/accounts", () => Response.json({ workspaceId: "fixture-workspace" }, { status: 201 }));
+  fireEvent.submit(dialog.querySelector("form"));
+  await waitFor(() => assert.ok(!view.queryByRole("dialog")));
+  const writes = requests.filter((request) => request.method === "POST");
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes[1].body, writes[0].body);
+  assert.equal(writes[0].body.startingCents, 123456);
+  assert.equal(writes[0].body.name, "Household");
+  assert.equal(writes[0].body.workspaceId, "fixture-workspace");
+});
+
+for (const role of ["OWNER", "EDITOR", "VIEWER"]) {
+  test(`collaboration controls respect the ${role.toLowerCase()} role`, async () => {
+    fixtures.set("/api/context", { ...fixtures.get("/api/context"), role, isShared: true });
+    const emptyList = { items: [], total: 0, limit: 50, nextCursor: null, hasMore: false };
+    fixtures.set("/api/collaborators", {
+      role,
+      workspace: { id: "fixture-workspace", name: "Test household", isShared: true },
+      members: emptyList,
+      invites: emptyList,
+      auditLogs: emptyList,
+    });
+    const view = show(CollaboratorsPage, "collaborators");
+    await waitFor(() => assert.equal(client.getQueryData(queryKeys.collaborators("fixture-workspace"))?.role, role));
+    await view.findByRole("heading", { name: "No collaborators yet" });
+    assert.equal(Boolean(view.queryByRole("button", { name: "Invite", exact: true })), role === "OWNER");
+    assert.ok(requests.every((request) => request.method === "GET"));
+    assert.ok(requests.every((request) => request.headers.get("x-workspace-id") === "fixture-workspace"));
+  });
+}
+
+test("investment account creation preserves dates and keeps a rejected form editable", async (context) => {
+  const previousTimezone = process.env.TZ;
+  process.env.TZ = "Asia/Singapore";
+  context.after(() => {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  });
+  fixtures.set("POST /api/investments", () => Response.json({ error: "Institution unavailable" }, { status: 503 }));
+  const view = show(InvestmentsPage, "investments");
+  await view.findByRole("heading", { name: "No investment accounts yet" });
+  fireEvent.click(view.getByRole("button", { name: "+ Add Investment Account" }));
+  const dialog = await view.findByRole("dialog", { name: "Investment account" });
+  for (const [label, value] of [
+    ["Display Name of the Account", "Retirement fund"],
+    ["Financial Institution Name", "Example brokerage"],
+    ["Product Name", "Index fund"],
+    ["Inception Date", "2026-02-03"],
+    ["Divested Date (Optional)", "2026-09-30"],
+  ]) fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+  fireEvent.submit(dialog.querySelector("form"));
+  await within(dialog).findByText("Institution unavailable");
+  assert.equal(within(dialog).getByLabelText("Product Name").value, "Index fund");
+  fixtures.set("POST /api/investments", ({ body }) => {
+    const created = { id: "investment-one", ...body, createdAt: "2026-10-01T00:00:00.000Z", entries: [] };
+    fixtures.set("/api/investments", [created]);
+    return Response.json(created, { status: 201 });
+  });
+  fireEvent.submit(dialog.querySelector("form"));
+  await waitFor(() => assert.ok(!view.queryByRole("dialog")));
+  const writes = requests.filter((request) => request.method === "POST");
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].body.inceptionDate, "2026-02-03T00:00:00.000Z");
+  assert.equal(writes[1].body.divestedDate, "2026-09-30T00:00:00.000Z");
+  assert.equal(writes[1].body.workspaceId, "fixture-workspace");
+  assert.ok(view.getAllByText("Retirement fund").length > 0);
+});
+
+for (const scenario of [
+  {
+    tab: "Hotel rewards", action: "Add hotel rewards", dialog: "Hotel reward account", path: "/api/rewards/hotel-rewards",
+    fields: { "Program Name": "Weekend stays", "Hotel Brand": "Example hotels", "Current Points": "1500", "Cents Per Point": "0.75" },
+    expected: { programName: "Weekend stays", hotelBrand: "Example hotels", currentPoints: 1500, targetPoints: null, centsPerPoint: 0.75 },
+  },
+  {
+    tab: "Frequent flyer", action: "Add frequent flyer", dialog: "Frequent flyer account", path: "/api/rewards/frequent-flyer",
+    fields: { "Program Name": "Holiday miles", "Airline Name": "Example air", "Current Miles": "12000", "Validity Period (years)": "3" },
+    expected: { programName: "Holiday miles", airlineName: "Example air", currentMiles: 12000, mileNeverExpire: false, validityPeriodYears: 3 },
+  },
+]) {
+  test(`${scenario.tab.toLowerCase()} retain the user's program when the server rejects creation`, async () => {
+    fixtures.set(`POST ${scenario.path}`, () => Response.json({ error: "Program could not be saved" }, { status: 503 }));
+    const view = show(RewardsPage, "rewards", rewardProps);
+    fireEvent.click(view.getByRole("button", { name: scenario.tab, exact: true }));
+    fireEvent.click(view.getByRole("button", { name: scenario.action, exact: true }));
+    const dialog = await view.findByRole("dialog", { name: scenario.dialog });
+    for (const [label, value] of Object.entries(scenario.fields)) {
+      fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+    }
+    fireEvent.submit(dialog.querySelector("form"));
+    await within(dialog).findByText("Program could not be saved");
+    assert.ok(dialog.isConnected, "a rejected save must not close and clear the form");
+    assert.equal(within(dialog).getByLabelText("Program Name").value, scenario.expected.programName);
+    fixtures.set(`POST ${scenario.path}`, () => Response.json({ id: "new-program" }, { status: 201 }));
+    fireEvent.submit(dialog.querySelector("form"));
+    await waitFor(() => assert.ok(!view.queryByRole("dialog")));
+    const writes = requests.filter((request) => request.method === "POST");
+    assert.equal(writes.length, 2);
+    assert.deepEqual(writes[1].body, writes[0].body);
+    for (const [key, value] of Object.entries(scenario.expected)) assert.equal(writes[1].body[key], value);
+  });
+}

@@ -22,6 +22,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { RewardsOverview } from "@/components/rewards/rewards-overview";
 import { useSearchParams } from "next/navigation";
 import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
+import { MutationErrorSummary } from "@/components/ui/mutation-error-summary";
+import { calculateExpiryDateInputValue, formatNumber, hotelPointValueCents, isExpiredAtToday, todayDateInputValue, toDateInputValue } from "@/components/rewards/format";
 
 type CreditCardReward = {
   id: string;
@@ -149,41 +151,8 @@ async function fetchRewards(): Promise<{
   return res.json();
 }
 
-function formatNumber(num: number): string {
-  return new Intl.NumberFormat("en-US").format(num);
-}
-
-function hotelPointValueCents(points: number, centsPerPoint: number): number {
-  return Math.round(points * centsPerPoint);
-}
-
-function toDateInputValue(value: string): string {
-  return value.slice(0, 10);
-}
-
-function todayDateInputValue(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function calculateExpiryDateInputValue(dateValue: string, years: number): string {
-  const date = new Date(`${dateValue}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return "";
-  const expiryDate = new Date(Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth() + 1, 0));
-  return expiryDate.toISOString().slice(0, 10);
-}
-
 const EARN_PAGE_SIZE = 8;
 const REDEMPTION_PAGE_SIZE = 6;
-
-function isExpiredAtToday(dateValue: string | null): boolean {
-  if (!dateValue) return false;
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  date.setHours(0, 0, 0, 0);
-  return date < today;
-}
 
 export function RewardsPage({
   initialCreditCards,
@@ -347,7 +316,7 @@ export function RewardsPage({
       conversionToMiles: number;
       conversionDescription?: string;
     }) =>
-      workspaceFetch("/api/rewards/credit-card", {
+      apiFetch("/api/rewards/credit-card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -360,7 +329,7 @@ export function RewardsPage({
 
   const updateCardReward = useMutation({
     mutationFn: (payload: { id: string; currentPoints: number; pointsValueCents?: number }) =>
-      workspaceFetch("/api/rewards/credit-card", {
+      apiFetch("/api/rewards/credit-card", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -384,7 +353,7 @@ export function RewardsPage({
       validityPeriodYears: number;
       notes?: string;
     }) =>
-      workspaceFetch("/api/rewards/frequent-flyer", {
+      apiFetch("/api/rewards/frequent-flyer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -408,7 +377,7 @@ export function RewardsPage({
       validityPeriodYears: number;
       notes?: string;
     }) =>
-      workspaceFetch("/api/rewards/frequent-flyer", {
+      apiFetch("/api/rewards/frequent-flyer", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -429,7 +398,7 @@ export function RewardsPage({
       centsPerPoint: number;
       notes?: string;
     }) =>
-      workspaceFetch("/api/rewards/hotel-rewards", {
+      apiFetch("/api/rewards/hotel-rewards", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -451,7 +420,7 @@ export function RewardsPage({
       centsPerPoint: number;
       notes?: string;
     }) =>
-      workspaceFetch("/api/rewards/hotel-rewards", {
+      apiFetch("/api/rewards/hotel-rewards", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -470,7 +439,7 @@ export function RewardsPage({
       toMiles: number;
       description?: string;
     }) =>
-      workspaceFetch("/api/rewards/conversion", {
+      apiFetch("/api/rewards/conversion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -482,28 +451,28 @@ export function RewardsPage({
   });
 
   const deleteCardReward = useMutation({
-    mutationFn: (id: string) => workspaceFetch(`/api/rewards/credit-card?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => apiFetch(`/api/rewards/credit-card?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const deleteFrequentFlyer = useMutation({
-    mutationFn: (id: string) => workspaceFetch(`/api/rewards/frequent-flyer?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => apiFetch(`/api/rewards/frequent-flyer?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const deleteHotelReward = useMutation({
-    mutationFn: (id: string) => workspaceFetch(`/api/rewards/hotel-rewards?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => apiFetch(`/api/rewards/hotel-rewards?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const deleteConversion = useMutation({
-    mutationFn: (id: string) => workspaceFetch(`/api/rewards/conversion?id=${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => apiFetch(`/api/rewards/conversion?id=${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) }),
   });
 
   const updateConversion = useMutation({
     mutationFn: (payload: { id: string; fromPoints: number; toMiles: number; description?: string }) =>
-      workspaceFetch("/api/rewards/conversion", {
+      apiFetch("/api/rewards/conversion", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -978,6 +947,11 @@ export function RewardsPage({
         hotelValue={totalHotelValueCents}
         combinedMiles={totalCombinedMiles}
         formatCurrency={formatCurrency}
+      />
+
+      <MutationErrorSummary
+        error={updateCardReward.error || updateConversion.error || updateEarnTransaction.error || deleteCardReward.error || deleteFrequentFlyer.error || deleteHotelReward.error || deleteConversion.error}
+        onReload={refreshRewardsAndHistory}
       />
 
       {isError && (

@@ -44,6 +44,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import type { AppShellContext } from "@/components/app-shell-context";
 import { WorkspaceSetupGuideBoundary } from "@/components/onboarding/workspace-setup-guide-boundary";
+import { getInitials } from "@/lib/user-display";
 
 const SCROLL_TO_TOP_MIN_OFFSET = 480;
 
@@ -71,16 +72,6 @@ function getMobileDate(date: Date) {
     dateTime: `${year}-${month}-${day}`,
     label: MOBILE_DATE_FORMATTER.format(date),
   };
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 export function AppShell({

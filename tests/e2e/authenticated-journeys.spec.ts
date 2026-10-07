@@ -12,35 +12,54 @@ async function enterWorkspace(page: Page) {
 
 async function openNavigation(page: Page, mobile: boolean) {
   if (mobile) {
-    await page.getByRole("button", { name: "Open More menu" }).click();
-    return page.getByRole("dialog", { name: "More", exact: true });
+    return page.getByRole("navigation", { name: "Primary mobile navigation" });
   }
   const trigger = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await trigger.isVisible()) await trigger.click();
   return page.getByLabel("Primary navigation");
 }
 
+async function openAccountOptions(page: Page, mobile: boolean) {
+  const navigation = await openNavigation(page, mobile);
+  if (mobile) {
+    await navigation.getByRole("button", { name: "Open More menu" }).click();
+    const more = page.getByRole("dialog", { name: "More", exact: true });
+    await expect(more).toBeVisible();
+    return more;
+  }
+  await navigation.getByRole("button", { name: /Nest Owner/i }).click();
+  return navigation.getByRole("region", { name: "Account options" });
+}
+
 test("session enters a workspace and core finance routes remain tenant scoped", async ({ page }, testInfo) => {
   await enterWorkspace(page);
+  const workspacePath = new URL(page.url()).pathname;
   const navigation = await openNavigation(page, testInfo.project.name.includes("mobile"));
   await navigation.getByRole("link", { name: "Transactions", exact: true }).click();
-  await expect(page).toHaveURL(/\/w\/[^/]+\/transactions/);
+  await expect(page).toHaveURL(new URL(`${workspacePath}/transactions`, page.url()).href, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: /transactions/i }).first()).toBeVisible();
 
   const context = await page.request.get("/api/context");
   expect(context.status()).toBe(200);
-  expect(context.headers()["cache-control"]).toContain("private");
+  expect(context.headers()["cache-control"]).toContain("no-store");
   expect(context.headers()["x-request-id"]).toBeTruthy();
+  expect((await context.json()).workspaceId).toBe(workspacePath.split("/")[2]);
 });
 
 test("workspace switching updates both URL scope and server context", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop workspace switch is covered here; mobile navigation has a separate journey.");
   await enterWorkspace(page);
-  const navigation = await openNavigation(page, false);
-  await navigation.getByRole("button", { name: /Nest Owner/i }).click();
-  await navigation.getByRole("button", { name: /E2E Secondary/i }).click();
-  await expect(page).toHaveURL(/\/w\/[^/?#]+$/);
-  await expect(page.getByText("E2E Secondary", { exact: true }).first()).toBeVisible();
+  const beforeResponse = await page.request.get("/api/context");
+  expect(beforeResponse.ok()).toBe(true);
+  const before = await beforeResponse.json();
+  const target = before.workspaces.find((workspace: { id: string; name: string }) => workspace.id !== before.workspaceId);
+  expect(target).toBeTruthy();
+  const options = await openAccountOptions(page, false);
+  await options.getByRole("button", { name: target.name }).click();
+  await expect(page).toHaveURL(new URL(`/w/${target.id}`, page.url()).href, { timeout: 30_000 });
+  const afterResponse = await page.request.get("/api/context");
+  expect(afterResponse.ok()).toBe(true);
+  expect(await afterResponse.json()).toMatchObject({ workspaceId: target.id, workspaceName: target.name });
 });
 
 test("mobile navigation exposes core destinations and remains accessible", async ({ page }, testInfo) => {
@@ -48,6 +67,9 @@ test("mobile navigation exposes core destinations and remains accessible", async
   await enterWorkspace(page);
   const navigation = await openNavigation(page, true);
   await expect(navigation.getByRole("link", { name: "Transactions", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Cards", exact: true })).toBeVisible();
+  const more = await openAccountOptions(page, true);
+  await expect(more.getByRole("link", { name: /^Rewards/ })).toBeVisible();
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter((violation) => violation.impact === "critical")).toEqual([]);
 });
@@ -59,9 +81,8 @@ test("logout removes the authenticated session and private API cache entries", a
     await cache.put("/api/context", new Response('{"private":true}'));
   });
   const mobile = testInfo.project.name.includes("mobile");
-  const navigation = await openNavigation(page, mobile);
-  if (!mobile) await navigation.getByRole("button", { name: /Nest Owner/i }).click();
-  await navigation.getByRole("button", { name: /^log out$/i }).click();
+  const options = await openAccountOptions(page, mobile);
+  await options.getByRole("button", { name: /^log out/i }).click();
   await page.getByRole("dialog", { name: "Log out of Nest?" }).getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   const response = await page.request.get("/api/context");

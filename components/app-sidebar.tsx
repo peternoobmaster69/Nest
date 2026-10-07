@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { invalidateWorkspaceQueries, queryKeys, removeWorkspaceQueries } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
+import { getInitials } from "@/lib/user-display";
 
 type Workspace = {
   id: string;
@@ -41,15 +42,6 @@ type Workspace = {
 type ReceivablesSummary = {
   count: number;
 };
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 export function AppSidebar({
   userName,
@@ -339,7 +331,12 @@ export function AppSidebar({
 
       <div className="sb-bot">
         <div className="sb-user-wrap" ref={profileMenuRef}>
-          <Button className="sb-user" onClick={() => setProfileMenuOpen((open) => !open)}>
+          <Button
+            className="sb-user"
+            onClick={() => setProfileMenuOpen((open) => !open)}
+            aria-expanded={profileMenuOpen}
+            aria-controls="sidebar-account-options"
+          >
             {userImage ? (
               <Image src={userImage} alt={avatarAlt} width={36} height={36} className="avatar avatar-md avatar-image" />
             ) : (
@@ -355,7 +352,7 @@ export function AppSidebar({
             <span className={`sb-user-chevron${profileMenuOpen ? " open" : ""}`}>▾</span>
           </Button>
           {profileMenuOpen && (
-            <div className="sb-user-menu">
+            <section id="sidebar-account-options" className="sb-user-menu" aria-label="Account options">
               <Link
                 className="sb-user-menu-item"
                 href={workspaceHref("/profile")}
@@ -408,7 +405,7 @@ export function AppSidebar({
               <Button className="sb-user-menu-item" onClick={() => void confirmLogout()}>
                 Log Out
               </Button>
-            </div>
+            </section>
           )}
         </div>
       </div>
