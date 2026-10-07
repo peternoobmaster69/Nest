@@ -53,7 +53,6 @@ const emailProviderMock = { namedExports: {
 } };
 mock.module("@azure/communication-email", emailProviderMock);
 mock.module(require.resolve("@azure/communication-email"), emailProviderMock);
-assert.equal(require("@azure/communication-email").EmailClient, emailProviderMock.namedExports.EmailClient);
 const { runCreditCardPaymentReminderJob: run, processReminderEmailDeliveryJob: deliver } = require("../lib/credit-card-payment-reminders.ts");
 
 const member = (workspaceId = "home", email = "owner@example.test", name = "Owner", id = email) => ({ workspaceId, user: { id, email, name } });
@@ -69,6 +68,7 @@ function storedJob(overrides = {}) {
 }
 
 beforeEach((t) => {
+  assert.equal(require("@azure/communication-email").EmailClient, emailProviderMock.namedExports.EmailClient);
   t.mock.timers.enable({ apis: ["Date"], now: today });
   const previous = new Map(fields.map((key) => [key, process.env[key]]));
   t.after(() => { for (const [key, value] of previous) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });

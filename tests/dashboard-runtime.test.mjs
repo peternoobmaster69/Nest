@@ -247,7 +247,7 @@ test("cash-flow filters select the correct sub-account and reset when the chosen
   assert.ok(within(flow).getByText("All sub-accounts in Spare bank - last 12 months"));
   fixtures.set("/api/context", { ...baseContext, sidebarMoneyPages: { creditCards: false, creditTransactions: false } });
   await ui.act(async () => client.invalidateQueries({ queryKey: ["app-context", "household"] }));
-  assert.ok(!view.queryByRole("region", { name: "Payments due" }));
+  await waitFor(() => assert.ok(!view.queryByRole("region", { name: "Payments due" })));
 });
 
 test("cash-flow chart supports zoom limits, focus and pointer details, and clearing removed points", (t) => {

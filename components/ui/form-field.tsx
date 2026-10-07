@@ -10,6 +10,11 @@ type FieldShellProps = {
   children: ReactNode;
 };
 
+function fieldDescriptionId(fieldId: string, error?: string | null, hint?: string) {
+  if (error) return `${fieldId}-error`;
+  return hint ? `${fieldId}-hint` : undefined;
+}
+
 function FieldShell({ label, hint, error, required, htmlFor, children }: Readonly<FieldShellProps>) {
   return (
     <div className={`form-group${error ? " has-error" : ""}`}>
@@ -33,7 +38,7 @@ type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "className"> &
 export function TextField({ label, hint, error, id, required, className = "", ...props }: TextFieldProps) {
   const generatedId = useId();
   const fieldId = id || generatedId;
-  const describedBy = error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined;
+  const describedBy = fieldDescriptionId(fieldId, error, hint);
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} htmlFor={fieldId}>
       <Input
@@ -66,7 +71,7 @@ export function SelectField({ label, hint, error, id, required, className = "", 
         className={`input${error ? " is-error" : ""} ${className}`.trim()}
         required={required}
         aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
+        aria-describedby={fieldDescriptionId(fieldId, error, hint)}
         {...props}
       >
         {children}
@@ -92,7 +97,7 @@ export function TextAreaField({ label, hint, error, id, required, className = ""
         className={`input textarea${error ? " is-error" : ""} ${className}`.trim()}
         required={required}
         aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
+        aria-describedby={fieldDescriptionId(fieldId, error, hint)}
         {...props}
       />
     </FieldShell>

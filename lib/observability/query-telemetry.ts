@@ -28,10 +28,10 @@ export async function withQueryTelemetry<T>(
 
 function estimateRowCount(value: unknown): number | undefined {
   if (!Array.isArray(value)) return undefined;
-  return value.reduce<number>(
-    (count, item) => count + (Array.isArray(item) ? item.length : item == null ? 0 : 1),
-    0,
-  );
+  return value.reduce<number>((count, item) => {
+    if (Array.isArray(item)) return count + item.length;
+    return item == null ? count : count + 1;
+  }, 0);
 }
 
 function emitQueryTiming(

@@ -87,6 +87,43 @@ function secureHeaders(response: Response, requestId: string, noStore: boolean) 
   return response;
 }
 
+async function requireApiAuthentication(options: SecureApiOptions["auth"]) {
+  if (!options) return undefined;
+  const auth = await requireWorkspaceAccess(options.workspaceId, options.minimumRole ?? "VIEWER");
+  if (options.recent) {
+    const recentUserId = await requireRecentAuthentication();
+    if (recentUserId !== auth.userId) throw new ApiAuthError(401, "Unauthorized");
+  }
+  return auth;
+}
+
+function failureLogLevel(status: number) {
+  if (status >= 500) return "error";
+  return status === 429 ? "warn" : "info";
+}
+
+function knownApiErrorResponse(error: unknown, requestId: string) {
+  const limited = rateLimitResponse(error);
+  if (limited) return limited;
+  if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
+    const code = error instanceof ApiRequestError ? error.code : apiErrorCodeForStatus(error.status);
+    return Response.json({ error: error.message, code, requestId }, { status: error.status });
+  }
+  if (error instanceof ZodError) {
+    return Response.json(
+      { error: "Invalid request", code: "UNPROCESSABLE_ENTITY", issues: z.flattenError(error), requestId },
+      { status: 422 },
+    );
+  }
+  if (isDatabaseWakeTransientError(error)) {
+    return Response.json(
+      { error: "The database is waking up. Please retry shortly.", code: DATABASE_UNAVAILABLE_CODE, requestId },
+      { status: 503, headers: { "Retry-After": "5" } },
+    );
+  }
+  return null;
+}
+
 export async function runSecureApiRoute(
   request: Request,
   options: SecureApiOptions,
@@ -96,17 +133,7 @@ export async function runSecureApiRoute(
   const startedAt = performance.now();
   try {
     if (options.mutation) assertSameOriginRequest(request);
-    let auth: SecureApiContext["auth"];
-    if (options.auth) {
-      auth = await requireWorkspaceAccess(
-        options.auth.workspaceId,
-        options.auth.minimumRole ?? "VIEWER",
-      );
-      if (options.auth.recent) {
-        const recentUserId = await requireRecentAuthentication();
-        if (recentUserId !== auth.userId) throw new ApiAuthError(401, "Unauthorized");
-      }
-    }
+    const auth = await requireApiAuthentication(options.auth);
     const response = await handler({ requestId, auth });
     logEvent("info", "api.request", {
       requestId,
@@ -119,12 +146,9 @@ export async function runSecureApiRoute(
     });
     return secureHeaders(response, requestId, options.noStore ?? true);
   } catch (error) {
-    const limited = rateLimitResponse(error);
-    const status = limited?.status
-      ?? (error instanceof ApiAuthError || error instanceof ApiRequestError ? error.status : undefined)
-      ?? (error instanceof ZodError ? 422 : undefined)
-      ?? (isDatabaseWakeTransientError(error) ? 503 : 500);
-    logEvent(status >= 500 ? "error" : status === 429 ? "warn" : "info", "api.request", {
+    const knownResponse = knownApiErrorResponse(error, requestId);
+    const status = knownResponse?.status ?? 500;
+    logEvent(failureLogLevel(status), "api.request", {
       requestId,
       method: request.method,
       route: new URL(request.url).pathname,
@@ -133,41 +157,7 @@ export async function runSecureApiRoute(
       errorType: error instanceof Error ? error.name : "UnknownError",
       durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
     });
-    if (limited) return secureHeaders(limited, requestId, true);
-    if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
-      const code = error instanceof ApiRequestError
-        ? error.code
-        : apiErrorCodeForStatus(error.status);
-      return secureHeaders(
-        Response.json({ error: error.message, code, requestId }, { status: error.status }),
-        requestId,
-        true,
-      );
-    }
-    if (error instanceof ZodError) {
-      return secureHeaders(
-        Response.json(
-          { error: "Invalid request", code: "UNPROCESSABLE_ENTITY", issues: z.flattenError(error), requestId },
-          { status: 422 },
-        ),
-        requestId,
-        true,
-      );
-    }
-    if (isDatabaseWakeTransientError(error)) {
-      return secureHeaders(
-        Response.json(
-          {
-            error: "The database is waking up. Please retry shortly.",
-            code: DATABASE_UNAVAILABLE_CODE,
-            requestId,
-          },
-          { status: 503, headers: { "Retry-After": "5" } },
-        ),
-        requestId,
-        true,
-      );
-    }
+    if (knownResponse) return secureHeaders(knownResponse, requestId, true);
     logEvent("error", "api.unhandled_error", {
       requestId,
       method: request.method,

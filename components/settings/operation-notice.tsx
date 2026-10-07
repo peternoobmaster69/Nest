@@ -17,15 +17,16 @@ export function SettingsOperationNotice({
   requiresReauthentication?: boolean;
 }>) {
   if (!notice) return null;
-  const NoticeIcon = notice.tone === "success" ? CheckCircle2 : notice.tone === "info" ? Info : CircleAlert;
+  const NoticeIcon = { success: CheckCircle2, info: Info, warning: CircleAlert, error: CircleAlert }[notice.tone];
+  const extraClassName = className ? ` ${className}` : "";
   return (
-    <div className={`settings-operation-notice is-${notice.tone}${className ? ` ${className}` : ""}`} role={notice.tone === "error" ? "alert" : "status"} aria-live="polite">
+    <output className={`settings-operation-notice is-${notice.tone}${extraClassName}`} role={notice.tone === "error" ? "alert" : undefined} aria-live="polite">
       <NoticeIcon size={18} aria-hidden="true" />
-      <div className="settings-operation-notice-copy">
+      <span className="settings-operation-notice-copy">
         <strong>{notice.title}</strong>
         {notice.detail ? <span>{notice.detail}</span> : null}
-      </div>
+      </span>
       {requiresReauthentication ? <ReauthenticateButton /> : null}
-    </div>
+    </output>
   );
 }

@@ -2,6 +2,7 @@ import { AzureKeyCredential } from "@azure/core-auth";
 import { DefaultAzureCredential } from "@azure/identity";
 import { SearchClient } from "@azure/search-documents";
 import { trimEndCharacters } from "../string-boundaries.mjs";
+import { normalizeInternalAppPath } from "../workspace-entry";
 
 type AskNestKnowledgeDocument = {
   id: string;
@@ -51,23 +52,29 @@ function getSearchEndpoint() {
   }
 }
 
+function searchGateReason(isEnabled: boolean, evaluationPassed: boolean, configured: boolean): SearchGate["reason"] {
+  if (!isEnabled) return "DISABLED";
+  if (!evaluationPassed) return "EVALUATION_REQUIRED";
+  return configured ? "ACTIVE" : "NOT_CONFIGURED";
+}
+
+function getSearchConfiguration() {
+  const endpoint = getSearchEndpoint();
+  const indexName = process.env.AZURE_SEARCH_INDEX?.trim();
+  return endpoint && indexName ? { endpoint, indexName } : null;
+}
+
 export function getAskNestSearchGate(): SearchGate {
   const isEnabled = enabled(process.env.ASK_NEST_SEARCH_ENABLED);
   const evaluationPassed = enabled(process.env.ASK_NEST_SEARCH_EVAL_PASS);
-  const configured = Boolean(getSearchEndpoint() && process.env.AZURE_SEARCH_INDEX?.trim());
+  const configured = Boolean(getSearchConfiguration());
   const active = isEnabled && evaluationPassed && configured;
   return {
     enabled: isEnabled,
     evaluationPassed,
     configured,
     active,
-    reason: active
-      ? "ACTIVE"
-      : !isEnabled
-        ? "DISABLED"
-        : !evaluationPassed
-          ? "EVALUATION_REQUIRED"
-          : "NOT_CONFIGURED",
+    reason: searchGateReason(isEnabled, evaluationPassed, configured),
   };
 }
 
@@ -76,14 +83,10 @@ function escapeOData(value: string) {
 }
 
 function safeHref(value: string | null | undefined) {
-  if (!value?.startsWith("/") || value.startsWith("//")) return "/transactions";
-  return value;
+  return normalizeInternalAppPath(value, "/transactions");
 }
 
-function getSearchClient() {
-  const endpoint = getSearchEndpoint();
-  const indexName = process.env.AZURE_SEARCH_INDEX?.trim();
-  if (!endpoint || !indexName) throw new Error("Ask Nest knowledge search is not configured.");
+function getSearchClient({ endpoint, indexName }: NonNullable<ReturnType<typeof getSearchConfiguration>>) {
   const queryKey = process.env.AZURE_SEARCH_QUERY_KEY?.trim();
   const credential = queryKey ? new AzureKeyCredential(queryKey) : new DefaultAzureCredential();
   return new SearchClient<AskNestKnowledgeDocument>(endpoint, indexName, credential);
@@ -95,9 +98,9 @@ export async function searchAskNestKnowledge(params: {
   query: string;
   limit: number;
 }): Promise<AskNestKnowledgeResult[]> {
-  const gate = getAskNestSearchGate();
-  if (!gate.active) return [];
-  const client = getSearchClient();
+  const configuration = getSearchConfiguration();
+  if (!configuration || !enabled(process.env.ASK_NEST_SEARCH_ENABLED) || !enabled(process.env.ASK_NEST_SEARCH_EVAL_PASS)) return [];
+  const client = getSearchClient(configuration);
   const semanticConfiguration = process.env.AZURE_SEARCH_SEMANTIC_CONFIGURATION?.trim() || "ask-nest-semantic";
   const filter = `workspaceId eq '${escapeOData(params.workspaceId)}' and (userId eq null or userId eq '${escapeOData(params.userId)}')`;
   const response = await client.search(params.query, {

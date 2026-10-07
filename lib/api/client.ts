@@ -24,6 +24,12 @@ function parseRetryAfter(value: string | null) {
   return Number.isNaN(date) ? undefined : Math.max(0, Math.ceil((date - Date.now()) / 1000));
 }
 
+function responseErrorMessage(payload: { message?: unknown; error?: unknown } | null, status: number) {
+  if (typeof payload?.message === "string") return payload.message;
+  if (typeof payload?.error === "string") return payload.error;
+  return `Request failed (${status})`;
+}
+
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await workspaceFetch(input, init);
   const payload = response.status === 204
@@ -32,11 +38,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
 
   if (!response.ok) {
     const errorPayload = payload && typeof payload === "object" ? payload as Partial<ApiErrorEnvelope> & { message?: unknown } : null;
-    const message = typeof errorPayload?.message === "string"
-      ? errorPayload.message
-      : typeof errorPayload?.error === "string"
-        ? errorPayload.error
-        : `Request failed (${response.status})`;
+    const message = responseErrorMessage(errorPayload, response.status);
     const code = typeof errorPayload?.code === "string"
       ? errorPayload.code
       : apiErrorCodeForStatus(response.status);

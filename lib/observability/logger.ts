@@ -29,7 +29,8 @@ export function redactTelemetry(value: unknown, key = "", seen = new WeakSet<obj
       code: typeof errorCode === "string" ? errorCode : undefined,
     };
   }
-  if (typeof value !== "object") return String(value);
+  if (typeof value === "function") return "[FUNCTION]";
+  if (typeof value === "symbol") return redactString(value.toString());
   if (seen.has(value)) return "[CIRCULAR]";
   seen.add(value);
   if (Array.isArray(value)) return value.slice(0, 50).map((item) => redactTelemetry(item, key, seen));
@@ -50,7 +51,7 @@ export function logEvent(level: LogLevel, event: string, context: LogContext = {
     environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
     ...redactTelemetry(context) as LogContext,
   });
-  const output = level === "error" ? console.error : level === "warn" ? console.warn : console.info;
+  const output = { error: console.error, warn: console.warn, info: console.info, debug: console.info }[level];
   output(entry);
 }
 

@@ -777,11 +777,11 @@ test("Gmail sync uses one responsive status surface", async () => {
   assert.match(notice, /className=\{`settings-operation-notice is-\$\{notice\.tone\}/);
   assert.match(styles, /\.gmail-sync-progress-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/s);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-operation-notice-copy\s*\{[^}]*display:\s*grid/s);
-  assert.match(notices, /hasProcessingIssues[\s\S]*?\? "warning"/);
+  assert.match(notices, /if \(hasProcessingIssues\) return "warning"/);
   assert.match(styles, /\.settings-operation-notice\.is-warning\s*\{[^}]*background:\s*var\(--warning-bg\)/s);
   assert.match(summary, /Inbox is up to date\. No new card alert emails were found\./);
   assert.doesNotMatch(summary, /Synced \$\{data\.scannedMessages\} emails/);
-  assert.match(notices, /!\/\\b0 failed\\b\/i\.test\(normalized\)/);
+  assert.match(notices, /!\/\\b0 failed\\b\/i\.test\(message\)/);
 });
 
 test("recent authentication errors provide a return-safe re-authentication action", async () => {

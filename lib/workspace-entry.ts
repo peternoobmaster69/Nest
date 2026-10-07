@@ -4,18 +4,18 @@ const DEFAULT_APP_DESTINATION = "/";
 const WORKSPACE_ENTRY_PATH = "/entry";
 const WORKSPACE_PATH_PREFIX = "/w";
 
-export function normalizeInternalAppPath(value: string | null | undefined) {
+export function normalizeInternalAppPath(value: string | null | undefined, fallback = DEFAULT_APP_DESTINATION) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return DEFAULT_APP_DESTINATION;
+    return fallback;
   }
 
   try {
     const base = new URL("https://nest.invalid");
     const parsed = new URL(value, base);
-    if (parsed.origin !== base.origin) return DEFAULT_APP_DESTINATION;
+    if (parsed.origin !== base.origin) return fallback;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
-    return DEFAULT_APP_DESTINATION;
+    return fallback;
   }
 }
 
