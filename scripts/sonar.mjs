@@ -32,7 +32,7 @@ async function runScan(api, token, verifier) {
     errors.push(...analysisFailures(task, result.projectStatus || {}));
     report.dashboard = `${api.serverUrl}/dashboard?id=${encodeURIComponent(policy.projectKey)}`;
     if (report.analysisCompleted) {
-      const findings = await collectAnalysisFindings(api, policy.projectKey);
+      const findings = await collectAnalysisFindings(verifier, policy.projectKey);
       report.findings = { issues: findings.issues.length, hotspots: findings.hotspots.length };
       await writeFile(path.join(root, "coverage/sonar-findings.json"), `${JSON.stringify(findings, null, 2)}\n`);
     }

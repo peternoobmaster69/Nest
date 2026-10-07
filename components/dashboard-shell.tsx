@@ -1191,15 +1191,16 @@ export function DashboardShell({
               </div>
               <form onSubmit={onCreateBudget} className="modal-form-shell">
                 <div className="profile-modal-body profile-field">
-                  <span>Name</span>
+                  <span id="dashboard-budget-name-label">Name</span>
                   <Input
+                    aria-labelledby="dashboard-budget-name-label"
                     className="input"
                     placeholder="Sub-account name"
                     value={budgetName}
                     onChange={(e) => setBudgetName(e.target.value)}
                   />
-                  <span>Bank account</span>
-                  <Select className="input" value={budgetAccountId} onChange={(e) => setBudgetAccountId(e.target.value)}>
+                  <span id="dashboard-budget-bank-label">Bank account</span>
+                  <Select aria-labelledby="dashboard-budget-bank-label" className="input" value={budgetAccountId} onChange={(e) => setBudgetAccountId(e.target.value)}>
                     <option value="" disabled>
                       Select bank account
                     </option>
@@ -1209,8 +1210,9 @@ export function DashboardShell({
                       </option>
                     ))}
                   </Select>
-                  <span>Monthly limit (optional)</span>
+                  <span id="dashboard-budget-limit-label">Monthly limit (optional)</span>
                   <NumericCalculatorInput
+                    aria-labelledby="dashboard-budget-limit-label"
                     placeholder="0.00"
                     min="0"
                     step="0.01"
@@ -1246,8 +1248,9 @@ export function DashboardShell({
                   <strong>{editingBankAccount.name}</strong>
                 </div>
                 <div className="form-group">
-                  <label className="label">Balance ({baseCurrency})</label>
+                  <label className="label" htmlFor="dashboard-bank-balance">Balance ({baseCurrency})</label>
                   <NumericCalculatorInput
+                    id="dashboard-bank-balance"
                     step="0.01"
                     min="0"
                     value={editBankBalance}
