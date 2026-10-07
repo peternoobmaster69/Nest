@@ -14,7 +14,7 @@ if (directory) {
   mkdirSync(directory, { recursive: true });
   const compile = Module.prototype._compile;
   Module.prototype._compile = function collectCompiledSource(source, filename) {
-    if (scope.shouldInstrument(filename)) {
+    if (scope.shouldInstrument(filename.split("?tsx-commonjs-", 1)[0])) {
       const url = pathToFileURL(filename).href;
       const id = createHash("sha256").update(url).update(source).digest("hex");
       writeFileSync(path.join(directory, `source-${id}.json`), JSON.stringify({ url, source }));

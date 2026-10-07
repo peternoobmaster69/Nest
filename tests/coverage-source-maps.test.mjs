@@ -179,3 +179,42 @@ test("coverage retains missed source branches and refuses missing compiled or na
   for (const file of await readdir(path.join(reports, "tmp"))) await rm(path.join(reports, "tmp", file));
   await assert.rejects(execute(process.execPath, [reporter], { cwd: directory, env: reportEnvironment, timeout: 45_000 }), /No V8 coverage was collected/);
 });
+
+test("named ESM imports and CommonJS requires both contribute their actual TypeScript execution", async (t) => {
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "nest-coverage-imports-")));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const reports = path.join(directory, "coverage");
+  await writeFile(path.join(directory, ".c8rc.json"), JSON.stringify({
+    all: true, include: ["source.ts"], exclude: [], extension: [".ts"],
+    "reports-dir": reports, reporter: ["json-summary", "json"],
+  }));
+  await writeFile(path.join(directory, "source.ts"), [
+    "export function choose(enabled: boolean) {",
+    "  if (enabled) return 'ready';",
+    "  return 'waiting';",
+    "}",
+  ].join("\n"));
+  await writeFile(path.join(directory, "runner.mjs"), `
+import assert from "node:assert/strict";
+import { choose } from "./source.ts";
+import { createRequire } from "node:module";
+assert.equal(choose(true), "ready");
+assert.equal(createRequire(import.meta.url)("./source.ts").choose(false), "waiting");
+console.log("Both module paths executed");
+`);
+  const environment = { ...process.env };
+  delete environment.NODE_TEST_CONTEXT;
+  delete environment.NODE_V8_COVERAGE;
+  const run = await execute(process.execPath, [
+    c8, "--config", path.join(directory, ".c8rc.json"), "--reporter=none", "--temp-directory", path.join(reports, "tmp"),
+    process.execPath, "--import", tsx, "--import", collector, path.join(directory, "runner.mjs"),
+  ], { cwd: directory, env: environment, timeout: 45_000 });
+  assert.match(run.stdout, /Both module paths executed/);
+  const reportEnvironment = { ...process.env };
+  delete reportEnvironment.NODE_TEST_CONTEXT;
+  const output = await execute(process.execPath, [reporter], { cwd: directory, env: reportEnvironment, timeout: 45_000 });
+  assert.doesNotMatch(output.stdout + output.stderr, /Unparsable source/);
+  const report = JSON.parse(await readFile(path.join(reports, "coverage-summary.json"), "utf8"));
+  assert.deepEqual(Object.keys(report), ["total", "source.ts"]);
+  for (const metric of ["lines", "statements", "functions", "branches"]) assert.equal(report.total[metric].pct, 100, metric);
+});

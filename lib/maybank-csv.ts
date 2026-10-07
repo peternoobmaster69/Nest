@@ -9,9 +9,7 @@ type ParsedMaybankRow = {
 const MAYBANK_HEADER = "POSTING DATE,TRANSACTION DATE,DESCRIPTION,AMOUNT";
 
 function parseMaybankDate(value: string) {
-  const match = /(\d{2})\s+([A-Za-z]{3})\s+(\d{4})/.exec(value.trim());
-  if (!match) return null;
-  const [, ddRaw, monRaw, yyyyRaw] = match;
+  const [ddRaw, monRaw, yyyyRaw] = value.trim().split(/\s+/);
   const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
   const monthIndex = monthNames.indexOf(monRaw.toLowerCase());
   if (monthIndex < 0) return null;
@@ -33,6 +31,31 @@ export function normalizeTransactionSubject(value: string) {
     .trim();
 }
 
+function findRowAmount(body: string, start: number, amounts: RegExp, headers: RegExp) {
+  amounts.lastIndex = start;
+  for (let amount = amounts.exec(body); amount; amount = amounts.exec(body)) {
+    const end = amount.index + amount[0].length;
+    headers.lastIndex = end;
+    const next = headers.exec(body);
+    if (next || end === body.length) return { amount, next };
+  }
+  return null;
+}
+
+function parseMaybankRow(header: RegExpExecArray, amount: RegExpExecArray, description: string): ParsedMaybankRow | null {
+  const postingDate = parseMaybankDate(header[1]);
+  const transactionDate = parseMaybankDate(header[2]);
+  const amountCents = parseAmountToCents(amount[3]);
+  if (!postingDate || !transactionDate || amountCents === null) return null;
+  return {
+    postingDate,
+    transactionDate,
+    description: description.replace(/\s+/g, " ").trim(),
+    amountCents: amount[1] ? amountCents : -amountCents,
+    currency: amount[2].toUpperCase(),
+  };
+}
+
 export function parseMaybankCsv(raw: string) {
   const compact = raw.replace(/\r?\n/g, "");
   const startIndex = compact.indexOf(MAYBANK_HEADER);
@@ -41,25 +64,17 @@ export function parseMaybankCsv(raw: string) {
   }
 
   const body = compact.slice(startIndex + MAYBANK_HEADER.length);
-  const rowPattern =
-    /(\d{2}\s+[A-Za-z]{3}\s+\d{4}),(\d{2}\s+[A-Za-z]{3}\s+\d{4}),(.*?),\s*(-?)\s*([A-Z]{3})\s*([0-9,]+\.\d{2})(?=(\d{2}\s+[A-Za-z]{3}\s+\d{4},\d{2}\s+[A-Za-z]{3}\s+\d{4},)|$)/g;
-
+  const headers = /(\d{2}\s+[A-Za-z]{3}\s+\d{4}),(\d{2}\s+[A-Za-z]{3}\s+\d{4}),/y;
+  const amounts = /,\s*(-\s*)?([A-Z]{3})\s*([\d,]+\.\d{2})/g;
   const rows: ParsedMaybankRow[] = [];
-
-  for (const match of body.matchAll(rowPattern)) {
-    const [, postingDateRaw, transactionDateRaw, descriptionRaw, signRaw, currencyRaw, amountRaw] = match;
-    const postingDate = parseMaybankDate(postingDateRaw);
-    const transactionDate = parseMaybankDate(transactionDateRaw);
-    const amountCents = parseAmountToCents(amountRaw);
-    if (!postingDate || !transactionDate || amountCents === null) continue;
-
-    rows.push({
-      postingDate,
-      transactionDate,
-      description: descriptionRaw.replace(/\s+/g, " ").trim(),
-      amountCents: signRaw === "-" ? amountCents : -amountCents,
-      currency: currencyRaw.toUpperCase(),
-    });
+  let header = new RegExp(headers.source).exec(body);
+  while (header) {
+    const start = header.index + header[0].length;
+    const end = findRowAmount(body, start, amounts, headers);
+    if (!end) break;
+    const row = parseMaybankRow(header, end.amount, body.slice(start, end.amount.index));
+    if (row) rows.push(row);
+    header = end.next;
   }
 
   if (!rows.length) {

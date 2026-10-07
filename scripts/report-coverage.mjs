@@ -85,7 +85,11 @@ const scope = new TestExclude({
   relativePath: true,
   excludeNodeModules: true,
 });
-const includesSource = (value) => scope.shouldInstrument(value.startsWith("file:") ? fileURLToPath(value) : path.resolve(cwd, value));
+const selectedSources = new Set((await scope.glob(cwd)).map((file) => path.resolve(cwd, file)));
+const includesSource = (value) => {
+  const filename = value.startsWith("file:") ? fileURLToPath(value) : path.resolve(cwd, value);
+  return selectedSources.has(filename.split("?tsx-commonjs-", 1)[0]);
+};
 const outputDir = path.resolve(cwd, config["reports-dir"]);
 const collectedDirectory = path.join(outputDir, "tmp");
 const report = new CoverageReport({
