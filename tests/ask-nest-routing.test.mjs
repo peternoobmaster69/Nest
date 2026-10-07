@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import test from "node:test";
 import { buildAskNestPlanningHint, classifyAskNestIntent } from "../lib/ai/ask-nest-intent.mjs";
 
@@ -104,4 +105,22 @@ test("planning hints state their evidentiary limits and do not request workspace
   const financial = buildAskNestPlanningHint("Show my financial overview");
   assert.match(financial, /does not appear to require workspace knowledge retrieval/);
   assert.match(financial, /not evidence/);
+});
+
+test("application CommonJS imports and ESM evaluations select the same tools and page fallbacks", () => {
+  const application = createRequire(import.meta.url)("../lib/ai/ask-nest-intent.mjs");
+  const cases = [
+    ["AAPL price and news", "/investments"],
+    ["AAPL headlines", "/investments"],
+    ["AAPL close", "/investments"],
+    ["Show spending on groceries", "/transactions"],
+    ["Find my uploaded statement", "/transactions"],
+    ["What does nominal mean?", "/cio"],
+    ["", "/credit-transactions"], ["", "/credit-cards"], ["", "/receivables"],
+    ["", "/investments"], ["", "/cio"], ["", "/budgets/plan"], ["", "/transactions"], ["", "/unknown"],
+  ];
+  for (const [question, page] of cases) {
+    assert.deepEqual(application.classifyAskNestIntent(question, page), classifyAskNestIntent(question, page));
+    assert.equal(application.buildAskNestPlanningHint(question, page), buildAskNestPlanningHint(question, page));
+  }
 });

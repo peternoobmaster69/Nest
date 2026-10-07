@@ -247,11 +247,12 @@ test("named ESM imports and CommonJS requires both contribute their actual TypeS
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), "nest-coverage-imports-")));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const reports = path.join(directory, "coverage");
+  await mkdir(path.join(directory, "nested"));
   await writeFile(path.join(directory, ".c8rc.json"), JSON.stringify({
-    all: true, include: ["source.ts"], exclude: [], extension: [".ts"],
+    all: true, include: ["nested/source.ts"], exclude: [], extension: [".ts"],
     "reports-dir": reports, reporter: ["json-summary", "json"],
   }));
-  await writeFile(path.join(directory, "source.ts"), [
+  await writeFile(path.join(directory, "nested/source.ts"), [
     "export function choose(enabled: boolean) {",
     "  if (enabled) return 'ready';",
     "  return 'waiting';",
@@ -259,10 +260,10 @@ test("named ESM imports and CommonJS requires both contribute their actual TypeS
   ].join("\n"));
   await writeFile(path.join(directory, "runner.mjs"), `
 import assert from "node:assert/strict";
-import { choose } from "./source.ts";
+import { choose } from "./nested/source.ts";
 import { createRequire } from "node:module";
 assert.equal(choose(true), "ready");
-assert.equal(createRequire(import.meta.url)("./source.ts").choose(false), "waiting");
+assert.equal(createRequire(import.meta.url)("./nested/source.ts").choose(false), "waiting");
 console.log("Both module paths executed");
 `);
   const environment = { ...process.env };
@@ -278,6 +279,6 @@ console.log("Both module paths executed");
   const output = await execute(process.execPath, [reporter], { cwd: directory, env: reportEnvironment, timeout: 45_000 });
   assert.doesNotMatch(output.stdout + output.stderr, /Unparsable source/);
   const report = JSON.parse(await readFile(path.join(reports, "coverage-summary.json"), "utf8"));
-  assert.deepEqual(Object.keys(report), ["total", "source.ts"]);
+  assert.deepEqual(Object.keys(report), ["total", "nested/source.ts"]);
   for (const metric of ["lines", "statements", "functions", "branches"]) assert.equal(report.total[metric].pct, 100, metric);
 });

@@ -98,6 +98,30 @@ type NamedBudgetMatch = {
   strong: boolean;
 };
 
+type ReviewMatch = {
+  action: SmartReviewAction;
+  confidence: "STRONG_MATCH" | "NEEDS_REVIEW";
+  source: "RULE" | "CREDIT_HISTORY" | "LEDGER_HISTORY" | "BUDGET_NAME";
+  count: number;
+  evidence: string;
+};
+
+type ReviewContext = {
+  rules: CreditTxnAutoRule[];
+  history: ReviewTransactionRow[];
+  categorizedTransactions: CategorizedTransaction[];
+  budgetChoices: BudgetChoice[];
+  budgetById: Map<string, BudgetChoice>;
+  crossWorkspaceByBudgetId: Map<string, BudgetChoice>;
+  postingBySourceId: Map<string, ReviewPostingRow>;
+  defaultDestination: BudgetChoice | undefined;
+  relatedPool: ReviewTransactionRow[];
+  fingerprintBase: string;
+  generatedAt: string;
+};
+
+type ReviewRequest = { workspaceId: string; userId: string; transactionIds: string[] };
+
 const ModelSuggestionSchema = z.object({
   transactionId: z.string().min(1),
   normalizedMerchant: z.string().trim().min(1).max(80),
@@ -232,67 +256,65 @@ function actionKey(action: SmartReviewAction) {
   ].join(":");
 }
 
-function currentAccounting(
-  transaction: ReviewTransactionRow,
-  posting: ReviewPostingRow | undefined,
-): SmartReviewCurrentAccounting | null {
-  if (!transaction.isAllocated) return null;
+function deductAccounting(transaction: ReviewTransactionRow): SmartReviewCurrentAccounting | null {
   const debit = transaction.ledgerTransactions.find((entry) => entry.direction === "DEBIT" && entry.budgetId);
   const credit = transaction.ledgerTransactions.find((entry) => entry.direction === "CREDIT" && entry.budgetId);
-  if (debit?.budget) {
-    const action: SmartReviewDeductAction = {
-      type: "DEDUCT",
-      accountId: debit.accountId,
-      accountName: debit.account.name,
-      budgetId: debit.budget.id,
-      budgetName: debit.budget.name,
-      ...(credit?.budget ? {
-        destinationAccountId: credit.accountId,
-        destinationAccountName: credit.account.name,
-        destinationBudgetId: credit.budget.id,
-        destinationBudgetName: credit.budget.name,
-      } : {}),
-    };
-    return {
-      type: "DEDUCT",
-      label: credit?.budget
-        ? `${debit.budget.name} → ${credit.budget.name}`
-        : `${debit.account.name} · ${debit.budget.name}`,
-      ledgerTransactionId: debit.id,
-      action,
-    };
-  }
+  if (!debit?.budget) return null;
+  const action: SmartReviewDeductAction = {
+    type: "DEDUCT",
+    accountId: debit.accountId,
+    accountName: debit.account.name,
+    budgetId: debit.budget.id,
+    budgetName: debit.budget.name,
+    ...(credit?.budget ? {
+      destinationAccountId: credit.accountId,
+      destinationAccountName: credit.account.name,
+      destinationBudgetId: credit.budget.id,
+      destinationBudgetName: credit.budget.name,
+    } : {}),
+  };
+  return {
+    type: "DEDUCT",
+    label: credit?.budget
+      ? `${debit.budget.name} → ${credit.budget.name}`
+      : `${debit.account.name} · ${debit.budget.name}`,
+    ledgerTransactionId: debit.id,
+    action,
+  };
+}
 
+function receivableAccounting(posting: ReviewPostingRow | undefined): SmartReviewCurrentAccounting | null {
+  const receivable = posting?.receivables[0];
+  let label: string;
   if (posting?.operation.includes("RECEIVABLE")) {
-    const receivable = posting.receivables[0];
-    const action: SmartReviewReceivableAction = {
+    label = receivable?.title || "Receivable";
+  } else if (posting?.operation === "CREDIT_TRANSACTION_ACCOUNT" && receivable) {
+    label = receivable.title;
+  } else {
+    return null;
+  }
+  return {
+    type: "RECEIVABLE",
+    label,
+    action: {
       type: "RECEIVABLE",
       ...(receivable?.sourceWorkspaceId ? { sourceWorkspaceId: receivable.sourceWorkspaceId } : {}),
       ...(receivable?.sourceAccountId ? { accountId: receivable.sourceAccountId } : {}),
       ...(receivable?.account?.name ? { accountName: receivable.account.name } : {}),
       ...(receivable?.sourceBudgetId ? { budgetId: receivable.sourceBudgetId } : {}),
       ...(receivable?.budget?.name ? { budgetName: receivable.budget.name } : {}),
-    };
-    return { type: "RECEIVABLE", label: receivable?.title || "Receivable", action };
-  }
+    },
+  };
+}
 
-  if (posting?.operation === "CREDIT_TRANSACTION_ACCOUNT" && posting.receivables[0]) {
-    const receivable = posting.receivables[0];
-    return {
-      type: "RECEIVABLE",
-      label: receivable.title,
-      action: {
-        type: "RECEIVABLE",
-        ...(receivable.sourceWorkspaceId ? { sourceWorkspaceId: receivable.sourceWorkspaceId } : {}),
-        ...(receivable.sourceAccountId ? { accountId: receivable.sourceAccountId } : {}),
-        ...(receivable.account?.name ? { accountName: receivable.account.name } : {}),
-        ...(receivable.sourceBudgetId ? { budgetId: receivable.sourceBudgetId } : {}),
-        ...(receivable.budget?.name ? { budgetName: receivable.budget.name } : {}),
-      },
-    };
-  }
-
-  return { type: "MARKED_ACCOUNTED", label: "Marked accounted without a linked posting" };
+function currentAccounting(
+  transaction: ReviewTransactionRow,
+  posting: ReviewPostingRow | undefined,
+): SmartReviewCurrentAccounting | null {
+  if (!transaction.isAllocated) return null;
+  return deductAccounting(transaction) ?? receivableAccounting(posting) ?? {
+    type: "MARKED_ACCOUNTED", label: "Marked accounted without a linked posting",
+  };
 }
 
 function findRelatedTransaction(transaction: ReviewTransactionRow, pool: ReviewTransactionRow[]) {
@@ -580,14 +602,237 @@ async function generateModelSuggestions(params: {
   }
 }
 
-export async function reviewCreditCardTransactions(params: {
-  workspaceId: string;
+function historicalMatch(candidates: ActionCandidate[], source: "CREDIT_HISTORY" | "LEDGER_HISTORY"): ReviewMatch | null {
+  const top = candidates[0];
+  if (!top) return null;
+  const total = candidates.reduce((sum, candidate) => sum + candidate.count, 0);
+  const plural = top.count === 1 ? "" : "s";
+  const ledgerVerb = top.count === 1 ? " was" : "s were";
+  const evidence = source === "CREDIT_HISTORY"
+    ? `${top.count} similar accounted card transaction${plural} used this accounting path.`
+    : `${top.count} similar transaction${ledgerVerb} already categorized under ${top.action.budgetName}.`;
+  return {
+    action: top.action,
+    confidence: isConsistentHistory(top.count, total) ? "STRONG_MATCH" : "NEEDS_REVIEW",
+    source, count: top.count, evidence,
+  };
+}
+
+function namedReviewMatch(named: NamedBudgetMatch | null): ReviewMatch | null {
+  if (!named) return null;
+  return {
+    action: named.action, confidence: named.strong ? "STRONG_MATCH" : "NEEDS_REVIEW", source: "BUDGET_NAME", count: 0,
+    evidence: `The merchant name closely matches the ${named.budgetName} sub-account.`,
+  };
+}
+
+function selectReviewMatch(transaction: ReviewTransactionRow, context: ReviewContext) {
+  const { rules, budgetById, crossWorkspaceByBudgetId, history, postingBySourceId, categorizedTransactions, defaultDestination, budgetChoices } = context;
+  const matchingRule = rules.find((rule) => matchesCreditTxnRule(transaction.subject, rule));
+  const matchedRuleAction = matchingRule ? ruleAction(matchingRule, budgetById, crossWorkspaceByBudgetId) : null;
+  if (matchingRule && matchedRuleAction) {
+    const selectedMatch: ReviewMatch = {
+      action: matchedRuleAction, confidence: "STRONG_MATCH", source: "RULE", count: 0,
+      evidence: `Matches the existing rule “${matchingRule.name}”.`,
+    };
+    return { matchingRule, selectedMatch };
+  }
+  const credit = historicalMatch(historyCandidates(transaction, history, postingBySourceId), "CREDIT_HISTORY");
+  const ledger = historicalMatch(categorizedTransactionCandidates(transaction, categorizedTransactions, budgetById, defaultDestination), "LEDGER_HISTORY");
+  const named = findNamedBudgetMatch(transaction, budgetChoices, defaultDestination);
+  const budget = namedReviewMatch(named);
+  const strong = [credit, ledger, budget].find((candidate) => candidate?.confidence === "STRONG_MATCH");
+  return { matchingRule, selectedMatch: strong ?? credit ?? ledger ?? budget };
+}
+
+function canApproveSuggestion(
+  transaction: ReviewTransactionRow,
+  action: SmartReviewAction | null,
+  confidence: SmartReviewSuggestion["confidence"],
+  defaultDestination: BudgetChoice | undefined,
+  hasRelatedTransaction: boolean,
+) {
+  const hasValidDeductPath = action?.type !== "DEDUCT" ||
+    (!action.destinationBudgetId && !defaultDestination) ||
+    Boolean(action.destinationBudgetId && action.destinationBudgetId !== action.budgetId);
+  return (
+    !transaction.isAllocated &&
+    transaction.amountCents > 0 &&
+    confidence === "STRONG_MATCH" &&
+    Boolean(action) &&
+    hasValidDeductPath &&
+    !hasRelatedTransaction
+  );
+}
+
+function receivableForBudget(source: BudgetChoice | undefined): SmartReviewReceivableAction {
+  if (!source) return { type: "RECEIVABLE" };
+  return { type: "RECEIVABLE", accountId: source.accountId, accountName: source.accountName, budgetId: source.id, budgetName: source.name };
+}
+
+function withDefaultDestination(action: SmartReviewAction | null, destination: BudgetChoice | undefined) {
+  if (action?.type !== "DEDUCT" || action.destinationBudgetId || !destination || destination.id === action.budgetId) return action;
+  return {
+    ...action,
+    destinationAccountId: destination.accountId, destinationAccountName: destination.accountName,
+    destinationBudgetId: destination.id, destinationBudgetName: destination.name,
+  };
+}
+
+function relatedWarning(related: NonNullable<ReturnType<typeof findRelatedTransaction>>) {
+  return related.state === "POSSIBLE_REVERSAL"
+    ? "A transaction with the opposite amount and a similar merchant may be a reversal."
+    : "A transaction on the same card has the same amount and a similar merchant.";
+}
+
+function buildDeterministicSuggestion(transaction: ReviewTransactionRow, context: ReviewContext) {
+  const { history, defaultDestination, relatedPool, fingerprintBase, generatedAt } = context;
+  const { selectedMatch, matchingRule } = selectReviewMatch(transaction, context);
+  let action = selectedMatch?.action ?? null;
+  let confidence: SmartReviewSuggestion["confidence"] = selectedMatch?.confidence ?? "NO_RELIABLE_MATCH";
+  const generatedBy: SmartReviewSuggestion["generatedBy"] = "DETERMINISTIC";
+  const supportingCount = selectedMatch?.count ?? 0;
+  const evidence = selectedMatch ? [selectedMatch.evidence] : [];
+  if (!action && hasReceivableLanguage(transaction.subject)) {
+    action = receivableForBudget(defaultDestination);
+    confidence = "NEEDS_REVIEW";
+    evidence.push("The transaction text suggests reimbursement or shared spending.");
+  }
+  const originalAction = action;
+  action = withDefaultDestination(action, defaultDestination);
+  if (action !== originalAction && selectedMatch?.source === "CREDIT_HISTORY" && !matchingRule) {
+    confidence = "NEEDS_REVIEW";
+    evidence.push("The workspace default destination would add a new credit path; review the effect before posting.");
+  }
+  const needsModel = !evidence.length;
+  if (needsModel) {
+    evidence.push("No clear category was found from your rules or past transactions.");
+  }
+
+  const related = findRelatedTransaction(transaction, relatedPool);
+  let state: SmartReviewSuggestion["state"] = "UNACCOUNTED";
+  if (related) {
+    state = related.state;
+    confidence = "NEEDS_REVIEW";
+    evidence.unshift(relatedWarning(related));
+  }
+  const ruleDraft = buildRuleDraft(transaction, action, history, Boolean(matchingRule));
+  const normalizedMerchant = displayMerchantName(transaction.subject);
+  const suggestion: SmartReviewSuggestion = {
+    transactionId: transaction.id,
+    inputFingerprint: transactionFingerprint(fingerprintBase, transaction),
+    generatedAt,
+    normalizedMerchant,
+    nameRecommendation: merchantNameRecommendation(transaction.subject, normalizedMerchant),
+    confidence,
+    state,
+    action,
+    evidence: evidence.slice(0, 4),
+    supportingCount,
+    ...(matchingRule ? { matchedRuleName: matchingRule.name } : {}),
+    ...(related ? {
+      relatedTransaction: {
+        id: related.transaction.id,
+        subject: related.transaction.subject,
+        transactionDate: related.transaction.transactionDate.toISOString(),
+        isAllocated: related.transaction.isAllocated,
+      },
+    } : {}),
+    canApprove: canApproveSuggestion(transaction, action, confidence, defaultDestination, Boolean(related)),
+    generatedBy,
+    ...(ruleDraft ? { ruleDraft } : {}),
+  };
+  return { suggestion, needsModel };
+}
+
+function modelReviewAction(key: string, budgets: Map<string, BudgetChoice>, destination: BudgetChoice | undefined): SmartReviewAction | null {
+  if (key === "RECEIVABLE") return receivableForBudget(destination);
+  if (key.startsWith("BUDGET:")) {
+    // Candidate keys are restricted to these exact budgets by the output policy.
+    return deductActionForBudget(budgets.get(key.slice(7))!, destination);
+  }
+  return null;
+}
+
+function modelReviewEvidence(key: string) {
+  if (key === "RECEIVABLE") return "The merchant text may describe shared or reimbursable spending; confirm before creating a receivable.";
+  if (key.startsWith("BUDGET:")) return "The merchant text resembles this sub account, but there is not enough approved history for a strong match.";
+  return "No reliable match was found; choose an accounting path below.";
+}
+
+function applyModelSuggestion(
+  suggestion: SmartReviewSuggestion,
+  transaction: ReviewTransactionRow,
+  modelValue: z.infer<typeof ModelSuggestionSchema>,
+  budgetById: Map<string, BudgetChoice>,
+  defaultDestination: BudgetChoice | undefined,
+) {
+  suggestion.normalizedMerchant = groundedMerchantName(transaction.subject, modelValue.normalizedMerchant);
+  suggestion.nameRecommendation = merchantNameRecommendation(transaction.subject, suggestion.normalizedMerchant);
+  suggestion.generatedBy = "AI_ASSISTED";
+  const modelAction = modelReviewAction(modelValue.candidateKey, budgetById, defaultDestination);
+  suggestion.action = modelAction;
+  suggestion.confidence = modelAction ? "NEEDS_REVIEW" : "NO_RELIABLE_MATCH";
+  suggestion.state = "UNACCOUNTED";
+  suggestion.canApprove = false;
+  suggestion.evidence = [
+    modelReviewEvidence(modelValue.candidateKey),
+    ...suggestion.evidence.filter((item) => !item.startsWith("No clear category was found")),
+  ].slice(0, 4);
+}
+
+async function addModelSuggestions(params: {
   userId: string;
-  transactionIds: string[];
-}): Promise<SmartReviewResponse> {
-  const configuration = await getAgentConfiguration("smart-review");
-  assertAgentEnabled(configuration);
-  const generatedAt = new Date().toISOString();
+  configuration: AgentConfiguration;
+  ambiguousTransactions: ReviewTransactionRow[];
+  transactions: ReviewTransactionRow[];
+  suggestions: SmartReviewSuggestion[];
+  budgetChoices: BudgetChoice[];
+  budgetById: Map<string, BudgetChoice>;
+  defaultDestination: BudgetChoice | undefined;
+}) {
+  const { userId, configuration, ambiguousTransactions, transactions, suggestions, budgetChoices, budgetById, defaultDestination } = params;
+  let providerStatus: SmartReviewResponse["providerStatus"] = "NOT_NEEDED";
+  const modelBatch = ambiguousTransactions.slice(0, MAX_MODEL_TRANSACTIONS);
+  if (modelBatch.length) {
+    const modelResult = await generateModelSuggestions({
+      userId,
+      configuration,
+      transactions: modelBatch,
+      budgetChoices: budgetChoices.filter((budget) => budget.id !== defaultDestination?.id),
+    });
+    providerStatus = modelResult.status;
+    if (modelResult.status !== "UNAVAILABLE" && ambiguousTransactions.length > MAX_MODEL_TRANSACTIONS) {
+      providerStatus = "PARTIAL";
+    }
+
+    const modelByTransactionId = new Map(modelResult.values.map((value) => [value.transactionId, value]));
+    for (const suggestion of suggestions) {
+      const modelValue = modelByTransactionId.get(suggestion.transactionId);
+      if (!modelValue || suggestion.confidence === "STRONG_MATCH" || suggestion.relatedTransaction) continue;
+      const transaction = transactions.find((item) => item.id === suggestion.transactionId)!;
+      // Output policy has already rejected IDs outside this request.
+      applyModelSuggestion(suggestion, transaction, modelValue, budgetById, defaultDestination);
+    }
+  }
+
+  return providerStatus;
+}
+
+function enforceSuggestionCapabilities(suggestion: SmartReviewSuggestion, configuration: AgentConfiguration) {
+  if (!configuration.capabilities.includes("merchant-names")) suggestion.nameRecommendation = null;
+  if (!configuration.capabilities.includes("rule-suggestions")) delete suggestion.ruleDraft;
+  if ((suggestion.action?.type === "DEDUCT" && !configuration.capabilities.includes("account-recommendations")) ||
+    (suggestion.action?.type === "RECEIVABLE" && !configuration.capabilities.includes("receivable-recommendations"))) {
+    suggestion.action = null;
+    suggestion.canApprove = false;
+    suggestion.confidence = "NO_RELIABLE_MATCH";
+    delete suggestion.ruleDraft;
+    suggestion.evidence = ["This type of accounting suggestion is disabled by your administrator."];
+  }
+}
+
+async function loadReviewData(params: ReviewRequest) {
   const [workspace, membership, transactions, accounts, history, categorizedTransactions, fingerprintBase] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id: params.workspaceId },
@@ -645,13 +890,16 @@ export async function reviewCreditCardTransactions(params: {
     throw new Error("Smart Review workspace is unavailable.");
   }
 
-  const rules = parseCreditTxnAutoRules(workspace.creditCardAutoRules).filter((rule) => rule.enabled);
+  return { workspace, transactions, accounts, history, categorizedTransactions, fingerprintBase };
+}
+
+async function accessibleRuleBudgets(rules: CreditTxnAutoRule[], userId: string) {
   const crossWorkspaceIds = [...new Set(rules.flatMap((rule) =>
     rule.action === "RECEIVABLE_OTHER_WORKSPACE" ? [rule.sourceWorkspaceId] : [],
   ))];
   const accessibleCrossMemberships = crossWorkspaceIds.length
     ? await prisma.workspaceMember.findMany({
-        where: { userId: params.userId, workspaceId: { in: crossWorkspaceIds } },
+        where: { userId, workspaceId: { in: crossWorkspaceIds } },
         select: { workspaceId: true },
       })
     : [];
@@ -673,14 +921,7 @@ export async function reviewCreditCardTransactions(params: {
       })
     : [];
 
-  const budgetChoices: BudgetChoice[] = accounts.flatMap((account) => account.budgets.map((budget) => ({
-    id: budget.id,
-    name: budget.name,
-    accountId: account.id,
-    accountName: account.name,
-    workspaceId: workspace.id,
-    workspaceName: workspace.name,
-  })));
+
   const crossBudgetChoices: BudgetChoice[] = crossAccounts.flatMap((account) => account.budgets.map((budget) => ({
     id: budget.id,
     name: budget.name,
@@ -689,19 +930,15 @@ export async function reviewCreditCardTransactions(params: {
     workspaceId: account.workspaceId,
     workspaceName: account.workspace.name,
   })));
-  const budgetById = new Map(budgetChoices.map((budget) => [budget.id, budget]));
-  const crossWorkspaceByBudgetId = new Map(crossBudgetChoices.map((budget) => [budget.id, budget]));
-  const defaultDestination = workspace.receivableDefaultBudgetId
-    ? budgetById.get(workspace.receivableDefaultBudgetId)
-    : undefined;
-  const defaultReceivableSource = defaultDestination;
+  return new Map(crossBudgetChoices.map((budget) => [budget.id, budget]));
+}
 
-  const allKnownTransactions = [...transactions, ...history];
-  const sourceIds = allKnownTransactions.map((transaction) => transaction.id);
+async function latestReviewPostings(workspaceId: string, transactions: ReviewTransactionRow[]) {
+  const sourceIds = transactions.map((transaction) => transaction.id);
   const postings = sourceIds.length
     ? await prisma.postingGroup.findMany({
         where: {
-          workspaceId: params.workspaceId,
+          workspaceId: workspaceId,
           sourceType: "CREDIT_CARD_TRANSACTION",
           sourceId: { in: sourceIds },
           status: "POSTED",
@@ -715,12 +952,17 @@ export async function reviewCreditCardTransactions(params: {
     if (posting.sourceId && !postingBySourceId.has(posting.sourceId)) postingBySourceId.set(posting.sourceId, posting);
   }
 
+  return postingBySourceId;
+}
+
+async function relatedReviewTransactions(workspaceId: string, transactions: ReviewTransactionRow[]) {
+
   const minDate = transactions.reduce((value, transaction) => Math.min(value, transaction.transactionDate.getTime()), Date.now());
   const maxDate = transactions.reduce((value, transaction) => Math.max(value, transaction.transactionDate.getTime()), 0);
   const relatedPool = transactions.length
     ? await prisma.creditCardTransaction.findMany({
         where: {
-          workspaceId: params.workspaceId,
+          workspaceId: workspaceId,
           transactionDate: {
             gte: new Date(minDate - 45 * 86_400_000),
             lte: new Date(maxDate + 45 * 86_400_000),
@@ -732,226 +974,57 @@ export async function reviewCreditCardTransactions(params: {
       })
     : [];
 
+  return relatedPool;
+}
+
+async function createReviewContext(data: Awaited<ReturnType<typeof loadReviewData>>, params: ReviewRequest, generatedAt: string): Promise<ReviewContext> {
+  const { workspace, accounts, history, transactions, categorizedTransactions, fingerprintBase } = data;
+  const rules = parseCreditTxnAutoRules(workspace.creditCardAutoRules).filter((rule) => rule.enabled);
+
+  const budgetChoices: BudgetChoice[] = accounts.flatMap((account) => account.budgets.map((budget) => ({
+    id: budget.id,
+    name: budget.name,
+    accountId: account.id,
+    accountName: account.name,
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+  })));
+  const budgetById = new Map(budgetChoices.map((budget) => [budget.id, budget]));
+  const defaultDestination = workspace.receivableDefaultBudgetId
+    ? budgetById.get(workspace.receivableDefaultBudgetId)
+    : undefined;
+  const [crossWorkspaceByBudgetId, postingBySourceId, relatedPool] = await Promise.all([
+    accessibleRuleBudgets(rules, params.userId),
+    latestReviewPostings(params.workspaceId, [...transactions, ...history]),
+    relatedReviewTransactions(params.workspaceId, transactions),
+  ]);
+  return {
+    rules, history, categorizedTransactions, budgetChoices, budgetById, crossWorkspaceByBudgetId,
+    postingBySourceId, defaultDestination, relatedPool, fingerprintBase, generatedAt,
+  };
+}
+
+export async function reviewCreditCardTransactions(params: ReviewRequest): Promise<SmartReviewResponse> {
+  const configuration = await getAgentConfiguration("smart-review");
+  assertAgentEnabled(configuration);
+  const generatedAt = new Date().toISOString();
+  const data = await loadReviewData(params);
+  const context = await createReviewContext(data, params, generatedAt);
+  const { transactions } = data;
+  const { budgetChoices, budgetById, defaultDestination } = context;
   const ambiguousTransactions: ReviewTransactionRow[] = [];
-  const suggestions = transactions.map((transaction): SmartReviewSuggestion => {
-    const matchingRule = rules.find((rule) => matchesCreditTxnRule(transaction.subject, rule));
-    const matchedRuleAction = matchingRule ? ruleAction(matchingRule, budgetById, crossWorkspaceByBudgetId) : null;
-    const candidates = historyCandidates(transaction, history, postingBySourceId);
-    const topCandidate = candidates[0];
-    const candidateTotal = candidates.reduce((sum, candidate) => sum + candidate.count, 0);
-    const consistentHistory = topCandidate && isConsistentHistory(topCandidate.count, candidateTotal);
-    const categorizedCandidates = categorizedTransactionCandidates(
-      transaction,
-      categorizedTransactions,
-      budgetById,
-      defaultDestination,
-    );
-    const topCategorizedCandidate = categorizedCandidates[0];
-    const categorizedCandidateTotal = categorizedCandidates.reduce((sum, candidate) => sum + candidate.count, 0);
-    const consistentCategorizedHistory = topCategorizedCandidate &&
-      isConsistentHistory(topCategorizedCandidate.count, categorizedCandidateTotal);
-    const namedBudgetMatch = findNamedBudgetMatch(transaction, budgetChoices, defaultDestination);
-    const selectedMatch = matchingRule && matchedRuleAction
-      ? { action: matchedRuleAction, confidence: "STRONG_MATCH" as const, source: "RULE" as const, count: 0 }
-      : consistentHistory && topCandidate
-        ? { action: topCandidate.action, confidence: "STRONG_MATCH" as const, source: "CREDIT_HISTORY" as const, count: topCandidate.count }
-        : consistentCategorizedHistory && topCategorizedCandidate
-          ? { action: topCategorizedCandidate.action, confidence: "STRONG_MATCH" as const, source: "LEDGER_HISTORY" as const, count: topCategorizedCandidate.count }
-          : namedBudgetMatch?.strong
-            ? { action: namedBudgetMatch.action, confidence: "STRONG_MATCH" as const, source: "BUDGET_NAME" as const, count: 0 }
-            : topCandidate
-              ? { action: topCandidate.action, confidence: "NEEDS_REVIEW" as const, source: "CREDIT_HISTORY" as const, count: topCandidate.count }
-              : topCategorizedCandidate
-                ? { action: topCategorizedCandidate.action, confidence: "NEEDS_REVIEW" as const, source: "LEDGER_HISTORY" as const, count: topCategorizedCandidate.count }
-                : namedBudgetMatch
-                  ? { action: namedBudgetMatch.action, confidence: "NEEDS_REVIEW" as const, source: "BUDGET_NAME" as const, count: 0 }
-                  : null;
-    let action = selectedMatch?.action ?? null;
-    let confidence: SmartReviewSuggestion["confidence"] = selectedMatch?.confidence ?? "NO_RELIABLE_MATCH";
-    const generatedBy: SmartReviewSuggestion["generatedBy"] = "DETERMINISTIC";
-    const supportingCount = selectedMatch?.count ?? 0;
-    const evidence: string[] = [];
-    if (selectedMatch?.source === "RULE" && matchingRule) {
-      evidence.push(`Matches the existing rule “${matchingRule.name}”.`);
-    } else if (selectedMatch?.source === "CREDIT_HISTORY") {
-      evidence.push(
-        `${selectedMatch.count} similar accounted card transaction${selectedMatch.count === 1 ? "" : "s"} used this accounting path.`,
-      );
-    } else if (selectedMatch?.source === "LEDGER_HISTORY") {
-      evidence.push(
-        `${selectedMatch.count} similar transaction${selectedMatch.count === 1 ? " was" : "s were"} already categorized under ${selectedMatch.action.budgetName}.`,
-      );
-    } else if (selectedMatch?.source === "BUDGET_NAME" && namedBudgetMatch) {
-      evidence.push(`The merchant name closely matches the ${namedBudgetMatch.budgetName} sub-account.`);
-    }
-    if (!action && hasReceivableLanguage(transaction.subject)) {
-      action = {
-        type: "RECEIVABLE",
-        ...(defaultReceivableSource ? {
-          accountId: defaultReceivableSource.accountId,
-          accountName: defaultReceivableSource.accountName,
-          budgetId: defaultReceivableSource.id,
-          budgetName: defaultReceivableSource.name,
-        } : {}),
-      };
-      confidence = "NEEDS_REVIEW";
-      evidence.push("The transaction text suggests reimbursement or shared spending.");
-    }
-    if (
-      action?.type === "DEDUCT" &&
-      !action.destinationBudgetId &&
-      defaultDestination &&
-      defaultDestination.id !== action.budgetId
-    ) {
-      action = {
-        ...action,
-        destinationAccountId: defaultDestination.accountId,
-        destinationAccountName: defaultDestination.accountName,
-        destinationBudgetId: defaultDestination.id,
-        destinationBudgetName: defaultDestination.name,
-      };
-      if (selectedMatch?.source === "CREDIT_HISTORY" && !matchingRule) {
-        confidence = "NEEDS_REVIEW";
-        evidence.push("The workspace default destination would add a new credit path; review the effect before posting.");
-      }
-    }
-    if (!evidence.length) {
-      evidence.push("No clear category was found from your rules or past transactions.");
-      ambiguousTransactions.push(transaction);
-    }
-
-    const related = findRelatedTransaction(transaction, relatedPool);
-    let state: SmartReviewSuggestion["state"] = "UNACCOUNTED";
-    if (related) {
-      state = related.state;
-      confidence = "NEEDS_REVIEW";
-      evidence.unshift(
-        related.state === "POSSIBLE_REVERSAL"
-          ? "A transaction with the opposite amount and a similar merchant may be a reversal."
-          : "A transaction on the same card has the same amount and a similar merchant.",
-      );
-    }
-    const hasValidDeductPath = action?.type !== "DEDUCT" ||
-      (!action.destinationBudgetId && !defaultDestination) ||
-      Boolean(action.destinationBudgetId && action.destinationBudgetId !== action.budgetId);
-    const canApprove =
-      !transaction.isAllocated &&
-      transaction.amountCents > 0 &&
-      confidence === "STRONG_MATCH" &&
-      Boolean(action) &&
-      hasValidDeductPath &&
-      !related;
-    const ruleDraft = buildRuleDraft(transaction, action, history, Boolean(matchingRule));
-    const normalizedMerchant = displayMerchantName(transaction.subject);
-    return {
-      transactionId: transaction.id,
-      inputFingerprint: transactionFingerprint(fingerprintBase, transaction),
-      generatedAt,
-      normalizedMerchant,
-      nameRecommendation: merchantNameRecommendation(transaction.subject, normalizedMerchant),
-      confidence,
-      state,
-      action,
-      evidence: evidence.slice(0, 4),
-      supportingCount,
-      ...(matchingRule ? { matchedRuleName: matchingRule.name } : {}),
-      ...(related ? {
-        relatedTransaction: {
-          id: related.transaction.id,
-          subject: related.transaction.subject,
-          transactionDate: related.transaction.transactionDate.toISOString(),
-          isAllocated: related.transaction.isAllocated,
-        },
-      } : {}),
-      canApprove,
-      generatedBy,
-      ...(ruleDraft ? { ruleDraft } : {}),
-    };
-  });
-
-  let providerStatus: SmartReviewResponse["providerStatus"] = "NOT_NEEDED";
-  const modelBatch = ambiguousTransactions.slice(0, MAX_MODEL_TRANSACTIONS);
-  if (modelBatch.length) {
-    const modelResult = await generateModelSuggestions({
-      userId: params.userId,
-      configuration,
-      transactions: modelBatch,
-      budgetChoices: budgetChoices.filter((budget) => budget.id !== defaultDestination?.id),
-    });
-    providerStatus = modelResult.status;
-    if (modelResult.status !== "UNAVAILABLE" && ambiguousTransactions.length > MAX_MODEL_TRANSACTIONS) {
-      providerStatus = "PARTIAL";
-    }
-
-    const modelByTransactionId = new Map(modelResult.values.map((value) => [value.transactionId, value]));
-    for (const suggestion of suggestions) {
-      const modelValue = modelByTransactionId.get(suggestion.transactionId);
-      if (!modelValue || suggestion.confidence === "STRONG_MATCH" || suggestion.relatedTransaction) continue;
-      const transaction = transactions.find((item) => item.id === suggestion.transactionId);
-      if (!transaction) continue;
-      suggestion.normalizedMerchant = groundedMerchantName(transaction.subject, modelValue.normalizedMerchant);
-      suggestion.nameRecommendation = merchantNameRecommendation(transaction.subject, suggestion.normalizedMerchant);
-      suggestion.generatedBy = "AI_ASSISTED";
-      let modelAction: SmartReviewAction | null = suggestion.action;
-      if (modelValue.candidateKey.startsWith("BUDGET:")) {
-        const budget = budgetById.get(modelValue.candidateKey.slice(7));
-        if (budget) {
-          modelAction = {
-            type: "DEDUCT",
-            accountId: budget.accountId,
-            accountName: budget.accountName,
-            budgetId: budget.id,
-            budgetName: budget.name,
-            ...(defaultDestination && defaultDestination.id !== budget.id ? {
-              destinationAccountId: defaultDestination.accountId,
-              destinationAccountName: defaultDestination.accountName,
-              destinationBudgetId: defaultDestination.id,
-              destinationBudgetName: defaultDestination.name,
-            } : {}),
-          };
-        }
-      } else if (modelValue.candidateKey === "RECEIVABLE") {
-        modelAction = {
-          type: "RECEIVABLE",
-          ...(defaultReceivableSource ? {
-            accountId: defaultReceivableSource.accountId,
-            accountName: defaultReceivableSource.accountName,
-            budgetId: defaultReceivableSource.id,
-            budgetName: defaultReceivableSource.name,
-          } : {}),
-        };
-      } else if (modelValue.candidateKey === "NO_MATCH") {
-        modelAction = null;
-      }
-      suggestion.action = modelAction;
-      suggestion.confidence = modelAction ? "NEEDS_REVIEW" : "NO_RELIABLE_MATCH";
-      suggestion.state = "UNACCOUNTED";
-      suggestion.canApprove = false;
-      suggestion.evidence = [
-        modelValue.candidateKey === "RECEIVABLE"
-          ? "The merchant text may describe shared or reimbursable spending; confirm before creating a receivable."
-          : modelValue.candidateKey.startsWith("BUDGET:")
-            ? "The merchant text resembles this sub account, but there is not enough approved history for a strong match."
-            : "No reliable match was found; choose an accounting path below.",
-        ...suggestion.evidence.filter((item) => !item.startsWith("No clear category was found")),
-      ].slice(0, 4);
-    }
+  const suggestions: SmartReviewSuggestion[] = [];
+  for (const transaction of transactions) {
+    const result = buildDeterministicSuggestion(transaction, context);
+    suggestions.push(result.suggestion);
+    if (result.needsModel) ambiguousTransactions.push(transaction);
   }
 
-  for (const suggestion of suggestions) {
-    if (!configuration.capabilities.includes("merchant-names")) suggestion.nameRecommendation = null;
-    if (!configuration.capabilities.includes("rule-suggestions")) delete suggestion.ruleDraft;
-    if ((suggestion.action?.type === "DEDUCT" && !configuration.capabilities.includes("account-recommendations")) ||
-      (suggestion.action?.type === "RECEIVABLE" && !configuration.capabilities.includes("receivable-recommendations"))) {
-      suggestion.action = null;
-      suggestion.canApprove = false;
-      suggestion.confidence = "NO_RELIABLE_MATCH";
-      delete suggestion.ruleDraft;
-      suggestion.evidence = ["This type of accounting suggestion is disabled by your administrator."];
-    }
-  }
+  const providerStatus = await addModelSuggestions({ userId: params.userId, configuration, ambiguousTransactions, transactions, suggestions, budgetChoices, budgetById, defaultDestination });
+
+  for (const suggestion of suggestions) enforceSuggestionCapabilities(suggestion, configuration);
   const order = new Map(params.transactionIds.map((id, index) => [id, index]));
-  suggestions.sort((left, right) => (order.get(left.transactionId) ?? 0) - (order.get(right.transactionId) ?? 0));
+  suggestions.sort((left, right) => order.get(left.transactionId)! - order.get(right.transactionId)!);
   return {
     suggestions,
     providerStatus,

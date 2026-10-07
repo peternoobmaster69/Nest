@@ -162,7 +162,15 @@ for (const filename of selectedSources) {
   await addEntry(report, entry, includesSource);
 }
 const results = await report.generate();
-const reportedFiles = new Set(results.files.map((file) => path.resolve(cwd, file.sourcePath)));
 const expectedFiles = await scope.glob(cwd);
+// Istanbul displays filenames relative to their shared parent directory.
+// A focused report may share a deeper parent than the project root.
+let reportBase = path.resolve(cwd, path.dirname(expectedFiles[0] ?? "."));
+for (const filename of expectedFiles) {
+  while (path.relative(reportBase, path.resolve(cwd, filename)).startsWith(`..${path.sep}`)) {
+    reportBase = path.dirname(reportBase);
+  }
+}
+const reportedFiles = new Set(results.files.map((file) => path.resolve(reportBase, file.sourcePath)));
 const missingFiles = expectedFiles.filter((file) => !reportedFiles.has(path.resolve(cwd, file)));
 if (missingFiles.length) throw new Error(`Coverage omitted production sources: ${missingFiles.join(", ")}`);
