@@ -24,6 +24,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { TransactionOperationControl } from "@/components/transactions/transaction-operation-control";
 import { TransactionMonthList } from "@/components/transactions/transaction-month-list";
 import { TransactionCorrectionDialog } from "@/components/transactions/transaction-correction-dialog";
 import type { TransactionLineageResponse } from "@/components/transactions/transaction-lineage-panel";
@@ -2667,7 +2668,7 @@ export function TransactionsPage() {
                 <div className="txn-modal-form">
                   <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                     Bank Account
-                    {bankAccounts.data && bankAccounts.data.length === 1 ? (
+                    {bankAccounts.data?.length === 1 ? (
                       <div className="crud-row" style={{ marginBottom: 0 }}>
                         <span>{bankAccounts.data[0].name}</span>
                       </div>
@@ -2731,25 +2732,7 @@ export function TransactionsPage() {
                       onValueChange={handleAmountChange}
                     />
                   </label>
-                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Deduct or Add
-                    <div className="segmented-toggle" role="tablist" aria-label="Transaction operation">
-                      <Button
-                        type="button"
-                        className={`segmented-toggle-btn segmented-toggle-btn-deduct ${operation === "DEDUCT" ? "is-active" : ""}`}
-                        onClick={() => setOperation("DEDUCT")}
-                      >
-                        Deduct
-                      </Button>
-                      <Button
-                        type="button"
-                        className={`segmented-toggle-btn segmented-toggle-btn-add ${operation === "ADD" ? "is-active" : ""}`}
-                        onClick={() => setOperation("ADD")}
-                      >
-                        Add
-                      </Button>
-                    </div>
-                  </label>
+                  <TransactionOperationControl operation={operation} onChange={setOperation} />
                   <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                     Title
                     <Input className="input" placeholder="Title" value={subject} onChange={(e) => setSubject(e.target.value)} />

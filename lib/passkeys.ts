@@ -77,7 +77,7 @@ export async function consumePasskeyLoginTicket(ticket: string) {
       where: { challenge: challengeHash },
       include: { user: true },
     });
-    if (!record || record.purpose !== "LOGIN_TICKET" || !record.user || record.expiresAt <= new Date()) {
+    if (record?.purpose !== "LOGIN_TICKET" || !record.user || record.expiresAt <= new Date()) {
       return null;
     }
     const claimed = await tx.webAuthnChallenge.deleteMany({ where: { id: record.id } });

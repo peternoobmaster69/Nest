@@ -334,7 +334,7 @@ async function readCachedNews(cacheKey: string, now: Date) {
   const cached = await prisma.serpApiNewsCache.findUnique({ where: { cacheKey } });
   if (!cached || cached.expiresAt <= now) return null;
   const parsed = parsePayload(JSON.parse(cached.payloadJson) as unknown);
-  if (!parsed || !parsed.articles.length) {
+  if (!parsed?.articles.length) {
     await prisma.serpApiNewsCache.delete({ where: { cacheKey } }).catch(() => undefined);
     return null;
   }
@@ -345,7 +345,7 @@ async function readCachedWeb(cacheKey: string, now: Date) {
   const cached = await prisma.serpApiNewsCache.findUnique({ where: { cacheKey } });
   if (!cached || cached.expiresAt <= now) return null;
   const parsed = parseSerpApiWebPayload(JSON.parse(cached.payloadJson) as unknown);
-  if (!parsed || !parsed.sources.length) {
+  if (!parsed?.sources.length) {
     await prisma.serpApiNewsCache.delete({ where: { cacheKey } }).catch(() => undefined);
     return null;
   }

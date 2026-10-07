@@ -98,7 +98,7 @@ export function calculateAnnualInvestmentContributions<T extends InvestedAmountE
     let previousInvestedCents = 0;
 
     for (const [year, yearEntries] of entriesByYear) {
-      const endingInvestedCents = yearEntries[yearEntries.length - 1].investedCents;
+      const endingInvestedCents = yearEntries.at(-1)!.investedCents;
       const contributedCents = endingInvestedCents - previousInvestedCents;
       contributionsByYear.set(year, (contributionsByYear.get(year) ?? 0) + contributedCents);
       previousInvestedCents = endingInvestedCents;
@@ -133,7 +133,7 @@ export function buildInvestmentCashFlows<T extends ValuedInvestmentEntry>(
     previousInvestedCents = entry.investedCents;
   }
 
-  const latest = sorted[sorted.length - 1];
+  const latest = sorted.at(-1)!;
   if (latest.currentValueCents !== 0) {
     flows.push({ date: new Date(latest.date), amountCents: latest.currentValueCents });
   }
@@ -152,7 +152,7 @@ export function calculateAnnualizedReturn(cashFlows: readonly InvestmentCashFlow
   if (sorted.length < 2) return null;
 
   const startMs = sorted[0].date.getTime();
-  const endMs = sorted[sorted.length - 1].date.getTime();
+  const endMs = sorted.at(-1)!.date.getTime();
   const spanYears = (endMs - startMs) / MS_PER_YEAR;
   if (spanYears < MIN_ANNUALIZATION_SPAN_YEARS) return null;
 

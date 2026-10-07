@@ -451,7 +451,7 @@ function buildInflationFactors(periods: readonly ProjectionPeriod[], inflationBp
   const factors: InflationFactor[] = [{ scalePower: BIGINT_ONE, inflationIndex: BIGINT_ONE }];
   const scale = BigInt(RETIREMENT_BASIS_POINTS_SCALE);
   for (const period of periods) {
-    const previous = factors[factors.length - 1];
+    const previous = factors.at(-1)!;
     const periodInflationBps = prorateAnnualRateBps(inflationBps, period.annualFractionBps);
     factors.push({
       scalePower: previous.scalePower * scale,
@@ -589,7 +589,7 @@ function projectScenario(options: {
 
   const finalRealValue = valueInTodaysCents(
     nominalValue,
-    options.inflationFactors[options.inflationFactors.length - 1],
+    options.inflationFactors.at(-1)!,
   );
   return {
     scenario: options.scenario,
@@ -672,7 +672,7 @@ export function projectRetirement(input: RetirementProjectionInput): RetirementP
     annualSpending * BigInt(RETIREMENT_BASIS_POINTS_SCALE),
     BigInt(withdrawalRateBps),
   );
-  const finalInflationFactor = inflationFactors[inflationFactors.length - 1];
+  const finalInflationFactor = inflationFactors.at(-1)!;
   const nominalTargetFund = valueAtFuturePrices(realTargetFund, finalInflationFactor);
   const nominalMonthlySpending = valueAtFuturePrices(
     BigInt(targetMonthlySpending),

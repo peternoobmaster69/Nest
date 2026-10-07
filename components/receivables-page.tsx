@@ -781,10 +781,10 @@ export function ReceivablesPage() {
                         ))}
                       </Select>
                     </label>
-                    <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    <label htmlFor="receivable-deduction-subaccount" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                       Deduction Sub Account
                       <div className={`recv-field-shell ${isDeductionSubaccountsLoading ? "is-loading" : ""}`}>
-                        <Select
+                        <Select id="receivable-deduction-subaccount"
                           className="input"
                           value={formDeductBudgetId}
                           onChange={(e) => {

@@ -45,10 +45,10 @@ async function validateRuleTargets(workspaceId: string, rules: z.infer<typeof Cr
 
       const sourceBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.sourceBudgetId);
       const destinationBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.destinationBudgetId);
-      if (!sourceBudget || sourceBudget.account.kind !== "BANK" || !sourceBudget.account.isActive) {
+      if (sourceBudget?.account.kind !== "BANK" || !sourceBudget.account.isActive) {
         throw new Error(`Rule "${rule.name}" has an invalid source sub account.`);
       }
-      if (!destinationBudget || destinationBudget.account.kind !== "BANK" || !destinationBudget.account.isActive) {
+      if (destinationBudget?.account.kind !== "BANK" || !destinationBudget.account.isActive) {
         throw new Error(`Rule "${rule.name}" has an invalid destination sub account.`);
       }
       continue;

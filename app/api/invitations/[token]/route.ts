@@ -36,7 +36,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ token: str
         invitedBy: { select: { name: true, email: true } },
       },
     });
-    if (!invite || invite.invitedEmail !== user.email) {
+    if (invite?.invitedEmail !== user.email) {
       return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
     }
     const status =
@@ -63,7 +63,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       where: { tokenHash },
       select: { id: true, workspaceId: true, invitedEmail: true, invitedById: true, role: true },
     });
-    if (!invite || invite.invitedEmail !== user.email) {
+    if (invite?.invitedEmail !== user.email) {
       return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
     }
 

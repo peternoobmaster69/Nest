@@ -56,7 +56,7 @@ beforeEach(() => {
     const fixture = fixtures.get(url.pathname);
     return typeof fixture === "function" ? fixture() : Response.json(fixture);
   };
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false, gcTime: 0 } } });
 });
 afterEach(() => {
   ui.cleanup();

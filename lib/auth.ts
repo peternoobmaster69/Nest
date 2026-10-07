@@ -134,7 +134,7 @@ export const authOptions: NextAuthOptions = {
   providers,
   callbacks: {
     async signIn({ account, profile }) {
-      if (!account || account.type !== "oauth") return true;
+      if (account?.type !== "oauth") return true;
       const claims = (profile ?? {}) as Record<string, unknown>;
       return (
         claims.email_verified === true ||
@@ -165,8 +165,7 @@ export const authOptions: NextAuthOptions = {
       if (
         !storedUser ||
         storedUser.sessionVersion !== token.sessionVersion ||
-        !storedSession ||
-        storedSession.userId !== token.id
+        storedSession?.userId !== token.id
       ) {
         token.revoked = true;
         token.sessionLimitRequired = false;

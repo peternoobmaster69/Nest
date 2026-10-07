@@ -180,7 +180,7 @@ function getCalculatorTotal(value: string) {
   if (lines.length === 0) return null;
 
   try {
-    const total = parseCalculatorExpression(lines[lines.length - 1]);
+    const total = parseCalculatorExpression(lines.at(-1)!);
     return Number.isFinite(total) ? total : null;
   } catch {
     return null;

@@ -58,7 +58,7 @@ export function toListEnvelope<T>(
     items,
     pageInfo: {
       hasMore,
-      nextCursor: hasMore && items.length ? encodeCursor(cursorFor(items[items.length - 1])) : null,
+      nextCursor: hasMore && items.length ? encodeCursor(cursorFor(items.at(-1)!)) : null,
       limit,
     },
   };

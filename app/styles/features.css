@@ -12084,6 +12084,13 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   padding: 0 20px 20px;
 }
 
+.cc-theme-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .cc-theme-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12106,6 +12113,19 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 .cc-theme-chip.on {
   border-color: var(--brand-500);
   box-shadow: 0 0 0 1px var(--brand-500) inset;
+}
+
+.cc-theme-select {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 .cc-theme-swatch {

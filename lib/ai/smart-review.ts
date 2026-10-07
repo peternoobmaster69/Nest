@@ -349,7 +349,7 @@ function ruleAction(
     };
   }
   const source = crossWorkspaceByBudgetId.get(rule.sourceBudgetId);
-  if (!source || source.workspaceId !== rule.sourceWorkspaceId || source.accountId !== rule.sourceAccountId) return null;
+  if (source?.workspaceId !== rule.sourceWorkspaceId || source.accountId !== rule.sourceAccountId) return null;
   return {
     type: "RECEIVABLE",
     sourceWorkspaceId: source.workspaceId,

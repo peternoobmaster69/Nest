@@ -192,7 +192,7 @@ export function solveCioRetirementLevers(assumptions: CioRetirementProjectionAss
   for (let years = 1; years <= MAX_LEVER_YEARS; years += 1) {
     const date = addUtcYears(assumptions.asOfDate, years);
     const outcome = baseOutcome(assumptions, { targetRetirementDate: date });
-    if (outcome && outcome.realTargetGapCents === 0) {
+    if (outcome?.realTargetGapCents === 0) {
       earliestFundedDate = date;
       break;
     }

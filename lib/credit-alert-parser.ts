@@ -32,7 +32,7 @@ function parseAmountToCents(value: string) {
 }
 
 function parseDateAtUtcMidnight(rawDate: string) {
-  const match = rawDate.match(/(\d{2})\/(\d{2})\/(\d{2})/);
+  const match = /(\d{2})\/(\d{2})\/(\d{2})/.exec(rawDate);
   if (!match) return undefined;
   const [, ddRaw, mmRaw, yyRaw] = match;
   const year = 2000 + Number(yyRaw);
@@ -42,7 +42,7 @@ function parseDateAtUtcMidnight(rawDate: string) {
 }
 
 function parseUobReversalDate(rawDate: string) {
-  const match = rawDate.match(/(\d{2})\s+([A-Z]{3})\s+(\d{2}),\s*(\d{1,2}):(\d{2})(AM|PM)/i);
+  const match = /(\d{2})\s+([A-Z]{3})\s+(\d{2}),\s*(\d{1,2}):(\d{2})(AM|PM)/i.exec(rawDate);
   if (!match) return undefined;
 
   const [, dayRaw, monRaw, yyRaw, hhRaw, mmRaw, meridiemRaw] = match;
@@ -59,8 +59,8 @@ function parseUobReversalDate(rawDate: string) {
 }
 
 function parseOcbcDateTime(rawTime: string, rawDate: string) {
-  const timeMatch = rawTime.match(/(\d{2}):(\d{2})/);
-  const dateMatch = rawDate.match(/(\d{2})-([A-Z]{3})-(\d{2})/i);
+  const timeMatch = /(\d{2}):(\d{2})/.exec(rawTime);
+  const dateMatch = /(\d{2})-([A-Z]{3})-(\d{2})/i.exec(rawDate);
   if (!timeMatch || !dateMatch) return undefined;
 
   const [, hhRaw, mmRaw] = timeMatch;
@@ -76,8 +76,8 @@ function parseOcbcDateTime(rawTime: string, rawDate: string) {
 }
 
 function parseDateAndTime(rawDate: string, rawTime: string) {
-  const dateMatch = rawDate.match(/(\d{2})\/(\d{2})\/(\d{2})/);
-  const timeMatch = rawTime.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+  const dateMatch = /(\d{2})\/(\d{2})\/(\d{2})/.exec(rawDate);
+  const timeMatch = /(\d{2}):(\d{2})(?::(\d{2}))?/.exec(rawTime);
   if (!dateMatch || !timeMatch) return undefined;
 
   const [, ddRaw, mmRaw, yyRaw] = dateMatch;
@@ -92,7 +92,7 @@ function parseDateAndTime(rawDate: string, rawTime: string) {
 }
 
 function parseDateTime(rawBody: string) {
-  const dtMatch = rawBody.match(/Date\s*&\s*Time:\s*(\d{2})\s+([A-Z]{3})\s+(\d{2}):(\d{2})/i);
+  const dtMatch = /Date\s*&\s*Time:\s*(\d{2})\s+([A-Z]{3})\s+(\d{2}):(\d{2})/i.exec(rawBody);
   if (!dtMatch) return undefined;
 
   const [, dayRaw, monRaw, hhRaw, mmRaw] = dtMatch;
@@ -103,7 +103,7 @@ function parseDateTime(rawBody: string) {
   if (monthIndex === undefined) return undefined;
 
   // Prefer explicit request date year, fallback to current year.
-  const datedMatch = rawBody.match(/request dated\s*(\d{2})\/(\d{2})\/(\d{2})/i);
+  const datedMatch = /request dated\s*(\d{2})\/(\d{2})\/(\d{2})/i.exec(rawBody);
   const year = datedMatch ? 2000 + Number(datedMatch[3]) : new Date().getUTCFullYear();
 
   // SGT timestamp in source email.
@@ -112,12 +112,12 @@ function parseDateTime(rawBody: string) {
 }
 
 function parseDbsTransactionAlert(rawBody: string): ParsedAlert {
-  const transactionRef = rawBody.match(/Transaction Ref:\s*([A-Z0-9]+)/i)?.[1];
-  const amountMatch = rawBody.match(/Amount:\s*([A-Z]{3})\s*([0-9,]+\.[0-9]{2})/i);
-  const fromLine = rawBody.match(/From:\s*([^\n\r]+)/i)?.[1] ?? "";
-  const bankName = fromLine.match(/^([A-Z/ ]+?)\s+card/i)?.[1]?.trim();
-  const cardLast4 = rawBody.match(/card ending\s*(\d{4})/i)?.[1];
-  const merchant = rawBody.match(/To:\s*([^\n\r]+)/i)?.[1]?.trim();
+  const transactionRef = /Transaction Ref:\s*([A-Z0-9]+)/i.exec(rawBody)?.[1];
+  const amountMatch = /Amount:\s*([A-Z]{3})\s*([0-9,]+\.[0-9]{2})/i.exec(rawBody);
+  const fromLine = /From:\s*([^\n\r]+)/i.exec(rawBody)?.[1] ?? "";
+  const bankName = /^([A-Z/ ]+?)\s+card/i.exec(fromLine)?.[1]?.trim();
+  const cardLast4 = /card ending\s*(\d{4})/i.exec(rawBody)?.[1];
+  const merchant = /To:\s*([^\n\r]+)/i.exec(rawBody)?.[1]?.trim();
   const currency = amountMatch?.[1]?.toUpperCase();
   const amountCents = amountMatch?.[2] ? parseAmountToCents(amountMatch[2]) : undefined;
   const transactionDate = parseDateTime(rawBody);
@@ -135,9 +135,7 @@ function parseDbsTransactionAlert(rawBody: string): ParsedAlert {
 }
 
 function parseUobTransactionAlert(rawBody: string): ParsedAlert {
-  const transitMatch = rawBody.match(
-    /Your accumulated transit transactions of\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+has been billed to your UOB card ending\s*(\d{4})\s+on\s+(\d{2}\/\d{2}\/\d{2})/i,
-  );
+  const transitMatch = /Your accumulated transit transactions of\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+has been billed to your UOB card ending\s*(\d{4})\s+on\s+(\d{2}\/\d{2}\/\d{2})/i.exec(rawBody);
   if (transitMatch) {
     const [, currency, amountRaw, cardLast4, dateRaw] = transitMatch;
     return {
@@ -151,9 +149,7 @@ function parseUobTransactionAlert(rawBody: string): ParsedAlert {
     };
   }
 
-  const reversalMatch = rawBody.match(
-    /A transaction of\s+([0-9,]+\.[0-9]{2})\s+([A-Z]{3})\s+made with your UOB card ending\s*(\d{4})\s+on\s+(\d{2}\s+[A-Z]{3}\s+\d{2},\s*\d{1,2}:\d{2}(?:AM|PM))\s+at\s+(.+?)\s+has been reversed\./i,
-  );
+  const reversalMatch = /A transaction of\s+([0-9,]+\.[0-9]{2})\s+([A-Z]{3})\s+made with your UOB card ending\s*(\d{4})\s+on\s+(\d{2}\s+[A-Z]{3}\s+\d{2},\s*\d{1,2}:\d{2}(?:AM|PM))\s+at\s+(.+?)\s+has been reversed\./i.exec(rawBody);
   if (reversalMatch) {
     const [, amountRaw, currency, cardLast4, dateRaw, merchant] = reversalMatch;
     return {
@@ -167,9 +163,7 @@ function parseUobTransactionAlert(rawBody: string): ParsedAlert {
     };
   }
 
-  const purchaseMatch = rawBody.match(
-    /A transaction of\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+was made with your UOB Card ending\s*(\d{4})\s+on\s+(\d{2}\/\d{2}\/\d{2})\s+at\s+(.+?)(?:\.\s+If unauthorised|$)/i,
-  );
+  const purchaseMatch = /A transaction of\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+was made with your UOB Card ending\s*(\d{4})\s+on\s+(\d{2}\/\d{2}\/\d{2})\s+at\s+(.+?)(?:\.\s+If unauthorised|$)/i.exec(rawBody);
   if (purchaseMatch) {
     const [, currency, amountRaw, cardLast4, dateRaw, merchant] = purchaseMatch;
     return {
@@ -189,9 +183,7 @@ function parseUobTransactionAlert(rawBody: string): ParsedAlert {
 }
 
 function parseOcbcTransactionAlert(rawBody: string): ParsedAlert {
-  const match = rawBody.match(
-    /We wish to inform you that\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+was charged at\s+(\d{2}:\d{2})\s+on\s+(\d{2}-[A-Z]{3}-\d{2})\s+to your card\s+\(-(\d{4})\)\s+at\s+(.+?)(?:\.|$)/i,
-  );
+  const match = /We wish to inform you that\s+([A-Z]{3})\s*([0-9,]+\.[0-9]{2})\s+was charged at\s+(\d{2}:\d{2})\s+on\s+(\d{2}-[A-Z]{3}-\d{2})\s+to your card\s+\(-(\d{4})\)\s+at\s+(.+?)(?:\.|$)/i.exec(rawBody);
 
   if (!match) {
     return {
@@ -212,11 +204,11 @@ function parseOcbcTransactionAlert(rawBody: string): ParsedAlert {
 }
 
 function parseCitiTransactionAlert(rawBody: string): ParsedAlert {
-  const cardLast4 = rawBody.match(/Account\s+Number\s*:\s*X{4}-X{4}-X{4}-(\d{4})/i)?.[1];
-  const dateRaw = rawBody.match(/Transaction\s+date\s*:\s*(\d{2}\/\d{2}\/\d{2})/i)?.[1];
-  const timeRaw = rawBody.match(/Transaction\s+time\s*:\s*(\d{2}:\d{2}:\d{2})/i)?.[1];
-  const amountMatch = rawBody.match(/Transaction\s+amount\s*:\s*([A-Z]{3})\s*([0-9,]+\.[0-9]{2})/i);
-  const merchant = rawBody.match(/Transaction\s+details\s*:\s*([^\n\r]+)/i)?.[1]?.trim();
+  const cardLast4 = /Account\s+Number\s*:\s*X{4}-X{4}-X{4}-(\d{4})/i.exec(rawBody)?.[1];
+  const dateRaw = /Transaction\s+date\s*:\s*(\d{2}\/\d{2}\/\d{2})/i.exec(rawBody)?.[1];
+  const timeRaw = /Transaction\s+time\s*:\s*(\d{2}:\d{2}:\d{2})/i.exec(rawBody)?.[1];
+  const amountMatch = /Transaction\s+amount\s*:\s*([A-Z]{3})\s*([0-9,]+\.[0-9]{2})/i.exec(rawBody);
+  const merchant = /Transaction\s+details\s*:\s*([^\n\r]+)/i.exec(rawBody)?.[1]?.trim();
 
   return {
     bankName: "Citibank",

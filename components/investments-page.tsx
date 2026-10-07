@@ -107,7 +107,7 @@ function buildAreaPath(points: Array<{ x: number; y: number }>, baselineY: numbe
   if (!points.length) return "";
   const linePath = buildLinePath(points);
   const first = points[0];
-  const last = points[points.length - 1];
+  const last = points.at(-1)!;
   return `${linePath} L ${last.x} ${baselineY} L ${first.x} ${baselineY} Z`;
 }
 
@@ -628,7 +628,7 @@ export function InvestmentsPage() {
     }
 
     const minTime = chartRows[0].date.getTime();
-    const maxTime = chartRows[chartRows.length - 1].date.getTime();
+    const maxTime = chartRows.at(-1)!.date.getTime();
     const rawLow = Math.min(...chartRows.map((r) => Math.min(r.invested, r.current)));
     const rawHigh = Math.max(...chartRows.map((r) => Math.max(r.invested, r.current)));
     const padding = Math.max((rawHigh - rawLow) * 0.14, rawHigh * 0.06, 1000);
@@ -653,7 +653,7 @@ export function InvestmentsPage() {
     const currentPath = buildLinePath(points.map((point) => ({ x: point.x, y: point.yCurrent })));
     const baselineY = height - pad;
     const currentAreaPath = buildAreaPath(points.map((point) => ({ x: point.x, y: point.yCurrent })), baselineY);
-    const latestPoint = points[points.length - 1];
+    const latestPoint = points.at(-1)!;
     const currentTone = latestPoint.current >= latestPoint.invested ? "gain" : "loss";
     const gridLines = Array.from({ length: 4 }, (_, index) => {
       const ratio = index / 3;

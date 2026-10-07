@@ -70,7 +70,7 @@ beforeEach(() => {
     assert.equal(method, "GET", "mutations need an explicit response fixture");
     return Response.json(fixture);
   };
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false, gcTime: 0 } } });
 });
 afterEach(() => {
   ui.cleanup();

@@ -148,7 +148,7 @@ export async function GET(request: Request) {
       page,
       limit,
       hasMore,
-      nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+      nextCursor: hasMore ? pageItems.at(-1)?.id ?? null : null,
       summary: {
         totalAmountCents: summary._sum.amountCents ?? 0,
         unaccountedAmountCents: unaccountedSummary._sum.amountCents ?? 0,
@@ -193,7 +193,7 @@ export async function POST(request: Request) {
       select: { id: true, workspaceId: true, statementDay: true, paymentDueDay: true },
     });
 
-    if (!card || card.workspaceId !== workspaceId) {
+    if (card?.workspaceId !== workspaceId) {
       return NextResponse.json({ error: "Credit card not found" }, { status: 404 });
     }
 

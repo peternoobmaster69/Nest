@@ -136,7 +136,7 @@ export async function POST(request: Request) {
         where: { id: parsed.data.accountId },
         select: { id: true, workspaceId: true, kind: true, isActive: true },
       });
-      if (!account || account.kind !== "BANK" || !account.isActive) {
+      if (account?.kind !== "BANK" || !account.isActive) {
         return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
       }
       await requireWorkspaceAccess(account.workspaceId, "EDITOR");

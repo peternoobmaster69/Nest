@@ -159,7 +159,7 @@ export async function enqueueBackgroundJob(params: {
 
 async function expireAbandonedJob(jobId: string, now: Date) {
   const job = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
-  if (!job || job.status !== "RUNNING" || !job.leaseExpiresAt || job.leaseExpiresAt > now) return;
+  if (job?.status !== "RUNNING" || !job.leaseExpiresAt || job.leaseExpiresAt > now) return;
 
   if (job.cancelRequestedAt) {
     await prisma.backgroundJob.updateMany({

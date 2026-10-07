@@ -7,7 +7,7 @@ const MASSIVE_CACHE_TTL_MS = 60 * 60 * 1_000;
 const MASSIVE_MAX_HISTORY_DAYS = 731;
 const MASSIVE_DOCS_URL = "https://massive.com/docs/rest/stocks/aggregates/custom-bars";
 
-const MassiveBarSchema = z.object({
+const MassiveBarSchema = z.looseObject({
   c: z.number(),
   h: z.number(),
   l: z.number(),
@@ -17,9 +17,9 @@ const MassiveBarSchema = z.object({
   t: z.number(),
   v: z.number(),
   vw: z.number().optional(),
-}).passthrough();
+});
 
-const MassiveAggregateResponseSchema = z.object({
+const MassiveAggregateResponseSchema = z.looseObject({
   adjusted: z.boolean().optional(),
   queryCount: z.number().optional(),
   request_id: z.string().optional(),
@@ -27,7 +27,7 @@ const MassiveAggregateResponseSchema = z.object({
   resultsCount: z.number().optional(),
   status: z.string(),
   ticker: z.string().optional(),
-}).passthrough();
+});
 
 type MassiveDailyBar = z.infer<typeof MassiveBarSchema>;
 

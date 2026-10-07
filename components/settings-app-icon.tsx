@@ -16,7 +16,7 @@ const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 type Platform = "ios" | "installed" | "browser";
 
 function readCookie(): AppIconId {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${APP_ICON_COOKIE}=([^;]*)`));
+  const match = new RegExp(`(?:^|; )${APP_ICON_COOKIE}=([^;]*)`).exec(document.cookie);
   return parseAppIcon(match?.[1]);
 }
 

@@ -48,7 +48,7 @@ export function SettingsPrivacyControls({ view = "privacy" }: Readonly<{ view?: 
       if (!response.ok) throw new Error(await responseError(response, "Your data could not be exported."));
       const blob = await response.blob();
       const disposition = response.headers.get("content-disposition") ?? "";
-      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? "nest-account-export.json";
+      const fileName = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "nest-account-export.json";
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

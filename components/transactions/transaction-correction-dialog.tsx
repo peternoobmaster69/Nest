@@ -8,6 +8,7 @@ import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { TransactionOperationControl } from "@/components/transactions/transaction-operation-control";
 import {
   TransactionLineagePanel,
   type TransactionLineageResponse,
@@ -98,25 +99,7 @@ export function TransactionCorrectionDialog({
               Date
               <Input type="date" className="input" value={date} onChange={(event) => onDateChange(event.target.value)} required />
             </label>
-            <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-              Deduct or Add
-              <div className="segmented-toggle" role="tablist" aria-label="Transaction operation">
-                <Button
-                  type="button"
-                  className={`segmented-toggle-btn segmented-toggle-btn-deduct ${operation === "DEDUCT" ? "is-active" : ""}`}
-                  onClick={() => onOperationChange("DEDUCT")}
-                >
-                  Deduct
-                </Button>
-                <Button
-                  type="button"
-                  className={`segmented-toggle-btn segmented-toggle-btn-add ${operation === "ADD" ? "is-active" : ""}`}
-                  onClick={() => onOperationChange("ADD")}
-                >
-                  Add
-                </Button>
-              </div>
-            </label>
+            <TransactionOperationControl operation={operation} onChange={onOperationChange} />
             <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
               Sub Account
               <Select className="input" value={budgetId} onChange={(event) => onBudgetChange(event.target.value)} required>

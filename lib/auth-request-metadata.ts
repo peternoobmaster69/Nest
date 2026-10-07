@@ -29,10 +29,10 @@ function normalizeIpAddress(value: string | null) {
   if (!candidate) return null;
   if (isIP(candidate)) return candidate;
 
-  const bracketedIpv6 = candidate.match(/^\[([^\]]+)](?::\d+)?$/);
+  const bracketedIpv6 = /^\[([^\]]+)](?::\d+)?$/.exec(candidate);
   if (bracketedIpv6 && isIP(bracketedIpv6[1]) === 6) return bracketedIpv6[1];
 
-  const ipv4WithPort = candidate.match(/^(.+):(\d+)$/);
+  const ipv4WithPort = /^(.+):(\d+)$/.exec(candidate);
   if (ipv4WithPort && isIP(ipv4WithPort[1]) === 4) return ipv4WithPort[1];
   return null;
 }

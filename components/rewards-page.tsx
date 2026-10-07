@@ -1877,8 +1877,8 @@ export function RewardsPage({
                   />
                 </div>
                 <div className="form-group st-span-2">
-                  <label className="label">Notes</label>
-                  <Textarea
+                  <label htmlFor="hotel-reward-notes" className="label">Notes</label>
+                  <Textarea id="hotel-reward-notes"
                     className="input"
                     rows={3}
                     placeholder="Optional notes..."
@@ -2022,8 +2022,8 @@ export function RewardsPage({
                   </div>
                 )}
                 <div className="form-group st-span-2">
-                  <label className="label">Notes</label>
-                  <Textarea
+                  <label htmlFor="frequent-flyer-notes" className="label">Notes</label>
+                  <Textarea id="frequent-flyer-notes"
                     className="input"
                     rows={3}
                     placeholder="Optional notes..."

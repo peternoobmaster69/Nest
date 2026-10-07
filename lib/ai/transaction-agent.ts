@@ -353,7 +353,7 @@ export async function confirmTransactionAgent(auth: Scope, input: Extract<Transa
       const { budgets, currency } = await loadContext(scope, db);
       if (currency !== review.currency || review.balances.some((old) => {
         const fresh = budgets.find((b) => b.id === old.id);
-        return !fresh || fresh.availableCents !== old.availableCents || fresh.accountId !== old.accountId || fresh.name !== old.name || fresh.accountName !== old.accountName;
+        return fresh?.availableCents !== old.availableCents || fresh.accountId !== old.accountId || fresh.name !== old.name || fresh.accountName !== old.accountName;
       })) throw new StaleReviewError("A sub-account balance changed since this review.");
       const after = review.after;
       let transactionId: string;

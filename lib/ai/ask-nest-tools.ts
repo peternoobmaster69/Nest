@@ -2059,7 +2059,7 @@ async function getMarketHistory(rawArgs: unknown, context: AskNestToolContext): 
       to: args.end_date,
     });
     const first = result.bars[0]!;
-    const latest = result.bars[result.bars.length - 1]!;
+    const latest = result.bars.at(-1)!;
     const change = latest.c - first.c;
     const changePercent = first.c === 0 ? null : (change / first.c) * 100;
     const periodHigh = Math.max(...result.bars.map((bar) => bar.h));

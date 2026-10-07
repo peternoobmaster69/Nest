@@ -133,10 +133,10 @@ export function AutoRuleEditorDialog({
 
             <section className="auto-rule-edit-section">
               <div className="auto-rule-section-label">Status</div>
-              <label className="auto-rule-enable-row">
+              <label htmlFor="auto-rule-enabled" className="auto-rule-enable-row">
                 <span>Rule is active</span>
                 <span className="auto-rule-switch">
-                  <Input
+                  <Input id="auto-rule-enabled"
                     type="checkbox"
                     checked={rule.enabled}
                     onChange={(event) => onUpdate((current) => ({ ...current, enabled: event.target.checked }))}

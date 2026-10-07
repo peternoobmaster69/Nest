@@ -46,7 +46,7 @@ test("session enters a workspace and core finance routes remain tenant scoped", 
   expect((await context.json()).workspaceId).toBe(workspacePath.split("/")[2]);
 });
 
-test("workspace switching updates both URL scope and server context", async ({ page }, testInfo) => {
+test("workspace switching updates the tab URL and its server context", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop workspace switch is covered here; mobile navigation has a separate journey.");
   await enterWorkspace(page);
   const beforeResponse = await page.request.get("/api/context");
@@ -55,11 +55,19 @@ test("workspace switching updates both URL scope and server context", async ({ p
   const target = before.workspaces.find((workspace: { id: string; name: string }) => workspace.id !== before.workspaceId);
   expect(target).toBeTruthy();
   const options = await openAccountOptions(page, false);
-  await options.getByRole("button", { name: target.name }).click();
+  const [afterResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/context" &&
+      response.request().headers()["x-workspace-id"] === target.id,
+    ),
+    options.getByRole("button", { name: target.name }).click(),
+  ]);
   await expect(page).toHaveURL(new URL(`/w/${target.id}`, page.url()).href, { timeout: 30_000 });
-  const afterResponse = await page.request.get("/api/context");
   expect(afterResponse.ok()).toBe(true);
   expect(await afterResponse.json()).toMatchObject({ workspaceId: target.id, workspaceName: target.name });
+  const fallback = await page.request.get("/api/context");
+  expect(fallback.ok()).toBe(true);
+  expect((await fallback.json()).workspaceId).toBe(before.workspaceId);
 });
 
 test("mobile navigation exposes core destinations and remains accessible", async ({ page }, testInfo) => {

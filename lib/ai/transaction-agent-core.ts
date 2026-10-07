@@ -22,7 +22,7 @@ export function parseAgentAmount(value: string | null): number | null {
 
 /** Accepts what people type into an amount box: "$12", "S$ 12.50", "12 dollars". */
 export function parseTypedAmount(value: string): string | null {
-  const match = value.trim().match(/^(?:s\$|us\$|sgd|\$)?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:sgd|dollars?|bucks)?\.?$/i);
+  const match = /^(?:s\$|us\$|sgd|\$)?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:sgd|dollars?|bucks)?\.?$/i.exec(value.trim());
   return match ? match[1] : null;
 }
 
@@ -211,7 +211,7 @@ export function planTransactionReview(
   if (!subject) return withDeferred({ ...next, pending: "subject", message: `What was it for? For example “${direction === "DEBIT" ? "bus fare" : "salary"}”. Reply “skip” to call it “${budget.name}”.` }, intent);
   const date = intent.date ?? before?.date.slice(0, 10) ?? today;
   if (!validAgentDate(date)) return withDeferred({ ...next, pending: "date", message: "Which date? Say today, yesterday, or a date like 2026-09-30." }, intent);
-  const kind = before && before.direction === direction
+  const kind = before?.direction === direction
     ? before.kind as AgentReview["after"]["kind"] : direction === "DEBIT" ? "EXPENSE" : "INCOME";
   const after: AgentReview["after"] = { accountId: budget.accountId, budgetId: budget.id, subject, amountCents, direction, kind, date: before && intent.date === null ? before.date : `${date}T00:00:00.000Z` };
   if (before && Object.entries(after).every(([key, value]) => before[key as keyof AgentTransaction] === value)) {
@@ -289,13 +289,13 @@ export function parseTransactionFallback(message: string, today = agentToday()):
   const debit = FALLBACK_DEBIT.test(text);
   const credit = FALLBACK_CREDIT.test(text);
   if (debit === credit) return null;
-  const amountMatch = text.match(/(?:s\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:sgd|dollars?|bucks)\b/i)
-    ?? text.match(/\b(?:deduct|subtract|minus|spent|spend|paid|pay|withdrew|withdraw|took|add|deposit|received|put)\s+(\d[\d,]*(?:\.\d+)?)\b/i);
+  const amountMatch = /(?:s\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:sgd|dollars?|bucks)\b/i.exec(text)
+    ?? /\b(?:deduct|subtract|minus|spent|spend|paid|pay|withdrew|withdraw|took|add|deposit|received|put)\s+(\d[\d,]*(?:\.\d+)?)\b/i.exec(text);
   const amount = amountMatch ? amountMatch[1] ?? amountMatch[2] ?? null : null;
   if (!amount) return null;
   const stop = String.raw`(?=\s+(?:for|on|at|yesterday|today|from|to|into|in)\b|[.,!]|$)`;
-  const account = text.match(new RegExp(String.raw`\b(?:from|to|into|in|under|out of)\s+(?:my\s+|the\s+)?([\p{L}][\p{L}\p{N} &'-]{0,40}?)(?:\s+(?:sub[- ]?account|account|budget|envelope))?${stop}`, "iu"));
-  const subject = text.match(new RegExp(String.raw`\b(?:for|on)\s+(?!today\b|yesterday\b)([\p{L}][\p{L}\p{N} &'-]{0,60}?)${stop}`, "iu"));
+  const account = new RegExp(String.raw`\b(?:from|to|into|in|under|out of)\s+(?:my\s+|the\s+)?([\p{L}][\p{L}\p{N} &'-]{0,40}?)(?:\s+(?:sub[- ]?account|account|budget|envelope))?${stop}`, "iu").exec(text);
+  const subject = new RegExp(String.raw`\b(?:for|on)\s+(?!today\b|yesterday\b)([\p{L}][\p{L}\p{N} &'-]{0,60}?)${stop}`, "iu").exec(text);
   const date = /\byesterday\b/i.test(text) ? shiftAgentDate(today, -1) : /\btoday\b/i.test(text) ? today : null;
   return {
     ...EMPTY_TRANSACTION_INTENT,

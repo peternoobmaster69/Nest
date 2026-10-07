@@ -29,6 +29,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { CardThemePicker } from "@/components/credit-cards/card-theme-picker";
 
 type AppContext = {
   workspaceId: string | null;
@@ -620,49 +621,17 @@ export function CreditCardsPage() {
                   />
                 </div>
 
-                <div className="form-group cc-span-2">
-                  <label className="label">Card Theme</label>
-                  <div className="cc-theme-grid">
-                    <Button
-                      type="button"
-                      className={`cc-theme-chip${themeKey.startsWith("custom:") ? " on" : ""}`}
-                      onClick={() => setThemeKey(`custom:${plainColor}`)}
-                      title="Plain color"
-                      aria-label="Use plain color"
-                    >
-                      <span className="cc-theme-swatch" style={{ background: plainColor }} />
-                      <span className="cc-theme-label">Plain Color</span>
-                      <Input
-                        type="color"
-                        value={plainColor}
-                        className="cc-theme-color"
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          setPlainColor(e.target.value);
-                          setThemeKey(`custom:${e.target.value}`);
-                        }}
-                      />
-                    </Button>
-                    {CARD_THEMES.map((theme) => (
-                      <Button
-                        key={theme.key}
-                        type="button"
-                        className={`cc-theme-chip${themeKey === theme.key ? " on" : ""}`}
-                        onClick={() => setThemeKey(theme.key)}
-                        title={theme.label}
-                        aria-label={`Use ${theme.label}`}
-                      >
-                        <span
-                          className="cc-theme-swatch"
-                          style={{
-                            background: theme.key === "bank-default" ? getCardGradient(bankName, null) : theme.background,
-                          }}
-                        />
-                        <span className="cc-theme-label">{theme.label}</span>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                <CardThemePicker
+                  themes={CARD_THEMES}
+                  themeKey={themeKey}
+                  plainColor={plainColor}
+                  bankGradient={getCardGradient(bankName, null)}
+                  onThemeChange={setThemeKey}
+                  onColorChange={(color) => {
+                    setPlainColor(color);
+                    setThemeKey(`custom:${color}`);
+                  }}
+                />
 
                 <div className="form-group">
                   <label htmlFor="credit-cards-expiry-month" className="label">Expiry Month</label>

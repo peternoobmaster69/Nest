@@ -16,6 +16,49 @@ const { DataView, MobileDataCard, DataValue } = require("../components/ui/data-v
 const { RouteLoadingState, RouteErrorState, RouteNotFoundState } = require("../components/ui/route-state.tsx");
 const { ModalCloseButton } = require("../components/ui/modal-close-button.tsx");
 const { ContributionTrendIndicator } = require("../components/investment-contribution-trend.tsx");
+const { TransactionOperationControl } = require("../components/transactions/transaction-operation-control.tsx");
+const { CardThemePicker } = require("../components/credit-cards/card-theme-picker.tsx");
+
+test("transaction operation buttons expose their selection and never submit the surrounding form", () => {
+  const changes = [];
+  let submissions = 0;
+  const content = (operation) => h("form", { onSubmit: () => { submissions += 1; } }, h(TransactionOperationControl, { operation, onChange: (value) => changes.push(value) }));
+  const view = render(content("DEDUCT"));
+  assert.ok(view.getByRole("group", { name: "Deduct or Add" }));
+  assert.equal(view.getByRole("button", { name: "Deduct" }).getAttribute("aria-pressed"), "true");
+  fireEvent.click(view.getByRole("button", { name: "Add", exact: true }));
+  assert.deepEqual(changes, ["ADD"]);
+  view.rerender(content("ADD"));
+  assert.equal(view.getByRole("button", { name: "Add", exact: true }).getAttribute("aria-pressed"), "true");
+  assert.equal(view.getByRole("button", { name: "Deduct" }).getAttribute("aria-pressed"), "false");
+  fireEvent.click(view.getByRole("button", { name: "Deduct" }));
+  assert.deepEqual(changes, ["ADD", "DEDUCT"]);
+  assert.equal(submissions, 0);
+});
+
+test("card colors have an independent labeled input and theme choices report their selected state", () => {
+  const selected = [];
+  const colors = [];
+  const props = {
+    themes: [{ key: "bank-default", label: "Bank Auto", background: "" }, { key: "ocean", label: "Ocean", background: "blue" }],
+    bankGradient: "red", plainColor: "#112233", themeKey: "bank-default",
+    onThemeChange: (value) => selected.push(value), onColorChange: (value) => colors.push(value),
+  };
+  const view = render(h(CardThemePicker, props));
+  assert.ok(view.getByRole("group", { name: "Card Theme" }));
+  const color = view.getByLabelText("Plain card color");
+  assert.equal(color.closest("button"), null);
+  fireEvent.change(color, { target: { value: "#445566" } });
+  assert.deepEqual(colors, ["#445566"]);
+  assert.equal(selected.length, 0);
+  fireEvent.click(view.getByRole("button", { name: "Use plain color" }));
+  assert.deepEqual(selected, ["custom:#112233"]);
+  view.rerender(h(CardThemePicker, { ...props, themeKey: "custom:#112233" }));
+  assert.equal(view.getByRole("button", { name: "Use plain color" }).getAttribute("aria-pressed"), "true");
+  assert.equal(view.getByRole("button", { name: "Use Bank Auto" }).getAttribute("aria-pressed"), "false");
+  fireEvent.click(view.getByRole("button", { name: "Use Ocean" }));
+  assert.equal(selected.at(-1), "ocean");
+});
 
 test("buttons preserve action semantics and block clicks while loading or disabled", () => {
   let clicks = 0;

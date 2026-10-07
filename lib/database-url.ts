@@ -1,7 +1,7 @@
 type EnvMap = Record<string, string | undefined>;
 
 function requireValue(value: string | undefined, key: string) {
-  if (!value || !value.trim()) {
+  if (!value?.trim()) {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value.trim();

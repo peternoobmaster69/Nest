@@ -473,8 +473,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
 
       {/* JSON Input */}
       <div className="settings-field settings-json-field">
-        <label>JSON Data</label>
-        <Textarea
+        <label htmlFor="import-json-data">JSON Data</label>
+        <Textarea id="import-json-data"
           className="input settings-json-input"
           rows={8}
           placeholder={`Paste JSON here, e.g.:

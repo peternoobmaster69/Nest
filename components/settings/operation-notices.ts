@@ -55,7 +55,7 @@ export function getAutoAccountingNotice(message: string): SettingsOperationNotic
     };
   }
 
-  const runResult = normalized.match(/^Auto-accounted (\d+) transactions? from (\d+) matched rule hits?\.$/i);
+  const runResult = /^Auto-accounted (\d+) transactions? from (\d+) matched rule hits?\.$/i.exec(normalized);
   if (runResult) {
     const accounted = Number(runResult[1]);
     const matched = Number(runResult[2]);

@@ -9,7 +9,7 @@ type ParsedMaybankRow = {
 const MAYBANK_HEADER = "POSTING DATE,TRANSACTION DATE,DESCRIPTION,AMOUNT";
 
 function parseMaybankDate(value: string) {
-  const match = value.trim().match(/(\d{2})\s+([A-Za-z]{3})\s+(\d{4})/);
+  const match = /(\d{2})\s+([A-Za-z]{3})\s+(\d{4})/.exec(value.trim());
   if (!match) return null;
   const [, ddRaw, monRaw, yyyyRaw] = match;
   const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];

@@ -119,7 +119,7 @@ async function loadIntegrationFromJob(payloadJson: string | null) {
       isActive: true,
     },
   });
-  if (!integration || !integration.isActive) {
+  if (!integration?.isActive) {
     throw new BackgroundJobError("GMAIL_INTEGRATION_INACTIVE", "The Gmail integration is no longer active.");
   }
   return integration;

@@ -2516,10 +2516,10 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
             <form className="cct-modal-form" onSubmit={onSubmitDeduct}>
               <div className="cct-form-grid">
                 <div className="form-group cct-span-2">
-                  <label className="label">Reference</label>
-                  <div className="input cct-reference-input">
+                  <label className="label" htmlFor="credit-accounting-reference">Reference</label>
+                  <output id="credit-accounting-reference" className="input cct-reference-input">
                     {accountingTarget.subject} • {formatCurrency(accountingTarget.amountCents)}
-                  </div>
+                  </output>
                 </div>
                 <div className="form-group cct-span-2">
                   <label htmlFor="credit-transactions-deduct-account-id" className="label">Bank Account</label>
@@ -2621,10 +2621,10 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
             <form className="cct-modal-form cct-receivable-form" onSubmit={onSubmitReceivable}>
               <div className="cct-form-grid cct-receivable-grid">
                 <div className="form-group cct-span-2 cct-receivable-reference">
-                  <label className="label">Reference</label>
-                  <div className="input cct-reference-input">
+                  <label className="label" htmlFor="credit-receivable-reference">Reference</label>
+                  <output id="credit-receivable-reference" className="input cct-reference-input">
                     {receivableTarget.subject}
-                  </div>
+                  </output>
                 </div>
                 <div className="form-group cct-receivable-title">
                   <label htmlFor="credit-transactions-receivable-title" className="label">Title</label>
