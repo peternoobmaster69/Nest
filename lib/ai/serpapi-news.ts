@@ -9,6 +9,12 @@ const SERPAPI_DEFAULT_MONTHLY_LIMIT = 200;
 const SERPAPI_MAX_MONTHLY_LIMIT = 250;
 const SERPAPI_MAX_RESULTS = 8;
 const SERPAPI_MAX_PARSED_RESULTS = 50;
+const FINANCIAL_TOPIC_PATTERNS = [
+  /\b(?:retir\w*|pension|cpf|provident|invest\w*|portfolio|asset|allocation)\b/i,
+  /\b(?:inflation|cost of living|household expenditure|household spending|living costs?|financial|finance|savings?|wealth|income|budget|spending|expenses?)\b/i,
+  /\b(?:healthcare costs?|insurance|tax(?:es|ation)?|interest rates?|mortgage|annuit\w*|market)\b/i,
+  /\b(?:stocks?|bonds?|funds?|etfs?|securit(?:y|ies)|exchange rates?|monetary policy)\b/i,
+];
 
 type SerpApiNewsArticle = {
   title: string;
@@ -165,7 +171,7 @@ export function normalizePublicFinancialQuery(value: string) {
     );
   }
 
-  const isFinancialTopic = /\b(?:retir\w*|pension|cpf|provident|invest\w*|portfolio|asset|allocation|inflation|cost of living|household expenditure|household spending|living costs?|financial|finance|savings?|wealth|income|budget|spending|expenses?|healthcare costs?|insurance|tax(?:es|ation)?|interest rates?|mortgage|annuit\w*|market|stocks?|bonds?|funds?|etfs?|securit(?:y|ies)|exchange rates?|monetary policy)\b/i.test(query);
+  const isFinancialTopic = FINANCIAL_TOPIC_PATTERNS.some((pattern) => pattern.test(query));
   if (!isFinancialTopic) {
     throw new SerpApiNewsError(
       "NO_DATA",
@@ -201,17 +207,9 @@ function safeArticleUrl(value: unknown) {
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
     url.username = "";
     url.password = "";
-    return url.toString();
+    return url;
   } catch {
     return null;
-  }
-}
-
-function sourceDomain(link: string) {
-  try {
-    return new URL(link).hostname.toLocaleLowerCase().replace(/^www\./, "");
-  } catch {
-    return "unknown";
   }
 }
 
@@ -236,11 +234,14 @@ function sourceAuthority(domain: string): SerpApiWebSource["authority"] {
 
 export function extractNormalizedFinancialValues(value: string) {
   const values = new Set<string>();
-  for (const match of value.matchAll(/\b(SGD|USD|EUR|GBP|AUD|JPY)\s*([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/gi)) {
-    values.add(`${match[1].toLocaleUpperCase()} ${match[2]}`);
+  const supportedCurrencies = new Set(["SGD", "USD", "EUR", "GBP", "AUD", "JPY"]);
+  for (const match of value.matchAll(/\b([A-Z]{3})\s*([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/gi)) {
+    const currency = match[1].toLocaleUpperCase();
+    if (supportedCurrencies.has(currency)) values.add(`${currency} ${match[2]}`);
   }
+  const shortCurrencies: Record<string, string> = { S: "SGD", US: "USD", A: "AUD" };
   for (const match of value.matchAll(/\b(S|US|A)\$\s*([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/gi)) {
-    const currency = match[1].toLocaleUpperCase() === "S" ? "SGD" : match[1].toLocaleUpperCase() === "US" ? "USD" : "AUD";
+    const currency = shortCurrencies[match[1].toLocaleUpperCase()];
     values.add(`${currency} ${match[2]}`);
   }
   return [...values].slice(0, 20);
@@ -266,7 +267,7 @@ function collectNewsArticles(value: unknown, output: SerpApiNewsArticle[]) {
   if (!item) return;
 
   const title = nonEmptyString(item.title);
-  const link = safeArticleUrl(item.link);
+  const link = safeArticleUrl(item.link)?.href;
   if (title && link && !output.some((article) => article.link === link)) {
     output.push({
       title: title.slice(0, 300),
@@ -296,13 +297,13 @@ function parsePayload(value: unknown) {
   collectNewsArticles(payload.news_results, articles);
   return {
     payload,
-    articles: articles
+    items: articles
       .toSorted((a, b) => articlePublishedTime(b) - articlePublishedTime(a))
       .slice(0, SERPAPI_MAX_RESULTS),
   };
 }
 
-export function parseSerpApiWebPayload(value: unknown) {
+function parseWebPayload(value: unknown) {
   const payload = asRecord(value) as SerpApiPayload | null;
   if (!payload) return null;
   const rawResults = Array.isArray(payload.organic_results) ? payload.organic_results : [];
@@ -311,10 +312,11 @@ export function parseSerpApiWebPayload(value: unknown) {
     const item = asRecord(rawResult);
     if (!item) continue;
     const title = nonEmptyString(item.title);
-    const link = safeArticleUrl(item.link);
-    if (!title || !link || sources.some((source) => source.link === link)) continue;
+    const url = safeArticleUrl(item.link);
+    if (!title || !url || sources.some((source) => source.link === url.href)) continue;
+    const link = url.href;
     const snippet = nonEmptyString(item.snippet)?.replace(/\s+/g, " ").slice(0, 1_200) ?? null;
-    const domain = sourceDomain(link);
+    const domain = url.hostname.toLocaleLowerCase().replace(/^www\./, "");
     sources.push({
       title: title.slice(0, 300),
       link,
@@ -327,29 +329,25 @@ export function parseSerpApiWebPayload(value: unknown) {
     });
     if (sources.length >= SERPAPI_MAX_RESULTS) break;
   }
-  return { payload, sources };
+  return { payload, items: sources };
 }
 
-async function readCachedNews(cacheKey: string, now: Date) {
+export function parseSerpApiWebPayload(value: unknown) {
+  const parsed = parseWebPayload(value);
+  return parsed ? { payload: parsed.payload, sources: parsed.items } : null;
+}
+
+type SearchParser<T> = (value: unknown) => { payload: SerpApiPayload; items: T[] } | null;
+
+async function readCachedSearch<T>(cacheKey: string, now: Date, parse: SearchParser<T>) {
   const cached = await prisma.serpApiNewsCache.findUnique({ where: { cacheKey } });
   if (!cached || cached.expiresAt <= now) return null;
-  const parsed = parsePayload(JSON.parse(cached.payloadJson) as unknown);
-  if (!parsed?.articles.length) {
+  const parsed = parse(JSON.parse(cached.payloadJson) as unknown);
+  if (!parsed?.items.length) {
     await prisma.serpApiNewsCache.delete({ where: { cacheKey } }).catch(() => undefined);
     return null;
   }
-  return { articles: parsed.articles, fetchedAt: cached.fetchedAt };
-}
-
-async function readCachedWeb(cacheKey: string, now: Date) {
-  const cached = await prisma.serpApiNewsCache.findUnique({ where: { cacheKey } });
-  if (!cached || cached.expiresAt <= now) return null;
-  const parsed = parseSerpApiWebPayload(JSON.parse(cached.payloadJson) as unknown);
-  if (!parsed?.sources.length) {
-    await prisma.serpApiNewsCache.delete({ where: { cacheKey } }).catch(() => undefined);
-    return null;
-  }
-  return { sources: parsed.sources, fetchedAt: cached.fetchedAt };
+  return { items: parsed.items, fetchedAt: cached.fetchedAt };
 }
 
 function utcMonthKey(date: Date) {
@@ -449,32 +447,28 @@ async function reserveSerpApiRequest(params: {
   });
 }
 
-export async function searchSerpApiNews(rawQuery: string): Promise<SerpApiNewsResult> {
-  const query = normalizePublicNewsQuery(rawQuery);
-  const config = getSerpApiConfig();
-  const cacheKey = cacheKeyForQuery(query);
-  const now = new Date();
-  const cached = await readCachedNews(cacheKey, now).catch(() => null);
-  if (cached) {
-    return { query, articles: cached.articles, fetchedAt: cached.fetchedAt, fromCache: true };
-  }
+type PublicSearchOptions<T> = {
+  cacheKey: (query: string) => string;
+  cacheTtlMs: number;
+  parse: SearchParser<T>;
+  operation: string;
+  responseKind: string;
+  noDataMessage: (query: string) => string;
+  configureRequest: (requestUrl: URL, query: string) => void;
+};
 
+async function reservePublicSearch(config: ReturnType<typeof getSerpApiConfig>, operation: string) {
   const account = await getSerpApiAccountStatus(config);
   const reservation = await reserveSerpApiRequest({ monthlyLimit: config.monthlyLimit, account });
   if (!reservation.allowed) {
     const message = reservation.code === "MONTHLY_LIMIT_REACHED"
       ? "Ask Nest's SerpApi monthly search allowance has been reached."
-      : "SerpApi news search is temporarily rate limited. Try again shortly.";
+      : `SerpApi ${operation} is temporarily rate limited. Try again shortly.`;
     throw new SerpApiNewsError(reservation.code, message, reservation.retryAfterSeconds);
   }
+}
 
-  const requestUrl = new URL("search", config.baseUrl);
-  requestUrl.searchParams.set("engine", "google_news");
-  requestUrl.searchParams.set("q", /\bwhen:\S+/i.test(query) ? query : `${query} when:7d`);
-  requestUrl.searchParams.set("gl", "sg");
-  requestUrl.searchParams.set("hl", "en");
-  requestUrl.searchParams.set("api_key", config.apiKey);
-
+async function fetchPublicSearch(requestUrl: URL, operation: string) {
   let response: Response;
   try {
     response = await fetch(requestUrl, {
@@ -483,9 +477,8 @@ export async function searchSerpApiNews(rawQuery: string): Promise<SerpApiNewsRe
       signal: AbortSignal.timeout(12_000),
     });
   } catch {
-    throw new SerpApiNewsError("UNAVAILABLE", "SerpApi news search could not be reached.");
+    throw new SerpApiNewsError("UNAVAILABLE", `SerpApi ${operation} could not be reached.`);
   }
-
   if (response.status === 401 || response.status === 403) {
     throw new SerpApiNewsError("AUTHENTICATION_FAILED", "SerpApi rejected the configured API credentials.");
   }
@@ -496,124 +489,86 @@ export async function searchSerpApiNews(rawQuery: string): Promise<SerpApiNewsRe
   if (!response.ok) {
     throw new SerpApiNewsError("UNAVAILABLE", `SerpApi returned HTTP ${response.status}.`);
   }
+  return response.json().catch(() => null) as Promise<unknown>;
+}
 
-  const body = await response.json().catch(() => null);
-  const parsed = parsePayload(body);
+async function searchPublic<T>(query: string, options: PublicSearchOptions<T>) {
+  const config = getSerpApiConfig();
+  const cacheKey = options.cacheKey(query);
+  const cached = await readCachedSearch(cacheKey, new Date(), options.parse).catch(() => null);
+  if (cached) return { query, ...cached, fromCache: true };
+
+  await reservePublicSearch(config, options.operation);
+  const requestUrl = new URL("search", config.baseUrl);
+  options.configureRequest(requestUrl, query);
+  requestUrl.searchParams.set("gl", "sg");
+  requestUrl.searchParams.set("hl", "en");
+  requestUrl.searchParams.set("api_key", config.apiKey);
+  const body = await fetchPublicSearch(requestUrl, options.operation);
+  const parsed = options.parse(body);
   if (!parsed) {
-    throw new SerpApiNewsError("UNAVAILABLE", "SerpApi returned an invalid news response.");
+    throw new SerpApiNewsError("UNAVAILABLE", `SerpApi returned an invalid ${options.responseKind} response.`);
   }
   if (typeof parsed.payload.error === "string") {
     const isAuthError = /api key|account|unauthorized/i.test(parsed.payload.error);
     throw new SerpApiNewsError(
       isAuthError ? "AUTHENTICATION_FAILED" : "UNAVAILABLE",
-      isAuthError ? "SerpApi rejected the configured API credentials." : "SerpApi could not complete the news search.",
+      isAuthError ? "SerpApi rejected the configured API credentials." : `SerpApi could not complete the ${options.operation}.`,
     );
   }
-  if (!parsed.articles.length) {
-    throw new SerpApiNewsError("NO_DATA", `SerpApi found no recent news for “${query}”.`);
+  if (!parsed.items.length) {
+    throw new SerpApiNewsError("NO_DATA", options.noDataMessage(query));
   }
 
   const fetchedAt = new Date();
+  const cachedPayload = {
+    payloadJson: JSON.stringify(body),
+    fetchedAt,
+    expiresAt: new Date(fetchedAt.getTime() + options.cacheTtlMs),
+  };
   await prisma.serpApiNewsCache.upsert({
     where: { cacheKey },
-    create: {
-      cacheKey,
-      payloadJson: JSON.stringify(body),
-      fetchedAt,
-      expiresAt: new Date(fetchedAt.getTime() + SERPAPI_CACHE_TTL_MS),
-    },
-    update: {
-      payloadJson: JSON.stringify(body),
-      fetchedAt,
-      expiresAt: new Date(fetchedAt.getTime() + SERPAPI_CACHE_TTL_MS),
-    },
+    create: { cacheKey, ...cachedPayload },
+    update: cachedPayload,
   }).catch(() => undefined);
+  return { query, items: parsed.items, fetchedAt, fromCache: false };
+}
 
-  return { query, articles: parsed.articles, fetchedAt, fromCache: false };
+const newsSearchOptions: PublicSearchOptions<SerpApiNewsArticle> = {
+  cacheKey: cacheKeyForQuery,
+  cacheTtlMs: SERPAPI_CACHE_TTL_MS,
+  parse: parsePayload,
+  operation: "news search",
+  responseKind: "news",
+  noDataMessage: (query) => `SerpApi found no recent news for “${query}”.`,
+  configureRequest(requestUrl, query) {
+    requestUrl.searchParams.set("engine", "google_news");
+    requestUrl.searchParams.set("q", /\bwhen:\S+/i.test(query) ? query : `${query} when:7d`);
+  },
+};
+
+const webSearchOptions: PublicSearchOptions<SerpApiWebSource> = {
+  cacheKey: cacheKeyForWebQuery,
+  cacheTtlMs: SERPAPI_WEB_CACHE_TTL_MS,
+  parse: parseWebPayload,
+  operation: "public financial search",
+  responseKind: "public search",
+  noDataMessage: (query) => `SerpApi found no public financial sources for “${query}”.`,
+  configureRequest(requestUrl, query) {
+    requestUrl.searchParams.set("engine", "google");
+    requestUrl.searchParams.set("q", query);
+    requestUrl.searchParams.set("google_domain", "google.com.sg");
+    requestUrl.searchParams.set("num", "10");
+    requestUrl.searchParams.set("safe", "active");
+  },
+};
+
+export async function searchSerpApiNews(rawQuery: string): Promise<SerpApiNewsResult> {
+  const { items, ...metadata } = await searchPublic(normalizePublicNewsQuery(rawQuery), newsSearchOptions);
+  return { ...metadata, articles: items };
 }
 
 export async function searchSerpApiFinancialWeb(rawQuery: string): Promise<SerpApiWebResult> {
-  const query = normalizePublicFinancialQuery(rawQuery);
-  const config = getSerpApiConfig();
-  const cacheKey = cacheKeyForWebQuery(query);
-  const now = new Date();
-  const cached = await readCachedWeb(cacheKey, now).catch(() => null);
-  if (cached) {
-    return { query, sources: cached.sources, fetchedAt: cached.fetchedAt, fromCache: true };
-  }
-
-  const account = await getSerpApiAccountStatus(config);
-  const reservation = await reserveSerpApiRequest({ monthlyLimit: config.monthlyLimit, account });
-  if (!reservation.allowed) {
-    const message = reservation.code === "MONTHLY_LIMIT_REACHED"
-      ? "Ask Nest's SerpApi monthly search allowance has been reached."
-      : "SerpApi public financial search is temporarily rate limited. Try again shortly.";
-    throw new SerpApiNewsError(reservation.code, message, reservation.retryAfterSeconds);
-  }
-
-  const requestUrl = new URL("search", config.baseUrl);
-  requestUrl.searchParams.set("engine", "google");
-  requestUrl.searchParams.set("q", query);
-  requestUrl.searchParams.set("google_domain", "google.com.sg");
-  requestUrl.searchParams.set("gl", "sg");
-  requestUrl.searchParams.set("hl", "en");
-  requestUrl.searchParams.set("num", "10");
-  requestUrl.searchParams.set("safe", "active");
-  requestUrl.searchParams.set("api_key", config.apiKey);
-
-  let response: Response;
-  try {
-    response = await fetch(requestUrl, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
-    });
-  } catch {
-    throw new SerpApiNewsError("UNAVAILABLE", "SerpApi public financial search could not be reached.");
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    throw new SerpApiNewsError("AUTHENTICATION_FAILED", "SerpApi rejected the configured API credentials.");
-  }
-  if (response.status === 429) {
-    const retryAfter = Number.parseInt(response.headers.get("retry-after") || "5", 10);
-    throw new SerpApiNewsError("RATE_LIMITED", "SerpApi's API rate limit was reached.", retryAfter || 5);
-  }
-  if (!response.ok) {
-    throw new SerpApiNewsError("UNAVAILABLE", `SerpApi returned HTTP ${response.status}.`);
-  }
-
-  const body = await response.json().catch(() => null);
-  const parsed = parseSerpApiWebPayload(body);
-  if (!parsed) {
-    throw new SerpApiNewsError("UNAVAILABLE", "SerpApi returned an invalid public search response.");
-  }
-  if (typeof parsed.payload.error === "string") {
-    const isAuthError = /api key|account|unauthorized/i.test(parsed.payload.error);
-    throw new SerpApiNewsError(
-      isAuthError ? "AUTHENTICATION_FAILED" : "UNAVAILABLE",
-      isAuthError ? "SerpApi rejected the configured API credentials." : "SerpApi could not complete the public financial search.",
-    );
-  }
-  if (!parsed.sources.length) {
-    throw new SerpApiNewsError("NO_DATA", `SerpApi found no public financial sources for “${query}”.`);
-  }
-
-  const fetchedAt = new Date();
-  await prisma.serpApiNewsCache.upsert({
-    where: { cacheKey },
-    create: {
-      cacheKey,
-      payloadJson: JSON.stringify(body),
-      fetchedAt,
-      expiresAt: new Date(fetchedAt.getTime() + SERPAPI_WEB_CACHE_TTL_MS),
-    },
-    update: {
-      payloadJson: JSON.stringify(body),
-      fetchedAt,
-      expiresAt: new Date(fetchedAt.getTime() + SERPAPI_WEB_CACHE_TTL_MS),
-    },
-  }).catch(() => undefined);
-
-  return { query, sources: parsed.sources, fetchedAt, fromCache: false };
+  const { items, ...metadata } = await searchPublic(normalizePublicFinancialQuery(rawQuery), webSearchOptions);
+  return { ...metadata, sources: items };
 }

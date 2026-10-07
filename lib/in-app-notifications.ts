@@ -81,32 +81,39 @@ function maxDeliveriesPerRun() {
   return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 500) : 100;
 }
 
+function savedDedupeKey(payloadJson: string | null) {
+  try {
+    const stored = JSON.parse(payloadJson ?? "{}") as { dedupeKey?: unknown };
+    return typeof stored.dedupeKey === "string" ? stored.dedupeKey : "";
+  } catch {
+    return "";
+  }
+}
+
+async function currentPushPayload(job: { userId: string | null; workspaceId: string | null; payloadJson: string | null }): Promise<PreparedPush | undefined> {
+  if (!job.userId || !job.workspaceId) return undefined;
+  // A payment may have settled the statement since this push was queued.
+  await syncCreditCardDueNotificationsForUser(job.userId, job.workspaceId);
+  const dedupeKey = savedDedupeKey(job.payloadJson);
+  if (!dedupeKey) return undefined;
+  const notification = await prisma.inAppNotification.findFirst({
+    where: { userId: job.userId, workspaceId: job.workspaceId, dedupeKey },
+    select: { title: true, message: true, href: true, dedupeKey: true },
+  });
+  if (!notification) return undefined;
+  return {
+    title: notification.title,
+    message: notification.message,
+    href: notification.href ?? "/credit-transactions",
+    tag: notification.dedupeKey,
+  };
+}
+
 export async function processReminderPushDeliveryJob(jobId: string, prepared?: PreparedPush) {
   const claimed = await claimBackgroundJob({ jobId, leaseMs: 2 * 60_000 });
   if (!claimed) return { status: "skipped" as const };
   try {
-    let payload = prepared;
-    if (!payload && claimed.job.userId && claimed.job.workspaceId) {
-      // A payment may have settled the statement since this push was queued.
-      await syncCreditCardDueNotificationsForUser(claimed.job.userId, claimed.job.workspaceId);
-      let dedupeKey = "";
-      try {
-        const stored = JSON.parse(claimed.job.payloadJson ?? "{}") as { dedupeKey?: unknown };
-        if (typeof stored.dedupeKey === "string") dedupeKey = stored.dedupeKey;
-      } catch {}
-      const notification = dedupeKey ? await prisma.inAppNotification.findFirst({
-        where: { userId: claimed.job.userId, workspaceId: claimed.job.workspaceId, dedupeKey },
-        select: { title: true, message: true, href: true, dedupeKey: true },
-      }) : null;
-      if (notification) {
-        payload = {
-          title: notification.title,
-          message: notification.message,
-          href: notification.href ?? "/credit-transactions",
-          tag: notification.dedupeKey,
-        };
-      }
-    }
+    const payload = prepared ?? await currentPushPayload(claimed.job);
     if (!payload || !claimed.job.userId) {
       await completeClaimedBackgroundJob(claimed.job.id, claimed.leaseToken, {
         message: "Push reminder no longer applies; delivery skipped.",
@@ -134,12 +141,35 @@ export async function processReminderPushDeliveryJob(jobId: string, prepared?: P
   }
 }
 
+async function queueReminderPush(
+  userId: string,
+  workspaceId: string,
+  today: Date,
+  payload: PreparedPush,
+  budget: DeliveryBudget,
+) {
+  const deliveryKey = `${startOfUtcDay(today).toISOString()}:${userId}:${payload.tag}`;
+  const queued = await enqueueBackgroundJob({
+    type: REMINDER_PUSH_JOB_TYPE,
+    key: deliveryKey,
+    idempotencyKey: deliveryKey,
+    workspaceId,
+    userId,
+    message: "Payment reminder push queued.",
+    payload: { dedupeKey: payload.tag },
+    maxAttempts: 4,
+  });
+  if (["SUCCEEDED", "SKIPPED", "RUNNING"].includes(queued.job.status)) return;
+  if (budget.used >= budget.limit) return;
+  budget.used += 1;
+  await processReminderPushDeliveryJob(queued.job.id, payload);
+}
+
 async function syncRowsForUser(
   userId: string,
   workspaceId: string,
   rows: DueCardRow[],
   today: Date,
-  deliverPush = false,
   deliveryBudget?: DeliveryBudget,
 ) {
   const activeKeys: string[] = [];
@@ -189,28 +219,13 @@ async function syncRowsForUser(
         VALUES (${randomUUID()}, ${userId}, ${workspaceId}, ${CREDIT_CARD_DUE_TYPE}, ${dedupeKey}, ${copy.title}, ${message}, ${href}, ${metadataJson}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
     `);
 
-    if (deliverPush && copy.shouldRealert) {
-      const deliveryKey = `${startOfUtcDay(today).toISOString()}:${userId}:${dedupeKey}`;
-      const queued = await enqueueBackgroundJob({
-        type: REMINDER_PUSH_JOB_TYPE,
-        key: deliveryKey,
-        idempotencyKey: deliveryKey,
-        workspaceId,
-        userId,
-        message: "Payment reminder push queued.",
-        payload: { dedupeKey },
-        maxAttempts: 4,
-      });
-      if (!["SUCCEEDED", "SKIPPED", "RUNNING"].includes(queued.job.status)) {
-        if (deliveryBudget && deliveryBudget.used >= deliveryBudget.limit) continue;
-        if (deliveryBudget) deliveryBudget.used += 1;
-        await processReminderPushDeliveryJob(queued.job.id, {
-          title: copy.title,
-          message,
-          href,
-          tag: dedupeKey,
-        });
-      }
+    if (deliveryBudget && copy.shouldRealert) {
+      await queueReminderPush(userId, workspaceId, today, {
+        title: copy.title,
+        message,
+        href,
+        tag: dedupeKey,
+      }, deliveryBudget);
     }
   }
 
@@ -257,7 +272,6 @@ export async function syncCreditCardDueNotificationsForAllUsers() {
       member.workspaceId,
       rowsByWorkspace.get(member.workspaceId) ?? [],
       today,
-      true,
       deliveryBudget,
     );
   }

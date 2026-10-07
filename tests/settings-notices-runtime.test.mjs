@@ -8,7 +8,7 @@ const { h, render, fireEvent, waitFor } = ui;
 const require = createRequire(import.meta.url);
 const signouts = [];
 let signOut = async () => {};
-mock.module("next-auth/react", { namedExports: { signOut: async (options) => { signouts.push(options); return signOut(options); } } });
+mock.module("next-auth/react", { namedExports: { signOut: async (options) => { signouts.push(options); return signOut(); } } });
 const { SettingsOperationNotice } = require("../components/settings/operation-notice.tsx");
 const { ActionableAuthenticationMessage, ReauthenticateButton } = require("../components/reauthentication-message.tsx");
 afterEach(() => { ui.cleanup(); signouts.length = 0; });
