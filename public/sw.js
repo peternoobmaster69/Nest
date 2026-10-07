@@ -1,4 +1,4 @@
-const VERSION = "nest-v10";
+const VERSION = "nest-v11";
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_FALLBACK = "/offline.html";

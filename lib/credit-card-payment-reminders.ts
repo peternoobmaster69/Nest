@@ -89,6 +89,16 @@ function getStatementLabel(month: number, year: number) {
   return new Intl.DateTimeFormat("en-SG", { month: "long", year: "numeric", timeZone: "UTC" }).format(statementDate);
 }
 
+function reminderDueColor(daysUntilDue: number) {
+  if (daysUntilDue <= 0) return "#b42318";
+  if (daysUntilDue <= 1) return "#b54708";
+  return "#9a6700";
+}
+
+function reminderCardName(row: ReminderRow) {
+  return row.bankName ? `${row.bankName} ${row.cardName}` : row.cardName;
+}
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -162,7 +172,6 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
   const greeting = recipient.name ? `Hi ${recipient.name},` : "Hi,";
 
   const lines = rows.map((row) => {
-    const bankPrefix = row.bankName ? `${row.bankName} ` : "";
     const statementUrl = buildAbsoluteWorkspaceEntryUrl(
       appUrl,
       recipient.workspaceId,
@@ -173,7 +182,7 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
       }),
     );
     const summary = [
-      `${bankPrefix}${row.cardName}`,
+      reminderCardName(row),
       getStatementLabel(row.statementMonth, row.statementYear),
       `${formatMoney(toNumber(row.outstandingCents))} ${getDueLabel(row.paymentDueDate, today)} (${formatDate(row.paymentDueDate)})`,
     ].join(" - ");
@@ -197,9 +206,9 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
 
   const htmlRows = rows
     .map((row) => {
-      const cardName = `${row.bankName ? `${row.bankName} ` : ""}${row.cardName}`;
+      const cardName = reminderCardName(row);
       const daysUntilDue = getDaysUntilDue(row.paymentDueDate, today);
-      const dueColor = daysUntilDue <= 0 ? "#b42318" : daysUntilDue <= 1 ? "#b54708" : "#9a6700";
+      const dueColor = reminderDueColor(daysUntilDue);
       const statementUrl = buildAbsoluteWorkspaceEntryUrl(
         appUrl,
         recipient.workspaceId,
@@ -228,6 +237,9 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
     })
     .join("");
 
+  const managePaymentsLink = managePaymentsUrl
+    ? `<p style="margin:22px 0 0;"><a href="${escapeHtml(managePaymentsUrl)}" style="display:inline-block;padding:11px 17px;border-radius:8px;background:#158f58;color:#ffffff;font-weight:700;text-decoration:none;">Manage payments in Nest</a></p>`
+    : "";
   const html = `
     <div style="margin:0;padding:28px 12px;background:#f3f7f5;font-family:Arial,sans-serif;color:#17211b;line-height:1.5;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dce8e1;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(20,68,43,0.08);">
@@ -252,7 +264,7 @@ function buildReminderEmail(recipient: ReminderRecipient, rows: ReminderRow[], t
             <span style="color:#53645b;font-size:13px;">Total outstanding</span><br>
             <strong style="font-size:24px;color:#116f45;">${escapeHtml(formatMoney(totalOutstanding))}</strong>
           </div>
-          ${managePaymentsUrl ? `<p style="margin:22px 0 0;"><a href="${escapeHtml(managePaymentsUrl)}" style="display:inline-block;padding:11px 17px;border-radius:8px;background:#158f58;color:#ffffff;font-weight:700;text-decoration:none;">Manage payments in Nest</a></p>` : ""}
+          ${managePaymentsLink}
           <p style="margin:22px 0 0;color:#718078;font-size:12px;">You will keep receiving this reminder while the statement balance remains outstanding.</p>
         </div>
       </div>
@@ -311,7 +323,8 @@ async function rebuildReminderEmail(job: {
   let reminderDate: Date;
   try {
     const payload = JSON.parse(job.payloadJson ?? "{}") as { reminderDate?: unknown };
-    reminderDate = startOfUtcDay(new Date(String(payload.reminderDate ?? "")));
+    if (typeof payload.reminderDate !== "string") return null;
+    reminderDate = startOfUtcDay(new Date(payload.reminderDate));
     if (!Number.isFinite(reminderDate.getTime())) return null;
   } catch {
     return null;

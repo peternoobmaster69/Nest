@@ -20,7 +20,7 @@ async function runStaticScripts(globals, page) {
     const filename = fileURLToPath(new URL(`../public/${name}.js`, import.meta.url));
     vm.runInContext(await readFile(filename, "utf8"), context, { filename });
   }
-  return context;
+  return context.NestStaticPage;
 }
 
 for (const page of ["offline", "style-guide"]) {
@@ -33,8 +33,17 @@ for (const page of ["offline", "style-guide"]) {
       expected.push({ name, digest });
     }
     assert.deepEqual(staticPageScriptIntegrity(`/${page}.html`), expected.map(({ digest }) => digest));
-    const tags = [...html.matchAll(/<script[^>]*><\/script>/g)].map(([tag]) => tag);
-    assert.deepEqual(tags, expected.map(({ name, digest }) => `<script src="/${name}.js" integrity="${digest}" defer></script>`));
+    const window = new Window({ settings: { disableJavaScriptEvaluation: true, disableCSSFileLoading: true, disableJavaScriptFileLoading: true } });
+    try {
+      window.document.write(html);
+      const scripts = [...window.document.querySelectorAll("script")].map((script) => ({
+        src: script.getAttribute("src"), integrity: script.getAttribute("integrity"),
+        defer: script.defer, type: script.type, content: script.textContent,
+      }));
+      assert.deepEqual(scripts, expected.map(({ name, digest }) => ({
+        src: `/${name}.js`, integrity: digest, defer: true, type: "", content: "",
+      })));
+    } finally { window.close(); }
     assert.doesNotMatch(html, /<script\s*>|\son(?:click|change|load)=/i);
     const response = proxy(new NextRequest(`https://nest.example.test/${page}.html`));
     const csp = response.headers.get("content-security-policy");

@@ -1,3 +1,5 @@
+const { renderStaticPageCopy, staticPageText } = globalThis.NestStaticPage;
+
 renderStaticPageCopy(document);
 
 (() => {

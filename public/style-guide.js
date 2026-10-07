@@ -1,3 +1,5 @@
+const { renderStaticPageCopy } = globalThis.NestStaticPage;
+
 renderStaticPageCopy(document);
 
 function setStyleGuideTheme(theme) {

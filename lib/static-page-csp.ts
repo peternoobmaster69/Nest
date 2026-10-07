@@ -1,13 +1,13 @@
 // Every parser-loaded script is integrity-verified under strict-dynamic.
 // Static-page tests check this list against the asset contents and HTML order.
 const sharedScripts = [
-  "sha256-1qMFETf0idFQp3JVsTxIVAnFQvpo56ARv3zC0brdA3s=",
-  "sha256-2kZc1THhDtNE5KqKjcIvptqed5diU734ghTbdJ8lwIU=",
+  "sha256-NRLJOUYQiXiJ+3zEYp56d6/tOMiXBGt/x5/n1OirC3A=",
+  "sha256-3IMa/4jyY4Q9HE7fkTB7udROLZIzbrr+JgeAXuo/17Y=",
 ];
 
 const staticPageScripts = new Map<string, readonly string[]>([
-  ["/style-guide.html", [...sharedScripts, "sha256-dfDSEc34H9YAqzTrHrWxy/BF2DQsiyXUu26ieZt9vbk="]],
-  ["/offline.html", [...sharedScripts, "sha256-3TBQgf8CwBiiDiqWuNuc+admBugLbu54sDGgAmRtBOw="]],
+  ["/style-guide.html", [...sharedScripts, "sha256-kJRY8u9Y9VhFtkfdu9teuqYexU0EL2bhXShtuadIBqU="]],
+  ["/offline.html", [...sharedScripts, "sha256-nOi0x29Z4qye61WeE5ruIBjiDUv+xowxSk9yKZwfYzo="]],
 ]);
 
 export function staticPageScriptIntegrity(pathname: string) {

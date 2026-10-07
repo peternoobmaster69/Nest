@@ -1,5 +1,5 @@
 // English resource bundle for the public offline page and component style guide.
-const ENGLISH_STATIC_PAGE_COPY = Object.freeze({
+globalThis.NestStaticPage = { messages: Object.freeze({
   "offline.connectionRestored": "Connection restored. Reloading…",
   "offline.checkingConnection": "Checking connection…",
   "offline.stillOffline": "Still offline. We’ll retry when you reconnect.",
@@ -255,4 +255,4 @@ const ENGLISH_STATIC_PAGE_COPY = Object.freeze({
   "guide.placeholder.0_00": "0.00",
   "guide.placeholder.search_by_merchant_or_amount": "Search by merchant or amount…",
   "guide.placeholder.add_a_note_to_this_transaction": "Add a note to this transaction…"
-});
+}) };
