@@ -30,6 +30,16 @@ type RunnerOptions = {
   workspaceId?: string;
 };
 
+type AutoAccountingTransaction = {
+  id: string;
+  workspaceId: string;
+  creditCardId: string;
+  transactionDate: Date;
+  amountCents: number;
+  subject: string;
+  creditCard: { cardName: string; last4Digit: string };
+};
+
 const CREDIT_TXN_AUTO_ACCOUNT_JOB_TYPE = "CREDIT_TXN_AUTO_ACCOUNT";
 
 function formatAutoReceivableGroupTitle(ruleName: string, transactionDate: Date) {
@@ -43,15 +53,7 @@ function formatAutoReceivableGroupTitle(ruleName: string, transactionDate: Date)
 
 async function applyDeductRule(
   db: PrismaClient,
-  transaction: {
-    id: string;
-    workspaceId: string;
-    creditCardId: string;
-    transactionDate: Date;
-    amountCents: number;
-    subject: string;
-    creditCard: { cardName: string; last4Digit: string };
-  },
+  transaction: AutoAccountingTransaction,
   rule: Extract<CreditTxnAutoRule, { action: "DEDUCT_SAME_WORKSPACE" }>,
 ) {
   const sameWorkspaceBudgets = await db.budgetEnvelope.findMany({
@@ -146,15 +148,7 @@ async function applyDeductRule(
 
 async function applyReceivableRule(
   db: PrismaClient,
-  transaction: {
-    id: string;
-    workspaceId: string;
-    creditCardId: string;
-    transactionDate: Date;
-    amountCents: number;
-    subject: string;
-    creditCard: { cardName: string; last4Digit: string };
-  },
+  transaction: AutoAccountingTransaction,
   rule: Extract<CreditTxnAutoRule, { action: "RECEIVABLE_OTHER_WORKSPACE" }>,
 ) {
   const account = await db.financialAccount.findFirst({
@@ -258,21 +252,57 @@ ${noteLine}`
 
 async function applyRuleToTransaction(
   db: PrismaClient,
-  transaction: {
-    id: string;
-    workspaceId: string;
-    creditCardId: string;
-    transactionDate: Date;
-    amountCents: number;
-    subject: string;
-    creditCard: { cardName: string; last4Digit: string };
-  },
+  transaction: AutoAccountingTransaction,
   rule: CreditTxnAutoRule,
 ) {
   if (rule.action === "DEDUCT_SAME_WORKSPACE") {
     return applyDeductRule(db, transaction, rule);
   }
   return applyReceivableRule(db, transaction, rule);
+}
+
+async function applyWorkspaceRules(
+  db: PrismaClient,
+  workspace: { id: string; creditCardAutoRules: string | null },
+  lease: { jobId: string; token: string },
+  summary: RunnerSummary,
+) {
+  const rules = parseCreditTxnAutoRules(workspace.creditCardAutoRules).filter((rule) => rule.enabled);
+  if (rules.length === 0) return false;
+
+  const creditTransactions = await db.creditCardTransaction.findMany({
+    where: { workspaceId: workspace.id, isAllocated: false },
+    orderBy: [{ transactionDate: "asc" }, { createdAt: "asc" }],
+    include: { creditCard: { select: { cardName: true, last4Digit: true } } },
+  });
+  for (const creditTransaction of creditTransactions) {
+    await throwIfBackgroundJobCancelled(lease.jobId, lease.token);
+    summary.scanned += 1;
+    const rule = findFirstMatchingCreditTxnRule(creditTransaction.subject, rules);
+    if (!rule) continue;
+
+    summary.matched += 1;
+    const accounted = await applyRuleToTransaction(db, creditTransaction, rule);
+    if (accounted) summary.accounted += 1;
+    else summary.skipped += 1;
+  }
+  return true;
+}
+
+async function runAllWorkspaces(db: PrismaClient): Promise<RunnerSummary> {
+  const workspaces = await db.workspace.findMany({
+    where: { creditCardAutoRules: { not: null } },
+    select: { id: true },
+  });
+  const combined: RunnerSummary = { scanned: 0, matched: 0, accounted: 0, skipped: 0 };
+  for (const workspace of workspaces) {
+    const result = await runCreditTxnAutoAccounting(db, { workspaceId: workspace.id });
+    combined.scanned += result.scanned;
+    combined.matched += result.matched;
+    combined.accounted += result.accounted;
+    combined.skipped += result.skipped;
+  }
+  return combined;
 }
 
 export async function runCreditTxnAutoAccounting(
@@ -287,21 +317,7 @@ export async function runCreditTxnAutoAccounting(
     }
     workspaceId = retryJob.workspaceId;
   }
-  if (!workspaceId) {
-    const workspaces = await db.workspace.findMany({
-      where: { creditCardAutoRules: { not: null } },
-      select: { id: true },
-    });
-    const combined: RunnerSummary = { scanned: 0, matched: 0, accounted: 0, skipped: 0 };
-    for (const workspace of workspaces) {
-      const result = await runCreditTxnAutoAccounting(db, { workspaceId: workspace.id });
-      combined.scanned += result.scanned;
-      combined.matched += result.matched;
-      combined.accounted += result.accounted;
-      combined.skipped += result.skipped;
-    }
-    return combined;
-  }
+  if (!workspaceId) return runAllWorkspaces(db);
 
   const jobKey = `workspace:${workspaceId}`;
   const queued = retryJob ? { job: retryJob, created: true } : await enqueueBackgroundJob({
@@ -338,41 +354,9 @@ export async function runCreditTxnAutoAccounting(
     let processedWorkspaces = 0;
 
     for (const workspace of workspaces) {
-      const rules = parseCreditTxnAutoRules(workspace.creditCardAutoRules).filter((rule) => rule.enabled);
-      if (rules.length === 0) {
-        processedWorkspaces += 1;
-        continue;
-      }
-
-      const creditTransactions = await db.creditCardTransaction.findMany({
-        where: {
-          workspaceId: workspace.id,
-          isAllocated: false,
-        },
-        orderBy: [{ transactionDate: "asc" }, { createdAt: "asc" }],
-        include: {
-          creditCard: {
-            select: {
-              cardName: true,
-              last4Digit: true,
-            },
-          },
-        },
-      });
-
-      for (const creditTransaction of creditTransactions) {
-        await throwIfBackgroundJobCancelled(persistedJobId, claimed.leaseToken);
-        summary.scanned += 1;
-        const rule = findFirstMatchingCreditTxnRule(creditTransaction.subject, rules);
-        if (!rule) continue;
-
-        summary.matched += 1;
-        const accounted = await applyRuleToTransaction(db, creditTransaction, rule);
-        if (accounted) summary.accounted += 1;
-        else summary.skipped += 1;
-      }
-
+      const appliedRules = await applyWorkspaceRules(db, workspace, { jobId: persistedJobId, token: claimed.leaseToken }, summary);
       processedWorkspaces += 1;
+      if (!appliedRules) continue;
       await heartbeatBackgroundJob(persistedJobId, claimed.leaseToken, {
         progress: 5 + (processedWorkspaces / Math.max(workspaces.length, 1)) * 90,
         message: `Processed ${processedWorkspaces}/${workspaces.length} workspaces.`,
