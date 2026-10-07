@@ -1,26 +1,32 @@
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import Module from "node:module";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { Session } from "node:inspector";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { threadId } from "node:worker_threads";
 import TestExclude from "test-exclude";
 
 const directory = process.env.NODE_V8_COVERAGE;
 if (directory) {
-  // Keep the exact JavaScript executed by tsx. Source-map line lengths alone cannot
-  // enumerate statements and branches inside functions that tests never call.
-  const config = JSON.parse(readFileSync(path.resolve(".c8rc.json"), "utf8"));
+  const config = JSON.parse(await readFile(path.resolve(".c8rc.json"), "utf8"));
   const scope = new TestExclude({ cwd: process.cwd(), include: config.include, exclude: config.exclude, extension: config.extension });
+  const selected = new Set((await scope.glob(process.cwd())).map((file) => path.resolve(file)));
   mkdirSync(directory, { recursive: true });
-  const compile = Module.prototype._compile;
-  Module.prototype._compile = function collectCompiledSource(source, filename) {
-    if (scope.shouldInstrument(filename.split("?tsx-commonjs-", 1)[0])) {
-      const url = pathToFileURL(filename).href;
-      const id = createHash("sha256").update(url).update(source).digest("hex");
-      writeFileSync(path.join(directory, `source-${id}.json`), JSON.stringify({ url, source }));
-    }
-    return compile.call(this, source, filename);
-  };
-  // Native ESM and any ESM transformations use Node's load hook instead.
-  await import("monocart-coverage-reports/register");
+  const session = new Session();
+  session.connect();
+  session.on("Debugger.scriptParsed", ({ params }) => {
+    const url = path.isAbsolute(params.url) ? pathToFileURL(params.url).href : params.url;
+    if (!url.startsWith("file:")) return;
+    if (!selected.has(fileURLToPath(url).split("?tsx-commonjs-", 1)[0])) return;
+    session.post("Debugger.getScriptSource", { scriptId: params.scriptId }, (error, result) => {
+      if (error) throw new Error(`Unable to collect executed source: ${url}`, { cause: error });
+      const data = { url, source: result.scriptSource, scriptId: params.scriptId, processId: process.pid, threadId };
+      writeFileSync(path.join(directory, `source-${process.pid}-${threadId}-${params.scriptId}.json`), JSON.stringify(data));
+    });
+  });
+  // The local inspector returns already parsed scripts too, including this
+  // preload. It opens no listening port and does not alter native hit counts.
+  session.post("Debugger.enable");
+  // Keep it connected through shutdown: disconnecting in an exit handler drops
+  // V8's block counters before Node writes its native coverage files.
 }

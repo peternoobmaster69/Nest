@@ -2,6 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { decode, encode } from "@jridgewell/sourcemap-codec";
+import { parse } from "acorn";
+import { convert } from "ast-v8-to-istanbul";
 import { CoverageReport } from "monocart-coverage-reports";
 import TestExclude from "test-exclude";
 import ts from "typescript";
@@ -45,47 +47,83 @@ function canonicalFileURL(url) {
   return url.startsWith("file:") ? pathToFileURL(fileURLToPath(url)).href : url;
 }
 
-function compiledSource(entry, sourceMap, sources) {
-  // A module can be native ESM in one test process and compiled CommonJS in
-  // another. The URL alone cannot identify the JavaScript that V8 measured.
-  const lengths = JSON.stringify(sourceMap.lineLengths);
-  const candidates = sources.filter((source) => JSON.stringify(source.split("\n").map((line) => line.length)) === lengths);
-  if (candidates.length !== 1) throw new Error(`Missing compiled coverage source or multiple matching versions: ${entry.url}`);
-  return candidates[0];
+async function readCompiledSources(collectedDirectory, filenames) {
+  const sources = new Map();
+  for (const filename of filenames.filter((name) => name.startsWith("source-") && name.endsWith(".json"))) {
+    const data = JSON.parse(await readFile(path.join(collectedDirectory, filename), "utf8"));
+    sources.set(`${data.processId}:${data.threadId}:${data.scriptId}`, data);
+  }
+  return sources;
+}
+
+async function hydrateEntries(data, filename, includesSource, sources) {
+  const context = /^coverage-(\d+)-\d+-(\d+)\.json$/.exec(filename);
+  const sourceMaps = new Map(Object.entries(data["source-map-cache"] ?? {})
+    .map(([url, sourceMap]) => [canonicalFileURL(url), sourceMap]));
+  const entries = data.result.filter((entry) => entry.url.startsWith("file:") && includesSource(entry.url));
+  for (const entry of entries) {
+    // V8 may leave route brackets literal while Node encodes its cache keys.
+    entry.url = canonicalFileURL(entry.url);
+    const sourceMap = sourceMaps.get(entry.url);
+    const captured = sources.get(`${context?.[1]}:${context?.[2]}:${entry.scriptId}`);
+    if (captured && canonicalFileURL(captured.url) === entry.url) {
+      entry.source = captured.source;
+    } else if (sourceMap?.data) {
+      throw new Error(`Missing compiled coverage source: ${entry.url}`);
+    } else {
+      entry.source = await readFile(fileURLToPath(entry.url), "utf8");
+    }
+    if (sourceMap?.data) entry.sourceMap = sourceMap.data;
+  }
+  return entries;
 }
 
 async function addCollectedCoverage(report, collectedDirectory, includesSource) {
   const filenames = await readdir(collectedDirectory);
-  const sources = new Map();
-  for (const filename of filenames.filter((name) => name.startsWith("source-") && name.endsWith(".json"))) {
-    const data = JSON.parse(await readFile(path.join(collectedDirectory, filename), "utf8"));
-    const url = canonicalFileURL(data.url);
-    const versions = sources.get(url) ?? new Set();
-    versions.add(data.source);
-    sources.set(url, versions);
-  }
+  const sources = await readCompiledSources(collectedDirectory, filenames);
   let hasCoverage = false;
+  const tested = new Set();
   for (const filename of filenames.filter((name) => !name.startsWith("source-") && name.endsWith(".json"))) {
     const data = JSON.parse(await readFile(path.join(collectedDirectory, filename), "utf8"));
     if (!Array.isArray(data.result)) continue;
     hasCoverage ||= data.result.length > 0;
-    const sourceMaps = new Map(Object.entries(data["source-map-cache"] ?? {})
-      .map(([url, sourceMap]) => [canonicalFileURL(url), sourceMap]));
-    const entries = data.result.filter((entry) => entry.url.startsWith("file:") && includesSource(entry.url));
+    const entries = await hydrateEntries(data, filename, includesSource, sources);
     for (const entry of entries) {
-      // V8 may leave route brackets literal while Node encodes its cache keys.
-      entry.url = canonicalFileURL(entry.url);
-      const sourceMap = sourceMaps.get(entry.url);
-      if (sourceMap?.data) {
-        entry.source = compiledSource(entry, sourceMap, [...sources.get(entry.url) ?? []]);
-        entry.sourceMap = sourceMap.data;
-      } else {
-        entry.source = await readFile(fileURLToPath(entry.url), "utf8");
-      }
+      for (const file of await addEntry(report, entry, includesSource)) tested.add(path.resolve(file));
     }
-    if (entries.length) await report.add(entries);
   }
   if (!hasCoverage) throw new Error("No V8 coverage was collected; run the test suite before reporting.");
+  return tested;
+}
+
+function compilerHelpers(entry) {
+  const wrapper = entry.source.indexOf("(()=>{");
+  if (!entry.sourceMap || !entry.source.startsWith("__filename=") || wrapper < 0) return () => false;
+  const exports = /module\.exports=__toCommonJS\([\w$]+\);/.exec(entry.source);
+  if (!exports || !entry.source.slice(0, exports.index).includes("var __defProp=")) return () => false;
+  const end = exports.index + exports[0].length;
+  // tsx/esbuild's export getters and module wrapper do not exist in the source.
+  // Ignore only those generated nodes, keeping every nested user-code node.
+  return (node, type) => node.end <= end || (type === "function" && node.start === wrapper + 1);
+}
+
+async function addEntry(report, entry, includesSource) {
+  terminateCommonJSAnnotationMap(entry);
+  const result = await convert({
+    code: entry.source,
+    ast: parse(entry.source, { ecmaVersion: "latest", sourceType: "module", locations: true, ranges: true }),
+    coverage: entry,
+    sourceMap: entry.sourceMap,
+    ignoreNode: compilerHelpers(entry),
+  });
+  const scoped = Object.fromEntries(Object.entries(result)
+    .filter(([file]) => includesSource(file))
+    .map(([file, coverage]) => {
+      const relative = path.relative(process.cwd(), file);
+      return [relative, { ...coverage, path: relative }];
+    }));
+  if (Object.keys(scoped).length) await report.add(scoped);
+  return Object.keys(scoped);
 }
 
 const cwd = process.cwd();
@@ -111,21 +149,18 @@ const report = new CoverageReport({
   outputDir,
   clean: false,
   reports: config.reporter,
-  onEntry: (entry) => {
-    if (entry.fake) throw new Error(`Missing compiled coverage source: ${entry.url}`);
-    terminateCommonJSAnnotationMap(entry);
-  },
-  entryFilter: (entry) => includesSource(entry.url),
-  sourceFilter: includesSource,
-  all: {
-    dir: cwd,
-    filter: (file) => includesSource(file) ? "js" : false,
-    // Unloaded TS/TSX must be compiled too, so its functions and JSX remain in the denominator.
-    transformer: compileUntestedTypeScript,
-  },
 });
 report.cleanCache();
-await addCollectedCoverage(report, collectedDirectory, includesSource);
+const tested = await addCollectedCoverage(report, collectedDirectory, includesSource);
+// Enumerate every production source with zero hits, including unloaded function
+// bodies and JSX. Istanbul merges these baselines with the actual V8 evidence.
+for (const filename of selectedSources) {
+  if (tested.has(filename)) continue;
+  const entry = { url: pathToFileURL(filename).href, source: await readFile(filename, "utf8") };
+  compileUntestedTypeScript(entry);
+  entry.functions = [{ functionName: "", isBlockCoverage: true, ranges: [{ startOffset: 0, endOffset: entry.source.length, count: 0 }] }];
+  await addEntry(report, entry, includesSource);
+}
 const results = await report.generate();
 const reportedFiles = new Set(results.files.map((file) => path.resolve(cwd, file.sourcePath)));
 const expectedFiles = await scope.glob(cwd);

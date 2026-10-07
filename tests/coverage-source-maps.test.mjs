@@ -104,13 +104,18 @@ test("source behavior", () => {
     const details = JSON.parse(await readFile(path.join(reports, "coverage-final.json"), "utf8"));
     sourceTotals.push(report["sample.ts"].lines.total);
     const sampleStatements = Object.entries(details["sample.ts"].statementMap);
-    for (const line of [2, 3, 4, 6, 7, 9, 10, 11, 12]) {
+    for (const line of [3, 4, 7, 10, 11, 12]) {
       assert.ok(sampleStatements.some(([, location]) => location.start.line === line), `Executable source line ${line} must be represented in ${mode}`);
     }
+    for (const line of [2, 6, 9]) {
+      assert.ok(Object.values(details["sample.ts"].fnMap).some((fn) => fn.line === line), `Function on source line ${line} must be represented in ${mode}`);
+    }
     if (mode !== "complete") {
-      for (const [id, location] of sampleStatements.filter(([, location]) => location.start.line >= 9)) {
+      for (const [id, location] of sampleStatements.filter(([, location]) => location.start.line >= 10)) {
         assert.equal(details["sample.ts"].s[id], 0, `Uncalled source line ${location.start.line} must be uncovered`);
       }
+      const delayed = Object.entries(details["sample.ts"].fnMap).find(([, fn]) => fn.name === "delayed");
+      assert.equal(details["sample.ts"].f[delayed[0]], 0, "An initialized function must remain uncovered until it is called");
     }
     const sources = Object.keys(report).filter((key) => key !== "total");
     assert.deepEqual(sources.map((file) => file.replaceAll("\\", "/")).sort(), ["nested/[id]/panel.tsx", "nested/untouched.ts", "plain.mjs", "sample.ts"]);
@@ -141,6 +146,64 @@ test("source behavior", () => {
   const environment = { ...process.env };
   delete environment.NODE_TEST_CONTEXT;
   await assert.rejects(execute(process.execPath, [reporter], { cwd: directory, env: environment }), /Coverage must include untested production sources/);
+});
+
+test("native ESM and compiled CommonJS share JavaScript hits without losing unexecuted branches or function bodies", async (t) => {
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "nest-coverage-js-formats-")));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, "source.mjs"), [
+    "export const API = 'v1';",
+    "export function choose(enabled) {",
+    "  if (enabled) return 'ready';",
+    "  return 'waiting';",
+    "}",
+    "export function uncalled() {",
+    "  const result = 'not executed';",
+    "  return result;",
+    "}",
+  ].join("\n"));
+  await writeFile(path.join(directory, "native.test.mjs"), `
+import assert from "node:assert/strict";
+import { API, choose } from "./source.mjs";
+assert.equal(API, "v1");
+assert.equal(choose(true), "ready");
+`);
+  await writeFile(path.join(directory, "compiled.test.mjs"), `
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+const { API, choose } = createRequire(import.meta.url)("./source.mjs");
+assert.equal(API, "v1");
+if (process.env.NEST_COVERAGE_FIXTURE_MODE === "complete") assert.equal(choose(false), "waiting");
+`);
+  for (const mode of ["partial", "complete"]) {
+    const reports = path.join(directory, mode);
+    await writeFile(path.join(directory, ".c8rc.json"), JSON.stringify({
+      all: true, include: ["source.mjs"], exclude: [], extension: [".mjs"],
+      "reports-dir": reports, reporter: ["json-summary", "json"],
+    }));
+    const environment = { ...process.env, NEST_COVERAGE_FIXTURE_MODE: mode };
+    delete environment.NODE_TEST_CONTEXT;
+    delete environment.NODE_V8_COVERAGE;
+    await execute(process.execPath, [
+      c8, "--config", path.join(directory, ".c8rc.json"), "--reporter=none", "--temp-directory", path.join(reports, "tmp"),
+      process.execPath, "--import", tsx, "--import", collector, "--test", "native.test.mjs", "compiled.test.mjs",
+    ], { cwd: directory, env: environment, timeout: 45_000 });
+    await execute(process.execPath, [reporter], { cwd: directory, env: environment, timeout: 45_000 });
+    const details = JSON.parse(await readFile(path.join(reports, "coverage-final.json"), "utf8"))["source.mjs"];
+    const branch = Object.entries(details.branchMap).find(([, location]) => location.line === 3);
+    assert.ok(branch);
+    assert.equal(details.b[branch[0]][0], 1);
+    assert.equal(details.b[branch[0]][1], mode === "complete" ? 1 : 0);
+    const choose = Object.entries(details.fnMap).find(([, fn]) => fn.name === "choose");
+    const uncalled = Object.entries(details.fnMap).find(([, fn]) => fn.name === "uncalled");
+    assert.equal(details.f[choose[0]], mode === "complete" ? 2 : 1);
+    assert.equal(details.f[uncalled[0]], 0);
+    for (const line of [7, 8]) {
+      const statement = Object.entries(details.statementMap).find(([, location]) => location.start.line === line);
+      assert.ok(statement);
+      assert.equal(details.s[statement[0]], 0);
+    }
+  }
 });
 
 test("coverage retains missed source branches and refuses missing compiled or native evidence", async (t) => {
