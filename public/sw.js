@@ -1,11 +1,17 @@
-const VERSION = "nest-v9";
+const VERSION = "nest-v10";
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_FALLBACK = "/offline.html";
 
-const APP_SHELL = [
+const OFFLINE_SHELL = [
   OFFLINE_FALLBACK,
   "/offline.js",
+  "/static-page-copy.js",
+  "/static-page-messages.js",
+];
+
+const APP_SHELL = [
+  ...OFFLINE_SHELL,
   "/manifest.webmanifest",
   "/icon.svg",
   "/favicon.svg",
@@ -20,12 +26,12 @@ self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(SHELL_CACHE);
 
-    // The fallback must always be available. Optional install assets are cached
-    // independently so one unavailable icon cannot make the whole worker fail.
-    await cache.add(new Request(OFFLINE_FALLBACK, { cache: "reload" }));
+    // Install the fallback and its scripts together so it remains usable offline.
+    // Optional icons are cached independently and cannot make installation fail.
+    await Promise.all(OFFLINE_SHELL.map((asset) => cache.add(new Request(asset, { cache: "reload" }))));
     await Promise.allSettled(
       APP_SHELL
-        .filter((asset) => asset !== OFFLINE_FALLBACK)
+        .filter((asset) => !OFFLINE_SHELL.includes(asset))
         .map((asset) => cache.add(new Request(asset, { cache: "reload" }))),
     );
   })());
@@ -96,6 +102,11 @@ self.addEventListener("fetch", (event) => {
         );
       }),
     );
+    return;
+  }
+
+  if (APP_SHELL.includes(url.pathname)) {
+    event.respondWith(networkFirst(request, SHELL_CACHE));
     return;
   }
 

@@ -35,6 +35,35 @@ test("offline fallback is keyboard operable and has no serious axe violations", 
   await expect(page.locator(":focus")).toBeVisible();
 });
 
+test("offline navigation loads every fallback script through the worker under the production CSP", async ({ page, context }) => {
+  const scriptErrors: string[] = [];
+  const cachedScripts = new Set<string>();
+  page.on("pageerror", (error) => scriptErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error" && /Content Security Policy/i.test(message.text())) scriptErrors.push(message.text());
+  });
+  page.on("response", (response) => {
+    if (response.fromServiceWorker()) cachedScripts.add(new URL(response.url()).pathname);
+  });
+  await page.goto("/offline.html");
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+  });
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+  await context.setOffline(true);
+  await page.goto("/w/offline-probe/transactions", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveTitle("Offline · Nest");
+  await expect(page.getByRole("heading", { name: "You’re offline" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeEnabled();
+  await expect(page.getByRole("status")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("{{");
+  for (const asset of ["/static-page-messages.js", "/static-page-copy.js", "/offline.js"]) {
+    expect(cachedScripts.has(asset), `${asset} must be available offline`).toBe(true);
+  }
+  expect(scriptErrors).toEqual([]);
+});
+
 test("style guide reflows and renders consistently in both themes", async ({ page }, testInfo) => {
   await page.goto("/style-guide.html");
   const theme = testInfo.project.name.includes("mobile") ? "dark" : "light";

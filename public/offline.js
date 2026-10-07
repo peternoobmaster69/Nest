@@ -1,3 +1,5 @@
+renderStaticPageCopy(document);
+
 (() => {
   const connectionStatus = document.getElementById("status");
   const retry = document.getElementById("retry");
@@ -9,26 +11,24 @@
   };
 
   const reconnect = () => {
-    connectionStatus.textContent = "Connection restored. Reloading…";
+    connectionStatus.textContent = staticPageText("offline.connectionRestored");
     returnToApp();
   };
 
   retry.addEventListener("click", () => {
-    connectionStatus.textContent = navigator.onLine ? "Checking connection…" : "Still offline. We’ll retry when you reconnect.";
+    connectionStatus.textContent = staticPageText(navigator.onLine ? "offline.checkingConnection" : "offline.stillOffline");
     returnToApp();
   });
 
   back.addEventListener("click", () => {
     if (window.history.length > 1) window.history.back();
-    else connectionStatus.textContent = "No earlier screen is available in this window.";
+    else connectionStatus.textContent = staticPageText("offline.noHistory");
   });
 
   window.addEventListener("online", reconnect);
   if (navigator.onLine) {
-    if (window.location.pathname === "/offline.html") {
-      connectionStatus.textContent = "Connection available. Try again to return to Nest.";
-    } else {
-      reconnect();
-    }
+    // An online device can still be unable to reach Nest. Wait for an explicit
+    // retry or a new connection event instead of reloading the fallback in a loop.
+    connectionStatus.textContent = staticPageText("offline.connectionAvailable");
   }
 })();

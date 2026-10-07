@@ -13,6 +13,7 @@ function worker(host = "https://save.htet.info") {
   const notifications = [];
   const opened = [];
   const clients = [];
+  const unavailableAssets = new Set();
   let fetchImpl = async () => new Response("network");
   const key = (request) => new URL(typeof request === "string" ? request : request.url, host).href;
   const caches = {
@@ -22,7 +23,10 @@ function worker(host = "https://save.htet.info") {
       if (!stores.has(name)) stores.set(name, new Map());
       const entries = stores.get(name);
       return {
-        async add(request) { entries.set(key(request), new Response("shell")); },
+        async add(request) {
+          if (unavailableAssets.has(new URL(request.url).pathname)) throw new Error("Asset unavailable");
+          entries.set(key(request), new Response("shell"));
+        },
         async put(request, response) { entries.set(key(request), response); },
         async match(request) { return entries.get(key(request))?.clone(); },
       };
@@ -53,6 +57,7 @@ function worker(host = "https://save.htet.info") {
   vm.runInNewContext(source, { self, caches, URL, Request: WorkerRequest, Response, fetch: (request) => fetchImpl(request) }, { filename });
   return {
     caches, self, notifications, opened, clients,
+    rejectAsset(pathname) { unavailableAssets.add(pathname); },
     fetchWith(implementation) { fetchImpl = implementation; },
     async dispatch(type, event = {}) {
       const work = [];
@@ -67,25 +72,51 @@ function worker(host = "https://save.htet.info") {
 test("worker install prepares the offline shell and activation purges obsolete private caches", async () => {
   const app = worker();
   await app.caches.open("nest-v7-static");
-  await app.caches.open("nest-v9-read");
-  await app.caches.open("nest-v9-static");
+  await app.caches.open("nest-v10-read");
+  await app.caches.open("nest-v10-static");
   await app.dispatch("install");
   assert.equal(app.self.skipWaitingCalls, 1);
   assert.equal(await (await app.caches.match("/offline.html")).text(), "shell");
   await app.dispatch("activate");
-  assert.deepEqual((await app.caches.keys()).sort(), ["nest-v9-shell", "nest-v9-static"]);
+  assert.deepEqual((await app.caches.keys()).sort(), ["nest-v10-shell", "nest-v10-static"]);
   assert.equal(app.self.clients.claimed, 1);
+});
+
+test("offline markup and its scripts install together, while failed optional icons do not block installation", async () => {
+  for (const asset of ["/offline.html", "/offline.js", "/static-page-copy.js", "/static-page-messages.js"]) {
+    const app = worker();
+    app.rejectAsset(asset);
+    await assert.rejects(app.dispatch("install"), /Asset unavailable/);
+  }
+  const app = worker();
+  app.rejectAsset("/favicon.ico");
+  await app.dispatch("install");
+  for (const asset of ["/offline.html", "/offline.js", "/static-page-copy.js", "/static-page-messages.js"]) {
+    assert.equal(await (await app.caches.match(asset)).text(), "shell");
+  }
+});
+
+test("offline scripts are served from the shell cache on both production and localhost", async () => {
+  for (const host of ["https://save.htet.info", "http://127.0.0.1:3100"]) {
+    const app = worker(host);
+    await app.dispatch("install");
+    app.fetchWith(async () => { throw new TypeError("Offline"); });
+    for (const asset of ["/offline.js", "/static-page-copy.js", "/static-page-messages.js"]) {
+      const response = await app.dispatch("fetch", { request: new Request(new URL(asset, host)) });
+      assert.equal(await response.text(), "shell");
+    }
+  }
 });
 
 test("cache purge messages require our origin and an explicitly supported operation", async () => {
   const app = worker();
-  for (const name of ["nest-v9-read", "nest-v9-shell", "unrelated"]) await app.caches.open(name);
+  for (const name of ["nest-v10-read", "nest-v10-shell", "unrelated"]) await app.caches.open(name);
   await app.dispatch("message", { origin: "https://untrusted.test", data: { type: "PURGE_ALL_CACHES" } });
   await app.dispatch("message", { origin: app.self.location.origin });
   await app.dispatch("message", { origin: app.self.location.origin, data: { type: "UNKNOWN" } });
   assert.equal((await app.caches.keys()).length, 3);
   await app.dispatch("message", { origin: app.self.location.origin, data: { type: "PURGE_PRIVATE_CACHES" } });
-  assert.deepEqual(await app.caches.keys(), ["nest-v9-shell", "unrelated"]);
+  assert.deepEqual(await app.caches.keys(), ["nest-v10-shell", "unrelated"]);
   await app.dispatch("message", { origin: app.self.location.origin, data: { type: "PURGE_ALL_CACHES" } });
   assert.deepEqual(await app.caches.keys(), ["unrelated"]);
 });
@@ -135,7 +166,7 @@ test("static assets use network-first caching, retain successful fallbacks, and 
   await assert.rejects(app.dispatch("fetch", { request: missing }), /offline/);
   app.fetchWith(async () => new Response("not found", { status: 404 }));
   assert.equal((await app.dispatch("fetch", { request: missing })).status, 404);
-  assert.equal(await (await app.caches.open("nest-v9-static")).match(missing), undefined);
+  assert.equal(await (await app.caches.open("nest-v10-static")).match(missing), undefined);
 });
 
 test("local development bypasses static caching on both supported loopback hostnames", async () => {

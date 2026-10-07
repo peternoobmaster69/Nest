@@ -37,7 +37,7 @@ function workspaceIdFromPath(pathname: string) {
 function contentSecurityPolicy(nonce: string, pathname: string) {
   const development = process.env.NODE_ENV === "development";
   const staticIntegrity = staticPageScriptIntegrity(pathname);
-  const trustedScript = staticIntegrity ? `'${staticIntegrity}'` : `'nonce-${nonce}'`;
+  const trustedScript = staticIntegrity ? staticIntegrity.map((digest) => `'${digest}'`).join(" ") : `'nonce-${nonce}'`;
   const directives = [
     "default-src 'self'",
     `script-src 'self' ${trustedScript} 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,

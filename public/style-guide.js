@@ -1,3 +1,5 @@
+renderStaticPageCopy(document);
+
 function setStyleGuideTheme(theme) {
   document.documentElement.dataset.theme = theme;
   for (const button of document.querySelectorAll("[data-theme-option]")) {
