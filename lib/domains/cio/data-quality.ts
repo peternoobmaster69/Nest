@@ -160,7 +160,7 @@ export function assessCioDataQuality(params: {
   }
 
   const completenessBps = possible === 0 ? 0 : Math.round((earned * 10_000) / possible);
-  const orderedDates = valuationDates.sort((left, right) => left.getTime() - right.getTime());
+  const orderedDates = valuationDates.toSorted((left, right) => left.getTime() - right.getTime());
   return {
     completenessBps,
     completenessPercentage: completenessBps / 100,

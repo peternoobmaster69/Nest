@@ -66,7 +66,7 @@ export function sanitizeBackgroundJobError(error: unknown): JobFailure {
 
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
     const rawConstraint = error.meta?.constraint ?? error.meta?.field_name;
-    const constraint = typeof rawConstraint === "string" && /^[A-Za-z0-9_]{1,64}$/.test(rawConstraint)
+    const constraint = typeof rawConstraint === "string" && /^\w{1,64}$/.test(rawConstraint)
       ? rawConstraint
       : null;
     return {

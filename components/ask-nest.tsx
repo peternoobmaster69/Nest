@@ -35,7 +35,7 @@ import type {
 } from "@/lib/ai/ask-nest-types";
 import { Button } from "@/components/ui/button";
 import { AskNestFab, type NestlingMood } from "@/components/ask-nest-mascot";
-import { askNestFlags, claimAskNestWorkspace, useAskNestLauncher, useAskNestState } from "@/components/ask-nest-store";
+import { claimAskNestFlag, releaseAskNestFlag, claimAskNestWorkspace, useAskNestLauncher, useAskNestState } from "@/components/ask-nest-store";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { usePrivacyMode } from "@/lib/privacy-mode";
 import { Textarea } from "@/components/ui/controls";
@@ -203,8 +203,7 @@ export function AskNest({
 
   useEffect(() => {
     const historyKey = "history";
-    if (!open || askNestFlags.has(historyKey)) return;
-    askNestFlags.add(historyKey);
+    if (!open || !claimAskNestFlag(historyKey)) return;
     setHistoryLoading(true);
     setHistoryError("");
     void workspaceFetch("/api/ai/history?limit=10", { cache: "no-store" })
@@ -217,7 +216,7 @@ export function AskNest({
         setNextCursor(payload.nextCursor);
       })
       .catch((error) => {
-        askNestFlags.delete(historyKey);
+        releaseAskNestFlag(historyKey);
         setHistoryError(error instanceof Error ? error.message : "Could not load conversation history.");
       })
       .finally(() => setHistoryLoading(false));

@@ -3,7 +3,7 @@ type LogContext = Record<string, unknown>;
 
 const SENSITIVE_KEY = /(authorization|cookie|token|secret|password|passphrase|cvv|cvc|pan|card(number)?|raw(body|email)|sql|query|params?|p256dh|endpoint|credential)/i;
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const BEARER = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
+const BEARER = /\bBearer\s+[a-z\d._~+/-]+=*/gi;
 const CARD_NUMBER = /\b(?:\d[ -]*?){13,19}\b/g;
 const MAX_STRING_LENGTH = 1_000;
 

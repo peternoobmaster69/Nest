@@ -320,11 +320,13 @@ function findRelatedTransaction(transaction: ReviewTransactionRow, pool: ReviewT
       possibleDuplicate = candidate;
     }
   }
-  return possibleReversal
-    ? { state: "POSSIBLE_REVERSAL" as const, transaction: possibleReversal }
-    : possibleDuplicate
-      ? { state: "POSSIBLE_DUPLICATE" as const, transaction: possibleDuplicate }
-      : null;
+  if (possibleReversal) {
+    return { state: "POSSIBLE_REVERSAL" as const, transaction: possibleReversal };
+  }
+  if (possibleDuplicate) {
+    return { state: "POSSIBLE_DUPLICATE" as const, transaction: possibleDuplicate };
+  }
+  return null;
 }
 
 function ruleAction(

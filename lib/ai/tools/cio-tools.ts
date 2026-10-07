@@ -70,7 +70,7 @@ type CioToolResult = {
 
 const nullableDateParameter = {
   type: ["string", "null"],
-  pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+  pattern: String.raw`^\d{4}-\d{2}-\d{2}$`,
 } as const;
 
 const nullableIntegerParameter = { type: ["integer", "null"] } as const;
@@ -292,6 +292,8 @@ function allocations(snapshot: CioSnapshot) {
     + toolOmittedSecurities.reduce((sum, bucket) => sum + bucket.valueCents, 0);
   const omittedSecurityAllocationBps = snapshot.allocation.omittedSecurityAllocationBps
     + toolOmittedSecurities.reduce((sum, bucket) => sum + bucket.allocationBps, 0);
+  const unknownAssetClass = snapshot.allocation.assetClasses.find((bucket) => bucket.key === "UNKNOWN");
+  const unknownGeography = snapshot.allocation.geographies.find((bucket) => bucket.key === "UNKNOWN");
   return {
     total: money(snapshot.allocation.totalCents, snapshot.baseCurrency),
     assetClasses: snapshot.allocation.assetClasses.map(mapBucket),
@@ -302,12 +304,8 @@ function allocations(snapshot: CioSnapshot) {
     securitiesTruncated: returnedSecurities.length < snapshot.allocation.securityBucketCount,
     omittedSecurityValue: money(omittedSecurityValueCents, snapshot.baseCurrency),
     omittedSecurityAllocation: percentage(omittedSecurityAllocationBps),
-    unknownAssetClass: snapshot.allocation.assetClasses.find((bucket) => bucket.key === "UNKNOWN")
-      ? mapBucket(snapshot.allocation.assetClasses.find((bucket) => bucket.key === "UNKNOWN")!)
-      : null,
-    unknownGeography: snapshot.allocation.geographies.find((bucket) => bucket.key === "UNKNOWN")
-      ? mapBucket(snapshot.allocation.geographies.find((bucket) => bucket.key === "UNKNOWN")!)
-      : null,
+    unknownAssetClass: unknownAssetClass ? mapBucket(unknownAssetClass) : null,
+    unknownGeography: unknownGeography ? mapBucket(unknownGeography) : null,
     unknownSecurity: unknownSecurity ? mapBucket(unknownSecurity) : null,
   };
 }

@@ -38,7 +38,13 @@ async function withCioTransaction<T>(
 }
 
 function optionalDate(value: string | null | undefined) {
-  return value === undefined ? undefined : value === null ? null : new Date(value);
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  return new Date(value);
 }
 
 function requiredDate(value: string) {

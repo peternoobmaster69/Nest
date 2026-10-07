@@ -559,7 +559,7 @@ export function InvestmentsPage() {
     if (allDates.size === 0) return [];
 
     // Sort all unique dates
-    const sortedDates = Array.from(allDates).sort();
+    const sortedDates = Array.from(allDates).sort((left, right) => left.localeCompare(right));
 
     // For each date, sum up the latest known values from each account
     return sortedDates.map((dateKey) => {
@@ -568,9 +568,7 @@ export function InvestmentsPage() {
 
       for (const [, entries] of accountEntries) {
         // Find the latest entry for this account up to this date
-        const latestEntry = entries
-          .filter((e) => e.date <= dateKey)
-          .pop();
+        const latestEntry = entries.findLast((e) => e.date <= dateKey);
         if (latestEntry) {
           totalInvested += latestEntry.invested;
           totalCurrent += latestEntry.current;

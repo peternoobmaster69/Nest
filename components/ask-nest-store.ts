@@ -64,10 +64,20 @@ export function claimAskNestWorkspace(workspaceId: string | null | undefined) {
   if (owner === workspaceId) return;
   values.set("workspace", workspaceId);
   if (owner === undefined) return;
-  for (const key of [...values.keys()]) if (key.startsWith("thread:")) values.delete(key);
+  for (const key of values.keys()) if (key.startsWith("thread:")) values.delete(key);
   // Called during render before any store reads, so subscribers pick up the reset without a notification.
   askNestFlags.clear();
 }
 
 /** One-shot flags (such as "history already requested") shared across remounts. */
-export const askNestFlags = new Set<string>();
+const askNestFlags = new Set<string>();
+
+export function claimAskNestFlag(name: string) {
+  if (askNestFlags.has(name)) return false;
+  askNestFlags.add(name);
+  return true;
+}
+
+export function releaseAskNestFlag(name: string) {
+  askNestFlags.delete(name);
+}

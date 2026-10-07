@@ -214,7 +214,7 @@ function parseDate(value: RetirementDateInput | null | undefined, field: string)
       field,
     );
   }
-  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     throw new RetirementProjectionValidationError(
       "INVALID_DATE",

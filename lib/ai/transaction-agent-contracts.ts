@@ -97,7 +97,7 @@ export type TransactionAgentView = {
 };
 
 const ACTION_VERBS = String.raw`deduct|subtract|minus|spent|spend|paid|pay|bought|buy|deposit|withdrew|withdraw|refund(?:ed)?|record|log|received|receive|got paid|top(?:ped)? up|credit|debit|charge[ds]?|took|take \S+ (?:out|off)|minus`;
-const EDIT_VERBS = String.raw`add(?:ed)?|got|create|move|transfer|delete|remove|undo|void|update|edit|change|correct|fix|rename|make (?:it|that)|put`;
+const EDIT_VERBS = `add(?:ed)?|got|create|move|transfer|delete|remove|undo|void|update|edit|change|correct|fix|rename|make (?:it|that)|put`;
 const QUESTION_START = /^\s*(?:how|what|why|when|where|which|who|whose|did|do|does|have|has|is|are|was|were|am|should|shall|will|would|compare|show|list|summari[sz]e|explain|tell me|give me|find)\b/i;
 const POLITE_REQUEST = /^\s*(?:(?:can|could|would|will) you|please|pls|help me|i (?:want|need|would like) to|i'd like to|let's|lets)\b/i;
 
@@ -105,8 +105,8 @@ const POLITE_REQUEST = /^\s*(?:(?:can|could|would|will) you|please|pls|help me|i
 export function isTransactionRequest(message: string) {
   const text = message.trim();
   if (!text) return false;
-  const imperative = new RegExp(`\\b(?:${ACTION_VERBS})\\b`, "i").test(text)
-    || new RegExp(`\\b(?:${EDIT_VERBS})\\b.*(?:\\$|\\d|transaction|expense|income|payment|entry|salary|allowance|bonus|refund|fare|bill)`, "i").test(text);
+  const imperative = new RegExp(String.raw`\b(?:${ACTION_VERBS})\b`, "i").test(text)
+    || new RegExp(String.raw`\b(?:${EDIT_VERBS})\b.*(?:\$|\d|transaction|expense|income|payment|entry|salary|allowance|bonus|refund|fare|bill)`, "i").test(text);
   if (!imperative) return false;
   // "Can you add $10…" is a request; "How much did I spend?" and "Did I pay…?" are questions.
   if (POLITE_REQUEST.test(text)) return true;

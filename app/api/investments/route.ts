@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      accounts.map((account) => ({ ...account, entries: account.entries.reverse() })),
+      accounts.map((account) => ({ ...account, entries: account.entries.toReversed() })),
     );
   } catch (error) {
     if (error instanceof ApiAuthError) {

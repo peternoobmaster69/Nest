@@ -58,7 +58,7 @@ function recommendationProfile(profile: ProfileRecord | null): CioRecommendation
 }
 
 function addUtcMonths(date: Date, months: number) {
-  const result = new Date(date.getTime());
+  const result = new Date(date);
   result.setUTCMonth(result.getUTCMonth() + months);
   return result;
 }
@@ -80,18 +80,18 @@ export function executiveStance(
   status: CioStrategyReportModel["strategyStatus"],
   recommendations: readonly CioStrategyRecommendation[],
 ) {
-  const liquidity = recommendations.find((item) => item.category === "LIQUIDITY" && item.severity === "CRITICAL");
+  const liquidity = recommendations.some((item) => item.category === "LIQUIDITY" && item.severity === "CRITICAL");
   if (liquidity) {
     return "Protect liquidity before adding portfolio risk. Restore the configured cash reserve, then resume long-term contribution priorities through the confirmed policy.";
   }
   if (status === "SETUP_REQUIRED") {
     return "The household planning foundation is not complete enough for high-conviction optimization. Finish the missing inputs and confirm policy guardrails before changing contribution direction.";
   }
-  const retirement = recommendations.find((item) => item.code === "INCREASE_RETIREMENT_CONTRIBUTIONS");
+  const retirement = recommendations.some((item) => item.code === "INCREASE_RETIREMENT_CONTRIBUTIONS");
   if (retirement) {
     return "The portfolio structure can remain disciplined, but the current retirement funding rate is below the configured base-case requirement. Contributions, timing, or spending must change.";
   }
-  const allocation = recommendations.find((item) => item.category === "ALLOCATION" && item.severity === "HIGH");
+  const allocation = recommendations.some((item) => item.category === "ALLOCATION" && item.severity === "HIGH");
   if (allocation) {
     return "Use new cash flows to move the portfolio back toward its confirmed strategic bands. An immediate sale is not required by this report.";
   }

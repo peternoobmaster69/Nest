@@ -2,17 +2,17 @@ import { runSecureApiRoute } from "@/lib/api-security";
 import { CioBoundedIdSchema } from "@/lib/domains/cio/contracts";
 import { getCioStrategyReport } from "@/lib/domains/cio/report-repository";
 import { renderCioStrategyReportPdf } from "@/lib/domains/cio/strategy-report-pdf";
+import { trimCharacters } from "@/lib/string-boundaries.mjs";
 
 export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 function downloadName(title: string, asOfDate: string) {
-  const stem = title
+  const normalized = title
     .normalize("NFKD")
-    .replace(/[^A-Za-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "CIO-Strategy";
+    .replace(/[^A-Za-z0-9_-]+/g, "-");
+  const stem = trimCharacters(normalized, "-").slice(0, 80) || "CIO-Strategy";
   return `${stem}-${asOfDate}.pdf`;
 }
 

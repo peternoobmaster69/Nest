@@ -1,6 +1,6 @@
 import { HTMLAttributes, ReactNode } from "react";
 
-export function DataView({ className = "", children, ...props }: Readonly<HTMLAttributes<HTMLDivElement>>) {
+export function DataListView({ className = "", children, ...props }: Readonly<HTMLAttributes<HTMLDivElement>>) {
   return <div className={`data-view ${className}`.trim()} {...props}>{children}</div>;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "nest-theme";
@@ -16,10 +16,14 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 function getStoredTheme(): Theme | null {
-  const saved = localStorage.getItem(THEME_STORAGE_KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  localStorage.removeItem(THEME_STORAGE_KEY);
-  return null;
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === "light" || saved === "dark") return saved;
+    localStorage.removeItem(THEME_STORAGE_KEY);
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function getSystemTheme(): Theme {
@@ -27,7 +31,7 @@ function getSystemTheme(): Theme {
 }
 
 function applyTheme(theme: Theme) {
-  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.dataset.theme = theme;
   // The stored theme can differ from prefers-color-scheme, so the SSR'd
   // media-based theme-color metas must be overridden to match --bg-elevated.
   const color = theme === "dark" ? "#2a2723" : "#ffffff";
@@ -38,9 +42,11 @@ function applyTheme(theme: Theme) {
 
 export function ThemeProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [theme, setTheme] = useState<Theme>("light");
+  const followsSystem = useRef(true);
 
   useEffect(() => {
     const saved = getStoredTheme();
+    followsSystem.current = saved === null;
     const initialTheme = saved ?? getSystemTheme();
     setTheme(initialTheme);
     applyTheme(initialTheme);
@@ -49,6 +55,7 @@ export function ThemeProvider({ children }: Readonly<{ children: ReactNode }>) {
 
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const handleSystemThemeChange = () => {
+      if (!followsSystem.current) return;
       const nextTheme = getSystemTheme();
       setTheme(nextTheme);
       applyTheme(nextTheme);
@@ -58,17 +65,20 @@ export function ThemeProvider({ children }: Readonly<{ children: ReactNode }>) {
     return () => media.removeEventListener("change", handleSystemThemeChange);
   }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
+    followsSystem.current = false;
     setTheme((prev) => {
       const nextTheme = prev === "light" ? "dark" : "light";
       applyTheme(nextTheme);
-      localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+      try { localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch { /* Keep the in-memory preference when storage is unavailable. */ }
       return nextTheme;
     });
-  };
+  }, []);
+
+  const value = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

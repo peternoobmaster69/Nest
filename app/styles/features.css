@@ -123,12 +123,6 @@
   background: var(--danger-bg);
 }
 
-.sb-ic {
-  width: 18px;
-  text-align: center;
-  font-size: 14px;
-}
-
 .sb-badge {
   margin-left: auto;
   background: var(--brand-500);
@@ -218,19 +212,6 @@
   z-index: 30;
   display: flex;
   flex-direction: column;
-}
-
-.sb-user-menu-item {
-  width: 100%;
-  display: block;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 9px 10px;
-  cursor: pointer;
 }
 
 .sb-user-menu-item:hover {
@@ -1418,19 +1399,6 @@
   gap: 12px;
 }
 
-.hamburger {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-
 .hamburger span {
   display: block;
   width: 18px;
@@ -2059,17 +2027,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
    BADGES
    ============================================================ */
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-}
-
 .badge-dot {
   width: 5px;
   height: 5px;
@@ -2101,11 +2058,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .badge-err .badge-dot {
   background: var(--danger);
-}
-
-.badge-neutral {
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
 }
 
 .badge-brand {
@@ -4032,10 +3984,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .dashboard-mini-card-total.positive {
-  color: var(--success);
-}
-
-.dashboard-mini-card-total.positive {
   color: var(--amount-positive);
 }
 
@@ -4348,26 +4296,24 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
    TOASTS
    ============================================================ */
 
-.toast-stack {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 60;
-  display: grid;
-  gap: 10px;
-}
-
 .toast {
   min-width: min(260px, calc(100vw - 40px));
   max-width: 360px;
-  padding: 14px 16px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-md);
   font-size: 14px;
   font-weight: 600;
   animation: slideIn 0.3s ease-out;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 46px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  pointer-events: auto;
 }
 
 @keyframes slideIn {
@@ -4379,24 +4325,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     transform: translateX(0);
     opacity: 1;
   }
-}
-
-.toast-success {
-  color: var(--success);
-  border-color: var(--success);
-  background: var(--success-bg);
-}
-
-.toast-error {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: var(--danger-bg);
-}
-
-.toast-info {
-  color: #1e3a8a;
-  border-color: #b7cbf5;
-  background: #eff6ff;
 }
 
 /* ============================================================
@@ -4657,19 +4585,6 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
     margin: 0;
   }
 
- .dashboard-mini-card {
-    padding: 8px 10px;
-    min-height: 36px;
-  }
-
-  .dashboard-mini-card-stack {
-    flex-wrap: nowrap;
-    gap: 8px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
   .dashboard-mini-card-stack::-webkit-scrollbar {
     display: none;
   }
@@ -4680,6 +4595,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   }
 
   .dashboard-mini-card-stack {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     gap: 12px;
   }
 
@@ -11565,19 +11484,16 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   filter: drop-shadow(0 -2px 6px rgba(0, 0, 0, 0.1));
 }
 
-.cc-grid-stacked .cc-card-collapsed .cc-card-front {
-  padding: 10px 16px;
-  opacity: 1;
-  border-radius: 12px;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15), 0 -4px 16px rgba(0, 0, 0, 0.1);
-}
-
 .cc-grid-stacked .cc-card-collapsed .cc-card-footer {
   display: none;
 }
 
 /* Show card number on collapsed cards */
 .cc-grid-stacked .cc-card-collapsed .cc-card-front {
+  padding: 10px 16px;
+  opacity: 1;
+  border-radius: 12px;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15), 0 -4px 16px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -12308,10 +12224,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
     letter-spacing: 0.04em;
   }
 
-  .cc-form-grid {
-    grid-template-columns: 1fr;
-  }
-
   .cc-theme-grid {
     grid-template-columns: 1fr;
   }
@@ -12369,6 +12281,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   }
 
   .cc-form-grid {
+    grid-template-columns: 1fr;
     padding-bottom: 24px;
   }
 }
@@ -12416,37 +12329,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   .signin-title {
     font-size: 24px;
   }
-}
-
-[data-theme="dark"] {
-  color-scheme: dark;
-  --skeleton-base: #2A2A2A;
-  --skeleton-shimmer: #3A3A3A;
-  --bg-base: #0a0908;
-  --bg-surface: #141210;
-  --bg-elevated: #1e1c19;
-  --bg-subtle: #2a2721;
-  --text-primary: #faf8f5;
-  --text-secondary: #d4cfc7;
-  --text-tertiary: #b8b0a4;
-  --text-disabled: #8a8278;
-  --border-subtle: #3c3830;
-  --border-default: #5c574f;
-  --success: #4ade80;
-  --success-bg: #0a2e1e;
-  --warning: #fbbf24;
-  --warning-bg: #2d1d00;
-  --danger: #f87171;
-  --danger-bg: #2d0a0a;
-  --amount-positive: #4ade80;
-  --amount-negative: #fbbf24;
-  --amount-zero: var(--text-primary);
-  --brand-50: #0a2e1e;
-  --brand-100: #147349;
-  --brand-500: #34d399;
-  --brand-600: #4ade80;
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.7);
 }
 
 [data-theme="dark"] body {
@@ -12565,10 +12447,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 /* Dark Mode Skeleton */
-[data-theme="dark"] .skeleton-block,
-[data-theme="dark"] .skeleton-text {
-  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--bg-elevated) 50%, var(--bg-subtle) 75%);
-}
 
 /* ============================================================
    CREDIT CARD TRANSACTIONS PAGE
@@ -13482,13 +13360,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 /* Table */
-.cct-table-wrapper {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  overflow-x: auto;
-}
 
 .cct-table {
   width: 100%;
@@ -16702,6 +16573,8 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .badge {
+  gap: 4px;
+  letter-spacing: 0.03em;
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -16781,21 +16654,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   pointer-events: none;
 }
 
-.toast {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 46px;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--r-md);
-  background: var(--color-surface-raised);
-  box-shadow: var(--shadow-lg);
-  color: var(--text-primary);
-  pointer-events: auto;
-}
-
 .toast-success { border-left: 4px solid var(--success); }
 .toast-error { border-left: 4px solid var(--danger); }
 .toast-info { border-left: 4px solid var(--teal); }
@@ -16827,6 +16685,8 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .sb-ic {
+  text-align: center;
+  font-size: 14px;
   flex: 0 0 20px;
   width: 20px;
   height: 20px;
@@ -16838,11 +16698,30 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .sb-user-menu-item {
+  width: 100%;
+  display: block;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 9px 10px;
+  cursor: pointer;
   align-items: center;
   gap: var(--space-2);
 }
 
 .hamburger {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
   display: none;
   place-items: center;
 }
@@ -16862,6 +16741,11 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .cct-table-wrapper {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-default) transparent;
 }
@@ -17952,21 +17836,6 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   opacity: 0.5;
 }
 
-.bp-compact-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.bp-compact-amount {
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
 .bp-compact-right .btn-icon {
   width: 24px;
   height: 24px;
@@ -17991,6 +17860,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .bp-compact-right {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -18219,6 +18089,16 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
    ============================================================ */
 
 [data-theme="dark"] {
+  color-scheme: dark;
+  --amount-positive: #4ade80;
+  --amount-negative: #fbbf24;
+  --amount-zero: var(--text-primary);
+  --brand-50: #0a2e1e;
+  --brand-100: #147349;
+  --brand-500: #34d399;
+  --brand-600: #4ade80;
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.7);
   /* Dark Mode Backgrounds */
   --bg-base: #1a1815;
   --bg-surface: #22201c;

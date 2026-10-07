@@ -297,7 +297,7 @@ function parsePayload(value: unknown) {
   return {
     payload,
     articles: articles
-      .sort((a, b) => articlePublishedTime(b) - articlePublishedTime(a))
+      .toSorted((a, b) => articlePublishedTime(b) - articlePublishedTime(a))
       .slice(0, SERPAPI_MAX_RESULTS),
   };
 }

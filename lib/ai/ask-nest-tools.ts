@@ -923,7 +923,7 @@ function findDestination(value: string) {
   const normalized = value.toLocaleLowerCase();
   return COUNTRY_FLAGS.find(([country]) => (
     country.length <= 3
-      ? new RegExp(`\\b${country}\\b`, "i").test(normalized)
+      ? new RegExp(String.raw`\b${country}\b`, "i").test(normalized)
       : normalized.includes(country)
   ));
 }
@@ -1965,7 +1965,7 @@ async function getInvestmentSummary(rawArgs: unknown, context: AskNestToolContex
       ? account.cioExposures.map((exposure) => ({
           assetClass: exposure.exposureKey,
           weightBps: exposure.weightBps,
-          weight: `${(exposure.weightBps / 100).toFixed(2).replace(/\.?0+$/, "")}%`,
+          weight: `${Number((exposure.weightBps / 100).toFixed(2))}%`,
         }))
       : [];
     return {

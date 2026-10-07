@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/form-field";
 import { QueryError } from "@/components/ui/query-state";
+import { trimCharacters } from "@/lib/string-boundaries.mjs";
 
 type PositionForm = {
   side: CioPositionSide; category: string; label: string; amount: string; asOfDate: string;
@@ -94,7 +95,7 @@ export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSav
   };
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    const category = form.category.trim().toUpperCase().replaceAll(/[^A-Z0-9_-]/g, "_").replaceAll(/^_+|_+$/g, "");
+    const category = trimCharacters(form.category.trim().toUpperCase().replaceAll(/[^A-Z0-9_-]/g, "_"), "_");
     const amount = Number(form.amount);
     const currentValueCents = centsFromMoneyInput(form.amount) ?? 0;
     if (!form.label.trim()) {

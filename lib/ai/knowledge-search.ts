@@ -1,6 +1,7 @@
 import { AzureKeyCredential } from "@azure/core-auth";
 import { DefaultAzureCredential } from "@azure/identity";
 import { SearchClient } from "@azure/search-documents";
+import { trimEndCharacters } from "../string-boundaries.mjs";
 
 type AskNestKnowledgeDocument = {
   id: string;
@@ -43,7 +44,7 @@ function getSearchEndpoint() {
   try {
     const endpoint = new URL(raw);
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return null;
-    endpoint.pathname = endpoint.pathname.replace(/\/+$/, "");
+    endpoint.pathname = trimEndCharacters(endpoint.pathname, "/");
     return endpoint.toString().replace(/\/$/, "");
   } catch {
     return null;

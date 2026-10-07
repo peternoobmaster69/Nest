@@ -25,7 +25,7 @@ function loadDotEnv(dotenvPath) {
 }
 
 function requireValue(value, key) {
-  if (!value || !value.trim()) {
+  if (!value?.trim()) {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value.trim();

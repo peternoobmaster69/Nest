@@ -2930,7 +2930,6 @@ html[data-ask-nest-open="true"] {
 .cc-preview {
   position: relative;
   height: 158px;
-  margin: 20px;
   overflow: hidden;
   padding: 15px 17px;
   border: 1px solid rgba(255, 255, 255, 0.23);
@@ -2939,6 +2938,7 @@ html[data-ask-nest-open="true"] {
   box-shadow:
     0 14px 30px rgba(30, 27, 22, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  margin: 14px 16px 12px !important;
 }
 
 .cc-preview::after {
@@ -4423,10 +4423,6 @@ body .profile-modal.txn-modal.txn-entry-modal[class] {
 
 .cc-modal-scroll {
   padding: 0 !important;
-}
-
-.cc-preview {
-  margin: 14px 16px 12px !important;
 }
 
 .cc-form-grid,

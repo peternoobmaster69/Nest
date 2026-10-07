@@ -1,15 +1,13 @@
 (() => {
   try {
     const savedTheme = window.localStorage.getItem("nest-theme");
-    const theme =
-      savedTheme === "light" || savedTheme === "dark"
-        ? savedTheme
-        : window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light";
-    document.documentElement.setAttribute("data-theme", theme);
+    let theme = savedTheme;
+    if (theme !== "light" && theme !== "dark") {
+      theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.dataset.theme = theme;
   } catch {
-    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.dataset.theme = "light";
   }
   try {
     // Privacy mode hides balances before first paint so amounts never flash on screen.

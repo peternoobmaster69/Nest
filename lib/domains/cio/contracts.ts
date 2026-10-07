@@ -105,8 +105,8 @@ function addUniqueKeyIssue<T extends Record<string, unknown>>(
 ) {
   if (!values) return;
   const seen = new Set<unknown>();
-  for (let index = 0; index < values.length; index += 1) {
-    const value = values[index][key];
+  for (const [index, item] of values.entries()) {
+    const value = item[key];
     if (seen.has(value)) ctx.addIssue({ code: "custom", path: [path, index, String(key)], message: "Duplicate key." });
     seen.add(value);
   }

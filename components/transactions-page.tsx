@@ -286,7 +286,7 @@ export function TransactionsPage() {
   const [isGroupingMode, setIsGroupingMode] = useState(false);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
-  const [groupDestinationId, setGroupDestinationId] = useState<"NEW" | string>("NEW");
+  const [groupDestinationId, setGroupDestinationId] = useState<string>("NEW");
   const [groupName, setGroupName] = useState("");
   const [groupIcon, setGroupIcon] = useState("📌");
   const [editingGroup, setEditingGroup] = useState<TransactionGroup | null>(null);
@@ -457,13 +457,13 @@ export function TransactionsPage() {
     setDraftCustomMonths((current) => (
       current.includes(monthKey)
         ? current.filter((value) => value !== monthKey)
-        : [...current, monthKey].sort()
+        : [...current, monthKey].sort((left, right) => left.localeCompare(right))
     ));
   };
 
   const applyCustomMonths = () => {
     if (!draftCustomMonths.length) return;
-    const sorted = [...draftCustomMonths].sort();
+    const sorted = draftCustomMonths.toSorted((left, right) => left.localeCompare(right));
     const [firstYear, firstMonth] = sorted[0].split("-").map(Number);
     const [lastYear, lastMonth] = sorted.at(-1)!.split("-").map(Number);
     setActiveQuickSelect("custom");
@@ -749,7 +749,7 @@ export function TransactionsPage() {
       setActiveQuickSelect(requestedQuickPeriod);
       setDateFilter(getTransactionQuickPeriodDateRange(requestedQuickPeriod));
     } else if (validMonths.length) {
-      const sorted = [...validMonths].sort();
+      const sorted = validMonths.toSorted((left, right) => left.localeCompare(right));
       const [firstYear, firstMonth] = sorted[0].split("-").map(Number);
       const [lastYear, lastMonth] = sorted.at(-1)!.split("-").map(Number);
       setSelectedCustomMonths(sorted);

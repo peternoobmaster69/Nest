@@ -3,7 +3,7 @@ import { closeSync, existsSync, fstatSync, openSync, readFileSync } from "node:f
 import path from "node:path";
 
 const root = process.cwd();
-const gitExecutable = process.platform === "win32" ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git";
+const gitExecutable = process.platform === "win32" ? String.raw`C:\Program Files\Git\cmd\git.exe` : "/usr/bin/git";
 const tracked = execFileSync(gitExecutable, ["ls-files", "-z"], { encoding: "utf8" })
   .split("\0")
   .filter(Boolean);
@@ -33,7 +33,7 @@ const forbiddenPaths = [
 ];
 const contentRules = [
   ["private key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
-  ["GitHub token", /(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,})/],
+  ["GitHub token", /(?:github_pat_\w{20,}|gh[pousr]_[A-Za-z0-9]{20,})/],
   ["AWS access key", /(?:AKIA|ASIA)[A-Z0-9]{16}/],
   ["Google API key", /AIza[0-9A-Za-z_-]{35}/],
   ["live Stripe key", /(?:sk|rk)_live_[0-9A-Za-z]{16,}/],

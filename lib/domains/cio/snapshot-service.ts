@@ -45,7 +45,7 @@ function normalizeAsOfDate(value?: string | Date) {
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   }
   const dateOnlyValue = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(dateOnlyValue ? `${dateOnlyValue}T00:00:00.000Z` : value);
+  const parsed = new Date(dateOnlyValue ? `${dateOnlyValue}T00:00:00.000Z` : value);
   if (Number.isNaN(parsed.getTime()) || (dateOnlyValue && parsed.toISOString().slice(0, 10) !== dateOnlyValue)) {
     throw new ApiRequestError(422, "Invalid CIO as-of date");
   }

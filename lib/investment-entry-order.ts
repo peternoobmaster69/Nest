@@ -30,13 +30,15 @@ export type InvestmentContributionAccount<T extends InvestedAmountEntry> = {
   entries: readonly T[];
 };
 
-function timestamp(value: string | Date | null | undefined) {
+type InvestmentTimestamp = string | Date | null | undefined;
+
+function timestamp(value: InvestmentTimestamp) {
   if (!value) return Number.NEGATIVE_INFINITY;
   const result = new Date(value).getTime();
   return Number.isNaN(result) ? Number.NEGATIVE_INFINITY : result;
 }
 
-function compareTimestamps(a: string | Date | null | undefined, b: string | Date | null | undefined) {
+function compareTimestamps(a: InvestmentTimestamp, b: InvestmentTimestamp) {
   const aTimestamp = timestamp(a);
   const bTimestamp = timestamp(b);
   if (aTimestamp === bTimestamp) return 0;

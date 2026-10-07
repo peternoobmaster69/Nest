@@ -117,5 +117,5 @@ export const SITE_STRUCTURED_DATA = {
 };
 
 export function serializeJsonLd(value: unknown) {
-  return JSON.stringify(value).replace(/</g, "\\u003c");
+  return JSON.stringify(value).replaceAll("<", String.raw`\u003c`);
 }

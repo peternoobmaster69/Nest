@@ -118,7 +118,7 @@ export default async function RewardsRoute() {
       ...ff,
       expiryWarning: ff.expiryWarning ?? 6,
       expirySummary: groupedMonths
-        .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+        .toSorted((a, b) => a.sortKey.localeCompare(b.sortKey))
         .filter(({ sortKey }) => {
           const [year, month] = sortKey.split("-").map(Number);
           const monthStart = new Date(Date.UTC(year, month - 1, 1));

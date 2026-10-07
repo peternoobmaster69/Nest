@@ -1,4 +1,4 @@
-import { apiErrorCodeForStatus, type ApiErrorCode, type ApiErrorEnvelope } from "@/lib/api/contracts";
+import { apiErrorCodeForStatus, type ApiErrorEnvelope } from "@/lib/api/contracts";
 import { workspaceFetch } from "@/lib/workspace-client";
 
 export class ApiClientError extends Error {
@@ -7,7 +7,7 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly code: ApiErrorCode | string,
+    public readonly code: string,
     public readonly requestId?: string,
     public readonly retryAfterSeconds?: number,
     public readonly issues?: unknown,

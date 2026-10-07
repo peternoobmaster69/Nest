@@ -416,6 +416,6 @@ export function buildCioStrategyRecommendations(params: {
   }
 
   return recommendations
-    .sort((left, right) => left.priority - right.priority || severityOrder[left.severity] - severityOrder[right.severity] || left.id.localeCompare(right.id))
+    .toSorted((left, right) => left.priority - right.priority || severityOrder[left.severity] - severityOrder[right.severity] || left.id.localeCompare(right.id))
     .slice(0, 12);
 }

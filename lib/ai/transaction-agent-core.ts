@@ -75,7 +75,10 @@ export type BudgetResolution =
 
 function usageReason(count: number, subject: string | null) {
   if (!count) return null;
-  return subject ? `Used for ${count} similar transaction${count === 1 ? "" : "s"}` : `Used ${count} time${count === 1 ? "" : "s"} recently`;
+  if (subject) {
+    return `Used for ${count} similar transaction${count === 1 ? "" : "s"}`;
+  }
+  return `Used ${count} time${count === 1 ? "" : "s"} recently`;
 }
 
 /**
@@ -95,7 +98,7 @@ export function resolveAgentBudget(
     const name = normalizeAccountName(b.accountName);
     return name.includes(bank) || bank.includes(name) || scorePair(bank, b.accountName).score >= 0.8;
   }) : budgets;
-  const byLikelihood = (items: Ranked[]) => items.sort((a, b) => b.score - a.score
+  const byLikelihood = (items: Ranked[]) => items.toSorted((a, b) => b.score - a.score
     || (usage.similar.get(b.budget.id) ?? 0) - (usage.similar.get(a.budget.id) ?? 0)
     || (usage.recent.get(b.budget.id) ?? 0) - (usage.recent.get(a.budget.id) ?? 0)
     || a.budget.name.localeCompare(b.budget.name) || a.budget.accountName.localeCompare(b.budget.accountName));
@@ -253,7 +256,10 @@ export function applyPendingReply(state: AgentState, reply: string, today = agen
     case "amount": {
       const amount = parseTypedAmount(text);
       // We asked for the workspace currency, so a bare number answers in it.
-      return amount ? { ...intent, amount, currency: /us\$|usd/i.test(text) ? "USD" : null } : null;
+      if (amount) {
+        return { ...intent, amount, currency: /us\$|usd/i.test(text) ? "USD" : null };
+      }
+      return null;
     }
     case "direction": {
       const word = text.toLowerCase().replace(/[.!]$/, "");

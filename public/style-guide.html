@@ -185,10 +185,6 @@
       padding: 48px 24px 120px;
     }
 
-    .sg-section {
-      margin-bottom: 72px;
-    }
-
     .sg-section-title {
       font-family: var(--font-display);
       font-size: 13px;
@@ -295,16 +291,6 @@
 
     .theme-toggle:hover {
       border-color: var(--border-brand);
-    }
-
-    .toggle-option {
-      padding: 6px 14px;
-      border-radius: var(--radius-pill);
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-tertiary);
-      transition: all var(--transition);
-      user-select: none;
     }
 
     .toggle-option.active {
@@ -955,6 +941,7 @@
     }
 
     .sg-section {
+      margin-bottom: 72px;
       animation: fadeUp 0.5s ease both;
     }
 
@@ -982,7 +969,14 @@
     .mb-16 { margin-bottom: 16px; }
 
 
-    .toggle-option { border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+    .toggle-option {
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-tertiary);
+      transition: all var(--transition);
+      user-select: none; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
     input.toggle, input.checkbox { appearance: none; margin: 0; }
     input.toggle:focus-visible, input.checkbox:focus-visible, .toggle-option:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 3px; }
     @media (prefers-reduced-motion: reduce) {

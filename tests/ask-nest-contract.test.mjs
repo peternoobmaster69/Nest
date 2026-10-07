@@ -124,7 +124,7 @@ test("Ask Nest rewrites an unsupported illustrative value once before blocking i
   assert.match(orchestration, /conceptual definition that does not ask about the user's records/);
   assert.match(orchestration, /today's money[\s\S]*?expressed in current purchasing power/);
   assert.match(orchestration, /const groundingFailure = findAskNestGroundingFailure/);
-  assert.match(orchestration, /requestItems\.push\(\{ role: "developer", content: GROUNDING_REPAIR_INSTRUCTION \}\)/);
+  assert.match(orchestration, /requestItems\.push\(\.\.\.response\.output as ResponseInputItem\[\], \{ role: "developer", content: GROUNDING_REPAIR_INSTRUCTION \}\)/);
   assert.equal([...orchestration.matchAll(/response = await createResponse\("none"\)/g)].length, 1);
   assert.match(orchestration, /generated = parseGeneratedResponse\(response\);[\s\S]*?assertGroundedCurrencyValues\(generated, groundingText\)/);
   assert.match(orchestration, /findUnsupportedCioValue\(generated, successfulToolOutputs, cioAllowedContext\)/);

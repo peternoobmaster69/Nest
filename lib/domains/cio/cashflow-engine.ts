@@ -122,7 +122,7 @@ function parseDate(value: CashflowDateInput | null | undefined, field: string) {
   if (value === null || value === undefined) {
     throw new CashflowValidationError("INVALID_DATE", `${field} is required.`, field);
   }
-  const result = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  const result = new Date(value);
   if (Number.isNaN(result.getTime())) {
     throw new CashflowValidationError("INVALID_DATE", `${field} must be a valid date.`, field);
   }
@@ -151,7 +151,7 @@ function normalizeAsOfInput(input: CashflowDateInput | RecurringFlowSummaryOptio
 }
 
 function isSupportedCadence(value: string): value is RecurringFlowCadence {
-  return Object.prototype.hasOwnProperty.call(RECURRING_FLOW_ANNUAL_MULTIPLIERS, value);
+  return Object.hasOwn(RECURRING_FLOW_ANNUAL_MULTIPLIERS, value);
 }
 
 function validateFlow(flow: RecurringFlow, index?: number) {
@@ -382,7 +382,15 @@ export function summarizeRecurringFlows(
     });
   }
 
-  sourceBreakdown.sort((left, right) => (left.id === right.id ? 0 : left.id < right.id ? -1 : 1));
+  sourceBreakdown.sort((left, right) => {
+    if (left.id === right.id) {
+      return 0;
+    }
+    if (left.id < right.id) {
+      return -1;
+    }
+    return 1;
+  });
   const active = finalizeTotals(activeTotals, "active");
   const retirementEligible = finalizeTotals(retirementTotals, "retirementEligible");
   return {

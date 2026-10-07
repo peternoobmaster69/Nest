@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SelectField, TextField } from "@/components/ui/form-field";
 import { useToast } from "@/components/toast-provider";
 
-const finalStatuses = ["SUCCEEDED", "FAILED", "CANCELLED"];
+const finalStatuses = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
 
 export function AgentFineTuning({ detail, configured, onChanged }: Readonly<{ detail: AgentDetail; configured: boolean; onChanged: () => Promise<void> }>) {
   const [baseModel, setBaseModel] = useState("");
@@ -19,7 +19,7 @@ export function AgentFineTuning({ detail, configured, onChanged }: Readonly<{ de
   const request = useRef<{ signature: string; id: string } | null>(null);
   const toast = useToast();
   const base = `/api/admin/agents/${detail.configuration.id}`;
-  const active = detail.fineTuningJobs.some((job) => !finalStatuses.includes(job.status));
+  const active = detail.fineTuningJobs.some((job) => !finalStatuses.has(job.status));
   const start = useMutation({
     mutationFn: () => {
       const signature = JSON.stringify([detail.configuration.revision, baseModel, trainingType, epochs]);
@@ -62,7 +62,7 @@ export function AgentFineTuning({ detail, configured, onChanged }: Readonly<{ de
       <div className="agent-run-list">{detail.fineTuningJobs.map((job) => <article className="agent-training-job" key={job.id}><div className="agent-panel-heading"><div><h4>{job.baseModel}</h4><p>{job.trainingCount} training · {job.validationCount} validation · revision {job.revision}</p></div><span className={`agent-badge${job.status === "SUCCEEDED" ? " is-active" : ""}`}>{job.status.toLowerCase().replaceAll("_", " ")}</span></div>
         {job.providerJobId ? <p className="agent-job-id">{job.providerJobId}</p> : null}{job.error ? <p className="agent-error">{job.error}</p> : null}
         {job.fineTunedModel ? <div className="agent-trained-model"><strong>Trained model</strong><code>{job.fineTunedModel}</code><p>Deploy this model in Azure, then enter its deployment name under Configuration.</p><a href="https://ai.azure.com" target="_blank" rel="noreferrer">Open Microsoft Foundry <ExternalLink size={13} aria-hidden="true" /></a></div> : null}
-        <div className="agent-form-footer"><span>{new Date(job.createdAt).toLocaleString("en-SG")}</span>{!finalStatuses.includes(job.status) ? <div className="agent-row-actions"><Button variant="outline" size="sm" loading={update.isPending && update.variables?.jobId === job.id} onClick={() => update.mutate({ jobId: job.id, action: "refresh" })}><RefreshCw size={14} aria-hidden="true" />Refresh status</Button>{job.providerJobId ? <Button variant="ghost" size="sm" disabled={update.isPending} onClick={() => update.mutate({ jobId: job.id, action: "cancel" })}>Cancel training</Button> : null}</div> : null}</div>
+        <div className="agent-form-footer"><span>{new Date(job.createdAt).toLocaleString("en-SG")}</span>{!finalStatuses.has(job.status) ? <div className="agent-row-actions"><Button variant="outline" size="sm" loading={update.isPending && update.variables?.jobId === job.id} onClick={() => update.mutate({ jobId: job.id, action: "refresh" })}><RefreshCw size={14} aria-hidden="true" />Refresh status</Button>{job.providerJobId ? <Button variant="ghost" size="sm" disabled={update.isPending} onClick={() => update.mutate({ jobId: job.id, action: "cancel" })}>Cancel training</Button> : null}</div> : null}</div>
       </article>)}</div>
     </div>
   );

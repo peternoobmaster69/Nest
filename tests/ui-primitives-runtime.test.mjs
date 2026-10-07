@@ -12,7 +12,7 @@ const { Button } = require("../components/ui/button.tsx");
 const { TextField, SelectField, TextAreaField } = require("../components/ui/form-field.tsx");
 const { PageHeader } = require("../components/ui/page-header.tsx");
 const { EmptyState, QueryError } = require("../components/ui/query-state.tsx");
-const { DataView, MobileDataCard, DataValue } = require("../components/ui/data-view.tsx");
+const { DataListView, MobileDataCard, DataValue } = require("../components/ui/data-view.tsx");
 const { RouteLoadingState, RouteErrorState, RouteNotFoundState } = require("../components/ui/route-state.tsx");
 const { ModalCloseButton } = require("../components/ui/modal-close-button.tsx");
 const { ContributionTrendIndicator } = require("../components/investment-contribution-trend.tsx");
@@ -135,10 +135,10 @@ test("query errors offer retry when available and empty states render the given 
 });
 
 test("data views preserve their accessible structure and value priority", () => {
-  const view = render(h(DataView, {}, h(MobileDataCard, {}, h(DataValue, { label: "Balance" }, "$10"))));
+  const view = render(h(DataListView, {}, h(MobileDataCard, {}, h(DataValue, { label: "Balance" }, "$10"))));
   assert.equal(view.getByRole("article").className, "mobile-data-card");
   assert.equal(view.getByText("Balance").parentElement.className, "data-value data-value-normal");
-  view.rerender(h(DataView, { className: "custom", "aria-label": "Balances" }, h(MobileDataCard, { className: "important" }, h(DataValue, { label: "Balance", priority: "high" }, "$10"))));
+  view.rerender(h(DataListView, { className: "custom", "aria-label": "Balances" }, h(MobileDataCard, { className: "important" }, h(DataValue, { label: "Balance", priority: "high" }, "$10"))));
   assert.equal(view.getByLabelText("Balances").className, "data-view custom");
   assert.equal(view.getByRole("article").className, "mobile-data-card important");
   assert.equal(view.getByText("Balance").parentElement.className, "data-value data-value-high");

@@ -19,7 +19,7 @@ const globals = await read("app/globals.css");
 const globalLines = countSourceLines(globals);
 assert.ok(globalLines <= Math.floor(23_795 * 0.6), `globals.css must stay at least 40% below its Phase 7 baseline; found ${globalLines} lines`);
 for (const layer of ["tokens", "base", "features", "components", "utilities"]) {
-  assert.match(globals, new RegExp(`@import ["']\\./styles/${layer}\\.css["']`));
+  assert.match(globals, new RegExp(String.raw`@import ["']\./styles/${layer}\.css["']`));
 }
 
 const componentFiles = (await walk("components")).filter((file) => file.endsWith(".tsx"));

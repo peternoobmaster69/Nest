@@ -101,6 +101,13 @@ export class AllocationValidationError extends Error {
   }
 }
 
+type RemainderRow = { key: string; remainder: bigint };
+
+function compareRemainders(left: RemainderRow, right: RemainderRow) {
+  if (left.remainder === right.remainder) return compareStableKeys(left.key, right.key);
+  return left.remainder > right.remainder ? -1 : 1;
+}
+
 function compareStableKeys(left: string, right: string) {
   if (left === right) return 0;
   return left < right ? -1 : 1;
@@ -204,14 +211,7 @@ export function allocateBigIntCentsByWeights(
     BIGINT_ZERO,
   );
   const remainingCents = absoluteTotal - allocatedFloor;
-  const remainderOrder = [...rows].sort(
-    (left, right) =>
-      (left.remainder === right.remainder
-        ? compareStableKeys(left.key, right.key)
-        : left.remainder > right.remainder
-          ? -1
-          : 1),
-  );
+  const remainderOrder = rows.toSorted(compareRemainders);
 
   for (let index = 0; index < Number(remainingCents); index += 1) {
     remainderOrder[index].absoluteValueCents += BIGINT_ONE;
@@ -258,14 +258,7 @@ function apportionNonnegativeUnits(totalUnits: bigint, rows: readonly Proportion
   });
   const floorTotal = allocations.reduce((total, row) => total + row.units, BIGINT_ZERO);
   const remaining = Number(totalUnits - floorTotal);
-  const remainderOrder = [...allocations].sort(
-    (left, right) =>
-      (left.remainder === right.remainder
-        ? compareStableKeys(left.key, right.key)
-        : left.remainder > right.remainder
-          ? -1
-          : 1),
-  );
+  const remainderOrder = allocations.toSorted(compareRemainders);
   for (let index = 0; index < remaining; index += 1) {
     remainderOrder[index].units += BIGINT_ONE;
   }

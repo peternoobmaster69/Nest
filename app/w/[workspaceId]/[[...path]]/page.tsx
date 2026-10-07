@@ -37,13 +37,13 @@ export default async function WorkspacePage({ params, searchParams }: Readonly<W
     case "admin":
       return <AdminRoute />;
     case "accounts":
-      redirect(buildWorkspacePath(workspaceId, "/settings?tab=workspaces#bank-accounts"));
+      return redirect(buildWorkspacePath(workspaceId, "/settings?tab=workspaces#bank-accounts"));
     case "budgets":
-      redirect(buildWorkspacePath(workspaceId));
+      return redirect(buildWorkspacePath(workspaceId));
     case "budgets/plan":
       return <BudgetPlanRoute />;
     case "collaborators":
-      redirect(buildWorkspacePath(workspaceId, "/settings?tab=workspaces"));
+      return redirect(buildWorkspacePath(workspaceId, "/settings?tab=workspaces"));
     case "credit-alerts":
       return <CreditAlertsRoute />;
     case "credit-cards":

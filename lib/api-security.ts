@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z, ZodError, type ZodType } from "zod";
-import { isDatabaseWakeTransientError } from "@/lib/database-errors";
+import { DATABASE_UNAVAILABLE_CODE, isDatabaseWakeTransientError } from "@/lib/database-errors";
 import { rateLimitResponse } from "@/lib/security-rate-limit";
 import { ApiRequestError, apiErrorCodeForStatus } from "@/lib/api/contracts";
-import { DATABASE_UNAVAILABLE_CODE } from "@/lib/database-errors";
 import {
   ApiAuthError,
   requireRecentAuthentication,

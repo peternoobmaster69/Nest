@@ -16,7 +16,7 @@ export type ApiErrorCode = (typeof API_ERROR_CODES)[keyof typeof API_ERROR_CODES
 
 export type ApiErrorEnvelope = {
   error: string;
-  code: ApiErrorCode | string;
+  code: string;
   requestId?: string;
   issues?: unknown;
 };
@@ -27,7 +27,7 @@ export class ApiRequestError extends Error {
   constructor(
     public readonly status: number,
     message: string,
-    public readonly code: ApiErrorCode | string = apiErrorCodeForStatus(status),
+    public readonly code: string = apiErrorCodeForStatus(status),
   ) {
     super(message);
   }

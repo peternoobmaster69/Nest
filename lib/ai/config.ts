@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { trimEndCharacters } from "../string-boundaries.mjs";
 
 export class AiConfigurationError extends Error {
   constructor(message: string) {
@@ -33,7 +34,7 @@ function normalizeAiWorkloadBaseUrl(value: string) {
     throw new AiConfigurationError("AI_WORKLOAD_ENDPOINT must not contain credentials, a query, or a fragment.");
   }
 
-  let path = endpoint.pathname.replace(/\/+$/, "");
+  let path = trimEndCharacters(endpoint.pathname, "/");
   if (path.endsWith("/openai/v1/responses")) {
     path = path.slice(0, -"/responses".length);
   } else if (!path.endsWith("/openai/v1")) {

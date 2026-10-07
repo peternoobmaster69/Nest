@@ -732,8 +732,7 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
     cioAllowedContext,
   );
   if (groundingFailure) {
-    requestItems.push(...response.output as ResponseInputItem[]);
-    requestItems.push({ role: "developer", content: GROUNDING_REPAIR_INSTRUCTION });
+    requestItems.push(...response.output as ResponseInputItem[], { role: "developer", content: GROUNDING_REPAIR_INSTRUCTION });
     if (groundingFailure.detail) {
       requestItems.push({ role: "developer", content: groundingRepairDetail(groundingFailure.detail) });
     }

@@ -10,6 +10,7 @@ import {
   CONTACT_MESSAGE_MAX_LENGTH,
   CONTACT_TOPIC_LABELS,
   CONTACT_TOPICS,
+  ContactRequestSchema,
   type ContactRequest,
 } from "@/lib/domains/contact/contracts";
 
@@ -75,9 +76,12 @@ export function LandingContact() {
 
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
-    if (!form.name.trim()) next.name = "Enter your name.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) next.email = "Enter a valid email address.";
-    if (form.message.trim().length < 10) next.message = "Message should be at least 10 characters.";
+    const result = ContactRequestSchema.safeParse(form);
+    if (result.success) return next;
+    for (const issue of result.error.issues) {
+      const field = issue.path[0];
+      if (field === "name" || field === "email" || field === "topic" || field === "message") next[field] ??= issue.message;
+    }
     return next;
   };
 
@@ -109,13 +113,10 @@ export function LandingContact() {
           message: fieldErrors.message?.[0],
         });
       }
-      setFormError(
-        response.status === 429
-          ? "You've sent a few messages already. Please try again a little later."
-          : fieldErrors
-            ? "Please check the highlighted fields."
-            : data.error || "Your message couldn't be sent. Please try again.",
-      );
+      let message = data.error || "Your message couldn't be sent. Please try again.";
+      if (fieldErrors) message = "Please check the highlighted fields.";
+      if (response.status === 429) message = "You've sent a few messages already. Please try again a little later.";
+      setFormError(message);
       setStatus("idle");
     } catch {
       setFormError("You appear to be offline. Check your connection and try again.");

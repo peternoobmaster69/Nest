@@ -1,3 +1,5 @@
+import { trimEndCharacters } from "./string-boundaries.mjs";
+
 const DEFAULT_APP_DESTINATION = "/";
 const WORKSPACE_ENTRY_PATH = "/entry";
 const WORKSPACE_PATH_PREFIX = "/w";
@@ -73,6 +75,6 @@ export function buildAbsoluteWorkspaceEntryUrl(
   workspaceId: string,
   destination = DEFAULT_APP_DESTINATION,
 ) {
-  const baseUrl = appUrl.trim().replace(/\/+$/, "");
+  const baseUrl = trimEndCharacters(appUrl.trim(), "/");
   return baseUrl ? `${baseUrl}${buildWorkspaceEntryHref(workspaceId, destination)}` : "";
 }

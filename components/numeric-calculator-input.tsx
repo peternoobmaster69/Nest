@@ -95,8 +95,7 @@ function calculateParsedExpression({ numbers, operators }: ParsedExpression) {
   const collapsedNumbers = [numbers[0]];
   const collapsedOperators: string[] = [];
 
-  for (let index = 0; index < operators.length; index += 1) {
-    const operator = operators[index];
+  for (const [index, operator] of operators.entries()) {
     const nextNumber = numbers[index + 1];
 
     if (operator === "*") {
