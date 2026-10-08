@@ -118,7 +118,8 @@ export function resolveAgentBudget(
       const name = normalizeAccountName(budget.name);
       const pair = scorePair(term, budget.name);
       let score = pair.score;
-      let reason: string | null = pair.method === "CONCEPT" ? "Similar category" : pair.score >= 0.8 ? "Similar name" : null;
+      const nameReason = pair.score >= 0.8 ? "Similar name" : null;
+      let reason: string | null = pair.method === "CONCEPT" ? "Similar category" : nameReason;
       if (term.length >= 4 && editDistance(name, term) <= Math.max(1, Math.floor(term.length / 4)) && score < 0.85) { score = 0.85; reason = "Similar spelling"; }
       if (candidateNames.has(name) && score < 0.72) { score = 0.72; reason = "Possible match"; }
       const { similar, reason: used } = history(budget);
@@ -136,7 +137,8 @@ export function resolveAgentBudget(
       const conceptual = concept && concept.score >= 0.8 ? 0.4 : 0;
       const hinted = candidateNames.has(normalizeAccountName(budget.name)) ? 0.3 : 0;
       const score = Math.min(0.9, (similar ? 0.5 + Math.min(0.3, similar / 20) : 0) + conceptual + hinted);
-      return { budget, score, reason: reason ?? (conceptual ? "Similar category" : hinted ? "Possible match" : null) };
+      const hintReason = hinted ? "Possible match" : null;
+      return { budget, score, reason: reason ?? (conceptual ? "Similar category" : hintReason) };
     })),
   };
 }
@@ -159,80 +161,136 @@ function joinOr(names: string[]) {
   return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
 }
 
+function initialReviewResponse(state: AgentState, before: AgentTransaction | null, currency: string): AgentState | null {
+  const intent = state.intent;
+  if (intent.operation === "CANCEL") return { ...state, message: "Cancelled. No transaction was changed." };
+  if (intent.operation === "UNSUPPORTED") return { ...state, message: intent.clarification || "I can record or correct one ordinary expense or deposit at a time. Transfers between sub-accounts, card payments, receivables, deleting, splitting, and recurring entries are on the Transactions page." };
+  if (intent.operation === "CLARIFY" || intent.clarification) return { ...state, message: intent.clarification || "Would you like to record an expense, add money, or correct an existing transaction?" };
+  if (intent.currency && intent.currency.toUpperCase() !== currency) return { ...state, pending: "amount", message: `This workspace uses ${currency}. What was the amount in ${currency}? I can’t convert currencies.` };
+  if (intent.operation === "UPDATE" && !before) return { ...state, pending: "target", message: "Which transaction should I correct? Tell me its description, date, or original amount." };
+  return null;
+}
+
+function budgetSelectionPrompt(state: AgentState, resolution: Exclude<BudgetResolution, { kind: "exact" }>, currency: string) {
+  const intent = state.intent;
+  const next: AgentState = { ...state, pending: "budget" };
+  const said = intent.accountQuery ? quote(intent.accountQuery) : "";
+  if (resolution.kind === "ambiguous") {
+    next.message = `You have more than one sub-account named ${said}. Which bank account is it in?`;
+    next.choices = resolution.ranked.map((item) => budgetChoice(item, currency, false));
+  } else if (resolution.kind === "suggest") {
+    const names = resolution.ranked.map((item) => quote(item.budget.name));
+    next.message = `There’s no sub-account called ${said}. Did you mean ${joinOr(names.slice(0, 3))}?`;
+    next.choices = resolution.ranked.map((item) => budgetChoice(item, currency, true));
+  } else {
+    const likely = resolution.ranked.filter((item) => item.score > 0);
+    let intro = "";
+    // The planner has already rejected empty budget lists, so this result has a bank query.
+    if (resolution.kind === "no-bank") intro = `I couldn’t find a bank account matching ${quote(intent.bankQuery!)}. `;
+    else if (said) intro = `I couldn’t find a sub-account like ${said}. `;
+    const history = likely.length ? " I’ve put the likeliest first, based on your history." : "";
+    next.message = `${intro}Which sub-account should I ${describeAction(intent, currency)}?${history}`;
+    next.choices = resolution.ranked.map((item) => budgetChoice(item, currency, item.score > 0 && likely.indexOf(item) < 3));
+  }
+  return withDeferred(next, intent);
+}
+
+function existingReviewBudget(state: AgentState, budgets: AgentBudget[], before: AgentTransaction | null) {
+  const selected = budgets.find((budget) => budget.id === state.budgetId);
+  if (selected) return selected;
+  if (state.intent.accountQuery || !before?.budgetId || state.pickBudget) return undefined;
+  return budgets.find((budget) => budget.id === before.budgetId);
+}
+
+function selectReviewBudget(
+  state: AgentState, budgets: AgentBudget[], before: AgentTransaction | null, currency: string, usage: AgentUsage,
+): { budget: AgentBudget } | { prompt: AgentState } {
+  const existing = existingReviewBudget(state, budgets, before);
+  if (existing) return { budget: existing };
+  const intent = state.intent;
+  const resolution = resolveAgentBudget(intent.accountQuery, budgets, intent.bankQuery, {
+    subject: intent.subject ?? before?.subject, candidates: intent.accountCandidates ?? [], usage,
+  });
+  if (resolution.kind === "exact") return { budget: resolution.match };
+  return { prompt: budgetSelectionPrompt(state, resolution, currency) };
+}
+
+function reviewTransactionKind(before: AgentTransaction | null, direction: "DEBIT" | "CREDIT"): AgentReview["after"]["kind"] {
+  if (before?.direction === direction) return before.kind as AgentReview["after"]["kind"];
+  return direction === "DEBIT" ? "EXPENSE" : "INCOME";
+}
+
+function resolveReviewTransaction(
+  state: AgentState, budget: AgentBudget, before: AgentTransaction | null, currency: string, today: string,
+): { transaction: AgentReview["after"] } | { prompt: AgentState } {
+  const intent = state.intent;
+  const amountCents = intent.amount !== null ? parseAgentAmount(intent.amount) : before?.amountCents;
+  if (!amountCents) {
+    const invalid = intent.amount !== null ? `I can’t use ${quote(intent.amount)} as an amount. ` : "";
+    return { prompt: withDeferred({ ...state, pending: "amount", message: `${invalid}How much, in ${currency}? For example 12 or 12.50.` }, intent) };
+  }
+  const direction = intent.direction ?? before?.direction;
+  if (!direction) return { prompt: withDeferred({ ...state, pending: "direction", message: `Should I deduct ${agentMoney(amountCents, currency)} from ${budget.name}, or add it?` }, intent) };
+  const subject = intent.subject || before?.subject;
+  if (!subject) return { prompt: withDeferred({ ...state, pending: "subject", message: `What was it for? For example “${direction === "DEBIT" ? "bus fare" : "salary"}”. Reply “skip” to call it “${budget.name}”.` }, intent) };
+  const date = intent.date ?? before?.date.slice(0, 10) ?? today;
+  if (!validAgentDate(date)) return { prompt: withDeferred({ ...state, pending: "date", message: "Which date? Say today, yesterday, or a date like 2026-09-30." }, intent) };
+  return { transaction: {
+    accountId: budget.accountId, budgetId: budget.id, subject, amountCents, direction,
+    kind: reviewTransactionKind(before, direction),
+    date: before && intent.date === null ? before.date : `${date}T00:00:00.000Z`,
+  } };
+}
+
+function reviewWarnings(
+  balances: AgentReview["balances"], before: AgentTransaction | null, intent: TransactionIntent,
+  date: string, today: string, currency: string,
+) {
+  const warnings = balances.filter((budget) => budget.afterCents < 0).map((budget) => `${budget.name} will be overdrawn: ${agentMoney(budget.afterCents, currency)}.`);
+  if (!before && !intent.date) warnings.push(`Dated today, ${today}. Say “yesterday” or a date to change it.`);
+  if (date > today) warnings.push("This date is in the future. Saving still changes the available balance immediately.");
+  if (date < shiftAgentDate(today, -365)) warnings.push("This date is more than a year ago.");
+  return warnings;
+}
+
+function finalizeTransactionReview(
+  state: AgentState, budgets: AgentBudget[], before: AgentTransaction | null,
+  after: AgentReview["after"], currency: string, today: string,
+): AgentState {
+  if (before && Object.entries(after).every(([key, value]) => before[key as keyof AgentTransaction] === value)) {
+    return { ...state, message: "That already matches the saved transaction. What would you like to change?" };
+  }
+  const deltas = getTransactionBudgetDelta({ previousBudgetId: before?.budgetId, previousDirection: before?.direction, previousAmountCents: before?.amountCents, nextBudgetId: after.budgetId, nextDirection: after.direction, nextAmountCents: after.amountCents });
+  // Include both accounts, even for a zero balance delta, so changes invalidate the preview.
+  const affectedIds = new Set([after.budgetId, ...(before?.budgetId ? [before.budgetId] : [])]);
+  const balances = budgets.filter((budget) => affectedIds.has(budget.id)).map((budget) => ({ ...budget, afterCents: budget.availableCents + (deltas.get(budget.id) ?? 0) }));
+  if (balances.length !== affectedIds.size) return { ...state, message: "The original sub-account is no longer active. Correct this transaction on the Transactions page." };
+  if (balances.some((budget) => budget.afterCents > 2_147_483_647 || budget.afterCents < -2_147_483_648)) return { ...state, pending: "amount", message: "That change would exceed the supported sub-account balance. Please use a smaller amount." };
+  const warnings = reviewWarnings(balances, before, state.intent, after.date.slice(0, 10), today, currency);
+  return withDeferred({
+    ...state,
+    review: { operation: before ? "UPDATE" : "CREATE", currency, before, after, balances, warnings },
+    message: before ? "Here’s the correction. Check it, then press Confirm to save it with its history." : "Here’s the transaction. Check it, then press Confirm to save.",
+  }, state.intent);
+}
+
 /** Only server records and validated slots can become a review. Model prose cannot approve it. */
 export function planTransactionReview(
   state: AgentState, budgets: AgentBudget[], before: AgentTransaction | null, currency: string,
   today = agentToday(), usage: AgentUsage = EMPTY_USAGE,
 ): AgentState {
   const next: AgentState = { ...state, choices: [], review: null, pending: null };
-  const intent = state.intent;
-  if (intent.operation === "CANCEL") return { ...next, message: "Cancelled. No transaction was changed." };
-  if (intent.operation === "UNSUPPORTED") return { ...next, message: intent.clarification || "I can record or correct one ordinary expense or deposit at a time. Transfers between sub-accounts, card payments, receivables, deleting, splitting, and recurring entries are on the Transactions page." };
-  if (intent.operation === "CLARIFY" || intent.clarification) return { ...next, message: intent.clarification || "Would you like to record an expense, add money, or correct an existing transaction?" };
-  if (intent.currency && intent.currency.toUpperCase() !== currency) return { ...next, pending: "amount", message: `This workspace uses ${currency}. What was the amount in ${currency}? I can’t convert currencies.` };
-  if (intent.operation === "UPDATE" && !before) return { ...next, pending: "target", message: "Which transaction should I correct? Tell me its description, date, or original amount." };
-
-  const eligibleBudgets = before ? budgets.filter((b) => b.accountId === before.accountId) : budgets;
+  const initialResponse = initialReviewResponse(next, before, currency);
+  if (initialResponse) return initialResponse;
+  const eligibleBudgets = before ? budgets.filter((budget) => budget.accountId === before.accountId) : budgets;
   if (!eligibleBudgets.length) return { ...next, message: "There are no active sub-accounts available for this transaction. Add or activate one on the Budgets page first." };
-  let budget = eligibleBudgets.find((b) => b.id === state.budgetId);
-  if (!budget && !intent.accountQuery && before?.budgetId && !state.pickBudget) budget = eligibleBudgets.find((b) => b.id === before.budgetId);
-  if (!budget) {
-    const resolution = resolveAgentBudget(intent.accountQuery, eligibleBudgets, intent.bankQuery, { subject: intent.subject ?? before?.subject, candidates: intent.accountCandidates ?? [], usage });
-    if (resolution.kind === "exact") budget = resolution.match;
-    else {
-      const action = describeAction(intent, currency);
-      const said = intent.accountQuery ? quote(intent.accountQuery) : "";
-      if (resolution.kind === "ambiguous") {
-        next.message = `You have more than one sub-account named ${said}. Which bank account is it in?`;
-        next.choices = resolution.ranked.map((item) => budgetChoice(item, currency, false));
-      } else if (resolution.kind === "suggest") {
-        const names = resolution.ranked.map((item) => quote(item.budget.name));
-        next.message = resolution.ranked.length === 1
-          ? `There’s no sub-account called ${said}. Did you mean ${names[0]}?`
-          : `There’s no sub-account called ${said}. Did you mean ${joinOr(names.slice(0, 3))}?`;
-        next.choices = resolution.ranked.map((item) => budgetChoice(item, currency, true));
-      } else {
-        const likely = resolution.ranked.filter((item) => item.score > 0);
-        const intro = resolution.kind === "no-bank" ? `I couldn’t find a bank account matching ${quote(intent.bankQuery ?? "")}. ` : said ? `I couldn’t find a sub-account like ${said}. ` : "";
-        next.message = `${intro}Which sub-account should I ${action}?${likely.length ? ` I’ve put the likeliest first, based on your history.` : ""}`;
-        next.choices = resolution.ranked.map((item) => budgetChoice(item, currency, item.score > 0 && likely.indexOf(item) < 3));
-      }
-      next.pending = "budget";
-      return withDeferred(next, intent);
-    }
-  }
-  next.budgetId = budget.id;
+  const selection = selectReviewBudget(next, eligibleBudgets, before, currency, usage);
+  if ("prompt" in selection) return selection.prompt;
+  next.budgetId = selection.budget.id;
   next.pickBudget = false;
-  const amountCents = intent.amount !== null ? parseAgentAmount(intent.amount) : before?.amountCents;
-  if (!amountCents) {
-    const invalid = intent.amount !== null ? `I can’t use ${quote(intent.amount)} as an amount. ` : "";
-    return withDeferred({ ...next, pending: "amount", message: `${invalid}How much, in ${currency}? For example 12 or 12.50.` }, intent);
-  }
-  const direction = intent.direction ?? before?.direction;
-  if (!direction) return withDeferred({ ...next, pending: "direction", message: `Should I deduct ${agentMoney(amountCents, currency)} from ${budget.name}, or add it?` }, intent);
-  const subject = intent.subject || before?.subject;
-  if (!subject) return withDeferred({ ...next, pending: "subject", message: `What was it for? For example “${direction === "DEBIT" ? "bus fare" : "salary"}”. Reply “skip” to call it “${budget.name}”.` }, intent);
-  const date = intent.date ?? before?.date.slice(0, 10) ?? today;
-  if (!validAgentDate(date)) return withDeferred({ ...next, pending: "date", message: "Which date? Say today, yesterday, or a date like 2026-09-30." }, intent);
-  const kind = before?.direction === direction
-    ? before.kind as AgentReview["after"]["kind"] : direction === "DEBIT" ? "EXPENSE" : "INCOME";
-  const after: AgentReview["after"] = { accountId: budget.accountId, budgetId: budget.id, subject, amountCents, direction, kind, date: before && intent.date === null ? before.date : `${date}T00:00:00.000Z` };
-  if (before && Object.entries(after).every(([key, value]) => before[key as keyof AgentTransaction] === value)) {
-    return { ...next, message: "That already matches the saved transaction. What would you like to change?" };
-  }
-  const deltas = getTransactionBudgetDelta({ previousBudgetId: before?.budgetId, previousDirection: before?.direction, previousAmountCents: before?.amountCents, nextBudgetId: budget.id, nextDirection: direction, nextAmountCents: amountCents });
-  // Include both accounts, even for a zero balance delta, so changes invalidate the preview.
-  const affectedIds = new Set([budget.id, ...(before?.budgetId ? [before.budgetId] : [])]);
-  const balances = budgets.filter((b) => affectedIds.has(b.id)).map((b) => ({ ...b, afterCents: b.availableCents + (deltas.get(b.id) ?? 0) }));
-  if (balances.length !== affectedIds.size) return { ...next, message: "The original sub-account is no longer active. Correct this transaction on the Transactions page." };
-  if (balances.some((b) => b.afterCents > 2_147_483_647 || b.afterCents < -2_147_483_648)) return { ...next, pending: "amount", message: "That change would exceed the supported sub-account balance. Please use a smaller amount." };
-  const warnings = balances.filter((b) => b.afterCents < 0).map((b) => `${b.name} will be overdrawn: ${agentMoney(b.afterCents, currency)}.`);
-  if (!before && !intent.date) warnings.push(`Dated today, ${today}. Say “yesterday” or a date to change it.`);
-  if (date > today) warnings.push("This date is in the future. Saving still changes the available balance immediately.");
-  if (date < shiftAgentDate(today, -365)) warnings.push("This date is more than a year ago.");
-  next.review = { operation: before ? "UPDATE" : "CREATE", currency, before, after, balances, warnings };
-  next.message = before ? "Here’s the correction. Check it, then press Confirm to save it with its history." : "Here’s the transaction. Check it, then press Confirm to save.";
-  return withDeferred(next, intent);
+  const resolved = resolveReviewTransaction(next, selection.budget, before, currency, today);
+  if ("prompt" in resolved) return resolved.prompt;
+  return finalizeTransactionReview(next, budgets, before, resolved.transaction, currency, today);
 }
 
 function withDeferred(state: AgentState, intent: TransactionIntent): AgentState {
@@ -243,6 +301,13 @@ function withDeferred(state: AgentState, intent: TransactionIntent): AgentState 
 const CHANGE_WORDS = /\b(?:actually|instead|change|make it|make that|no[, ]|not|wrong|cancel|stop|undo|delete|also|and then|another)\b/i;
 const DEBIT_WORDS = /^(?:deduct|deduct it|minus|subtract|expense|spent|spend|paid|out|debit|take (?:it )?out|withdraw(?:al)?|take)$/i;
 const CREDIT_WORDS = /^(?:add|add it|plus|deposit|income|in|credit|top up|received|refund|put (?:it )?in)$/i;
+
+function pendingSubject(text: string, budgetName: string | null) {
+  if (/^(?:skip|none|no|nothing|n\/a|-)[.!]?$/i.test(text)) return budgetName;
+  // Digits or currency suggest a new instruction ("$12 lunch"), not just a description.
+  if (/[\d$]/.test(text) || text.split(" ").length > 8) return null;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /**
  * Answers the single question the assistant just asked without calling the model, when the reply is
@@ -272,10 +337,8 @@ export function applyPendingReply(state: AgentState, reply: string, today = agen
       return date ? { ...intent, date } : null;
     }
     case "subject": {
-      if (/^(?:skip|none|no|nothing|n\/a|-)[.!]?$/i.test(text)) return budgetName ? { ...intent, subject: budgetName } : null;
-      // Digits or currency suggest a new instruction ("$12 lunch"), not just a description.
-      if (/[\d$]/.test(text) || text.split(" ").length > 8) return null;
-      return { ...intent, subject: text.charAt(0).toUpperCase() + text.slice(1) };
+      const subject = pendingSubject(text, budgetName);
+      return subject ? { ...intent, subject } : null;
     }
     default:
       return null;
@@ -284,6 +347,28 @@ export function applyPendingReply(state: AgentState, reply: string, today = agen
 
 const FALLBACK_DEBIT = /\b(?:deduct(?:ed)?|subtract(?:ed)?|minus|spent|spend|paid|pay|bought|withdrew|withdraw|charged?|took)\b/i;
 const FALLBACK_CREDIT = /\b(?:add(?:ed)?|deposit(?:ed)?|received|receive|got paid|top(?:ped)? up|refund(?:ed)?|put)\b/i;
+
+function explicitFallbackAmount(text: string) {
+  const prefix = /(?:s\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)/i.exec(text);
+  const unit = /\s?(?:sgd|dollars?|bucks)\b/iy;
+  let suffix: { index: number; amount: string } | undefined;
+  for (const number of text.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
+    unit.lastIndex = number.index + number[0].length;
+    if (unit.test(text)) {
+      suffix = { index: number.index, amount: number[0] };
+      break;
+    }
+  }
+  if (!prefix) return suffix?.amount ?? null;
+  if (suffix && suffix.index < prefix.index) return suffix.amount;
+  return prefix[1];
+}
+
+function fallbackAmount(text: string) {
+  const explicit = explicitFallbackAmount(text);
+  if (explicit) return explicit;
+  return /\b(?:deduct|subtract|minus|spent|spend|paid|pay|withdrew|withdraw|took|add|deposit|received|put)\s+(\d[\d,]*(?:\.\d+)?)\b/i.exec(text)?.[1] ?? null;
+}
 
 /**
  * A deliberately narrow parser for simple one-line commands, used only when the AI service is
@@ -295,14 +380,14 @@ export function parseTransactionFallback(message: string, today = agentToday()):
   const debit = FALLBACK_DEBIT.test(text);
   const credit = FALLBACK_CREDIT.test(text);
   if (debit === credit) return null;
-  const amountMatch = /(?:s\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:sgd|dollars?|bucks)\b/i.exec(text)
-    ?? /\b(?:deduct|subtract|minus|spent|spend|paid|pay|withdrew|withdraw|took|add|deposit|received|put)\s+(\d[\d,]*(?:\.\d+)?)\b/i.exec(text);
-  const amount = amountMatch ? amountMatch[1] ?? amountMatch[2] ?? null : null;
+  const amount = fallbackAmount(text);
   if (!amount) return null;
   const stop = String.raw`(?=\s+(?:for|on|at|yesterday|today|from|to|into|in)\b|[.,!]|$)`;
   const account = new RegExp(String.raw`\b(?:from|to|into|in|under|out of)\s+(?:my\s+|the\s+)?([\p{L}][\p{L}\p{N} &'-]{0,40}?)(?:\s+(?:sub[- ]?account|account|budget|envelope))?${stop}`, "iu").exec(text);
   const subject = new RegExp(String.raw`\b(?:for|on)\s+(?!today\b|yesterday\b)([\p{L}][\p{L}\p{N} &'-]{0,60}?)${stop}`, "iu").exec(text);
-  const date = /\byesterday\b/i.test(text) ? shiftAgentDate(today, -1) : /\btoday\b/i.test(text) ? today : null;
+  let date: string | null = null;
+  if (/\byesterday\b/i.test(text)) date = shiftAgentDate(today, -1);
+  else if (/\btoday\b/i.test(text)) date = today;
   return {
     ...EMPTY_TRANSACTION_INTENT,
     operation: "CREATE",

@@ -7,12 +7,10 @@ type GeneratedCioAnswer = {
 
 const DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}\b/g;
 const YEAR_PATTERN = /\b(?:19|20|21)\d{2}\b/g;
-const PERCENTAGE_PATTERN = /(-?[\d,]+(?:\.\d+)?)\s*%/g;
-const CURRENCY_PATTERN = /(?<![A-Z0-9_-])(-?)(SGD|USD|EUR|GBP|AUD|JPY)\s+(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)(?![\d,]|\.\d)/g;
-const PERIODIC_AMOUNT_PATTERNS = [
-  /(?<![\d,])((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\s*(?:a|per|each|\/)\s*(?:month|year)\b/gi,
-  /\b(?:monthly|annual|yearly)\s+(?:spending|budget|income|contribution|amount|target|expenses?)\s*(?:of|is|at|=)?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/gi,
-] as const;
+const NUMBER_PATTERN = /\d+(?:,\d+)*(?:\.\d+)?/g;
+const MONEY_NUMBER_PATTERN = /^-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/;
+const CURRENCY_PREFIX_PATTERN = /(?<![A-Z0-9_-])(-?)(SGD|USD|EUR|GBP|AUD|JPY)\s+/g;
+const PERIODIC_PREFIX_PATTERN = /\b(?:monthly|annual|yearly)\s+(?:spending|budget|income|contribution|amount|target|expenses?)\s*(?:of|is|at|=)?\s*/gi;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -28,25 +26,42 @@ function successfulFinancialGroundingOutputs(outputs: readonly Record<string, un
   ));
 }
 
-function normalizedPercentages(value: string) {
-  return [...value.matchAll(PERCENTAGE_PATTERN)].map((match) => (
-    Number(match[1].replaceAll(",", ""))
-  ));
+function percentageValues(value: string) {
+  const suffix = /\s*%/y;
+  const percentages: Array<{ rendered: string; amount: number }> = [];
+  // Consume each numeric token once; a missing unit must not retry every digit.
+  for (const match of value.matchAll(/-?[\d,]+(?:\.\d+)?/g)) {
+    suffix.lastIndex = match.index + match[0].length;
+    const unit = suffix.exec(value);
+    if (unit) percentages.push({ rendered: `${match[0]}${unit[0]}`, amount: Number(match[0].replaceAll(",", "")) });
+  }
+  return percentages;
+}
+
+function isMoneyNumber(match: RegExpExecArray, value: string) {
+  const end = match.index + match[0].length;
+  return MONEY_NUMBER_PATTERN.test(match[0]) && !/^\.\d/.test(value.slice(end, end + 2));
 }
 
 function currencyValues(value: string) {
-  return [...value.matchAll(CURRENCY_PATTERN)].map((match) => {
-    const rawNumeric = match[3].replaceAll(",", "");
+  const number = /-?\d+(?:,\d+)*(?:\.\d+)?/y;
+  const values: Array<{ rendered: string; currency: string; amount: number; fractionDigits: number; normalized: string }> = [];
+  for (const prefix of value.matchAll(CURRENCY_PREFIX_PATTERN)) {
+    number.lastIndex = prefix.index + prefix[0].length;
+    const match = number.exec(value);
+    if (!match || !isMoneyNumber(match, value) || value[number.lastIndex] === ",") continue;
+    const rawNumeric = match[0].replaceAll(",", "");
     const numeric = Number(rawNumeric);
-    const signed = match[1] === "-" || numeric < 0 ? -Math.abs(numeric) : numeric;
-    return {
-      rendered: match[0],
-      currency: match[2],
+    const signed = prefix[1] === "-" || numeric < 0 ? -Math.abs(numeric) : numeric;
+    values.push({
+      rendered: `${prefix[0]}${match[0]}`,
+      currency: prefix[2],
       amount: signed,
       fractionDigits: rawNumeric.split(".")[1]?.length ?? 0,
-      normalized: `${match[2]}:${signed}`,
-    };
-  });
+      normalized: `${prefix[2]}:${signed}`,
+    });
+  }
+  return values;
 }
 
 function isSupportedCurrencyValue(
@@ -79,11 +94,26 @@ export function isReferentialFinancialFollowUp(value: string) {
 export function userSuppliedCurrencyGrounding(values: readonly string[], currency: string) {
   const supported = new Set<string>();
   for (const value of values) {
-    for (const pattern of PERIODIC_AMOUNT_PATTERNS) {
-      for (const match of value.matchAll(pattern)) supported.add(`${currency} ${match[1]}`);
-    }
+    for (const amount of periodicAmounts(value)) supported.add(`${currency} ${amount}`);
   }
   return [...supported];
+}
+
+function periodicAmounts(value: string) {
+  const amounts: string[] = [];
+  const period = /\s*(?:a|per|each|\/)\s*(?:month|year)\b/iy;
+  for (const match of value.matchAll(NUMBER_PATTERN)) {
+    if (value[match.index - 1] === ",") continue;
+    period.lastIndex = match.index + match[0].length;
+    if (period.test(value) && isMoneyNumber(match, value)) amounts.push(match[0]);
+  }
+  const number = /\d+(?:,\d+)*(?:\.\d+)?/y;
+  for (const prefix of value.matchAll(PERIODIC_PREFIX_PATTERN)) {
+    number.lastIndex = prefix.index + prefix[0].length;
+    const match = number.exec(value);
+    if (match && isMoneyNumber(match, value)) amounts.push(match[0]);
+  }
+  return amounts;
 }
 
 export function findUnsupportedCurrencyValue(
@@ -116,12 +146,17 @@ export function findUnsupportedCioValue(
   const unsupportedYear = (rendered.match(YEAR_PATTERN) ?? []).find((year) => !supportedYears.has(year));
   if (unsupportedYear) return unsupportedYear;
 
-  const supportedPercentages = new Set(normalizedPercentages(corpus));
-  const generatedPercentageMatches = [...rendered.matchAll(PERCENTAGE_PATTERN)];
-  const unsupportedPercentage = generatedPercentageMatches.find((match) => (
-    !supportedPercentages.has(Number(match[1].replaceAll(",", "")))
+  const supportedPercentages = new Set(percentageValues(corpus).map((value) => value.amount));
+  const unsupportedPercentage = percentageValues(rendered).find((value) => (
+    !supportedPercentages.has(value.amount)
   ));
-  return unsupportedPercentage?.[0] ?? null;
+  return unsupportedPercentage?.rendered ?? null;
+}
+
+function trimPartialWord(value: string) {
+  let boundary = value.length;
+  while (boundary > 0 && !/\s/.test(value[boundary - 1])) boundary -= 1;
+  return (boundary > 0 ? value.slice(0, boundary) : value).trimEnd();
 }
 
 export function ensureCioDataDate(
@@ -140,6 +175,6 @@ export function ensureCioDataDate(
   const available = Math.max(0, maxLength - suffix.length - 1);
   const prefix = answer.length <= available
     ? answer.trimEnd()
-    : answer.slice(0, available).replace(/\s+\S*$/, "").trimEnd();
+    : trimPartialWord(answer.slice(0, available));
   return `${prefix}${prefix ? " " : ""}${suffix}`;
 }

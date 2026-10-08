@@ -211,3 +211,106 @@ test("answers offer recording only for statements that carry an amount", () => {
   for (const text of ["Lunch $12 at the hawker centre", "grab 15 dollars", "S$30 taxi home"]) assert.equal(couldBeTransaction(text), true, text);
   for (const text of ["How much did I spend in 2025?", "Show spending over $100", "Top 5 merchants", "Compare March and April"]) assert.equal(couldBeTransaction(text), false, text);
 });
+
+test("budget selection explains ambiguous banks, several suggestions, deposits, and missing directions", () => {
+  const duplicate = [...budgets, { ...budgets[0], id: "other-transit", accountId: "other-bank", accountName: "OCBC" }];
+  const ambiguous = plan(state({ accountQuery: "Transit" }), null, duplicate);
+  assert.equal(ambiguous.pending, "budget");
+  assert.match(ambiguous.message, /more than one sub-account named “Transit”/);
+  assert.deepEqual(ambiguous.choices.map((choice) => choice.id), ["transit", "other-transit"]);
+  assert.ok(ambiguous.choices.every((choice) => choice.suggested === undefined));
+  const multiple = plan(state({ accountQuery: "transport" }), null, [...budgets, { ...budgets[0], id: "bus", name: "Bus fares" }]);
+  assert.match(multiple.message, /“Bus fares” or “Transit”/);
+  assert.equal(multiple.review, null);
+  assert.match(plan(state({ direction: "CREDIT", amount: null })).message, /should I add to/);
+  assert.match(plan(state({ direction: null })).message, /should I use for this/);
+  const legacy = plan(state({ accountCandidates: undefined }));
+  assert.equal(legacy.pending, "budget", "drafts saved before candidate hints existed remain usable");
+  assert.match(plan(state({ operation: "CLARIFY" })).message, /Would you like to record an expense/);
+  assert.match(plan(state({ amount: "0" }, { budgetId: "transit" })).message, /can’t use “0”/);
+  assert.match(plan(state({ direction: "CREDIT" }, { budgetId: "transit" })).message, /For example “salary”/);
+});
+
+test("history and model hints improve rankings without changing the need to choose a near match", () => {
+  const usage = { similar: new Map([["transit", 1]]), recent: new Map([["food", 1]]) };
+  const ranked = resolveAgentBudget(null, budgets, null, { subject: "Bus fare", usage });
+  assert.equal(ranked.kind, "none");
+  assert.equal(ranked.ranked[0].reason, "Used for 1 similar transaction");
+  assert.equal(ranked.ranked.find((item) => item.budget.id === "food").reason, "Used 1 time recently");
+  const withoutSubject = resolveAgentBudget(null, budgets, null, { usage });
+  assert.equal(withoutSubject.ranked[0].reason, "Used 1 time recently");
+  const hinted = resolveAgentBudget("Unrelated", budgets, null, { candidates: ["Transit"], subject: "Bus fare", usage });
+  assert.equal(hinted.kind, "suggest");
+  assert.equal(hinted.ranked[0].reason, "Possible match");
+  assert.equal(hinted.ranked[0].score, 0.73);
+  const conceptual = resolveAgentBudget("transport", budgets, null, { candidates: ["Transit"], subject: "Bus fare", usage });
+  assert.equal(conceptual.kind, "suggest");
+  assert.equal(conceptual.ranked[0].reason, "Similar category");
+  assert.ok(conceptual.ranked[0].score > 0.82);
+  const custom = { ...budgets[0], id: "custom", name: "Communications shared monthly allocation" };
+  const partial = resolveAgentBudget("Internationalisation shared monthly allocation", [custom], null, {
+    subject: "Phone plan", usage: { similar: new Map([["custom", 1]]), recent: new Map() },
+  });
+  assert.equal(partial.kind, "suggest");
+  assert.equal(partial.ranked[0].reason, "Used for 1 similar transaction");
+  assert.equal(partial.ranked[0].score, 0.61);
+});
+
+test("reviews retain zero balance changes, reject unavailable originals, and prevent both integer overflows", () => {
+  const renamed = plan(state({ operation: "UPDATE", amount: null, direction: null, subject: "Updated lunch" }), before);
+  assert.equal(renamed.review.after.subject, "Updated lunch");
+  assert.deepEqual(renamed.review.balances.map((row) => [row.id, row.afterCents]), [["food", 20_000]]);
+  const zeroOriginal = plan(state({ operation: "UPDATE", accountQuery: "Transit" }), { ...before, amountCents: 0 });
+  assert.deepEqual(zeroOriginal.review.balances.map((row) => [row.id, row.afterCents]), [["transit", 9_000], ["food", 20_000]]);
+  const unavailable = plan(state({ operation: "UPDATE", accountQuery: "Transit" }), { ...before, budgetId: "retired" });
+  assert.equal(unavailable.review, null);
+  assert.match(unavailable.message, /original sub-account is no longer active/);
+  for (const [direction, availableCents] of [["CREDIT", 2_147_483_647], ["DEBIT", -2_147_483_648]]) {
+    const result = plan(state({ subject: "Boundary amount", amount: "0.01", direction }, { budgetId: "transit" }), null, [{ ...budgets[0], availableCents }]);
+    assert.equal(result.review, null);
+    assert.equal(result.pending, "amount");
+    assert.match(result.message, /exceed the supported sub-account balance/);
+  }
+  const deposit = plan(state({ operation: "UPDATE", direction: "CREDIT" }), before);
+  assert.equal(deposit.review.after.kind, "INCOME");
+  assert.equal(deposit.review.balances[0].afterCents, 22_000);
+});
+
+test("ambiguous pending replies stay with the model and foreign currency remains explicit", () => {
+  const pending = (field, reply, budgetName = null) => applyPendingReply(state({}, { pending: field }), reply, "2026-09-30", budgetName);
+  for (const [field, reply] of [
+    ["amount", "twelve"], ["direction", "maybe"], ["date", "someday"], ["subject", "skip"],
+    ["subject", "one two three four five six seven eight nine"], ["amount", " "], ["subject", "x".repeat(81)],
+  ]) assert.equal(pending(field, reply), null, `${field}: ${reply}`);
+  assert.equal(pending("amount", "US$ 12").currency, "USD");
+  assert.equal(pending("subject", "skip", "Transit").subject, "Transit");
+});
+
+test("fallback amounts follow currency order, preserve foreign currency, and resolve explicit today", () => {
+  for (const [text, amount] of [
+    ["Deduct 5 dollars, notated as $12", "5"],
+    ["Deduct $12 alongside 5 dollars", "12"],
+    ["Spent 4.50 bucks on tea", "4.50"],
+    ["Add 2,500 SGD to savings", "2,500"],
+  ]) assert.equal(parseTransactionFallback(text, "2026-09-30").amount, amount, text);
+  const foreign = parseTransactionFallback("Spent US$ 12 on lunch today", "2026-09-30");
+  assert.equal(foreign.currency, "USD");
+  assert.equal(foreign.date, "2026-09-30");
+  assert.equal(foreign.subject, "Lunch");
+  assert.equal(plan(state({ ...foreign }, { budgetId: "food" })).pending, "amount");
+});
+
+test("question detection preserves plain statements, question prefixes, polite requests, and empty input", () => {
+  for (const text of ["", " ", "Spent $10?", "Tell me why I paid $12", "Give me the amount I paid", "Summarise what I spent", "Summarize what I spent"]) {
+    assert.equal(isTransactionRequest(text), false, text);
+  }
+  for (const text of ["$12 paid for lunch", "Please record $12", "Could you add $12?", "deduct $12?"]) {
+    assert.equal(isTransactionRequest(text), true, text);
+  }
+  for (const text of ["Tell me about SGD 12", "Give me $12 in cents", "$12 lunch?"]) assert.equal(couldBeTransaction(text), false, text);
+  assert.equal(couldBeTransaction("12.50 dollars on lunch"), true);
+});
+
+test("fallback parsing does not repeatedly scan long numbers without an amount unit", { timeout: 5_000 }, () => {
+  assert.equal(parseTransactionFallback(`I bought ${"1".repeat(30_000)} apples`, "2026-09-30"), null);
+});
