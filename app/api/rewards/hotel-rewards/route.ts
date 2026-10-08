@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { deleteWorkspaceReward, rewardFailureResponse } from "@/lib/domains/rewards/api";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -61,10 +62,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...account, centsPerPoint: Number(account.centsPerPoint) }, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to create hotel rewards account" }, { status: 500 });
+    return rewardFailureResponse(error, "Failed to create hotel rewards account");
   }
 }
 
@@ -99,41 +97,10 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ...account, centsPerPoint: Number(account.centsPerPoint) });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to update hotel rewards account" }, { status: 500 });
+    return rewardFailureResponse(error, "Failed to update hotel rewards account");
   }
 }
 
 export async function DELETE(request: Request) {
-  try {
-    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-
-    if (!id) {
-      return NextResponse.json({ error: "ID is required" }, { status: 400 });
-    }
-
-    const existing = await prisma.hotelRewardAccount.findFirst({
-      where: { id, workspaceId },
-      select: { id: true },
-    });
-    if (!existing) {
-      return NextResponse.json({ error: "Hotel rewards account not found" }, { status: 404 });
-    }
-
-    await prisma.hotelRewardAccount.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to delete hotel rewards account" }, { status: 500 });
-  }
+  return deleteWorkspaceReward(request, prisma.hotelRewardAccount, "Hotel rewards account");
 }

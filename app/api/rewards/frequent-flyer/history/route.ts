@@ -47,9 +47,7 @@ const PostSchema = z.union([CreateEarnSchema, CreateRedeemSchema]);
 const PatchSchema = z.union([UpdateEarnSchema, UpdateRedeemSchema]);
 
 function toDate(value?: string | null): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return value ? new Date(value) : null;
 }
 
 function expiryLastDayOfEarnMonth(earnDate: string, years: number): Date {
@@ -110,6 +108,7 @@ async function createRedemptionWithAutoAllocation(params: {
       workspaceId,
       frequentFlyerId,
       balanceMiles: { gt: 0 },
+      OR: [{ expiryDate: null }, { expiryDate: { gte: startOfTodayUtc() } }],
     },
     orderBy: [{ expiryDate: "asc" }, { date: "asc" }, { createdAt: "asc" }],
     select: { id: true, balanceMiles: true, firstRedeemedDate: true },
@@ -120,7 +119,6 @@ async function createRedemptionWithAutoAllocation(params: {
   for (const source of sources) {
     if (remaining <= 0) break;
     const used = Math.min(source.balanceMiles, remaining);
-    if (used <= 0) continue;
     allocations.push({ milesFileId: source.id, milesRedeemed: used });
     remaining -= used;
   }
@@ -186,11 +184,12 @@ export async function POST(request: Request) {
 
     await prisma.$transaction(async (tx) => {
       if (payload.type === "earn") {
-        const expiryDate = frequentFlyer.mileNeverExpire
-          ? null
-          : payload.expiryDate
+        let expiryDate: Date | null = null;
+        if (!frequentFlyer.mileNeverExpire) {
+          expiryDate = payload.expiryDate
             ? toDate(payload.expiryDate)
             : expiryLastDayOfEarnMonth(payload.date, frequentFlyer.validityPeriodYears);
+        }
 
         await tx.mileProgram.create({
           data: {

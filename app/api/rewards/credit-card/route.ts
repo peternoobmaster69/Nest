@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { deleteWorkspaceReward, rewardFailureResponse } from "@/lib/domains/rewards/api";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -73,10 +74,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(reward, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to create credit card reward" }, { status: 500 });
+    return rewardFailureResponse(error, "Failed to create credit card reward");
   }
 }
 
@@ -113,41 +111,10 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(reward);
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to update credit card reward" }, { status: 500 });
+    return rewardFailureResponse(error, "Failed to update credit card reward");
   }
 }
 
 export async function DELETE(request: Request) {
-  try {
-    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-
-    if (!id) {
-      return NextResponse.json({ error: "ID is required" }, { status: 400 });
-    }
-
-    const existing = await prisma.creditCardReward.findFirst({
-      where: { id, workspaceId },
-      select: { id: true },
-    });
-    if (!existing) {
-      return NextResponse.json({ error: "Credit card reward not found" }, { status: 404 });
-    }
-
-    await prisma.creditCardReward.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to delete credit card reward" }, { status: 500 });
-  }
+  return deleteWorkspaceReward(request, prisma.creditCardReward, "Credit card reward");
 }

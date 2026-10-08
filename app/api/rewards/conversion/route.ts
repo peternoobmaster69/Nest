@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { deleteWorkspaceReward, rewardFailureResponse } from "@/lib/domains/rewards/api";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -68,43 +69,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...conversion, conversionRate: Number(conversion.conversionRate) }, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to create conversion" }, { status: 500 });
+    return rewardFailureResponse(error, "Failed to create conversion");
   }
 }
 
 export async function DELETE(request: Request) {
-  try {
-    const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-
-    if (!id) {
-      return NextResponse.json({ error: "ID is required" }, { status: 400 });
-    }
-
-    const existing = await prisma.pointConversion.findFirst({
-      where: { id, workspaceId },
-      select: { id: true },
-    });
-    if (!existing) {
-      return NextResponse.json({ error: "Conversion not found" }, { status: 404 });
-    }
-
-    await prisma.pointConversion.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to delete conversion" }, { status: 500 });
-  }
+  return deleteWorkspaceReward(request, prisma.pointConversion, "Conversion");
 }
 
 export async function PATCH(request: Request) {
@@ -147,9 +117,6 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ...updated, conversionRate: Number(updated.conversionRate) });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to update conversion" }, { status: 500 });
+    return rewardFailureResponse(error, "Failed to update conversion");
   }
 }

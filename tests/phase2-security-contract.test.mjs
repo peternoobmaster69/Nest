@@ -77,10 +77,17 @@ test("all finance mutations require at least EDITOR", async () => {
     "app/api/rewards/frequent-flyer/history/route.ts": ["POST", "PATCH", "DELETE"],
     "app/api/rewards/hotel-rewards/route.ts": ["POST", "PATCH", "DELETE"],
   };
+  const rewardDeletion = handler(await read("lib/domains/rewards/api.ts"), "deleteWorkspaceReward");
   for (const [path, methods] of Object.entries(routes)) {
     const source = await read(path);
     for (const method of methods) {
-      assert.match(handler(source, method), /requireWorkspace(?:Access|Role)\([^\n]*"EDITOR"\)/, `${path} ${method}`);
+      let mutation = handler(source, method);
+      if (mutation.includes("return deleteWorkspaceReward(")) {
+        assert.equal(method, "DELETE");
+        assert.match(source, /import \{ deleteWorkspaceReward, rewardFailureResponse \} from "@\/lib\/domains\/rewards\/api"/);
+        mutation = rewardDeletion;
+      }
+      assert.match(mutation, /requireWorkspace(?:Access|Role)\([^\n]*"EDITOR"\)/, `${path} ${method}`);
     }
   }
 });
