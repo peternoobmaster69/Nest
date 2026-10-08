@@ -12,11 +12,11 @@ let authenticate;
 let fixtures;
 const router = { replace: (...args) => calls.push(["replace", ...args]) };
 mock.module("next-auth/react", { namedExports: {
-  signIn: async (...args) => { calls.push(["signin", ...args]); return signIn(...args); },
+  signIn: async (...args) => { calls.push(["signin", ...args]); return signIn(); },
   signOut: async (...args) => { calls.push(["signout", ...args]); },
 } });
 mock.module("next/navigation", { namedExports: { useRouter: () => router } });
-mock.module(require.resolve("@simplewebauthn/browser"), { namedExports: { startAuthentication: async (options) => { calls.push(["authenticate", options]); return authenticate(options); } } });
+mock.module(require.resolve("@simplewebauthn/browser"), { namedExports: { startAuthentication: async (options) => { calls.push(["authenticate", options]); return authenticate(); } } });
 const { SignInPanel } = require("../components/signin-panel.tsx");
 const { LandingSignInDialog } = require("../components/landing-signin-dialog.tsx");
 const { rememberPostSignInDestination, consumePostSignInDestination, clearPostSignInDestination } = require("../lib/session-limit-client.ts");

@@ -4,7 +4,7 @@ import test, { after, afterEach, beforeEach, mock } from "node:test";
 import { createReactHarness } from "./react-harness.mjs";
 
 const ui = await createReactHarness();
-const { h, render, fireEvent, within, waitFor } = ui;
+const { h, render, fireEvent, waitFor } = ui;
 const require = createRequire(import.meta.url);
 let read;
 let update;
@@ -12,7 +12,7 @@ let client;
 const requests = [];
 mock.module("../lib/api/client.ts", { namedExports: { apiFetch: async (url, options = {}) => {
   requests.push({ url, ...options });
-  return options.method === "PATCH" ? update(JSON.parse(options.body)) : read();
+  return options.method === "PATCH" ? update() : read();
 } } });
 const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 const { queryKeys } = require("../lib/query-keys.ts");
