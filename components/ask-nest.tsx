@@ -174,7 +174,7 @@ export function AskNest({
   const memoryLoadedRef = useRef(false);
   const preserveScrollRef = useRef<{ height: number; top: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDialogElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -725,11 +725,10 @@ export function AskNest({
   const panel = open ? (
     <div className="ask-nest-layer">
       <Button type="button" className="ask-nest-backdrop" onClick={minimize} aria-label="Minimize Ask Nest" />
-      <section
+      <dialog open
         id="ask-nest-panel"
         ref={panelRef}
         className="ask-nest-panel"
-        role="dialog"
         aria-modal="true"
         aria-labelledby="ask-nest-title"
         aria-describedby="ask-nest-description"
@@ -913,7 +912,7 @@ export function AskNest({
             <Button type="button" variant="secondary" onClick={() => setMemoryOpen(false)}>Back to conversation</Button>
           </footer>
         )}
-      </section>
+      </dialog>
     </div>
   ) : null;
 

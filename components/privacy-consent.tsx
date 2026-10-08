@@ -85,7 +85,7 @@ function PrivacyConsentBanner() {
   if (!ready || consent) return null;
 
   return (
-    <aside className="cookie-overlay privacy-consent-banner" role="dialog" aria-modal="false" aria-labelledby="privacy-consent-title" aria-describedby="privacy-consent-description">
+    <dialog open className="cookie-overlay privacy-consent-banner" aria-modal="false" aria-labelledby="privacy-consent-title" aria-describedby="privacy-consent-description">
       <div className="privacy-consent-copy">
         <strong id="privacy-consent-title">Your privacy choices</strong>
         <p id="privacy-consent-description">
@@ -114,6 +114,6 @@ function PrivacyConsentBanner() {
         )}
         <Button variant="primary" size="sm" onClick={() => updateConsent({ analytics: true, performance: true })}>Accept optional</Button>
       </div>
-    </aside>
+    </dialog>
   );
 }

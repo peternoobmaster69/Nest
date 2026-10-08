@@ -1467,7 +1467,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
       {/* Add Account Modal */}
       {isAddModalOpen && (
         <Dialog open onClose={closeAddModal} title="Add bank account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>Add Bank Account</h3>
               <ModalCloseButton onClick={closeAddModal} label="Close Add Bank Account" />
@@ -1532,14 +1532,14 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
 
       {/* Edit Account Modal */}
       {isEditModalOpen && editingAccountId && (
         <Dialog open onClose={closeEditModal} title="Edit bank account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>Edit Bank Account</h3>
               <ModalCloseButton onClick={closeEditModal} label="Close Edit Bank Account" />
@@ -1615,7 +1615,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
           )}
         </>

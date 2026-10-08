@@ -57,7 +57,7 @@ test("session-limit sign-in keeps five active sessions in a compact centered dia
   assert.match(dialog, /sessionLimitRequired \? "Account security"/);
   assert.match(dialog, /sessionLimitRequired \? "Choose where to stay signed in\."/);
   assert.match(dialog, /End at least one session to continue here\./);
-  assert.match(dialog, /`\$\{sessions\.length\} active sessions`/);
+  assert.match(dialog, /`\$\{count\} active sessions`/);
   assert.match(dialog, /Choose sessions to end/);
   assert.match(dialog, /type="checkbox"/);
   assert.match(dialog, /sessionIds: selectedSessionIds/);
@@ -859,7 +859,7 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(shell, /id="main-content" tabIndex=\{-1\}/);
   assert.match(shell, /aria-controls="mobile-more-menu"/);
   assert.match(transactions, /className="budget-mini budget-mini-compact tx-account-card"[\s\S]*?role="button"[\s\S]*?aria-pressed=/);
-  assert.match(dialog, /role="dialog"/);
+  assert.match(dialog, /<dialog open/);
   assert.match(dialog, /"aria-labelledby": labelledBy/);
   assert.match(navigationLoader, /performance\.measure\(ROUTE_MEASURE/);
   assert.match(navigationLoader, /nest:route-performance/);

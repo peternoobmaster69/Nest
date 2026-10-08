@@ -84,7 +84,7 @@ export function TransactionCorrectionDialog({
 }>) {
   return (
     <Dialog open onClose={onClose} title="Correct transaction" surface="custom" overlayClassName="profile-modal-overlay">
-      <div className="profile-modal txn-modal txn-entry-modal">
+      <dialog open className="profile-modal txn-modal txn-entry-modal">
         <div className="profile-modal-head">
           <h3>Correct Transaction</h3>
           <ModalCloseButton onClick={onClose} label="Close Correct Transaction" />
@@ -144,7 +144,7 @@ export function TransactionCorrectionDialog({
             </div>
           </div>
         </form>
-      </div>
+      </dialog>
     </Dialog>
   );
 }

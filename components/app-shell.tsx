@@ -109,7 +109,7 @@ export function AppShell({
   const { theme, toggleTheme } = useTheme();
   const mainRef = useRef<HTMLElement | null>(null);
   const bodyScrollRef = useRef<HTMLDivElement | null>(null);
-  const mobileMoreRef = useRef<HTMLElement | null>(null);
+  const mobileMoreRef = useRef<HTMLDialogElement | null>(null);
   const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarMoneyPages = contextData?.sidebarMoneyPages ?? {
     creditCards: true,
@@ -383,7 +383,7 @@ export function AppShell({
       {mobileMoreOpen ? (
         <>
           <div className="mobile-more-backdrop" aria-hidden="true" />
-          <section id="mobile-more-menu" ref={mobileMoreRef} className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
+          <dialog open id="mobile-more-menu" ref={mobileMoreRef} className="mobile-more-menu" aria-modal="true" aria-labelledby="mobile-more-title">
             <div className="mobile-more-header">
               <div className="mobile-more-header-main">
                 <div>
@@ -503,7 +503,7 @@ export function AppShell({
                 {theme === "light" ? <Moon size={19} aria-hidden="true" /> : <Sun size={19} aria-hidden="true" />}
               </Button>
             </div>
-          </section>
+          </dialog>
         </>
       ) : null}
 

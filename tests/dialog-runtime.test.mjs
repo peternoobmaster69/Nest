@@ -20,7 +20,7 @@ test("an initially open dialog hydrates without replacing server-rendered page c
   );
   const container = document.createElement("div");
   container.innerHTML = renderToStaticMarkup(content);
-  assert.doesNotMatch(container.innerHTML, /role="dialog"/);
+  assert.doesNotMatch(container.innerHTML, /<dialog/);
   document.body.append(container);
   const heading = container.querySelector("h1");
   const view = render(content, { container, baseElement: document.body, hydrate: true, onRecoverableError: (error) => errors.push(error) });
@@ -51,9 +51,14 @@ test("dialogs name their contents, trap focus, and restore the trigger on close"
   let closed = 0;
   const view = render(h(Dialog, { open: true, title: "Edit account", description: "Change the account name", onClose: () => { closed += 1; }, footer: h("button", null, "Save") }, h("input", { "aria-label": "Name", "data-dialog-initial-focus": true })));
   const dialog = view.getByRole("dialog", { name: "Edit account" });
+  assert.equal(dialog.tagName, "DIALOG");
+  assert.equal(dialog.open, true);
   assert.equal(dialog.getAttribute("aria-modal"), "true");
   assert.equal(document.getElementById(dialog.getAttribute("aria-describedby")).textContent, "Change the account name");
   assert.equal(document.activeElement, view.getByRole("textbox", { name: "Name" }));
+  const interiorTab = new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+  fireEvent(document, interiorTab);
+  assert.equal(interiorTab.defaultPrevented, false, "ordinary tab movement inside the dialog remains native");
   view.getByRole("button", { name: "Save" }).focus();
   fireEvent.keyDown(document, { key: "Tab" });
   assert.equal(document.activeElement, view.getByRole("button", { name: "Close Edit account" }));
@@ -113,10 +118,23 @@ test("nested dialogs retain the viewport lock until the last surface closes", ()
 });
 
 test("custom dialog surfaces retain accessible names and support empty-content fallback", () => {
-  const view = render(h(Dialog, { open: true, title: "Custom", surface: "custom", onClose: () => {} }, h("section", null, "Content")));
-  assert.equal(view.getByRole("dialog", { name: "Custom" }).tagName, "SECTION");
-  view.rerender(h(Dialog, { open: true, title: "Custom", surface: "custom", labelledBy: "custom-heading", onClose: () => {} }, h("section", null, h("h2", { id: "custom-heading" }, "Named surface"))));
+  const view = render(h(Dialog, { open: true, title: "Custom", surface: "custom", onClose: () => {} }, h("dialog", { className: "custom-surface" }, "Content")));
+  assert.equal(view.getByRole("dialog", { name: "Custom" }).tagName, "DIALOG");
+  assert.equal(view.getByRole("dialog").open, true);
+  assert.ok(view.getByRole("dialog").classList.contains("custom-surface"));
+  view.rerender(h(Dialog, { open: true, title: "Custom", surface: "custom", labelledBy: "custom-heading", onClose: () => {} }, h("dialog", null, h("h2", { id: "custom-heading" }, "Named surface"))));
   assert.equal(view.getByRole("dialog", { name: "Named surface" }).getAttribute("aria-label"), null);
   view.rerender(h(Dialog, { open: true, title: "Fallback", surface: "custom", onClose: () => {} }, "Plain content"));
-  assert.equal(view.getByRole("dialog", { name: "Fallback" }).tagName, "DIV");
+  assert.equal(view.getByRole("dialog", { name: "Fallback" }).tagName, "DIALOG");
+  view.rerender(h(Dialog, { open: true, title: "Nested content", surface: "custom", onClose: () => {} }, h("section", null, "Ordinary content")));
+  assert.ok(view.getByRole("dialog", { name: "Nested content" }).querySelector("section"));
+});
+
+test("dialogs safely open when the previous focus target is an SVG element", (t) => {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  t.mock.getter(document, "activeElement", () => svg);
+  const view = render(h(Dialog, { open: true, title: "Chart details", onClose: () => {} }, "Details"));
+  assert.ok(view.getByRole("dialog", { name: "Chart details" }));
+  view.unmount();
+  assert.equal(document.body.dataset.modalScrollLock, undefined);
 });

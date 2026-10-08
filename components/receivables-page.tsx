@@ -707,7 +707,7 @@ export function ReceivablesPage() {
 
       {isModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeModal} title={modalMode === "edit" ? "Edit receivable" : "Add receivable"} closeDisabled={isSavingReceivable} surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal recv-modal">
+          <dialog open className="profile-modal recv-modal">
             <div className="profile-modal-head">
               <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>
               <ModalCloseButton onClick={closeModal} disabled={isSavingReceivable} label={`Close ${modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}`} />
@@ -866,7 +866,7 @@ export function ReceivablesPage() {
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>,
         document.body
       )}

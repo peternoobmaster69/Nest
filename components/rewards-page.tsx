@@ -1607,7 +1607,7 @@ export function RewardsPage({
       {/* Credit Card Rewards Modal */}
       {isCardRewardModalOpen && data?.cardsWithoutRewards.length ? (
         <Dialog open onClose={closeCardRewardModal} title="Add card rewards" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>Add Credit Card Rewards</h3>
               <ModalCloseButton onClick={closeCardRewardModal} label="Close Add Credit Card Rewards" />
@@ -1700,14 +1700,14 @@ export function RewardsPage({
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       ) : null}
 
       {/* Conversion Rate Modal */}
       {isConversionModalOpen && data?.creditCards.length && data?.frequentFlyers.length ? (
         <Dialog open onClose={closeConversionModal} title="Add point conversion" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>Add Conversion Rate</h3>
               <ModalCloseButton onClick={closeConversionModal} label="Close Add Conversion Rate" />
@@ -1798,14 +1798,14 @@ export function RewardsPage({
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       ) : null}
 
       {/* Hotel Rewards Modal */}
       {isHotelModalOpen && (
         <Dialog open onClose={closeHotelModal} title="Hotel reward account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>{editingHotelId ? "Edit Hotel Rewards" : "Add Hotel Rewards"}</h3>
               <ModalCloseButton onClick={closeHotelModal} label={`Close ${editingHotelId ? "Edit Hotel Program" : "Add Hotel Program"}`} />
@@ -1911,14 +1911,14 @@ export function RewardsPage({
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
 
       {/* Frequent Flyer Modal */}
       {isFFModalOpen && (
         <Dialog open onClose={closeFFModal} title="Frequent flyer account" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>{editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}</h3>
               <ModalCloseButton onClick={closeFFModal} label={`Close ${editingFFId ? "Edit Frequent Flyer Program" : "Add Frequent Flyer Program"}`} />
@@ -2056,14 +2056,14 @@ export function RewardsPage({
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
 
       {/* Add Earn Transaction Modal */}
       {isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
         <Dialog open onClose={() => setIsAddEarnModalOpen(false)} title="Add miles earned" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>Add Earn Transaction</h3>
               <ModalCloseButton onClick={() => setIsAddEarnModalOpen(false)} label="Close Add Earn Transaction" />
@@ -2143,14 +2143,14 @@ export function RewardsPage({
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
 
       {/* Redeem Miles Modal */}
       {isRedeemModalOpen && selectedHistoryFrequentFlyer && (
         <Dialog open onClose={() => setIsRedeemModalOpen(false)} title="Redeem miles" surface="custom" overlayClassName="st-modal-overlay">
-          <div className="st-modal">
+          <dialog open className="st-modal">
             <div className="st-modal-header">
               <h3>Redeem Miles</h3>
               <ModalCloseButton onClick={() => setIsRedeemModalOpen(false)} label="Close Redeem Miles" />
@@ -2220,7 +2220,7 @@ export function RewardsPage({
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
     </div>

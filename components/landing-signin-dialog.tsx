@@ -42,10 +42,31 @@ function sessionSummary(session: ActiveSession) {
   return `${country} · ${lastActive}`;
 }
 
+function SessionHeading({ loading, count }: Readonly<{ loading: boolean; count: number }>) {
+  let title = "A session slot is available";
+  if (loading) title = "Checking active sessions";
+  else if (count >= 5) title = `${count} active sessions`;
+  return (
+    <div className="signin-embedded-heading">
+      <h1 className="signin-title">{title}</h1>
+      {!loading && count < 5 ? <p className="signin-subtitle">You can continue on this device.</p> : null}
+    </div>
+  );
+}
+
+function approvalLabel(approving: boolean, selected: number, total: number) {
+  if (approving) return "Approving device…";
+  if (selected > 0 && selected === total) return "End all and continue";
+  if (selected === 1) return "End session and continue";
+  if (selected > 1) return `End ${selected} and continue`;
+  return "Continue on this device";
+}
+
 function SessionLimitPanel({ onCancel }: Readonly<{ onCancel: () => void }>) {
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const firstSessionRef = useRef<HTMLInputElement>(null);
@@ -60,6 +81,7 @@ function SessionLimitPanel({ onCancel }: Readonly<{ onCancel: () => void }>) {
         const activeSessions = result?.sessions ?? [];
         setSessions(activeSessions);
         setSelectedSessionIds([]);
+        setSessionsLoaded(true);
       })
       .catch((error) => {
         if (active) setErrorMessage(error instanceof Error ? error.message : "Unable to load active devices.");
@@ -104,14 +126,7 @@ function SessionLimitPanel({ onCancel }: Readonly<{ onCancel: () => void }>) {
 
   return (
     <section className="signin-takeover-panel">
-      <div className="signin-embedded-heading">
-        <h1 className="signin-title">
-          {isLoading ? "Checking active sessions" : requiresSelection ? `${sessions.length} active sessions` : "A session slot is available"}
-        </h1>
-        {!isLoading && !requiresSelection ? (
-          <p className="signin-subtitle">You can continue on this device.</p>
-        ) : null}
-      </div>
+      <SessionHeading loading={isLoading} count={sessions.length} />
 
       {isLoading ? <p className="signin-session-status">Loading active devices…</p> : null}
       {!isLoading && sessions.length ? (
@@ -161,17 +176,9 @@ function SessionLimitPanel({ onCancel }: Readonly<{ onCancel: () => void }>) {
           type="button"
           className="lp-btn-primary"
           onClick={() => void approveDevice()}
-          disabled={isLoading || isApproving || (requiresSelection && !selectedSessionIds.length) || Boolean(errorMessage && !sessions.length)}
+          disabled={!sessionsLoaded || isApproving || (requiresSelection && !selectedSessionIds.length)}
         >
-          {isApproving
-            ? "Approving device…"
-            : allSessionsSelected
-              ? "End all and continue"
-              : selectedSessionIds.length === 1
-                ? "End session and continue"
-                : selectedSessionIds.length > 1
-                  ? `End ${selectedSessionIds.length} and continue`
-              : "Continue on this device"}
+          {approvalLabel(isApproving, selectedSessionIds.length, sessions.length)}
         </Button>
         <Button type="button" className="lp-btn-secondary" onClick={onCancel} disabled={isApproving}>
           Cancel
@@ -206,9 +213,8 @@ export function LandingSignInDialog({
 
   return (
     <Dialog open onClose={close} title={sessionLimitRequired ? "Choose a device to sign out" : "Sign in to Nest"} surface="custom" overlayClassName={`lp-signin-overlay${sessionLimitRequired ? " is-session-limit" : ""}`}>
-      <div
+      <dialog open
         className={`lp-signin-dialog${sessionLimitRequired ? " is-session-limit" : ""}`}
-        role="dialog"
         aria-modal="true"
         aria-label={sessionLimitRequired ? "Choose a device to sign out" : "Sign in to Nest"}
       >
@@ -265,7 +271,7 @@ export function LandingSignInDialog({
             <SignInPanel embedded callbackUrl={callbackUrl} serviceMessage={serviceMessage} />
           )}
         </div>
-      </div>
+      </dialog>
     </Dialog>
   );
 }

@@ -49,6 +49,74 @@ function relativeTime(value: string) {
   return new Intl.DateTimeFormat("en-SG", { day: "numeric", month: "short" }).format(new Date(value));
 }
 
+function markNotificationsRead(current: NotificationResponse | undefined, notificationId?: string) {
+  if (!current) return current;
+  const readAt = new Date().toISOString();
+  let changed = 0;
+  const items = current.notifications.items.map((notification) => {
+    if (notification.readAt || (notificationId && notification.id !== notificationId)) return notification;
+    changed += 1;
+    return { ...notification, readAt };
+  });
+  return {
+    notifications: { ...current.notifications, items },
+    unreadCount: notificationId ? Math.max(0, current.unreadCount - changed) : 0,
+  };
+}
+
+function NotificationList({ loading, error, items, onRetry, onOpen }: Readonly<{
+  loading: boolean;
+  error: boolean;
+  items: NotificationItem[] | undefined;
+  onRetry: () => void;
+  onOpen: (notification: NotificationItem) => void;
+}>) {
+  if (loading) return (
+    <output className="notification-state">
+      <LoaderCircle className="notification-spinner" size={22} aria-hidden="true" />
+      <span>Loading notifications…</span>
+    </output>
+  );
+  if (error) return (
+    <div className="notification-state notification-state-error">
+      <span>Notifications couldn’t be loaded.</span>
+      <Button type="button" onClick={onRetry}>Try again</Button>
+    </div>
+  );
+  if (!items?.length) return (
+    <div className="notification-state notification-empty">
+      <span className="notification-empty-icon"><Bell size={22} aria-hidden="true" /></span>
+      <strong>All caught up</strong>
+      <span>Credit card due reminders and workspace invitations will appear here.</span>
+    </div>
+  );
+  return items.map((notification) => {
+    const content = (
+      <>
+        <span className="notification-icon" aria-hidden="true"><CreditCard size={17} /></span>
+        <span className="notification-copy">
+          <span className="notification-title-row">
+            <strong>{notification.title}</strong>
+            {!notification.readAt ? <span className="notification-unread-dot" aria-label="Unread" /> : null}
+          </span>
+          <span className="notification-message">{notification.message}</span>
+          <span className="notification-time">{relativeTime(notification.updatedAt)}</span>
+        </span>
+      </>
+    );
+    const className = `notification-item${notification.readAt ? "" : " unread"}`;
+    return notification.href ? (
+      <Link key={notification.id} href={notification.href} prefetch={false} className={className} onClick={() => onOpen(notification)}>
+        {content}
+      </Link>
+    ) : (
+      <Button key={notification.id} type="button" className={className} onClick={() => onOpen(notification)}>
+        {content}
+      </Button>
+    );
+  });
+}
+
 export function NotificationBell({ workspaceId }: Readonly<{ workspaceId?: string | null }>) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -86,35 +154,16 @@ export function NotificationBell({ workspaceId }: Readonly<{ workspaceId?: strin
 
   const data = notificationsQuery.data;
   const unreadCount = data?.unreadCount ?? 0;
-  const markReadLocally = (notificationId: string) => {
-    queryClient.setQueryData<NotificationResponse>(queryKey, (current) => {
-      if (!current) return current;
-      const items = current.notifications.items.map((notification) =>
-        notification.id === notificationId && !notification.readAt
-          ? { ...notification, readAt: new Date().toISOString() }
-          : notification,
-      );
-      return {
-        notifications: { ...current.notifications, items },
-        unreadCount: Math.max(0, current.unreadCount - 1),
-      };
-    });
+  const openNotification = (notification: NotificationItem) => {
+    if (!notification.readAt) {
+      queryClient.setQueryData<NotificationResponse>(queryKey, (current) => markNotificationsRead(current, notification.id));
+      updateMutation.mutate({ notificationId: notification.id });
+    }
+    setOpen(false);
   };
 
   const markAllRead = () => {
-    const readAt = new Date().toISOString();
-    queryClient.setQueryData<NotificationResponse>(queryKey, (current) => current
-      ? {
-          notifications: {
-            ...current.notifications,
-            items: current.notifications.items.map((notification) => ({
-              ...notification,
-              readAt: notification.readAt ?? readAt,
-            })),
-          },
-          unreadCount: 0,
-        }
-      : current);
+    queryClient.setQueryData<NotificationResponse>(queryKey, (current) => markNotificationsRead(current));
     updateMutation.mutate({ markAllRead: true });
   };
 
@@ -133,7 +182,7 @@ export function NotificationBell({ workspaceId }: Readonly<{ workspaceId?: strin
       </Button>
 
       {open ? (
-        <section className="notification-popover" role="dialog" aria-label="Notifications">
+        <dialog open className="notification-popover" aria-label="Notifications">
           <header className="notification-header">
             <div>
               <h2>Notifications</h2>
@@ -147,64 +196,15 @@ export function NotificationBell({ workspaceId }: Readonly<{ workspaceId?: strin
           </header>
 
           <div className="notification-list">
-            {notificationsQuery.isLoading ? (
-              <output className="notification-state">
-                <LoaderCircle className="notification-spinner" size={22} aria-hidden="true" />
-                <span>Loading notifications…</span>
-              </output>
-            ) : notificationsQuery.isError ? (
-              <div className="notification-state notification-state-error">
-                <span>Notifications couldn’t be loaded.</span>
-                <Button type="button" onClick={() => notificationsQuery.refetch()}>Try again</Button>
-              </div>
-            ) : data?.notifications.items.length ? (
-              data.notifications.items.map((notification) => {
-                const content = (
-                  <>
-                    <span className="notification-icon" aria-hidden="true"><CreditCard size={17} /></span>
-                    <span className="notification-copy">
-                      <span className="notification-title-row">
-                        <strong>{notification.title}</strong>
-                        {!notification.readAt ? <span className="notification-unread-dot" aria-label="Unread" /> : null}
-                      </span>
-                      <span className="notification-message">{notification.message}</span>
-                      <span className="notification-time">{relativeTime(notification.updatedAt)}</span>
-                    </span>
-                  </>
-                );
-                const onOpen = () => {
-                  if (!notification.readAt) {
-                    markReadLocally(notification.id);
-                    updateMutation.mutate({ notificationId: notification.id });
-                  }
-                  setOpen(false);
-                };
-
-                return notification.href ? (
-                  <Link
-                    key={notification.id}
-                    href={notification.href}
-                    prefetch={false}
-                    className={`notification-item${notification.readAt ? "" : " unread"}`}
-                    onClick={onOpen}
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <Button key={notification.id} type="button" className={`notification-item${notification.readAt ? "" : " unread"}`} onClick={onOpen}>
-                    {content}
-                  </Button>
-                );
-              })
-            ) : (
-              <div className="notification-state notification-empty">
-                <span className="notification-empty-icon"><Bell size={22} aria-hidden="true" /></span>
-                <strong>All caught up</strong>
-                <span>Credit card due reminders and workspace invitations will appear here.</span>
-              </div>
-            )}
+            <NotificationList
+              loading={notificationsQuery.isLoading}
+              error={notificationsQuery.isError}
+              items={data?.notifications.items}
+              onRetry={() => void notificationsQuery.refetch()}
+              onOpen={openNotification}
+            />
           </div>
-        </section>
+        </dialog>
       ) : null}
     </div>
   );

@@ -158,13 +158,13 @@ function ModalShell({
 }>) {
   return (
     <Dialog open onClose={onClose} title={title} closeDisabled={closeDisabled} surface="custom" overlayClassName="st-modal-overlay">
-      <div className="st-modal">
+      <dialog open className="st-modal">
         <div className="st-modal-header">
           <h3>{title}</h3>
           <ModalCloseButton onClick={onClose} disabled={closeDisabled} label={`Close ${title}`} />
         </div>
         {children}
-      </div>
+      </dialog>
     </Dialog>
   );
 }

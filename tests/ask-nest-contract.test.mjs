@@ -192,7 +192,7 @@ test("Ask Nest uses an accessible panel with persisted, lazy-loaded history", as
   ]);
 
   assert.match(shell, /<AskNest/);
-  assert.match(panel, /role="dialog"/);
+  assert.match(panel, /<dialog open/);
   assert.match(panel, /aria-modal="true"/);
   assert.match(panel, /Supporting data/);
   assert.match(panel, /Read-only/);

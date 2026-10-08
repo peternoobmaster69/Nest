@@ -34,6 +34,17 @@ textarea {
   font: inherit;
 }
 
+/* Dialog surfaces retain their layout within the shared overlay or popover. */
+dialog {
+  position: static;
+  inset: auto;
+  width: auto;
+  height: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
 html[data-modal-scroll-lock="true"],
 body[data-modal-scroll-lock="true"] {
   overscroll-behavior: none;

@@ -1159,7 +1159,7 @@ export function InvestmentsPage() {
 
       {accountModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeAccountModal} title="Investment account" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal inv-modal">
+          <dialog open className="profile-modal inv-modal">
             <div className="profile-modal-head">
               <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
               <ModalCloseButton onClick={closeAccountModal} label={`Close ${accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}`} />
@@ -1239,14 +1239,14 @@ export function InvestmentsPage() {
                 </div>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>,
         document.body
       )}
 
       {entryModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeEntryModal} title="Investment entry" surface="custom" overlayClassName="profile-modal-overlay">
-          <div className="profile-modal inv-modal">
+          <dialog open className="profile-modal inv-modal">
             <div className="profile-modal-head">
               <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
               <ModalCloseButton onClick={closeEntryModal} label={`Close ${entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}`} />
@@ -1303,7 +1303,7 @@ export function InvestmentsPage() {
                 </div>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>,
         document.body
       )}

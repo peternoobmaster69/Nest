@@ -110,7 +110,7 @@ export function Dialog({
   const titleId = useId();
   const descriptionId = useId();
   const clientReady = useSyncExternalStore(subscribeToClientReady, clientReadySnapshot, serverReadySnapshot);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDialogElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const closeDisabledRef = useRef(closeDisabled);
@@ -184,9 +184,9 @@ export function Dialog({
 
   if (!open || !clientReady) return null;
 
-  const customSurface = surface === "custom" && isValidElement(children)
+  const customSurface = surface === "custom" && isValidElement(children) && children.type === "dialog"
     ? cloneElement(children as ReactElement<Record<string, unknown>>, {
-        role: "dialog",
+        open: true,
         "aria-modal": true,
         "aria-label": labelledBy ? undefined : title,
         "aria-labelledby": labelledBy,
@@ -197,16 +197,14 @@ export function Dialog({
   return createPortal(
     <div
       ref={overlayRef}
-      role="presentation"
       className={`${surface === "standard" ? "modal-overlay" : ""} ${overlayClassName}`.trim()}
       onMouseDown={(event) => {
         if (!closeDisabled && event.target === event.currentTarget) onClose();
       }}
     >
-      {customSurface || <div
+      {customSurface || <dialog open
         ref={containerRef}
         className={`modal-container modal-${size} ${contentClassName}`.trim()}
-        role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
@@ -221,7 +219,7 @@ export function Dialog({
         </div>
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}
-      </div>}
+      </dialog>}
     </div>,
     document.body,
   );

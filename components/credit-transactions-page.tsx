@@ -2384,7 +2384,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
       {/* Add Transaction Modal */}
       {isModalOpen && (
         <Dialog open onClose={closeModal} title="Credit card transaction" surface="custom" overlayClassName="cct-modal-overlay">
-          <div className="cct-modal cct-modal-wide">
+          <dialog open className="cct-modal cct-modal-wide">
             <div className="cct-modal-header">
               <h3>{editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}</h3>
               <ModalCloseButton onClick={closeModal} label={`Close ${editingTransactionId ? "Edit Credit Card Transaction" : "Add Credit Card Transaction"}`} />
@@ -2502,13 +2502,13 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
 
       {isAccountingModalOpen && accountingTarget && (
         <Dialog open onClose={closeAccountingModal} title="Account for transaction" surface="custom" overlayClassName="cct-modal-overlay">
-          <div className="cct-modal">
+          <dialog open className="cct-modal">
             <div className="cct-modal-header">
               <h3>Deduct Credit Transaction</h3>
               <ModalCloseButton onClick={closeAccountingModal} label="Close Deduct Credit Transaction" />
@@ -2607,13 +2607,13 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
 
       {isReceivableModalOpen && receivableTarget && (
         <Dialog open onClose={closeReceivableModal} title="Create receivable" surface="custom" overlayClassName="cct-modal-overlay">
-          <div className="cct-modal cct-receivable-modal">
+          <dialog open className="cct-modal cct-receivable-modal">
             <div className="cct-modal-header">
               <h3>Create Receivable</h3>
               <ModalCloseButton onClick={closeReceivableModal} label="Close Create Receivable" />
@@ -2751,7 +2751,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
     </div>

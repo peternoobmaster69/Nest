@@ -549,7 +549,7 @@ export function CreditCardsPage() {
       {/* Add Card Modal */}
       {isModalOpen && (
         <Dialog open onClose={closeModal} title="Credit card" surface="custom" overlayClassName="cc-modal-overlay">
-          <div className="cc-modal">
+          <dialog open className="cc-modal">
             <div className="cc-modal-header">
               <h3>{editingCardId ? "Edit Credit Card" : "Add Credit Card"}</h3>
               <ModalCloseButton onClick={closeModal} label={`Close ${editingCardId ? "Edit Credit Card" : "Add Credit Card"}`} />
@@ -718,7 +718,7 @@ export function CreditCardsPage() {
                 </Button>
               </div>
             </form>
-          </div>
+          </dialog>
         </Dialog>
       )}
     </div>
