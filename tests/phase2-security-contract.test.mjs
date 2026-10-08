@@ -168,7 +168,7 @@ test("sessions and public links are revocable and audited", async () => {
 
 test("OAuth accounts are linked only by an authenticated explicit action with verified claims", async () => {
   const auth = await read("lib/auth.ts");
-  const settings = await read("components/settings-app-access.tsx");
+  const settings = await read("components/settings/linked-account-settings.tsx");
   assert.doesNotMatch(auth, /allowDangerousEmailAccountLinking/);
   assert.match(auth, /claims\.email_verified === true/);
   assert.match(auth, /claims\.verified === true/);

@@ -4,6 +4,12 @@ import { useEffect } from "react";
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
+function sceneProgress(mode: string | undefined, rect: DOMRect, viewportHeight: number) {
+  if (mode === "pin") return clamp(-rect.top / Math.max(1, rect.height - viewportHeight));
+  if (mode === "exit") return clamp(-rect.top / Math.max(1, rect.height));
+  return clamp((viewportHeight - rect.top) / (viewportHeight + rect.height));
+}
+
 /**
  * Drives the landing page's scroll choreography with one passive, rAF-throttled
  * listener. Scenes receive a `--p` progress variable (0–1) that CSS maps to
@@ -40,13 +46,22 @@ export function LandingScrollMotion() {
 
     // Count-up numbers: final values are in the HTML; only the visible text animates.
     const counted = new WeakSet<Element>();
+    const countFrames = new Set<number>();
+    const pendingCounts = new Map<HTMLElement, string>();
+    const scheduleCount = (callback: FrameRequestCallback) => {
+      const countFrame = window.requestAnimationFrame((now) => {
+        countFrames.delete(countFrame);
+        callback(now);
+      });
+      countFrames.add(countFrame);
+    };
     const countUp = (element: HTMLElement) => {
       if (counted.has(element)) return;
       counted.add(element);
       const finalText = element.textContent ?? "";
-      const match = finalText.match(/-?[\d,]+(?:\.\d+)?/);
+      const match = /-?[\d,]+(?:\.\d+)?/.exec(finalText);
       if (!match) return;
-      const target = Number(match[0].replace(/,/g, ""));
+      const target = Number(match[0].replaceAll(",", ""));
       const decimals = match[0].includes(".") ? match[0].split(".")[1].length : 0;
       const grouped = match[0].includes(",");
       const format = (value: number) => {
@@ -55,14 +70,18 @@ export function LandingScrollMotion() {
       };
       const duration = 1100;
       const start = performance.now();
+      pendingCounts.set(element, finalText);
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / duration);
         const eased = 1 - Math.pow(1 - t, 3);
         element.textContent = finalText.replace(match[0], format(target * eased));
-        if (t < 1) window.requestAnimationFrame(tick);
-        else element.textContent = finalText;
+        if (t < 1) scheduleCount(tick);
+        else {
+          element.textContent = finalText;
+          pendingCounts.delete(element);
+        }
       };
-      window.requestAnimationFrame(tick);
+      scheduleCount(tick);
     };
 
     const revealObserver = new IntersectionObserver((entries) => {
@@ -107,14 +126,10 @@ export function LandingScrollMotion() {
       // Read every rect first, then write, so the frame never thrashes layout.
       const measured = Array.from(active, (scene) => ({ scene, rect: scene.getBoundingClientRect() }));
       for (const { scene, rect } of measured) {
-        const mode = scene.dataset.scene;
         // pin: 0→1 while a tall section's sticky stage is held on screen.
         // exit: 0→1 as the section scrolls off the top (hero).
         // track: 0→1 from entering at the bottom to leaving at the top.
-        let progress: number;
-        if (mode === "pin") progress = clamp(-rect.top / Math.max(1, rect.height - height));
-        else if (mode === "exit") progress = clamp(-rect.top / Math.max(1, rect.height));
-        else progress = clamp((height - rect.top) / (height + rect.height));
+        const progress = sceneProgress(scene.dataset.scene, rect, height);
         const rounded = Math.round(progress * 1000) / 1000;
         if (lastProgress.get(scene) === rounded) continue;
         lastProgress.set(scene, rounded);
@@ -149,6 +164,8 @@ export function LandingScrollMotion() {
       window.removeEventListener("resize", schedule);
       if (frame) window.cancelAnimationFrame(frame);
       window.cancelAnimationFrame(introFrame);
+      for (const countFrame of countFrames) window.cancelAnimationFrame(countFrame);
+      for (const [element, text] of pendingCounts) element.textContent = text;
       window.clearTimeout(introDone);
       delete root.dataset.intro;
       revealObserver.disconnect();

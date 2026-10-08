@@ -2,7 +2,7 @@
 
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { signIn, signOut } from "next-auth/react";
+import { signOut } from "next-auth/react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
@@ -17,6 +17,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SettingsAppIcon } from "@/components/settings-app-icon";
+import { LinkedAccountSettings } from "@/components/settings/linked-account-settings";
+import { getBrowserPushSubscription, preparePushSubscription } from "@/lib/browser-notifications";
 
 type Passkey = {
   id: string;
@@ -39,8 +41,6 @@ type PushStatus = {
   }>;
 };
 
-type AuthProvider = { id: string; name: string; type: string };
-
 type LoginSession = {
   sessionId: string;
   provider: string | null;
@@ -61,13 +61,6 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-function applicationServerKey(value: string) {
-  const padding = "=".repeat((4 - (value.length % 4)) % 4);
-  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const bytes = window.atob(base64);
-  return Uint8Array.from(bytes, (character) => character.charCodeAt(0));
-}
-
 function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches ||
     Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
@@ -86,7 +79,8 @@ function passkeyMetadata(passkey: Passkey) {
   const kind = passkey.backedUp || passkey.deviceType === "multiDevice" ? "Synced passkey" : "Device-bound passkey";
   const added = new Date(passkey.createdAt).toLocaleDateString("en-SG");
   const lastUsed = passkey.lastUsedAt ? new Date(passkey.lastUsedAt).toLocaleDateString("en-SG") : null;
-  return `${kind} · Added ${added}${lastUsed ? ` · Last used ${lastUsed}` : " · Not used yet"}`;
+  const usage = lastUsed ? `Last used ${lastUsed}` : "Not used yet";
+  return `${kind} · Added ${added} · ${usage}`;
 }
 
 function loginSessionLocation(session: LoginSession) {
@@ -103,9 +97,7 @@ function loginSessionLocation(session: LoginSession) {
 
 function loginSessionDetails(session: LoginSession) {
   const provider = session.provider
-    ? session.provider === "passkey"
-      ? "Passkey"
-      : `${session.provider.charAt(0).toUpperCase()}${session.provider.slice(1)}`
+    ? `${session.provider.charAt(0).toUpperCase()}${session.provider.slice(1)}`
     : "Sign-in provider unavailable";
   const lastSeenAt = new Date(session.lastSeenAt).toLocaleString("en-SG", {
     dateStyle: "medium",
@@ -114,15 +106,28 @@ function loginSessionDetails(session: LoginSession) {
   return `${provider} · Last active ${lastSeenAt}`;
 }
 
+type AccessMessage = (message: string | null) => void;
+
+function installDescriptionFor(standalone: boolean, ios: boolean, available: boolean) {
+  if (standalone) return "Nest is installed on this device.";
+  if (ios) return "In Safari, use Share, then Add to Home Screen.";
+  return available ? "Install Nest for faster access from your home screen." : "Your browser will enable installation when the app is eligible.";
+}
+
+function InstallAction({ standalone, ios, available, pending, onInstall }: Readonly<{
+  standalone: boolean; ios: boolean; available: boolean; pending: boolean; onInstall: () => void;
+}>) {
+  if (standalone) return <span className="settings-status-pill is-enabled">Installed</span>;
+  if (ios) return <span className="settings-status-pill">Browser menu</span>;
+  return <Button className="btn btn-primary btn-xs" type="button" onClick={onInstall} disabled={!available || pending}>
+    {pending ? "Installing..." : "Install"}
+  </Button>;
+}
+
 export function SettingsAppAccess() {
-  const queryClient = useQueryClient();
   const installAvailable = useSyncExternalStore(subscribeInstallPrompt, hasInstallPrompt, () => false);
   const [capabilities, setCapabilities] = useState({ passkeys: false, push: false, standalone: false, ios: false });
   const [message, setMessage] = useState<string | null>(null);
-  const [isNamingPasskey, setIsNamingPasskey] = useState(false);
-  const [newPasskeyName, setNewPasskeyName] = useState("");
-  const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
-  const [editingPasskeyName, setEditingPasskeyName] = useState("");
 
   useEffect(() => {
     setCapabilities({
@@ -133,51 +138,6 @@ export function SettingsAppAccess() {
         (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1),
     });
   }, []);
-
-  const passkeys = useQuery({
-    queryKey: queryKeys.key(["settings-passkeys"]),
-    queryFn: () => jsonRequest<{ passkeys: Passkey[] }>("/api/passkeys"),
-  });
-
-  const pushStatus = useQuery({
-    queryKey: queryKeys.key(["settings-push-status"]),
-    queryFn: () => jsonRequest<PushStatus>("/api/push-subscriptions"),
-  });
-
-  const authProviders = useQuery({
-    queryKey: queryKeys.key(["settings-auth-providers"]),
-    queryFn: () => jsonRequest<Record<string, AuthProvider>>("/api/auth/providers"),
-  });
-
-  const linkedAccounts = useQuery({
-    queryKey: queryKeys.key(["settings-linked-accounts"]),
-    queryFn: () => jsonRequest<{ providers: string[] }>("/api/auth/accounts"),
-  });
-
-  const loginSessions = useQuery({
-    queryKey: queryKeys.key(["settings-login-sessions"]),
-    queryFn: () => jsonRequest<{ sessions: LoginSession[] }>("/api/auth/sessions"),
-  });
-
-  const revokeSession = useMutation({
-    mutationFn: async (session: LoginSession) => {
-      const result = await jsonRequest<{ revoked: boolean; current: boolean }>("/api/auth/sessions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.sessionId }),
-      });
-      return { ...result, session };
-    },
-    onSuccess: async ({ current, session }) => {
-      if (current) {
-        await signOut({ callbackUrl: "/" });
-        return;
-      }
-      setMessage(`${session.deviceName} was signed out.`);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-login-sessions"]) });
-    },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "The device could not be signed out."),
-  });
 
   const installApp = useMutation({
     mutationFn: async () => {
@@ -192,6 +152,40 @@ export function SettingsAppAccess() {
       return choice;
     },
     onSuccess: (choice) => setMessage(choice.outcome === "accepted" ? "Nest was installed." : "Installation was cancelled."),
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Nest could not be installed."),
+  });
+
+  const installDescription = installDescriptionFor(capabilities.standalone, capabilities.ios, installAvailable);
+  return <>
+      <div className="card settings-card-block settings-app-access-card">
+        <div className="settings-row">
+          <div className="settings-item-copy">
+            <div className="settings-section-title">Install Nest</div>
+            <div className="settings-section-copy">{installDescription}</div>
+          </div>
+          <InstallAction standalone={capabilities.standalone} ios={capabilities.ios} available={installAvailable} pending={installApp.isPending} onInstall={() => installApp.mutate()} />
+        </div>
+
+        <NotificationSettings supported={capabilities.push} onMessage={setMessage} />
+      </div>
+      <SettingsAppIcon />
+      <PasskeySettings supported={capabilities.passkeys} onMessage={setMessage} />
+      <LoginSessionSettings onMessage={setMessage} />
+      <LinkedAccountSettings />
+      <ActionableAuthenticationMessage message={message} className="settings-access-message" />
+    </>;
+}
+
+function PasskeySettings({ supported, onMessage }: Readonly<{ supported: boolean; onMessage: AccessMessage }>) {
+  const queryClient = useQueryClient();
+  const [isNamingPasskey, setIsNamingPasskey] = useState(false);
+  const [newPasskeyName, setNewPasskeyName] = useState("");
+  const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
+  const [editingPasskeyName, setEditingPasskeyName] = useState("");
+
+  const passkeys = useQuery({
+    queryKey: queryKeys.key(["settings-passkeys"]),
+    queryFn: () => jsonRequest<{ passkeys: Passkey[] }>("/api/passkeys"),
   });
 
   const addPasskey = useMutation({
@@ -207,12 +201,12 @@ export function SettingsAppAccess() {
       });
     },
     onSuccess: async () => {
-      setMessage("Passkey added. You can now use it to sign in.");
+      onMessage("Passkey added. You can now use it to sign in.");
       setIsNamingPasskey(false);
       setNewPasskeyName("");
       await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-passkeys"]) });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey could not be added."),
+    onError: (error) => onMessage(error instanceof Error ? error.message : "Passkey could not be added."),
   });
 
   const renamePasskey = useMutation({
@@ -222,12 +216,12 @@ export function SettingsAppAccess() {
       body: JSON.stringify({ id, name: name.trim() }),
     }),
     onSuccess: async () => {
-      setMessage("Passkey name updated.");
+      onMessage("Passkey name updated.");
       setEditingPasskeyId(null);
       setEditingPasskeyName("");
       await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-passkeys"]) });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey name could not be updated."),
+    onError: (error) => onMessage(error instanceof Error ? error.message : "Passkey name could not be updated."),
   });
 
   const removePasskey = useMutation({
@@ -237,158 +231,28 @@ export function SettingsAppAccess() {
       body: JSON.stringify({ id }),
     }),
     onSuccess: async () => {
-      setMessage("Passkey removed.");
+      onMessage("Passkey removed.");
       setEditingPasskeyId(null);
       await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-passkeys"]) });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "Passkey could not be removed."),
+    onError: (error) => onMessage(error instanceof Error ? error.message : "Passkey could not be removed."),
   });
 
   const openPasskeyNameForm = () => {
-    setMessage(null);
+    onMessage(null);
     setEditingPasskeyId(null);
     setNewPasskeyName(suggestedPasskeyName());
     setIsNamingPasskey(true);
   };
 
-  const enableNotifications = useMutation({
-    mutationFn: async () => {
-      const status = pushStatus.data;
-      if (!status?.configured || !status.publicKey) throw new Error("Push notifications are not configured for this deployment.");
-      if (!capabilities.push) throw new Error("This browser does not support push notifications.");
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") throw new Error("Notification permission was not granted.");
-      const registration = await navigator.serviceWorker.getRegistration("/") ?? await navigator.serviceWorker.register("/sw.js");
-      const subscription = await registration.pushManager.getSubscription() ?? await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: applicationServerKey(status.publicKey),
-      });
-      await jsonRequest("/api/push-subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-    },
-    onSuccess: async () => {
-      setMessage("Notifications enabled.");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
-    },
-  });
-
-  const disableNotifications = useMutation({
-    mutationFn: async () => {
-      const registration = await navigator.serviceWorker.getRegistration("/");
-      const subscription = await registration?.pushManager.getSubscription();
-      if (!subscription) throw new Error("Notifications are not enabled in this browser. Revoke an older notification device below instead.");
-      await jsonRequest("/api/push-subscriptions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription ? { endpoint: subscription.endpoint } : {}),
-      });
-      await subscription?.unsubscribe();
-    },
-    onSuccess: async () => {
-      setMessage("Notifications disabled.");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
-    },
-  });
-
-  const revokeNotificationDevice = useMutation({
-    mutationFn: (subscriptionId: string) => jsonRequest("/api/push-subscriptions", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscriptionId }),
-    }),
-    onSuccess: async () => {
-      setMessage("Notification device revoked.");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
-    },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "The notification device could not be revoked."),
-  });
-
-  const installDescription = capabilities.standalone
-    ? "Nest is installed on this device."
-    : capabilities.ios
-      ? "In Safari, use Share, then Add to Home Screen."
-      : installAvailable
-        ? "Install Nest for faster access from your home screen."
-        : "Your browser will enable installation when the app is eligible.";
-
   return (
-    <>
-      <div className="card settings-card-block settings-app-access-card">
-        <div className="settings-row">
-          <div className="settings-item-copy">
-            <div className="settings-section-title">Install Nest</div>
-            <div className="settings-section-copy">{installDescription}</div>
-          </div>
-          {capabilities.standalone ? (
-            <span className="settings-status-pill is-enabled">Installed</span>
-          ) : capabilities.ios ? (
-            <span className="settings-status-pill">Browser menu</span>
-          ) : (
-            <Button className="btn btn-primary btn-xs" type="button" onClick={() => installApp.mutate()} disabled={!installAvailable || installApp.isPending}>
-              {installApp.isPending ? "Installing..." : "Install"}
-            </Button>
-          )}
-        </div>
-
-        <div className="settings-row settings-row-spaced">
-          <div className="settings-item-copy">
-            <div className="settings-section-title">Notifications</div>
-            <div className="settings-section-copy">
-              {!pushStatus.data?.configured
-                ? "Notification delivery has not been configured for this deployment."
-                : "Receive scheduled reminders for credit card payments that are due, plus workspace invitations."}
-            </div>
-          </div>
-          {pushStatus.data?.subscribed ? (
-            <Button className="btn btn-ghost btn-xs" type="button" onClick={() => disableNotifications.mutate()} disabled={disableNotifications.isPending}>
-              {disableNotifications.isPending ? "Disabling..." : "Disable"}
-            </Button>
-          ) : (
-            <Button
-              className="btn btn-primary btn-xs"
-              type="button"
-              onClick={() => enableNotifications.mutate()}
-              disabled={!capabilities.push || !pushStatus.data?.configured || enableNotifications.isPending}
-            >
-              {enableNotifications.isPending ? "Enabling..." : "Enable"}
-            </Button>
-          )}
-        </div>
-        {pushStatus.data?.subscriptions.length ? (
-          <div className="settings-passkey-list settings-message-spaced" aria-label="Notification devices">
-            {pushStatus.data.subscriptions.map((subscription) => (
-              <div className="settings-passkey-item" key={subscription.id}>
-                <div className="settings-passkey-copy">
-                  <strong>{subscription.provider}</strong>
-                  <span>
-                    Registered {new Date(subscription.createdAt).toLocaleDateString("en-SG")} · Last refreshed {new Date(subscription.updatedAt).toLocaleDateString("en-SG")}
-                  </span>
-                </div>
-                <Button
-                  className="btn btn-ghost btn-xs"
-                  type="button"
-                  onClick={() => revokeNotificationDevice.mutate(subscription.id)}
-                  disabled={revokeNotificationDevice.isPending}
-                >
-                  {revokeNotificationDevice.isPending && revokeNotificationDevice.variables === subscription.id ? "Revoking..." : "Revoke"}
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <SettingsAppIcon />
-
       <div className="card settings-card-block settings-passkeys-card">
         <div className="settings-row">
           <div className="settings-item-copy">
             <div className="settings-section-title">Passkeys</div>
             <div className="settings-section-copy">Sign in securely with Face ID, Touch ID, Windows Hello, or a security key.</div>
           </div>
-          <Button className="btn btn-primary btn-xs" type="button" onClick={openPasskeyNameForm} disabled={!capabilities.passkeys || addPasskey.isPending || isNamingPasskey}>
+          <Button className="btn btn-primary btn-xs" type="button" onClick={openPasskeyNameForm} disabled={!supported || addPasskey.isPending || isNamingPasskey}>
             Add Passkey
           </Button>
         </div>
@@ -507,11 +371,43 @@ export function SettingsAppAccess() {
               </div>
             ))}
           </div>
-        ) : !passkeys.isLoading && !passkeys.isError ? (
+        ) : null}
+        {!passkeys.data?.passkeys.length && !passkeys.isLoading && !passkeys.isError ? (
           <div className="settings-muted-message settings-message-spaced">No passkeys added yet.</div>
         ) : null}
       </div>
 
+  );
+}
+
+function LoginSessionSettings({ onMessage }: Readonly<{ onMessage: AccessMessage }>) {
+  const queryClient = useQueryClient();
+  const loginSessions = useQuery({
+    queryKey: queryKeys.key(["settings-login-sessions"]),
+    queryFn: () => jsonRequest<{ sessions: LoginSession[] }>("/api/auth/sessions"),
+  });
+
+  const revokeSession = useMutation({
+    mutationFn: async (session: LoginSession) => {
+      const result = await jsonRequest<{ revoked: boolean; current: boolean }>("/api/auth/sessions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.sessionId }),
+      });
+      return { ...result, session };
+    },
+    onSuccess: async ({ current, session }) => {
+      if (current) {
+        await signOut({ callbackUrl: "/" });
+        return;
+      }
+      onMessage(`${session.deviceName} was signed out.`);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-login-sessions"]) });
+    },
+    onError: (error) => onMessage(error instanceof Error ? error.message : "The device could not be signed out."),
+  });
+
+  return (
       <div className="card settings-card-block">
         <div className="settings-row">
           <div className="settings-item-copy">
@@ -548,47 +444,114 @@ export function SettingsAppAccess() {
               </div>
             ))}
           </div>
-        ) : !loginSessions.isLoading && !loginSessions.isError ? (
+        ) : null}
+        {!loginSessions.data?.sessions.length && !loginSessions.isLoading && !loginSessions.isError ? (
           <div className="settings-muted-message settings-message-spaced">No active sessions were found.</div>
         ) : null}
       </div>
 
-      <div className="card settings-card-block">
+  );
+}
+
+function NotificationSettings({ supported, onMessage }: Readonly<{ supported: boolean; onMessage: AccessMessage }>) {
+  const queryClient = useQueryClient();
+  const pushStatus = useQuery({
+    queryKey: queryKeys.key(["settings-push-status"]),
+    queryFn: () => jsonRequest<PushStatus>("/api/push-subscriptions"),
+  });
+
+  const enableNotifications = useMutation({
+    mutationFn: async () => {
+      const subscription = await preparePushSubscription(pushStatus.data, supported);
+      await jsonRequest("/api/push-subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+    },
+    onSuccess: async () => {
+      onMessage("Notifications enabled.");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
+    },
+    onError: (error) => onMessage(error instanceof Error ? error.message : "Notifications could not be enabled."),
+  });
+
+  const disableNotifications = useMutation({
+    mutationFn: async () => {
+      const subscription = await getBrowserPushSubscription();
+      await jsonRequest("/api/push-subscriptions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      await subscription.unsubscribe();
+    },
+    onSuccess: async () => {
+      onMessage("Notifications disabled.");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
+    },
+    onError: (error) => onMessage(error instanceof Error ? error.message : "Notifications could not be disabled."),
+  });
+
+  const revokeNotificationDevice = useMutation({
+    mutationFn: (subscriptionId: string) => jsonRequest("/api/push-subscriptions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscriptionId }),
+    }),
+    onSuccess: async () => {
+      onMessage("Notification device revoked.");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.key(["settings-push-status"]) });
+    },
+    onError: (error) => onMessage(error instanceof Error ? error.message : "The notification device could not be revoked."),
+  });
+
+  return <>
         <div className="settings-row settings-row-spaced">
           <div className="settings-item-copy">
-            <div className="settings-section-title">Linked sign-in accounts</div>
+            <div className="settings-section-title">Notifications</div>
             <div className="settings-section-copy">
-              Link another verified provider while signed in. Nest never links accounts solely because email addresses match.
+              {!pushStatus.data?.configured
+                ? "Notification delivery has not been configured for this deployment."
+                : "Receive scheduled reminders for credit card payments that are due, plus workspace invitations."}
             </div>
           </div>
+          {pushStatus.data?.subscribed ? (
+            <Button className="btn btn-ghost btn-xs" type="button" onClick={() => disableNotifications.mutate()} disabled={disableNotifications.isPending}>
+              {disableNotifications.isPending ? "Disabling..." : "Disable"}
+            </Button>
+          ) : (
+            <Button
+              className="btn btn-primary btn-xs"
+              type="button"
+              onClick={() => enableNotifications.mutate()}
+              disabled={!supported || !pushStatus.data?.configured || enableNotifications.isPending}
+            >
+              {enableNotifications.isPending ? "Enabling..." : "Enable"}
+            </Button>
+          )}
         </div>
-        <div className="simple-list">
-          {Object.values(authProviders.data ?? {}).filter((provider) => provider.type === "oauth").map((provider) => {
-            const linked = linkedAccounts.data?.providers.includes(provider.id) ?? false;
-            return (
-              <div className="crud-row" key={provider.id}>
-                <span>{provider.name}</span>
-                {linked ? (
-                  <span className="settings-status-pill is-enabled">Linked</span>
-                ) : (
-                  <Button
-                    className="btn btn-primary btn-xs"
-                    type="button"
-                    onClick={() => signIn(provider.id, { callbackUrl: "/settings" })}
-                  >
-                    Link account
-                  </Button>
-                )}
+        {pushStatus.data?.subscriptions.length ? (
+          <div className="settings-passkey-list settings-message-spaced" aria-label="Notification devices">
+            {pushStatus.data.subscriptions.map((subscription) => (
+              <div className="settings-passkey-item" key={subscription.id}>
+                <div className="settings-passkey-copy">
+                  <strong>{subscription.provider}</strong>
+                  <span>
+                    Registered {new Date(subscription.createdAt).toLocaleDateString("en-SG")} · Last refreshed {new Date(subscription.updatedAt).toLocaleDateString("en-SG")}
+                  </span>
+                </div>
+                <Button
+                  className="btn btn-ghost btn-xs"
+                  type="button"
+                  onClick={() => revokeNotificationDevice.mutate(subscription.id)}
+                  disabled={revokeNotificationDevice.isPending}
+                >
+                  {revokeNotificationDevice.isPending && revokeNotificationDevice.variables === subscription.id ? "Revoking..." : "Revoke"}
+                </Button>
               </div>
-            );
-          })}
-          {!authProviders.isLoading && !Object.values(authProviders.data ?? {}).some((provider) => provider.type === "oauth") ? (
-            <div className="settings-muted-message">No OAuth providers are configured for this deployment.</div>
-          ) : null}
-        </div>
-      </div>
-
-      <ActionableAuthenticationMessage message={message} className="settings-access-message" />
-    </>
-  );
+            ))}
+          </div>
+        ) : null}
+    </>;
 }
