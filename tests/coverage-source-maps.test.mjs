@@ -33,6 +33,13 @@ test("coverage maps original TypeScript branches, retains untouched files, and e
     "  const doubled = 2;",
     "  return doubled;",
     "}",
+    "export async function loadChoice(enabled: boolean) {",
+    "  const loaded = await import('./sample.ts');",
+    "  return enabled ? loaded.choose(true) : loaded.choose(false);",
+    "}",
+    "export function unwrap(value: unknown) {",
+    '  return Promise.resolve(value).then(s=>{const e="default";return s[e]&&typeof s[e]=="object"&&"__esModule"in s[e]?s[e]:s});',
+    "}",
   ].join("\n");
   await Promise.all([
     writeFile(path.join(directory, "sample.ts"), sample),
@@ -49,11 +56,13 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import test from "node:test";
 const require = createRequire(import.meta.url);
-test("source behavior", () => {
+test("source behavior", async () => {
   if (process.env.NEST_COVERAGE_FIXTURE_MODE === "untested") return;
-  const { choose, label, delayed } = require("./sample.ts");
+  const { choose, label, delayed, loadChoice, unwrap } = require("./sample.ts");
   assert.equal(choose(true), "ready");
   assert.equal(label({ label: "Named" }), "Named");
+  assert.equal(await loadChoice(true), "ready");
+  assert.deepEqual(await unwrap({ value: "fallback" }), { value: "fallback" });
   if (process.env.NEST_COVERAGE_FIXTURE_MODE === "complete") {
     assert.equal(choose(false), "waiting");
     assert.equal(label(), "Unnamed");
@@ -61,6 +70,10 @@ test("source behavior", () => {
     assert.equal(label({ label: "" }), "");
     assert.equal(delayed(true), 2);
     assert.equal(delayed(false), 0);
+    assert.equal(await loadChoice(false), "waiting");
+    assert.deepEqual(await unwrap({ default: { __esModule: true, value: "module" } }), { __esModule: true, value: "module" });
+    assert.deepEqual(await unwrap({ default: "plain" }), { default: "plain" });
+    assert.deepEqual(await unwrap({ default: {} }), { default: {} });
     assert.equal(require("./nested/untouched.ts").twice(3), 6);
     assert.equal(require("./plain.mjs").plain(), "plain");
     assert.deepEqual(require("./nested/[id]/panel.tsx").Panel({ label: "Ready" }), { type: "aside", child: "Ready" });
@@ -111,11 +124,17 @@ test("source behavior", () => {
       assert.ok(Object.values(details["sample.ts"].fnMap).some((fn) => fn.line === line), `Function on source line ${line} must be represented in ${mode}`);
     }
     if (mode !== "complete") {
-      for (const [id, location] of sampleStatements.filter(([, location]) => location.start.line >= 10)) {
+      for (const [id, location] of sampleStatements.filter(([, location]) => location.start.line >= 10 && location.start.line <= 12)) {
         assert.equal(details["sample.ts"].s[id], 0, `Uncalled source line ${location.start.line} must be uncovered`);
       }
       const delayed = Object.entries(details["sample.ts"].fnMap).find(([, fn]) => fn.name === "delayed");
       assert.equal(details["sample.ts"].f[delayed[0]], 0, "An initialized function must remain uncovered until it is called");
+    }
+    for (const line of [16, 19]) {
+      const branch = Object.entries(details["sample.ts"].branchMap).find(([, location]) => location.line === line && location.type === "cond-expr");
+      assert.ok(branch, `The original conditional on line ${line} must remain in coverage`);
+      const hits = details["sample.ts"].b[branch[0]];
+      assert.equal(hits.every((count) => count > 0), mode === "complete", `Original branch coverage must reflect the executed paths in ${mode}`);
     }
     const sources = Object.keys(report).filter((key) => key !== "total");
     assert.deepEqual(sources.map((file) => file.replaceAll("\\", "/")).sort(), ["nested/[id]/panel.tsx", "nested/untouched.ts", "plain.mjs", "sample.ts"]);

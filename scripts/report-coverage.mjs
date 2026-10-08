@@ -43,6 +43,47 @@ function terminateCommonJSAnnotationMap(entry) {
   entry.sourceMap.mappings = encode(mappings);
 }
 
+function dynamicImportBoundaries(sourceMap) {
+  const boundaries = new Set();
+  sourceMap.sourcesContent?.forEach((source, index) => {
+    if (typeof source !== "string") return;
+    const file = ts.createSourceFile(sourceMap.sources[index], source, ts.ScriptTarget.Latest, true);
+    function visit(node) {
+      if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        const { line, character } = file.getLineAndCharacterOfPosition(node.end - 1);
+        boundaries.add(`${index}:${line}:${character}`);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
+  });
+  return boundaries;
+}
+
+function dynamicImportInteropRanges(entry) {
+  if (!entry.sourceMap) return [];
+  // tsx appends this CommonJS namespace adapter to dynamic imports. Its
+  // generated branches inherit the import's final mapping. Only identify
+  // this helper when the suffix has no source mappings of its own
+  // and maps exactly to the closing delimiter of an original import.
+  const suffix = '.then(s=>{const e="default";return s[e]&&typeof s[e]=="object"&&"__esModule"in s[e]?s[e]:s})';
+  if (!entry.source.includes(suffix)) return [];
+  const boundaries = dynamicImportBoundaries(entry.sourceMap);
+  const mappings = decode(entry.sourceMap.mappings);
+  const ranges = [];
+  for (let start = entry.source.indexOf(suffix); start >= 0; start = entry.source.indexOf(suffix, start + suffix.length)) {
+    const prefix = entry.source.slice(0, start).split("\n");
+    const segments = mappings[prefix.length - 1];
+    const column = prefix.at(-1).length;
+    const end = column + suffix.length;
+    const inherited = segments?.findLast((segment) => segment[0] <= column);
+    if (!inherited || !boundaries.has(inherited.slice(1, 4).join(":"))) continue;
+    if (segments.some((segment) => segment[0] > column && segment[0] < end)) continue;
+    ranges.push({ start, end: start + suffix.length });
+  }
+  return ranges;
+}
+
 function canonicalFileURL(url) {
   return url.startsWith("file:") ? pathToFileURL(fileURLToPath(url)).href : url;
 }
@@ -97,14 +138,16 @@ async function addCollectedCoverage(report, collectedDirectory, includesSource) 
 }
 
 function compilerHelpers(entry) {
+  const importInterop = dynamicImportInteropRanges(entry);
+  const withinImportInterop = (node) => importInterop.some((range) => node.start >= range.start && node.end <= range.end);
   const wrapper = entry.source.indexOf("(()=>{");
-  if (!entry.sourceMap || !entry.source.startsWith("__filename=") || wrapper < 0) return () => false;
+  if (!entry.sourceMap || !entry.source.startsWith("__filename=") || wrapper < 0) return withinImportInterop;
   const exports = /module\.exports=__toCommonJS\([\w$]+\);/.exec(entry.source);
-  if (!exports || !entry.source.slice(0, exports.index).includes("var __defProp=")) return () => false;
+  if (!exports || !entry.source.slice(0, exports.index).includes("var __defProp=")) return withinImportInterop;
   const end = exports.index + exports[0].length;
   // tsx/esbuild's export getters and module wrapper do not exist in the source.
   // Ignore only those generated nodes, keeping every nested user-code node.
-  return (node, type) => node.end <= end || (type === "function" && node.start === wrapper + 1);
+  return (node, type) => withinImportInterop(node) || node.end <= end || (type === "function" && node.start === wrapper + 1);
 }
 
 async function addEntry(report, entry, includesSource) {
