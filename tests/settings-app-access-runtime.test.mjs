@@ -182,6 +182,7 @@ test("an expired install prompt reports browser-menu guidance and remains recove
   act(() => rememberInstallPrompt(prompt("accepted")));
   fireEvent.click(view.getByRole("button", { name: "Install", exact: true }));
   await view.findByText("Nest was installed.");
+  assert.equal(getInstallPrompt(), null);
 });
 
 for (const error of [new Error("Browser refused installation"), "refused"]) {

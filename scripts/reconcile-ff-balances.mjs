@@ -90,9 +90,11 @@ async function main() {
   });
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => prisma.$disconnect());
+try {
+  await main();
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  await prisma.$disconnect();
+}

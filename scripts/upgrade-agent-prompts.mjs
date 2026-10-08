@@ -13,4 +13,11 @@ async function main() {
   console.log(JSON.stringify({ applied, results }, null, 2));
   if (results.some(result => result.status === "conflict")) process.exitCode = 1;
 }
-main().catch(error => { console.error(error instanceof Error ? error.message : "Prompt upgrade failed."); process.exitCode = 1; }).finally(() => prisma.$disconnect());
+try {
+  await main();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "Prompt upgrade failed.");
+  process.exitCode = 1;
+} finally {
+  await prisma.$disconnect();
+}

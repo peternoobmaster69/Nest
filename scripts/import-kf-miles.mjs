@@ -29,7 +29,7 @@ async function runWithConcurrency(items, limit, worker, onProgress) {
       if (index >= items.length) return;
       await worker(items[index], index);
       completed += 1;
-      if (onProgress) onProgress(completed, items.length);
+      onProgress(completed, items.length);
     }
   }
 
@@ -210,11 +210,11 @@ async function main() {
   });
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+try {
+  await main();
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  await prisma.$disconnect();
+}

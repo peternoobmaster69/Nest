@@ -27,6 +27,7 @@ async function waitForDatabase() {
   }
 }
 
+/** @type {[name: string, query: import("@prisma/client").Prisma.Sql, handling?: "repair"][]} */
 const checks = [
   ["invalid workspace member role", Prisma.sql`SELECT COUNT_BIG(*) AS [count] FROM [dbo].[WorkspaceMember] WHERE [role] NOT IN (N'VIEWER', N'EDITOR', N'OWNER', N'MEMBER')`],
   ["invalid invite role/status", Prisma.sql`SELECT COUNT_BIG(*) AS [count] FROM [dbo].[WorkspaceInvite] WHERE [role] NOT IN (N'VIEWER', N'EDITOR') OR [status] NOT IN (N'PENDING', N'ACCEPTED', N'DECLINED', N'REVOKED')`],
@@ -123,6 +124,11 @@ const checks = [
   ["integration without workspace membership", Prisma.sql`SELECT COUNT_BIG(*) AS [count] FROM (SELECT g.[workspaceId] FROM [dbo].[GmailIntegration] g LEFT JOIN [dbo].[WorkspaceMember] m ON m.[workspaceId] = g.[workspaceId] AND m.[userId] = g.[userId] WHERE m.[id] IS NULL UNION ALL SELECT o.[workspaceId] FROM [dbo].[IntegrationOAuthState] o LEFT JOIN [dbo].[WorkspaceMember] m ON m.[workspaceId] = o.[workspaceId] AND m.[userId] = o.[userId] WHERE m.[id] IS NULL) x`],
 ];
 
+function checkStatus(count, handling) {
+  if (count === 0) return "ok";
+  return handling === "repair" ? "REPAIR" : "BLOCKED";
+}
+
 let failures = 0;
 try {
   await waitForDatabase();
@@ -143,12 +149,12 @@ try {
     }
     const rows = await prisma.$queryRaw(query);
     const count = Number(rows[0]?.count ?? 0);
-    const status = count === 0 ? "ok" : handling === "repair" ? "REPAIR" : "BLOCKED";
+    const status = checkStatus(count, handling);
     console.log(`${status.padEnd(7)} ${name}: ${count}`);
     if (count && handling !== "repair") failures += 1;
   }
 } catch (error) {
-  const message = error instanceof Error ? error.message.split("\n").filter(Boolean).at(-1) : String(error);
+  const message = error instanceof Error ? error.message.split("\n").findLast(Boolean) : String(error);
   console.error(`Phase 4 preflight could not run: ${message}`);
   process.exitCode = 1;
 } finally {
