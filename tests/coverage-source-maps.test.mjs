@@ -15,6 +15,61 @@ const tsx = require.resolve("tsx");
 const reporter = fileURLToPath(new URL("../scripts/report-coverage.mjs", import.meta.url));
 const collector = fileURLToPath(new URL("../scripts/collect-coverage-sources.mjs", import.meta.url));
 
+function assertUncalledSource(details, statements) {
+  for (const [id, location] of statements.filter(([, location]) => location.start.line >= 10 && location.start.line <= 12)) {
+    assert.equal(details["sample.ts"].s[id], 0, `Uncalled source line ${location.start.line} must be uncovered`);
+  }
+  const delayed = Object.entries(details["sample.ts"].fnMap).find(([, fn]) => fn.name === "delayed");
+  assert.equal(details["sample.ts"].f[delayed[0]], 0, "An initialized function must remain uncovered until it is called");
+}
+
+function assertOriginalSourceCoverage(details, mode) {
+  const statements = Object.entries(details["sample.ts"].statementMap);
+  for (const line of [3, 4, 7, 10, 11, 12]) {
+    assert.ok(statements.some(([, location]) => location.start.line === line), `Executable source line ${line} must be represented in ${mode}`);
+  }
+  for (const line of [2, 6, 9]) {
+    assert.ok(Object.values(details["sample.ts"].fnMap).some((fn) => fn.line === line), `Function on source line ${line} must be represented in ${mode}`);
+  }
+  if (mode !== "complete") assertUncalledSource(details, statements);
+  for (const line of [16, 19]) {
+    const branch = Object.entries(details["sample.ts"].branchMap).find(([, location]) => location.line === line && location.type === "cond-expr");
+    assert.ok(branch, `The original conditional on line ${line} must remain in coverage`);
+    const hits = details["sample.ts"].b[branch[0]];
+    assert.equal(hits.every((count) => count > 0), mode === "complete", `Original branch coverage must reflect the executed paths in ${mode}`);
+  }
+  const barrelBranch = Object.entries(details["barrel.ts"].branchMap).find(([, branch]) => branch.line === 2);
+  assert.ok(barrelBranch, "Re-exported modules retain their original source conditions");
+  assert.equal(details["barrel.ts"].b[barrelBranch[0]].every((count) => count > 0), mode === "complete");
+}
+
+function assertCompleteCoverage(report, details) {
+  const missedBranches = Object.entries(details).flatMap(([file, coverage]) => Object.entries(coverage.b)
+    .filter(([, hits]) => hits.some((count) => count === 0))
+    .map(([id, hits]) => ({ file, hits, location: coverage.branchMap[id] })));
+  for (const metric of ["lines", "statements", "functions", "branches"]) {
+    assert.equal(report.total[metric].pct, 100, `${metric}: ${JSON.stringify(missedBranches)}`);
+  }
+}
+
+function assertIncompleteCoverage(report, sources, mode) {
+  for (const metric of ["lines", "statements", "functions", "branches"]) {
+    assert.ok(report.total[metric].pct < 100, `${metric}: ${JSON.stringify(report)}`);
+  }
+  const untouched = sources.find((file) => file.endsWith("untouched.ts"));
+  assert.equal(report[untouched].lines.covered, 0);
+  assert.equal(report[untouched].functions.covered, 0);
+  assert.ok(report[untouched].lines.total > 0);
+  assert.ok(report[untouched].functions.total > 0);
+  if (mode === "untested") {
+    for (const source of sources) {
+      assert.ok(report[source].lines.total > 0, source);
+      assert.equal(report[source].lines.covered, 0, source);
+      assert.equal(report[source].functions.covered, 0, source);
+    }
+  }
+}
+
 test("coverage maps original TypeScript branches, retains untouched files, and excludes generated module wrappers", async (t) => {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), "nest-coverage-map-")));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -43,6 +98,7 @@ test("coverage maps original TypeScript branches, retains untouched files, and e
   ].join("\n");
   await Promise.all([
     writeFile(path.join(directory, "sample.ts"), sample),
+    writeFile(path.join(directory, "barrel.ts"), "export * from './sample.ts';\nexport function reexportLabel(enabled: boolean) { return enabled ? 'ready' : 'waiting'; }\n"),
     writeFile(path.join(directory, "nested", "untouched.ts"), "export function twice(value: number) {\n  return value * 2;\n}\n"),
     writeFile(path.join(directory, "plain.mjs"), "export function plain() { return 'plain'; }\n"),
     writeFile(path.join(directory, "nested", "[id]", "panel.tsx"), [
@@ -59,12 +115,16 @@ const require = createRequire(import.meta.url);
 test("source behavior", async () => {
   if (process.env.NEST_COVERAGE_FIXTURE_MODE === "untested") return;
   const { choose, label, delayed, loadChoice, unwrap } = require("./sample.ts");
+  const barrel = require("./barrel.ts");
+  assert.equal(barrel.choose(true), "ready");
+  assert.equal(barrel.reexportLabel(true), "ready");
   assert.equal(choose(true), "ready");
   assert.equal(label({ label: "Named" }), "Named");
   assert.equal(await loadChoice(true), "ready");
   assert.deepEqual(await unwrap({ value: "fallback" }), { value: "fallback" });
   if (process.env.NEST_COVERAGE_FIXTURE_MODE === "complete") {
     assert.equal(choose(false), "waiting");
+    assert.equal(barrel.reexportLabel(false), "waiting");
     assert.equal(label(), "Unnamed");
     assert.equal(label({}), "Unnamed");
     assert.equal(label({ label: "" }), "");
@@ -116,49 +176,12 @@ test("source behavior", async () => {
     const report = JSON.parse(await readFile(path.join(reports, "coverage-summary.json"), "utf8"));
     const details = JSON.parse(await readFile(path.join(reports, "coverage-final.json"), "utf8"));
     sourceTotals.push(report["sample.ts"].lines.total);
-    const sampleStatements = Object.entries(details["sample.ts"].statementMap);
-    for (const line of [3, 4, 7, 10, 11, 12]) {
-      assert.ok(sampleStatements.some(([, location]) => location.start.line === line), `Executable source line ${line} must be represented in ${mode}`);
-    }
-    for (const line of [2, 6, 9]) {
-      assert.ok(Object.values(details["sample.ts"].fnMap).some((fn) => fn.line === line), `Function on source line ${line} must be represented in ${mode}`);
-    }
-    if (mode !== "complete") {
-      for (const [id, location] of sampleStatements.filter(([, location]) => location.start.line >= 10 && location.start.line <= 12)) {
-        assert.equal(details["sample.ts"].s[id], 0, `Uncalled source line ${location.start.line} must be uncovered`);
-      }
-      const delayed = Object.entries(details["sample.ts"].fnMap).find(([, fn]) => fn.name === "delayed");
-      assert.equal(details["sample.ts"].f[delayed[0]], 0, "An initialized function must remain uncovered until it is called");
-    }
-    for (const line of [16, 19]) {
-      const branch = Object.entries(details["sample.ts"].branchMap).find(([, location]) => location.line === line && location.type === "cond-expr");
-      assert.ok(branch, `The original conditional on line ${line} must remain in coverage`);
-      const hits = details["sample.ts"].b[branch[0]];
-      assert.equal(hits.every((count) => count > 0), mode === "complete", `Original branch coverage must reflect the executed paths in ${mode}`);
-    }
+    assertOriginalSourceCoverage(details, mode);
     const sources = Object.keys(report).filter((key) => key !== "total");
-    assert.deepEqual(sources.map((file) => file.replaceAll("\\", "/")).sort(), ["nested/[id]/panel.tsx", "nested/untouched.ts", "plain.mjs", "sample.ts"]);
+    assert.deepEqual(sources.map((file) => file.replaceAll("\\", "/")).sort(), ["barrel.ts", "nested/[id]/panel.tsx", "nested/untouched.ts", "plain.mjs", "sample.ts"]);
     assert.ok(report.total.functions.total >= 6, "Every source function should count");
-    if (mode === "complete") {
-      const missedBranches = Object.entries(details).flatMap(([file, coverage]) => Object.entries(coverage.b)
-        .filter(([, hits]) => hits.some((count) => count === 0))
-        .map(([id, hits]) => ({ file, hits, location: coverage.branchMap[id] })));
-      for (const metric of ["lines", "statements", "functions", "branches"]) assert.equal(report.total[metric].pct, 100, `${metric}: ${JSON.stringify(missedBranches)}`);
-    } else {
-      for (const metric of ["lines", "statements", "functions", "branches"]) assert.ok(report.total[metric].pct < 100, `${metric}: ${JSON.stringify(report)}`);
-      const untouched = sources.find((file) => file.endsWith("untouched.ts"));
-      assert.equal(report[untouched].lines.covered, 0);
-      assert.equal(report[untouched].functions.covered, 0);
-      assert.ok(report[untouched].lines.total > 0);
-      assert.ok(report[untouched].functions.total > 0);
-      if (mode === "untested") {
-        for (const source of sources) {
-          assert.ok(report[source].lines.total > 0, source);
-          assert.equal(report[source].lines.covered, 0, source);
-          assert.equal(report[source].functions.covered, 0, source);
-        }
-      }
-    }
+    if (mode === "complete") assertCompleteCoverage(report, details);
+    else assertIncompleteCoverage(report, sources, mode);
   }
   assert.equal(sourceTotals[1], sourceTotals[2], "Executing branches must not change the source line denominator");
   await writeFile(path.join(directory, ".c8rc.json"), JSON.stringify({ all: false }));
@@ -230,7 +253,7 @@ test("coverage retains missed source branches and refuses missing compiled or na
   t.after(() => rm(directory, { recursive: true, force: true }));
   const reports = path.join(directory, "coverage");
   await writeFile(path.join(directory, ".c8rc.json"), JSON.stringify({
-    all: true, include: ["source.ts"], exclude: [], extension: [".ts"],
+    all: true, include: ["source.ts", "authored.ts"], exclude: [], extension: [".ts"],
     "reports-dir": reports, reporter: ["json-summary", "json"],
   }));
   await writeFile(path.join(directory, "source.ts"), [
@@ -239,12 +262,17 @@ test("coverage retains missed source branches and refuses missing compiled or na
     "  return 'available';",
     "}",
   ].join("\n"));
+  await writeFile(path.join(directory, "authored.ts"), [
+    'export * from "./source.ts";',
+    'const enabled = process.env.NEST_COVERAGE_AUTHORED_EXPORT === "true";',
+    'enabled && (module.exports = { ...require("./source.ts") });',
+  ].join("\n"));
   const environment = { ...process.env };
   delete environment.NODE_TEST_CONTEXT;
   delete environment.NODE_V8_COVERAGE;
   const result = await execute(process.execPath, [
     c8, "--config", path.join(directory, ".c8rc.json"), "--reporter=none", "--temp-directory", path.join(reports, "tmp"),
-    process.execPath, "--import", tsx, "--import", collector, "--eval", 'console.log(require("./source.ts").value(false))',
+    process.execPath, "--import", tsx, "--import", collector, "--eval", 'console.log(require("./authored.ts").value(false))',
   ], { cwd: directory, env: environment, timeout: 45_000 });
   assert.equal(result.stdout.trim(), "available");
   const reportEnvironment = { ...process.env };
@@ -252,6 +280,10 @@ test("coverage retains missed source branches and refuses missing compiled or na
   const output = await execute(process.execPath, [reporter], { cwd: directory, env: reportEnvironment, timeout: 45_000 });
   assert.doesNotMatch(output.stdout + output.stderr, /Unparsable source/);
   const coverage = JSON.parse(await readFile(path.join(reports, "coverage-final.json"), "utf8"))["source.ts"];
+  const authored = JSON.parse(await readFile(path.join(reports, "coverage-final.json"), "utf8"))["authored.ts"];
+  const authoredAnnotation = Object.entries(authored.branchMap).find(([, branch]) => branch.line === 3);
+  assert.ok(authoredAnnotation, "A source-authored export condition must remain in the denominator");
+  assert.deepEqual(authored.b[authoredAnnotation[0]], [1, 0]);
   const originalBranch = Object.entries(coverage.branchMap).find(([, branch]) => branch.line === 2);
   assert.ok(originalBranch, "A branch written in the source must remain measurable");
   assert.deepEqual(coverage.b[originalBranch[0]], [1, 0]);

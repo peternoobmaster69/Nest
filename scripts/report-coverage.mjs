@@ -25,14 +25,25 @@ function compileUntestedTypeScript(entry) {
   entry.sourceMap.sources = [entry.url];
 }
 
-function terminateCommonJSAnnotationMap(entry) {
+function commonJSExportAnnotation(ast) {
+  const wrapper = ast.body.at(-1)?.expression;
+  if (wrapper?.type !== "CallExpression" || wrapper.callee.type !== "ArrowFunctionExpression") return null;
+  const annotation = wrapper.callee.body.body?.at(-1);
+  const expression = annotation?.expression;
+  if (expression?.type !== "LogicalExpression" || expression.operator !== "&&" || expression.left.value !== 0) return null;
+  const assignment = expression.right;
+  if (assignment.type !== "AssignmentExpression" || assignment.operator !== "=" || assignment.right.type !== "ObjectExpression") return null;
+  const target = assignment.left;
+  if (target.type !== "MemberExpression" || target.computed || target.object.name !== "module" || target.property.name !== "exports") return null;
+  return annotation;
+}
+
+function terminateCommonJSAnnotationMap(entry, ast) {
   if (!entry.sourceMap) return;
-  const annotation = /;0&&\(module\.exports=\{[\w,$:]*\}\);\s*\}\)\(\)/.exec(entry.source);
+  const annotation = commonJSExportAnnotation(ast);
   if (!annotation) return;
-  const start = annotation.index + 1;
-  const prefix = entry.source.slice(0, start).split("\n");
-  const line = prefix.length - 1;
-  const column = prefix.at(-1).length;
+  const line = annotation.loc.start.line - 1;
+  const column = annotation.loc.start.column;
   const mappings = decode(entry.sourceMap.mappings);
   const segments = mappings[line];
   if (!segments?.length || segments.at(-1)[0] >= column) return;
@@ -151,10 +162,11 @@ function compilerHelpers(entry) {
 }
 
 async function addEntry(report, entry, includesSource) {
-  terminateCommonJSAnnotationMap(entry);
+  const ast = parse(entry.source, { ecmaVersion: "latest", sourceType: "module", locations: true, ranges: true });
+  terminateCommonJSAnnotationMap(entry, ast);
   const result = await convert({
     code: entry.source,
-    ast: parse(entry.source, { ecmaVersion: "latest", sourceType: "module", locations: true, ranges: true }),
+    ast,
     coverage: entry,
     sourceMap: entry.sourceMap,
     ignoreNode: compilerHelpers(entry),
