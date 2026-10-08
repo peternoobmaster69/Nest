@@ -211,7 +211,7 @@ export function TransactionAgentCard({ session, agent, latest, typing, workspace
       <ReceiptText size={13} aria-hidden="true" />
       {draft.status === "SAVED" ? "Saved" : draft.status === "CANCELLED" ? "Draft cancelled" : draft.status === "EXPIRED" ? "Draft expired" : "Transaction draft · nothing saved yet"}
     </span> : null}
-    {draft?.status === "EXPIRED" ? <p className="transaction-agent-hint" role="status">{draft.message}</p> : null}
+    {draft?.status === "EXPIRED" ? <output className="transaction-agent-hint">{draft.message}</output> : null}
     {choices.length && reference ? <div className="transaction-agent-picker">
       {choices.length > 6 ? <label>Find a sub-account or transaction<Input className="transaction-agent-filter" type="search" value={filter} onChange={(e) => setFilter(e.target.value)} /></label> : null}
       <div className="transaction-agent-choices" aria-label="Choose a sub-account or transaction">
@@ -235,6 +235,6 @@ export function TransactionAgentCard({ session, agent, latest, typing, workspace
       {draft ? <Button variant="ghost" size="sm" disabled={agent.busy} onClick={() => void agent.reload(session.key, draft.draftId)}>Reload draft</Button>
         : <Button variant="ghost" size="sm" disabled={agent.busy} onClick={() => { void agent.discard(session); agent.start(session.text, session.routed); }}>Try again</Button>}
     </div> : null}
-    {agent.busy && latest ? <p className="ask-nest-thinking" role="status"><LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" /> {draft ? "Updating the draft…" : "Preparing a draft…"}</p> : null}
+    {agent.busy && latest ? <output className="ask-nest-thinking"><LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" /> {draft ? "Updating the draft…" : "Preparing a draft…"}</output> : null}
   </article>;
 }

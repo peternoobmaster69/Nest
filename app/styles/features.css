@@ -6440,7 +6440,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   font-size: 20px;
 }
 
-.lp-contact-sent p {
+.lp-contact-sent output {
   max-width: 40ch;
   margin: 0 0 10px;
   color: var(--text-secondary);
@@ -10765,6 +10765,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .settings-app-icon-note {
+  display: block;
   margin: 14px 0 0;
   color: var(--text-tertiary);
   font-size: var(--text-base);
@@ -11053,6 +11054,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .settings-muted-message {
+  display: block;
   font-size: var(--text-base);
   color: var(--text-tertiary);
 }

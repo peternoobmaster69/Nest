@@ -763,8 +763,7 @@ export function BudgetPlanPage() {
             )}
 
             {isConfirming && (
-              <div
-                role="status"
+              <output
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -779,7 +778,7 @@ export function BudgetPlanPage() {
               >
                 <RefreshCw size={17} style={{ flexShrink: 0, marginTop: "1px" }} />
                 <span style={{ fontSize: "13px" }}>This monthly budget is being confirmed and is temporarily read-only.</span>
-              </div>
+              </output>
             )}
 
             <div className="bp-stat-grid" style={{ marginTop: "18px" }}>

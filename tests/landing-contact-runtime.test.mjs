@@ -91,6 +91,7 @@ test("successful contact submission sends form timing, locks the dialog while se
   const dialog = await view.findByRole("dialog", { name: "Message sent" });
   assert.ok(within(dialog).getByText("Thanks, Ada!"));
   assert.ok(within(dialog).getByText("ada@example.com"));
+  assert.equal(within(dialog).getByRole("status").tagName, "OUTPUT");
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "/api/public/contact");
   assert.equal(requests[0].method, "POST");
@@ -138,4 +139,15 @@ test("server field errors identify affected controls and disappear as the user c
   await waitFor(() => {
     for (const errors of Object.values(fieldErrors)) assert.ok(!view.queryByText(errors[0]));
   });
+});
+
+test("hidden honeypot validation never exposes the trap and leaves the server to reject bot submissions", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ sent: true }));
+  const view = show();
+  fill(view);
+  fireEvent.change(view.getByLabelText("Website"), { target: { value: "x".repeat(501) } });
+  submit(view);
+  await view.findByRole("dialog", { name: "Message sent" });
+  assert.equal(view.queryByRole("alert"), null);
+  assert.equal(JSON.parse(fetch.mock.calls[0].arguments[1].body).website.length, 501);
 });

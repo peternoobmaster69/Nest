@@ -928,6 +928,7 @@
 }
 
 .ask-nest-history-error {
+  display: block;
   margin: 0 0 14px;
   padding: 8px 10px;
   border-radius: var(--r-sm);

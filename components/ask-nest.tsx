@@ -571,10 +571,10 @@ export function AskNest({
       <div className="ask-nest-question">{turn.question}</div>
       {turn.createdAt ? <time className="ask-nest-turn-date" dateTime={turn.createdAt}>{formatAsOf(turn.createdAt)}</time> : null}
       {turn.pending ? (
-        <div className="ask-nest-thinking" role="status">
+        <output className="ask-nest-thinking">
           <LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" />
           <span>Checking your Nest data…</span>
-        </div>
+        </output>
       ) : turn.error ? (
         <div className="ask-nest-error" role="alert">
           <CircleAlert size={18} aria-hidden="true" />
@@ -600,10 +600,10 @@ export function AskNest({
         <div className="ask-nest-response">
           <p className="ask-nest-answer">{renderWithFormattedDates(turn.answer.answer)}</p>
           {turn.answer.memoryUpdates?.length ? (
-            <div className="ask-nest-memory-saved" role="status">
+            <output className="ask-nest-memory-saved">
               <Brain size={15} aria-hidden="true" />
               <span><strong>Remembered</strong>{turn.answer.memoryUpdates.join(" · ")}</span>
-            </div>
+            </output>
           ) : null}
           {turn.answer.highlights.length ? (
             <dl className="ask-nest-highlights">
@@ -776,9 +776,9 @@ export function AskNest({
                   <p>Only preferences, terminology, and interaction instructions you explicitly asked Nest to remember. Financial figures are always loaded fresh.</p>
                 </div>
               </div>
-              {memoryError ? <div className="ask-nest-history-error" role="status">{memoryError}</div> : null}
+              {memoryError ? <output className="ask-nest-history-error">{memoryError}</output> : null}
               {memoryLoading && !memoryLoadedRef.current ? (
-                <div className="ask-nest-thinking" role="status"><LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" /> Loading memory…</div>
+                <output className="ask-nest-thinking"><LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" /> Loading memory…</output>
               ) : memories.length ? (
                 <div className="ask-nest-memory-list">
                   {memories.map((memory) => {
@@ -824,12 +824,12 @@ export function AskNest({
             </div>
           ) : (
           <>
-          {historyError ? <div className="ask-nest-history-error" role="status">{historyError}</div> : null}
+          {historyError ? <output className="ask-nest-history-error">{historyError}</output> : null}
           {!turns.length && historyLoading ? (
-            <div className="ask-nest-thinking" role="status">
+            <output className="ask-nest-thinking">
               <LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" />
               <span>Loading conversation history…</span>
-            </div>
+            </output>
           ) : !thread.length ? (
             <div className="ask-nest-welcome">
               <span className="ask-nest-readonly-label">Read-only answers · You confirm every change</span>
@@ -874,13 +874,13 @@ export function AskNest({
 
         {!memoryOpen ? <footer className="ask-nest-footer">
           {activeDraft ? (
-            <div className="ask-nest-draft-strip" role="status">
+            <output className="ask-nest-draft-strip">
               <ReceiptText size={15} aria-hidden="true" />
               <span><strong>Drafting</strong>{draftSummary(activeDraft)}</span>
               <Button type="button" variant="ghost" size="sm" disabled={agent.busy} onClick={() => void agent.discard(activeDraft)}>
                 <X size={14} aria-hidden="true" /> Cancel
               </Button>
-            </div>
+            </output>
           ) : null}
           <form className="ask-nest-form" onSubmit={onSubmit}>
             <div className="ask-nest-input-shell">

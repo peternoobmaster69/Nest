@@ -953,13 +953,13 @@ export function DashboardShell({
                   : `${discrepancy.name} sub-accounts exceed its bank balance.`;
 
                 return (
-                  <div key={discrepancy.id} className="tx-reconciliation dashboard-reconciliation" role="status">
+                  <div key={discrepancy.id} className="tx-reconciliation dashboard-reconciliation">
                     <div className="tx-reconciliation-status">
                       <span className="tx-reconciliation-icon" aria-hidden="true"><AlertTriangle size={15} /></span>
-                      <div className="tx-reconciliation-copy">
+                      <output className="tx-reconciliation-copy">
                         <strong>{discrepancyLabel}</strong>
                         <span>{discrepancyDescription}</span>
-                      </div>
+                      </output>
                     </div>
 
                     <dl className="tx-reconciliation-values">

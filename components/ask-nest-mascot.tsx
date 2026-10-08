@@ -52,7 +52,7 @@ export const AskNestFab = forwardRef<HTMLButtonElement, FabProps>(function AskNe
         <Nestling mood={mood} size={46} />
         {mood === "news" || mood === "drafting" ? <span className="ask-nest-fab-badge" aria-hidden="true" /> : null}
       </Button>
-      <span className="ask-nest-fab-bubble" role="status">{status}</span>
+      <output className="ask-nest-fab-bubble">{status}</output>
       <Button type="button" className="ask-nest-fab-dismiss" onClick={onDismiss} aria-label="Hide Ask Nest launcher">×</Button>
     </div>
   );

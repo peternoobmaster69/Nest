@@ -103,10 +103,10 @@ export function SettingsAppIcon() {
         })}
       </div>
 
-      <p className="settings-app-icon-note" role="status">
+      <output className="settings-app-icon-note">
         {saved ? <strong>Saved for this device. </strong> : null}
         {GUIDANCE[platform]}
-      </p>
+      </output>
     </div>
   );
 }

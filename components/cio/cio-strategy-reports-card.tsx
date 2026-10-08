@@ -164,7 +164,7 @@ export function CioStrategyReportsCard({ canEdit }: Readonly<{ canEdit: boolean 
         </div>
       </div>
 
-      {reports.isLoading ? <div className="cio-report-loading" role="status"><RefreshCw size={16} aria-hidden="true" /> Loading reports…</div> : null}
+      {reports.isLoading ? <output className="cio-report-loading"><RefreshCw size={16} aria-hidden="true" /> Loading reports…</output> : null}
       {reports.isError ? <div className="cio-report-error" role="alert"><span>The report archive could not be loaded.</span><Button variant="outline" size="sm" onClick={() => void reports.refetch()}>Retry</Button></div> : null}
       {!reports.isLoading && !reports.isError && !latest ? <div className="cio-report-empty"><FileText size={22} aria-hidden="true" /><div><strong>No strategy report yet</strong><p>Generate one after the household profile, policy, valuations, and exposures are current.</p></div></div> : null}
       {latest ? (

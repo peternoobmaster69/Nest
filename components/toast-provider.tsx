@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 type ToastTone = "success" | "error" | "info";
 type ToastRecord = { id: number; tone: ToastTone; message: string };
+const TOAST_ICONS = { success: CheckCircle2, error: CircleAlert, info: Info };
 const externalToastListeners = new Set<(message: string, tone: ToastTone) => void>();
 
 export function notifyToast(message: string, tone: ToastTone = "info") {
@@ -54,15 +55,15 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
       {children}
       <div className="toast-stack" aria-live="polite" aria-relevant="additions">
         {toasts.map((toast) => {
-          const Icon = toast.tone === "success" ? CheckCircle2 : toast.tone === "error" ? CircleAlert : Info;
+          const Icon = TOAST_ICONS[toast.tone];
           return (
-            <div key={toast.id} className={`toast toast-${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}>
+            <output key={toast.id} className={`toast toast-${toast.tone}`} role={toast.tone === "error" ? "alert" : undefined}>
               <Icon size={18} aria-hidden="true" />
               <span>{toast.message}</span>
               <Button type="button" onClick={() => dismiss(toast.id)} aria-label="Dismiss notification">
                 <X size={15} aria-hidden="true" />
               </Button>
-            </div>
+            </output>
           );
         })}
       </div>

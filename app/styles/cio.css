@@ -242,7 +242,7 @@
 .cio-empty-inline strong { color: var(--text-primary); }
 .cio-readonly-note,
 .cio-disclaimer { margin: 0; color: var(--text-tertiary); font-size: var(--text-xs); line-height: var(--leading-base); }
-.cio-readonly-note { padding: var(--space-2) var(--space-3); border-radius: var(--r-md); background: var(--warning-bg); color: var(--text-secondary); }
+.cio-readonly-note { display: block; padding: var(--space-2) var(--space-3); border-radius: var(--r-md); background: var(--warning-bg); color: var(--text-secondary); }
 .cio-disclaimer { text-align: center; }
 
 .cio-reports-card { display: grid; gap: var(--space-4); }

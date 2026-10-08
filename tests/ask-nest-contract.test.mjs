@@ -463,7 +463,7 @@ test("Ask Nest minimizes to the Nestling launcher instead of closing", async () 
   assert.match(panel, /<AskNestFab/);
   assert.match(panel, /event\.key === "Escape"[\s\S]{0,120}minimize\(\)/);
   assert.match(mascot, /Reopen Ask Nest/);
-  assert.match(mascot, /role="status"/);
+  assert.match(mascot, /<output className="ask-nest-fab-bubble"/);
   assert.match(styles, /\[data-theme="dark"\] \.nestling-eyes/);
 });
 

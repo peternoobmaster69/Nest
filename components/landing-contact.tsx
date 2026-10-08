@@ -127,10 +127,10 @@ export function LandingContact() {
   let body: ReactNode;
   if (status === "sent") {
     body = (
-      <div className="lp-contact-sent" role="status">
+      <div className="lp-contact-sent">
         <span className="lp-contact-sent-icon"><CheckCircle2 size={28} aria-hidden="true" /></span>
         <h3>Thanks, {form.name.trim().split(/\s+/)[0]}!</h3>
-        <p>Your message is on its way. I&apos;ll reply to <strong>{form.email.trim()}</strong> as soon as I can.</p>
+        <output>Your message is on its way. I&apos;ll reply to <strong>{form.email.trim()}</strong> as soon as I can.</output>
         <Button type="button" variant="secondary" onClick={close}>Close</Button>
       </div>
     );

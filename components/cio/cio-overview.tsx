@@ -57,7 +57,7 @@ export function CioOverview({
           </>
         }
       />
-      {!canEdit ? <p className="cio-readonly-note" role="status">You have view-only access. An owner or editor can update CIO assumptions.</p> : null}
+      {!canEdit ? <output className="cio-readonly-note">You have view-only access. An owner or editor can update CIO assumptions.</output> : null}
       <CioHealthSummary overview={overview} onConfigure={(section) => onConfigure(section)} onOpenBankControls={openBankControls} onOpenSubAccounts={openSubAccounts} />
       <CioContributionProgressCard overview={overview} />
       <div className="cio-content-grid">

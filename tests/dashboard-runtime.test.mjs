@@ -112,6 +112,7 @@ test("dashboard totals use the latest valuation and bank selection persists in t
   assert.match(overview.textContent, /25\.00%/);
   assert.ok(view.getByText("Daily bank has funds not represented in sub-accounts."));
   assert.ok(view.getByText("Spare bank sub-accounts exceed its bank balance."));
+  assert.equal(view.getByText("Daily bank has funds not represented in sub-accounts.").closest("output")?.tagName, "OUTPUT");
   fireEvent.click(within(overview).getByRole("button", { name: /Dining/ }));
   assert.equal(navigation.at(-1), "/w/household/transactions?budgetId=dining&accountId=bank");
   fireEvent.click(view.getByRole("button", { name: "Choose bank" }));

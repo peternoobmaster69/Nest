@@ -148,10 +148,10 @@ export function NotificationBell({ workspaceId }: Readonly<{ workspaceId?: strin
 
           <div className="notification-list">
             {notificationsQuery.isLoading ? (
-              <div className="notification-state" role="status">
+              <output className="notification-state">
                 <LoaderCircle className="notification-spinner" size={22} aria-hidden="true" />
                 <span>Loading notifications…</span>
-              </div>
+              </output>
             ) : notificationsQuery.isError ? (
               <div className="notification-state notification-state-error">
                 <span>Notifications couldn’t be loaded.</span>

@@ -17,7 +17,7 @@
 .transaction-agent-before p { margin-bottom: 0; line-height: 1.5; }
 .transaction-agent-balances p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; }
 .transaction-agent-warnings { padding: 10px 10px 10px 26px; border-radius: 8px; background: var(--warning-bg); line-height: 1.6; }
-.transaction-agent-hint { color: var(--text-secondary); line-height: 1.5; }
+.transaction-agent-hint { display: block; color: var(--text-secondary); line-height: 1.5; }
 .transaction-agent-review > .btn { width: 100%; min-height: 44px; }
 .transaction-agent-link { color: var(--brand-700); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .transaction-agent-turn button:disabled { opacity: .55; cursor: not-allowed; }

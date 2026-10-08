@@ -19,6 +19,13 @@ import { workspaceFetch } from "@/lib/workspace-client";
 
 const EMPTY_OFFLINE_SUMMARY: OfflineStorageSummary = { supported: false, cacheCount: 0, entryCount: 0 };
 
+function offlineStorageMessage({ supported, entryCount, cacheCount }: OfflineStorageSummary) {
+  if (!supported) return "This browser does not expose offline cache storage.";
+  const fileLabel = entryCount === 1 ? "file" : "files";
+  const cacheLabel = cacheCount === 1 ? "cache" : "caches";
+  return `${entryCount} static ${fileLabel} in ${cacheCount} Nest ${cacheLabel}.`;
+}
+
 async function responseError(response: Response, fallback: string) {
   const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
   return payload.message || payload.error || fallback;
@@ -143,11 +150,10 @@ export function SettingsPrivacyControls({ view = "privacy" }: Readonly<{ view?: 
             {clearingOffline ? "Clearing..." : "Clear offline files"}
           </Button>
         </div>
-        <div className="settings-muted-message settings-message-spaced" role="status">
-          {offlineSummary.supported
-            ? `${offlineSummary.entryCount} static ${offlineSummary.entryCount === 1 ? "file" : "files"} in ${offlineSummary.cacheCount} Nest ${offlineSummary.cacheCount === 1 ? "cache" : "caches"}.`
-            : "This browser does not expose offline cache storage."}
-        </div>
+        <output className="settings-muted-message settings-message-spaced">
+          {offlineStorageMessage(offlineSummary)}
+        </output>
+        <ActionableAuthenticationMessage message={message} className="settings-access-message" />
       </section>
         </>
       ) : (
