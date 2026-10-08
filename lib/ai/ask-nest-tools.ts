@@ -668,9 +668,7 @@ function addUtcDays(date: Date, days: number) {
 }
 
 function parseIsoDate(value: string, label: string) {
-  if (!ISO_DATE_PATTERN.test(value)) {
-    throw new AskNestToolInputError(`${label} must use YYYY-MM-DD.`);
-  }
+  // Tool schemas validate the shape; also reject invalid days and calendar overflow.
   const date = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
     throw new AskNestToolInputError(`${label} is not a valid calendar date.`);
@@ -767,30 +765,29 @@ function transactionWhere(
   range: DateRange,
   filters?: ResolvedTransactionFilters,
 ): Prisma.TransactionWhereInput {
-  return {
+  const where: Prisma.TransactionWhereInput = {
     workspaceId,
     voidedAt: null,
     kind: { not: "REVERSAL" },
     date: { gte: range.start, lt: range.endExclusive },
-    ...(filters?.accountIds?.length
-      ? { accountId: { in: filters.accountIds } }
-      : filters?.accountName
-      ? {
-          account: {
-            workspaceId,
-            OR: [
-              { name: { contains: filters.accountName } },
-              { bankName: { contains: filters.accountName } },
-            ],
-          },
-        }
-      : {}),
-    ...(filters?.budgetIds?.length
-      ? { budgetId: { in: filters.budgetIds } }
-      : filters?.budgetName
-      ? { budget: { workspaceId, name: { contains: filters.budgetName } } }
-      : {}),
   };
+  if (filters?.accountIds?.length) {
+    where.accountId = { in: filters.accountIds };
+  } else if (filters?.accountName) {
+    where.account = {
+      workspaceId,
+      OR: [
+        { name: { contains: filters.accountName } },
+        { bankName: { contains: filters.accountName } },
+      ],
+    };
+  }
+  if (filters?.budgetIds?.length) {
+    where.budgetId = { in: filters.budgetIds };
+  } else if (filters?.budgetName) {
+    where.budget = { workspaceId, name: { contains: filters.budgetName } };
+  }
+  return where;
 }
 
 function transactionTextWhere(query: string): Prisma.TransactionWhereInput {
@@ -828,8 +825,7 @@ function transactionHref(filters: Record<string, string | null | undefined>) {
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }
-  const query = params.toString();
-  return query ? `/transactions?${query}` : "/transactions";
+  return `/transactions?${params.toString()}`;
 }
 
 type TransactionEvidenceSource = {
@@ -1459,11 +1455,12 @@ async function findTransactions(rawArgs: unknown, context: AskNestToolContext): 
     }),
     prisma.transaction.count({ where }),
   ]);
+  const searchDetail = args.query ? ` · “${args.query}”` : "";
   const transactionEvidence = evidence(
     context.callId,
     "transactions",
     `${total} matching transaction${total === 1 ? "" : "s"}`,
-    `${range.startLabel} to ${range.endLabel}${args.query ? ` · “${args.query}”` : ""}`,
+    `${range.startLabel} to ${range.endLabel}${searchDetail}`,
     transactionHref({
       from: range.startLabel,
       to: range.endLabel,
@@ -1536,25 +1533,21 @@ async function findCardTransactions(rawArgs: unknown, context: AskNestToolContex
     workspaceId: context.workspaceId,
     transactionDate: { gte: range.start, lt: range.endExclusive },
     ...(args.query ? { subject: { contains: args.query } } : {}),
-    ...(args.allocation_status === "ALLOCATED"
-      ? { isAllocated: true }
-      : args.allocation_status === "UNALLOCATED"
-        ? { isAllocated: false }
-        : {}),
-    ...(cardResolution?.matched
-      ? { creditCardId: { in: cardResolution.ids } }
-      : args.card_name
-      ? {
-          creditCard: {
-            workspaceId: context.workspaceId,
-            OR: [
-              { cardName: { contains: args.card_name } },
-              { bankName: { contains: args.card_name } },
-            ],
-          },
-        }
-      : {}),
   };
+  if (args.allocation_status !== "ANY") {
+    where.isAllocated = args.allocation_status === "ALLOCATED";
+  }
+  if (cardResolution?.matched) {
+    where.creditCardId = { in: cardResolution.ids };
+  } else if (args.card_name) {
+    where.creditCard = {
+      workspaceId: context.workspaceId,
+      OR: [
+        { cardName: { contains: args.card_name } },
+        { bankName: { contains: args.card_name } },
+      ],
+    };
+  }
   const [rows, total] = await Promise.all([
     prisma.creditCardTransaction.findMany({
       where,
@@ -1654,11 +1647,12 @@ async function getReceivables(rawArgs: unknown, context: AskNestToolContext): Pr
     prisma.receivable.count({ where }),
   ]);
   const totalCents = aggregate._sum.amountCents ?? 0;
+  const throughDetail = args.through_date ? ` · through ${args.through_date}` : "";
   const receivableEvidence = evidence(
     context.callId,
     "receivables",
     `${total} receivable${total === 1 ? "" : "s"}`,
-    `${args.status === "ANY" ? "All statuses" : args.status}${args.through_date ? ` · through ${args.through_date}` : ""}`,
+    `${args.status === "ANY" ? "All statuses" : args.status}${throughDetail}`,
     "/receivables",
   );
   return {
@@ -1757,11 +1751,12 @@ async function explainReconciliation(rawArgs: unknown, context: AskNestToolConte
     resolveAskNestAccount(context.workspaceId, args.account_name),
   ]);
   const accountQuery = args.account_name?.toLocaleLowerCase();
-  const rows = accountResolution?.matched
-    ? allRows.filter((row) => accountResolution.ids.includes(row.id))
-    : accountQuery
-    ? allRows.filter((row) => row.name.toLocaleLowerCase().includes(accountQuery))
-    : allRows;
+  let rows = allRows;
+  if (accountResolution?.matched) {
+    rows = allRows.filter((row) => accountResolution.ids.includes(row.id));
+  } else if (accountQuery) {
+    rows = allRows.filter((row) => row.name.toLocaleLowerCase().includes(accountQuery));
+  }
   const reconciliationEvidence = evidence(
     context.callId,
     "reconciliation",
@@ -2288,6 +2283,101 @@ async function readAuthoritativeFinancialSource(rawArgs: unknown, context: AskNe
   }
 }
 
+const TRAVEL_PATTERN = /\b(trip|holiday|travel|vacation|tour|flight|hotel)\b/i;
+
+type TripTextTransaction = {
+  date: Date;
+  subject: string;
+  details: string | null;
+  notes: string | null;
+  amountCents: number;
+  budget: { workspaceId: string; name: string } | null;
+};
+
+type EstimatedTripBucket = {
+  name: string;
+  flag: string;
+  search: string;
+  amountCents: number;
+  transactionCount: number;
+  startDate: Date;
+  endDate: Date;
+  subAccounts: Set<string>;
+};
+
+function estimatedTripBuckets(transactions: TripTextTransaction[], hints: string[], workspaceId: string) {
+  const buckets = new Map<string, EstimatedTripBucket>();
+  for (const transaction of transactions) {
+    const text = `${transaction.subject} ${transaction.details ?? ""} ${transaction.notes ?? ""}`;
+    const normalized = text.toLocaleLowerCase();
+    const destination = hints.find((hint) => normalized.includes(hint.toLocaleLowerCase())) ?? findDestination(text)?.[0];
+    if (!destination) continue;
+    const name = formatDestinationLabel(destination);
+    const key = name.toLocaleLowerCase();
+    const bucket = buckets.get(key) ?? {
+      name,
+      flag: getDestinationFlag(destination, null),
+      search: destination,
+      amountCents: 0,
+      transactionCount: 0,
+      startDate: transaction.date,
+      endDate: transaction.date,
+      subAccounts: new Set<string>(),
+    };
+    bucket.amountCents += transaction.amountCents;
+    bucket.transactionCount += 1;
+    if (transaction.date < bucket.startDate) bucket.startDate = transaction.date;
+    if (transaction.date > bucket.endDate) bucket.endDate = transaction.date;
+    if (transaction.budget?.workspaceId === workspaceId) bucket.subAccounts.add(transaction.budget.name);
+    buckets.set(key, bucket);
+  }
+  return [...buckets.values()];
+}
+
+async function loadEstimatedTrips(
+  args: z.infer<typeof TripSpendingArgsSchema>,
+  range: DateRange,
+  context: AskNestToolContext,
+) {
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      ...transactionWhere(context.workspaceId, range),
+      direction: "DEBIT",
+    },
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    take: 500,
+    select: {
+      date: true,
+      subject: true,
+      details: true,
+      notes: true,
+      amountCents: true,
+      budget: { select: { workspaceId: true, name: true } },
+    },
+  });
+  const hints = new Set(args.destination_hints);
+  if (args.query && !TRAVEL_PATTERN.test(args.query)) hints.add(args.query);
+  return estimatedTripBuckets(transactions, [...hints], context.workspaceId)
+    .sort((a, b) => b.amountCents - a.amountCents)
+    .slice(0, 30)
+    .map((bucket, index) => ({
+      id: `estimated-${index + 1}`,
+      name: bucket.name,
+      flag: bucket.flag,
+      subAccount: [...bucket.subAccounts].join(", ") || "Matched transactions",
+      startDate: formatDate(bucket.startDate),
+      endDate: formatDate(bucket.endDate),
+      amountCents: bucket.amountCents,
+      amount: formatAmount(bucket.amountCents, context.currency),
+      transactionCount: bucket.transactionCount,
+      href: transactionHref({
+        from: range.startLabel,
+        to: range.endLabel,
+        search: bucket.search,
+      }),
+    }));
+}
+
 async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = TripSpendingArgsSchema.parse(rawArgs);
   const range = resolveRange(args.start_date, args.end_date);
@@ -2325,18 +2415,18 @@ async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): P
     },
   });
   const query = args.query?.toLocaleLowerCase() ?? null;
-  const travelPattern = /\b(trip|holiday|travel|vacation|tour|flight|hotel)\b/i;
   const candidates = groups.filter((group) => {
     const text = `${group.name} ${group.budget.workspaceId === context.workspaceId ? group.budget.name : ""}`;
     return query
       ? text.toLocaleLowerCase().includes(query)
-      : travelPattern.test(text) || getDestinationFlag(text, group.icon) !== "🧳";
+      : TRAVEL_PATTERN.test(text) || getDestinationFlag(text, group.icon) !== "🧳";
   });
   let estimated = false;
   let disclaimer: string | null = null;
   let trips = candidates.slice(0, 30).map((group) => {
     const first = group.transactions[0]?.date;
     const last = group.transactions.at(-1)?.date;
+    const budgetName = group.budget.workspaceId === context.workspaceId ? group.budget.name : null;
     const amountCents = group.transactions.reduce((sum, transaction) => sum + transaction.amountCents, 0);
     const href = transactionHref({
       budgetId: group.budget.id,
@@ -2347,8 +2437,8 @@ async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): P
     return {
       id: group.id,
       name: group.name,
-      flag: getDestinationFlag(`${group.name} ${group.budget.name}`, group.icon),
-      subAccount: group.budget.workspaceId === context.workspaceId ? group.budget.name : "Unavailable",
+      flag: getDestinationFlag(`${group.name} ${budgetName ?? ""}`, group.icon),
+      subAccount: budgetName ?? "Unavailable",
       startDate: first ? formatDate(first) : null,
       endDate: last ? formatDate(last) : null,
       amountCents,
@@ -2358,84 +2448,7 @@ async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): P
     };
   });
   if (!trips.length) {
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        workspaceId: context.workspaceId,
-        voidedAt: null,
-        kind: { not: "REVERSAL" },
-        direction: "DEBIT",
-        date: { gte: range.start, lt: range.endExclusive },
-      },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      take: 500,
-      select: {
-        date: true,
-        subject: true,
-        details: true,
-        notes: true,
-        amountCents: true,
-        budget: { select: { workspaceId: true, name: true } },
-      },
-    });
-    const hints = [...new Set([
-      ...args.destination_hints,
-      ...(args.query && !travelPattern.test(args.query) ? [args.query] : []),
-    ].map((hint) => hint.trim()).filter(Boolean))];
-    const buckets = new Map<string, {
-      name: string;
-      flag: string;
-      search: string;
-      amountCents: number;
-      transactionCount: number;
-      startDate: Date;
-      endDate: Date;
-      subAccounts: Set<string>;
-    }>();
-    for (const transaction of transactions) {
-      const text = `${transaction.subject} ${transaction.details ?? ""} ${transaction.notes ?? ""}`;
-      const normalized = text.toLocaleLowerCase();
-      const hint = hints.find((value) => normalized.includes(value.toLocaleLowerCase()));
-      const detected = hint ? null : findDestination(text);
-      if (!hint && !detected) continue;
-      const search = hint ?? detected![0];
-      const name = formatDestinationLabel(hint ?? detected![0]);
-      const key = name.toLocaleLowerCase();
-      const bucket = buckets.get(key) ?? {
-        name,
-        flag: getDestinationFlag(hint ?? detected![0], null),
-        search,
-        amountCents: 0,
-        transactionCount: 0,
-        startDate: transaction.date,
-        endDate: transaction.date,
-        subAccounts: new Set<string>(),
-      };
-      bucket.amountCents += transaction.amountCents;
-      bucket.transactionCount += 1;
-      if (transaction.date < bucket.startDate) bucket.startDate = transaction.date;
-      if (transaction.date > bucket.endDate) bucket.endDate = transaction.date;
-      if (transaction.budget?.workspaceId === context.workspaceId) bucket.subAccounts.add(transaction.budget.name);
-      buckets.set(key, bucket);
-    }
-    trips = [...buckets.values()]
-      .sort((a, b) => b.amountCents - a.amountCents)
-      .slice(0, 30)
-      .map((bucket, index) => ({
-        id: `estimated-${index + 1}`,
-        name: bucket.name,
-        flag: bucket.flag,
-        subAccount: [...bucket.subAccounts].join(", ") || "Matched transactions",
-        startDate: formatDate(bucket.startDate),
-        endDate: formatDate(bucket.endDate),
-        amountCents: bucket.amountCents,
-        amount: formatAmount(bucket.amountCents, context.currency),
-        transactionCount: bucket.transactionCount,
-        href: transactionHref({
-          from: range.startLabel,
-          to: range.endLabel,
-          search: bucket.search,
-        }),
-      }));
+    trips = await loadEstimatedTrips(args, range, context);
     estimated = trips.length > 0;
     disclaimer = estimated
       ? "Estimated from transaction text matches because no explicit trip groups were found. Transactions may be missed or assigned to the wrong destination; review the filtered supporting data."
@@ -2478,7 +2491,7 @@ async function getTripSpending(rawArgs: unknown, context: AskNestToolContext): P
           amount: trip.amount,
           dateRange: trip.startDate === trip.endDate
             ? trip.startDate ?? range.startLabel
-            : `${trip.startDate ?? range.startLabel} to ${trip.endDate ?? range.endLabel}`,
+            : `${trip.startDate} to ${trip.endDate}`,
           href: trip.href,
         })),
       },
@@ -2753,11 +2766,58 @@ async function getTopSpendingDrivers(rawArgs: unknown, context: AskNestToolConte
   };
 }
 
+type PlannedBudgetItem = {
+  title: string;
+  amountCents: number;
+  destinationSubAccountId: string | null;
+  destinationSubAccount: { workspaceId: string; name: string } | null;
+};
+
+type BudgetComparison = {
+  name: string;
+  plannedCents: number;
+  actualCents: number;
+  transactionCount: number;
+};
+
+function matchesPlannedBudget(item: PlannedBudgetItem, filters: ResolvedTransactionFilters) {
+  if (filters.budgetIds) {
+    return item.destinationSubAccountId !== null && filters.budgetIds.includes(item.destinationSubAccountId);
+  }
+  if (!filters.budgetName) return true;
+  const label = item.destinationSubAccount?.name ?? item.title;
+  return label.toLocaleLowerCase().includes(filters.budgetName.toLocaleLowerCase());
+}
+
+function plannedBudgetComparisons(items: PlannedBudgetItem[], filters: ResolvedTransactionFilters, workspaceId: string) {
+  const comparisons = new Map<string, BudgetComparison>();
+  for (const item of items) {
+    if (!matchesPlannedBudget(item, filters)) continue;
+    const key = item.destinationSubAccountId ?? `plan:${item.title.toLocaleLowerCase()}`;
+    const current = comparisons.get(key) ?? {
+      name: item.destinationSubAccount?.workspaceId === workspaceId ? item.destinationSubAccount.name : item.title,
+      plannedCents: 0,
+      actualCents: 0,
+      transactionCount: 0,
+    };
+    current.plannedCents += item.amountCents;
+    comparisons.set(key, current);
+  }
+  return comparisons;
+}
+
+function budgetComparisonStatus(row: BudgetComparison) {
+  if (row.plannedCents === 0 && row.actualCents > 0) return "UNPLANNED";
+  if (row.actualCents > row.plannedCents) return "OVER";
+  if (row.actualCents < row.plannedCents) return "UNDER";
+  return "ON_PLAN";
+}
+
 async function getBudgetVsActual(rawArgs: unknown, context: AskNestToolContext): Promise<AskNestToolResult> {
   const args = BudgetVsActualArgsSchema.parse(rawArgs);
   const period = `${args.year}-${String(args.month).padStart(2, "0")}`;
   const start = `${period}-01`;
-  const endDate = new Date(Date.UTC(args.month === 12 ? args.year + 1 : args.year, args.month === 12 ? 0 : args.month, 0));
+  const endDate = new Date(Date.UTC(args.year, args.month, 0));
   const end = formatDate(endDate);
   const range = resolveRange(start, end);
   const budgetResolution = await resolveAskNestBudget(context.workspaceId, args.budget_name);
@@ -2801,23 +2861,7 @@ async function getBudgetVsActual(rawArgs: unknown, context: AskNestToolContext):
     select: { id: true, name: true },
   }) : [];
   const names = new Map(actualBudgets.map((budget) => [budget.id, budget.name]));
-  const comparisons = new Map<string, { name: string; plannedCents: number; actualCents: number; transactionCount: number }>();
-  for (const item of plan?.items ?? []) {
-    if (budgetResolution?.matched && (!item.destinationSubAccountId || !budgetResolution.ids.includes(item.destinationSubAccountId))) continue;
-    if (!budgetResolution?.matched && args.budget_name) {
-      const label = item.destinationSubAccount?.name ?? item.title;
-      if (!label.toLocaleLowerCase().includes(args.budget_name.toLocaleLowerCase())) continue;
-    }
-    const key = item.destinationSubAccountId ?? `plan:${item.title.toLocaleLowerCase()}`;
-    const current = comparisons.get(key) ?? {
-      name: item.destinationSubAccount?.workspaceId === context.workspaceId ? item.destinationSubAccount.name : item.title,
-      plannedCents: 0,
-      actualCents: 0,
-      transactionCount: 0,
-    };
-    current.plannedCents += item.amountCents;
-    comparisons.set(key, current);
-  }
+  const comparisons = plannedBudgetComparisons(plan?.items ?? [], filters, context.workspaceId);
   for (const row of actualRows) {
     const key = row.budgetId ?? "unassigned";
     const current = comparisons.get(key) ?? {
@@ -2839,7 +2883,7 @@ async function getBudgetVsActual(rawArgs: unknown, context: AskNestToolContext):
       varianceCents,
       variance: formatAmount(varianceCents, context.currency),
       usagePercent: row.plannedCents === 0 ? null : Math.round((row.actualCents / row.plannedCents) * 10_000) / 100,
-      status: row.plannedCents === 0 && row.actualCents > 0 ? "UNPLANNED" : varianceCents < 0 ? "OVER" : varianceCents > 0 ? "UNDER" : "ON_PLAN",
+      status: budgetComparisonStatus(row),
     };
   }).sort((left, right) => right.actualCents - left.actualCents || left.name.localeCompare(right.name));
   const plannedCents = rows.reduce((sum, row) => sum + row.plannedCents, 0);
@@ -2915,7 +2959,8 @@ async function findRecurringSpend(rawArgs: unknown, context: AskNestToolContext)
     if (merchant.dates.length < args.min_occurrences) return [];
     const intervals = merchant.dates.slice(1).map((date, index) => Math.round((date.getTime() - merchant.dates[index]!.getTime()) / 86_400_000));
     const orderedIntervals = [...intervals].sort((left, right) => left - right);
-    const medianDays = orderedIntervals[Math.floor(orderedIntervals.length / 2)] ?? 0;
+    // min_occurrences is at least two, so every candidate has an interval.
+    const medianDays = orderedIntervals[Math.floor(orderedIntervals.length / 2)]!;
     const cadence = recurringCadence(medianDays);
     if (!cadence) return [];
     const totalCents = merchant.amounts.reduce((sum, amount) => sum + amount, 0);

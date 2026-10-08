@@ -227,6 +227,10 @@ test("card obligations exclude paid, missing, and later statements and sort the 
   assert.equal(output.cardCount, 2);
   assert.deepEqual(output.statements.map((row) => row.paymentDueDate), ["2026-10-02", "2026-10-10", "2026-10-10"]);
   await assert.rejects(run("get_card_obligations", { before_date: "2026-02-30" }), /valid calendar date/);
+  reply("creditCardTransaction.groupBy", [statement("visa", 5_000, "2026-10-10")]);
+  const single = await run("get_card_obligations", { before_date: null });
+  assert.equal(single.evidence[0].label, "1 outstanding statement across 1 card");
+  assert.equal(single.output.totalCents, 5_000);
 });
 
 test("card activity filters allocation and resolved cards while protecting related names", async () => {
@@ -360,6 +364,27 @@ test("investment summaries use recorded valuations and only user-confirmed asset
   assert.equal(query.where.OR[2].institutionName.contains, "Broker");
   assert.equal(query.select.entries.where.date.lt.toISOString(), "2026-10-01T00:00:00.000Z");
   assert.equal(query.select.entries.take, 1);
+  reply("investmentAccount.findMany", [base]);
+  const single = await run("get_investment_summary", { account_name: null, as_of_date: null });
+  assert.equal(single.evidence[0].label, "1 investment account");
+  assert.equal(single.output.totals.gainLossCents, 1_000);
+});
+
+test("category ties use stable names and uncertain local transactions retain their visible account labels", async () => {
+  reply("transaction.findMany", [
+    transaction({ id: "ride", subject: "GrabCar", amountCents: 500 }),
+    transaction({ id: "bus", subject: "Bus ticket", amountCents: 500 }),
+    transaction({ id: "coffee", subject: "Starbucks", amountCents: 1_000 }),
+    transaction({ id: "possible", subject: "GrabPay", amountCents: 200 }),
+  ]);
+  const args = { ...comparison, period_b_start: null, period_b_end: null, account_name: null, category: "ALL", limit: 5 };
+  const all = await run("get_category_spending", args);
+  assert.deepEqual(all.output.periodA.categories.map((row) => [row.category, row.amountCents]), [["DINING", 1_000], ["TRANSPORT", 1_000]]);
+  assert.equal(all.output.periodA.possibleAdditionalCents, 200);
+  const transport = await run("get_category_spending", { ...args, category: "TRANSPORT" });
+  assert.deepEqual(transport.output.periodA.merchants.map((row) => [row.merchant, row.amountCents]), [["Bus Ticket", 500], ["Grab", 500]]);
+  assert.equal(transport.output.periodA.uncertainTransactions[0].account, "Daily Bank");
+  assert.equal(transport.output.periodA.uncertainTransactions[0].subAccount, "Dining");
 });
 
 test("market history calculates changes and volume from recorded daily bars with dated evidence", async () => {
@@ -488,6 +513,44 @@ test("trip estimates disclose text matching and derive date extents without expo
   assert.ok(queryHint.output.trips.some((trip) => trip.name === "Berlin"));
 });
 
+test("empty trip groups preserve missing dates and never derive destinations from a foreign subaccount", async () => {
+  reply("transactionGroup.findMany", [{
+    id: "weekend", name: "Weekend trip", icon: null,
+    budget: { id: "foreign", workspaceId: "other", name: "Private Japan fund" },
+    transactions: [],
+  }]);
+  const args = { ...range, query: null, destination_hints: [] };
+  const result = await run("get_trip_spending", args);
+  assert.equal(result.output.estimated, false);
+  assert.equal(result.output.trips[0].flag, "🧳");
+  assert.equal(result.output.trips[0].subAccount, "Unavailable");
+  assert.equal(result.output.trips[0].startDate, null);
+  assert.equal(result.output.trips[0].endDate, null);
+  assert.equal(result.output.trips[0].transactionCount, 0);
+  assert.equal(result.output.presentation.items[0].dateRange, "2026-09-01");
+  assert.equal(result.evidence[1].detail, "2026-09-01 to 2026-09-30 · SGD 0.00");
+  assert.doesNotMatch(JSON.stringify(result), /Japan|Private/);
+  const filtered = await run("get_trip_spending", { ...args, query: "Private" });
+  assert.deepEqual(filtered.output.trips, []);
+});
+
+test("generic travel queries infer destinations from details and notes without grouping every hotel charge", async () => {
+  reply("transaction.findMany", [
+    transaction({ subject: "Hotel booking", amountCents: 8_000 }),
+    transaction({ subject: "Dinner", details: "Kyoto", notes: "with friends", amountCents: 1_000 }),
+    transaction({ subject: "Museum", details: "Admission", notes: "Kyoto", amountCents: 500 }),
+  ]);
+  const result = await run("get_trip_spending", { ...range, query: "hotel", destination_hints: [] });
+  assert.equal(result.output.totalCents, 1_500);
+  assert.equal(result.output.trips.length, 1);
+  assert.equal(result.output.trips[0].name, "Kyoto");
+  assert.equal(result.output.trips[0].transactionCount, 2);
+  assert.equal(result.output.estimated, true);
+  const query = request("transaction.findMany");
+  assert.equal(query.take, 500);
+  assert.deepEqual(query.where, { workspaceId: "household", voidedAt: null, kind: { not: "REVERSAL" }, direction: "DEBIT", date: { gte: date("2026-09-01"), lt: date("2026-10-01") } });
+});
+
 test("cash-flow and income comparisons merge merchant aliases and attribute directional changes", async () => {
   reply("transaction.groupBy", ({ where, by }) => {
     const recent = where.date.gte.getUTCMonth() === 8;
@@ -531,6 +594,27 @@ test("spending drivers merge duplicate merchant names and calculate shares again
   assert.equal(zero.output.drivers[2].sharePercent, 0);
 });
 
+test("cash-flow and merchant summaries tolerate absent aggregate amounts and sort equal totals by name", async () => {
+  reply("transaction.groupBy", ({ by }) => by.length === 2
+    ? [sum(null, 1, { subject: "Refund pending", direction: "CREDIT" })]
+    : []);
+  const cash = await run("explain_cash_flow_change", { ...comparison, account_name: null });
+  assert.equal(cash.output.change.netCents, 0);
+  assert.equal(cash.output.drivers[0].periodACents, 0);
+  assert.equal(cash.output.drivers[0].periodBCents, 0);
+  reply("transaction.groupBy", [sum(500, 1, { subject: "Starbucks" }), sum(500, 1, { subject: "GrabCar" }), sum(null, 0, { subject: "Pending" })]);
+  reply("transaction.aggregate", sum(1_000, 2));
+  const args = { ...range, ...filters, dimension: "MERCHANT", limit: 10 };
+  const merchants = await run("get_top_spending_drivers", args);
+  assert.deepEqual(merchants.output.drivers.map((row) => [row.name, row.amountCents, row.sharePercent]), [["Grab", 500, 50], ["Starbucks", 500, 50], ["Pending", 0, 0]]);
+  reply("transaction.groupBy", [sum(1_000, 2, { budgetId: null })]);
+  calls.length = 0;
+  const unassigned = await run("get_top_spending_drivers", { ...args, dimension: "SUB_ACCOUNT" });
+  assert.equal(unassigned.output.drivers[0].name, "Unassigned");
+  assert.equal(unassigned.output.drivers[0].sharePercent, 100);
+  assert.equal(calls.some(({ operation }) => operation === "budgetEnvelope.findMany"), false);
+});
+
 test("budget versus actual combines allocations and distinguishes overruns, savings, and unplanned spending", async () => {
   const travel = { ...budget, id: "travel", name: "Travel" };
   const fixed = { ...budget, id: "fixed", name: "Fixed" };
@@ -565,6 +649,22 @@ test("budget versus actual combines allocations and distinguishes overruns, savi
   assert.equal(fallback.output.rows[0].plannedCents, 500);
 });
 
+test("budget comparisons retain unplanned and missing subaccounts, stable ties, and leap-month boundaries", async () => {
+  reply("monthlyBudgetPlan.findUnique", { status: "DRAFT", updatedAt: now, items: [
+    { title: "Named allocation", amountCents: 600, destinationSubAccountId: "foreign", destinationSubAccount: { workspaceId: "other", name: "Private fund" } },
+  ] });
+  reply("budgetEnvelope.findMany", [budget]);
+  reply("transaction.groupBy", [sum(500, 1, { budgetId: "deleted" }), sum(500, 1, { budgetId: "food" }), sum(null, 0, { budgetId: null })]);
+  const result = await run("get_budget_vs_actual", { year: 2024, month: 2, budget_name: null });
+  assert.deepEqual(result.output.rows.map((row) => [row.name, row.status]), [
+    ["Dining", "UNPLANNED"], ["Unknown sub-account", "UNPLANNED"], ["Named allocation", "UNDER"], ["Unassigned", "ON_PLAN"],
+  ]);
+  assert.equal(result.output.totals.plannedCents, 600);
+  assert.equal(result.output.totals.actualCents, 1_000);
+  assert.doesNotMatch(JSON.stringify(result), /Private fund/);
+  assert.deepEqual(request("transaction.groupBy").where.date, { gte: date("2024-02-01"), lt: date("2024-03-01") });
+});
+
 test("recurring payments require enough occurrences at a recognized cadence and report measured totals", async () => {
   const patterns = [["Weekly plan", 7, 100, 2, "WEEKLY"], ["Fortnight plan", 14, 200, 2, "FORTNIGHTLY"], ["Monthly plan", 30, 300, 3, "MONTHLY"], ["Quarterly plan", 90, 400, 2, "QUARTERLY"], ["Annual plan", 365, 500, 2, "ANNUAL"]];
   const transactions = patterns.flatMap(([subject, gap, amountCents, count]) => Array.from({ length: count }, (_, index) => transaction({ id: `${subject}-${index}`, subject, amountCents, date: new Date(date("2025-09-01").getTime() + gap * index * 86400_000) })));
@@ -591,4 +691,19 @@ test("recurring payments require enough occurrences at a recognized cadence and 
   assert.equal(capped.output.analyzedTransactions, 2_000);
   assert.equal(capped.output.totalMatches, 0);
   assert.match(capped.evidence[0].detail, /2000\+ debit transactions/);
+});
+
+test("recurring patterns use merchant names to break ties and keep a singular limited result", async () => {
+  reply("transaction.findMany", ["Zulu membership", "Alpha membership"].flatMap((subject) => [
+    transaction({ subject, date: date("2026-09-01"), amountCents: 500 }),
+    transaction({ subject, date: date("2026-09-08"), amountCents: 500 }),
+  ]));
+  const args = { ...range, ...filters, min_occurrences: 2, limit: 1 };
+  const result = await run("find_recurring_spend", args);
+  assert.equal(result.output.totalMatches, 2);
+  assert.equal(result.output.patterns.length, 1);
+  assert.equal(result.output.patterns[0].merchant, "Alpha Membership");
+  assert.equal(result.output.patterns[0].totalCents, 1_000);
+  assert.equal(result.evidence.length, 2);
+  assert.ok(result.evidence.every((item) => item.label === "Alpha membership · SGD 5.00"));
 });
