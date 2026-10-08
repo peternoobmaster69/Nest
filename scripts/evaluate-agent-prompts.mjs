@@ -38,10 +38,17 @@ const score = (item, output, calls) => ({
   noForbiddenContent: (item.forbiddenPatterns || []).every(pattern => !new RegExp(pattern, "i").test(output.answer || "")),
   completeReview: item.agentId !== "smart-review" || output.suggestions?.length === item.context.transactions.length,
 });
+function toolChoice(request, round) {
+  if (!request.tools.length || round === 4) return "none";
+  return round === 0 ? request.initialToolChoice : "auto";
+}
+
 assert.equal(new Set(cases.map(item => item.id)).size, cases.length, "Case IDs must be unique");
 for (const item of cases) {
   assert.ok(item.expected || item.answerPatterns?.length, `${item.id} needs a substantive assertion`);
-  for (const pattern of [...item.answerPatterns || [], ...item.forbiddenPatterns || []]) new RegExp(pattern, "i");
+  for (const pattern of [...item.answerPatterns || [], ...item.forbiddenPatterns || []]) {
+    assert.doesNotThrow(() => new RegExp(pattern, "i"), `${item.id} contains an invalid answer pattern`);
+  }
 }
 const requests = option("--from") ? JSON.parse(await readFile(option("--from"), "utf8")) : cases.map(makeRequest);
 assert.deepEqual(requests.map(item => item.id), cases.map(item => item.id), "Snapshot and case IDs must match");
@@ -73,7 +80,7 @@ if (option("--rescore")) {
     try {
       for (let round = 0; round <= 4; round++) {
         const response = await client.responses.create({ model, instructions: request.instructions, input, tools: request.tools,
-          tool_choice: !request.tools.length || round === 4 ? "none" : round === 0 ? request.initialToolChoice : "auto",
+          tool_choice: toolChoice(request, round),
           parallel_tool_calls: false, max_output_tokens: request.maxOutputTokens, store: false, include: ["reasoning.encrypted_content"],
           text: {format: {type: "json_schema", name: "agent_prompt_evaluation", strict: true, schema: request.schema}} }, { maxRetries: 0, signal });
         tokens += response.usage?.total_tokens || 0;
