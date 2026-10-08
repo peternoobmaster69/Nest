@@ -781,12 +781,12 @@
 }
 
 .segmented-toggle-btn-deduct.is-active {
-  background: #d97706;
+  background: #b45309;
   color: #fff;
 }
 
 .segmented-toggle-btn-add.is-active {
-  background: #16a34a;
+  background: #15803d;
   color: #fff;
 }
 
@@ -1525,17 +1525,17 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .avatar-peach {
   background: #ffe8dc;
-  color: #c05030;
+  color: #ac4428;
 }
 
 .avatar-teal {
   background: #d0f0ee;
-  color: #1a7a76;
+  color: #146863;
 }
 
 .avatar-amber {
   background: #fff0cc;
-  color: #a06010;
+  color: #95570b;
 }
 
 /* ============================================================
@@ -2067,12 +2067,12 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .badge-teal {
   background: #d0f0ee;
-  color: #1a7a76;
+  color: #146863;
 }
 
 .badge-amber {
   background: #fff0cc;
-  color: #a06010;
+  color: #95570b;
 }
 
 /* ============================================================
@@ -5449,8 +5449,8 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .lp-signal.is-positive { background: rgba(82, 196, 144, 0.17); color: var(--lp-band-mint); }
-.lp-signal.is-zero { background: rgba(255, 255, 255, 0.11); color: #fff; }
-.lp-signal.is-negative { background: rgba(240, 146, 106, 0.17); color: #ffc0a5; }
+.lp-signal.is-zero { background: #354f44; color: #fff; }
+.lp-signal.is-negative { background: #453e30; color: #ffc0a5; }
 
 /* ---------- Hero ---------- */
 
@@ -11999,7 +11999,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
   color: var(--text-primary);
   font-weight: 600;
   min-width: 0;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .cc-detail-value-icon {
@@ -15581,7 +15581,7 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 
 .auto-rule-chip-target {
   background: #eef5fb;
-  color: #5276a0;
+  color: #486a94;
 }
 
 .auto-rule-separator {

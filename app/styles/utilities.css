@@ -3615,7 +3615,7 @@ html[data-ask-nest-open="true"] {
   flex: 0 0 auto;
   padding: 2px;
   border-radius: 50%;
-  background: rgba(142, 221, 184, 0.17);
+  background: #245e45;
   color: #a9e8c9;
 }
 
@@ -4088,14 +4088,14 @@ html[data-ask-nest-open="true"] {
 
   .lp-signin-close {
     border-color: rgba(255, 255, 255, 0.2);
-    background: rgba(255, 255, 255, 0.12);
+    background: #356b50;
     color: #fff;
     box-shadow: none;
   }
 
   .lp-signin-close:hover {
     border-color: rgba(255, 255, 255, 0.34);
-    background: rgba(255, 255, 255, 0.2);
+    background: #46775e;
     color: #fff;
   }
 
