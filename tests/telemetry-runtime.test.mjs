@@ -3,6 +3,18 @@ import test from "node:test";
 import { redactTelemetry, logEvent, observeDuration } from "../lib/observability/logger.ts";
 import { withQueryTelemetry } from "../lib/observability/query-telemetry.ts";
 
+test("telemetry redacts sensitive fields even when their names are mixed-case or nested", () => {
+  const names = [
+    "Authorization", "cookie", "refreshToken", "clientSecret", "password", "passphrase",
+    "CVV", "cvc", "PAN", "card", "cardNumber", "rawBody", "rawEmail", "sql",
+    "query", "param", "params", "p256dh", "endpoint", "credential",
+  ];
+  const context = Object.fromEntries(names.map((name) => [name, "private value"]));
+  const result = redactTelemetry({ metadata: context, label: "Safe label" });
+  assert.equal(result.label, "Safe label");
+  assert.deepEqual(result.metadata, Object.fromEntries(names.map((name) => [name, "[REDACTED]"])));
+});
+
 test("telemetry preserves safe types while bounding strings, collections, cycles, and executable values", () => {
   const shared = { safe: true };
   const input = { count: 2, enabled: false, absent: null, missing: undefined, large: 123n, date: new Date("2026-10-07T00:00:00Z"), first: shared, second: shared };

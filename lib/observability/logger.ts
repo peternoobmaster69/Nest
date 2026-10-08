@@ -1,7 +1,11 @@
 type LogLevel = "debug" | "info" | "warn" | "error";
 type LogContext = Record<string, unknown>;
 
-const SENSITIVE_KEY = /(authorization|cookie|token|secret|password|passphrase|cvv|cvc|pan|card(number)?|raw(body|email)|sql|query|params?|p256dh|endpoint|credential)/i;
+const SENSITIVE_KEY_PARTS = [
+  "authorization", "cookie", "token", "secret", "password", "passphrase",
+  "cvv", "cvc", "pan", "card", "rawbody", "rawemail", "sql", "query",
+  "param", "p256dh", "endpoint", "credential",
+];
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const BEARER = /\bBearer\s+[a-z\d._~+/-]+=*/gi;
 const CARD_NUMBER = /\b(?:\d[ -]*?){13,19}\b/g;
@@ -16,7 +20,8 @@ function redactString(value: string) {
 }
 
 export function redactTelemetry(value: unknown, key = "", seen = new WeakSet<object>()): unknown {
-  if (SENSITIVE_KEY.test(key)) return "[REDACTED]";
+  const normalizedKey = key.toLowerCase();
+  if (SENSITIVE_KEY_PARTS.some((part) => normalizedKey.includes(part))) return "[REDACTED]";
   if (value == null || typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "bigint") return value.toString();
   if (typeof value === "string") return redactString(value);

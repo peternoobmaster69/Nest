@@ -12,7 +12,11 @@ export type AskNestMemoryCandidate = z.infer<typeof AskNestMemoryCandidateSchema
 
 const EXPLICIT_MEMORY_PATTERN = /\b(?:remember|please remember|keep in mind|from now on|i prefer|my preference|(?:please )?call (?:it|them|this|that|my|the)\b|always show|use .+ by default)\b/i;
 const UNSAFE_MEMORY_PATTERN = /\b(?:password|passcode|secret|api key|access token|refresh token|authentication|system prompt|developer message|ignore (?:all|previous)|bypass|jailbreak)\b/i;
-const FINANCIAL_FACT_PATTERN = /(?:\b(?:SGD|USD|EUR|GBP|AUD|JPY)\s*-?[\d,]+|[$€£¥]\s*-?[\d,.]+|\b\d{7,}\b)/i;
+const FINANCIAL_FACT_PATTERNS = [
+  /\b(?:SGD|USD|EUR|GBP|AUD|JPY)\s*-?[\d,]+/i,
+  /[$€£¥]\s*-?[\d,.]+/,
+  /\b\d{7,}\b/,
+];
 
 function hash(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -38,7 +42,7 @@ function acceptsExplicitMemory(question: string, candidate: AskNestMemoryCandida
 
 export function isSafeAskNestMemoryContent(content: string) {
   if (UNSAFE_MEMORY_PATTERN.test(content)) return false;
-  if (FINANCIAL_FACT_PATTERN.test(content)) return false;
+  if (FINANCIAL_FACT_PATTERNS.some((pattern) => pattern.test(content))) return false;
   return true;
 }
 
