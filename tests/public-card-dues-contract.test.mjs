@@ -7,16 +7,19 @@ const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
 
 test("public cards-due API is token gated and exposes only the requested card fields", async () => {
-  const [route, payload, settings] = await Promise.all([
+  const [route, sharing, payload, settings] = await Promise.all([
     source("app/api/public/cards-due/[token]/route.ts"),
+    source("lib/api/public-workspace.ts"),
     source("lib/public-card-dues.ts"),
     source("components/settings-page.tsx"),
   ]);
 
-  assert.match(route, /publicNetWorthEnabled:\s*true/);
-  assert.match(route, /publicNetWorthToken:\s*token/);
-  assert.match(route, /token\.length < 24/);
-  assert.match(route, /Cache-Control.*private, no-store/s);
+  assert.match(route, /publicWorkspaceResponse\(request, params/);
+  assert.match(route, /load: getWorkspaceCardsDuePayload/);
+  assert.match(sharing, /publicNetWorthEnabled:\s*true/);
+  assert.match(sharing, /publicNetWorthToken:\s*token/);
+  assert.match(sharing, /token\.length < 24/);
+  assert.match(sharing, /Cache-Control.*private, no-store/s);
   assert.match(payload, /amountCents:\s*\{ gt: 0 \}[\s\S]*paymentDueDate:\s*\{ not: null \}/);
   assert.match(payload, /const DUE_WINDOW_DAYS = 14/);
   assert.match(payload, /DUE_WINDOW_DAYS \+ 1/);
