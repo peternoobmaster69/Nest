@@ -173,14 +173,16 @@ export async function POST(request: NextRequest) {
         select: { workspaceId: true },
       });
       if (memberships.length) {
+        const sessionDescription = revokedSessionIds.length === 1 ? "session was" : "sessions were";
+        const details = revokedSessionIds.length
+          ? `${revokedSessionIds.length} active ${sessionDescription} signed out to approve a new device.`
+          : "A pending device was approved after an active-session slot became available.";
         await transaction.workspaceAuditLog.createMany({
           data: memberships.map((membership) => ({
             workspaceId: membership.workspaceId,
             actorUserId: token.id,
             action: "SESSION_REPLACED",
-            details: revokedSessionIds.length
-              ? `${revokedSessionIds.length} active ${revokedSessionIds.length === 1 ? "session was" : "sessions were"} signed out to approve a new device.`
-              : "A pending device was approved after an active-session slot became available.",
+            details,
           })),
         });
       }

@@ -53,8 +53,8 @@ export async function DELETE(request: NextRequest) {
       requireRecentAuthentication(),
       getToken({ req: request }),
     ]);
-    const body = await request.json().catch(() => ({})) as { sessionId?: unknown };
-    if (typeof body.sessionId !== "string" || !body.sessionId) {
+    const body = await request.json().catch(() => ({})) as { sessionId?: unknown } | null;
+    if (typeof body?.sessionId !== "string" || !body.sessionId) {
       return NextResponse.json({ error: "Session id is required" }, { status: 400 });
     }
     const sessionId = body.sessionId;
