@@ -3,6 +3,25 @@ import type { CioSnapshot, CioSetupSection } from "@/components/cio/types";
 import { formatCioDate, formatCioMoney } from "@/components/cio/cio-format";
 import { Button } from "@/components/ui/button";
 
+function healthStatus(warnings: CioSnapshot["dataQuality"]["warnings"]) {
+  if (warnings.some((warning) => warning.severity === "CRITICAL")) {
+    return { label: "Action required", tone: "critical", Icon: AlertTriangle };
+  }
+  if (warnings.length) return { label: "Review recommended", tone: "warning", Icon: Clock3 };
+  return { label: "Ready", tone: "good", Icon: CheckCircle2 };
+}
+
+function warningAction(
+  code: CioSnapshot["dataQuality"]["warnings"][number]["code"],
+  onConfigure: (section: CioSetupSection) => void,
+  onOpenBankControls: () => void,
+  onOpenSubAccounts: () => void,
+) {
+  if (code === "BANK_BALANCE_AFTER_DATA_DATE") return { label: "Open bank controls", onClick: onOpenBankControls };
+  if (code === "SAVINGS_BALANCE_AFTER_DATA_DATE") return { label: "Open sub-accounts", onClick: onOpenSubAccounts };
+  return { label: "Review", onClick: () => onConfigure(sectionForWarning(code)) };
+}
+
 export function CioHealthSummary({
   overview,
   onConfigure,
@@ -15,9 +34,7 @@ export function CioHealthSummary({
   onOpenSubAccounts: () => void;
 }>) {
   const { dataQuality, totals, baseCurrency } = overview;
-  const criticalCount = dataQuality.warnings.filter((warning) => warning.severity === "CRITICAL").length;
-  const statusLabel = criticalCount > 0 ? "Action required" : dataQuality.warnings.length ? "Review recommended" : "Ready";
-  const statusTone = criticalCount ? "critical" : dataQuality.warnings.length ? "warning" : "good";
+  const { label: statusLabel, tone: statusTone, Icon } = healthStatus(dataQuality.warnings);
   const issueLabel = dataQuality.warnings.length === 1 ? "1 issue" : `${dataQuality.warnings.length} issues`;
 
   return (
@@ -25,7 +42,7 @@ export function CioHealthSummary({
       <details className={`cio-health-card is-${statusTone}`}>
         <summary className="cio-health-summary-row">
           <div className={`cio-health-icon is-${statusTone}`} aria-hidden="true">
-            {criticalCount ? <AlertTriangle size={22} /> : dataQuality.warnings.length ? <Clock3 size={22} /> : <CheckCircle2 size={22} />}
+            <Icon size={22} />
           </div>
           <div className="cio-health-heading">
             <span className="cio-card-eyebrow">Decision readiness</span>
@@ -41,8 +58,9 @@ export function CioHealthSummary({
         <div className="cio-health-details" aria-labelledby="cio-health-title">
           <div className="cio-completeness">
             <div className="cio-completeness-copy"><span>Data completeness</span><strong>{dataQuality.completenessPercentage}%</strong></div>
-            <div className="cio-progress-track" role="progressbar" aria-label="CIO data completeness" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dataQuality.completenessPercentage}>
-              <span style={{ width: `${Math.min(100, Math.max(0, dataQuality.completenessPercentage))}%` }} />
+            <div className="cio-progress-track">
+              <progress className="sr-only" aria-label="CIO data completeness" max={100} value={Math.min(100, Math.max(0, dataQuality.completenessPercentage))} />
+              <span style={{ width: `${Math.min(100, Math.max(0, dataQuality.completenessPercentage))}%` }} aria-hidden="true" />
             </div>
             <small>Latest valuation: {formatCioDate(dataQuality.latestValuationDate)} · Oldest valuation: {formatCioDate(dataQuality.oldestValuationDate)}</small>
           </div>
@@ -64,16 +82,14 @@ export function CioHealthSummary({
             <h2 id="cio-setup-actions-title">Improve decision quality</h2>
           </div>
           <ul>
-            {dataQuality.warnings.slice(0, 4).map((warning, index) => {
-              const section = sectionForWarning(warning.code);
-              const reviewsBankControls = warning.code === "BANK_BALANCE_AFTER_DATA_DATE";
-              const reviewsSubAccounts = warning.code === "SAVINGS_BALANCE_AFTER_DATA_DATE";
+            {dataQuality.warnings.slice(0, 4).map((warning) => {
+              const action = warningAction(warning.code, onConfigure, onOpenBankControls, onOpenSubAccounts);
               return (
-                <li key={`${warning.code}-${warning.entityId ?? "workspace"}-${index}`}>
+                <li key={`${warning.code}-${warning.entityId ?? "workspace"}`}>
                   <span className={`cio-severity-dot is-${warning.severity.toLowerCase()}`} aria-hidden="true" />
                   <span><strong>{warning.message}</strong><small>{warning.severity.toLowerCase()} · setup data, not investment advice</small></span>
-                  <Button variant="outline" size="sm" onClick={reviewsBankControls ? onOpenBankControls : reviewsSubAccounts ? onOpenSubAccounts : () => onConfigure(section)}>
-                    {reviewsBankControls ? "Open bank controls" : reviewsSubAccounts ? "Open sub-accounts" : "Review"}
+                  <Button variant="outline" size="sm" onClick={action.onClick}>
+                    {action.label}
                   </Button>
                 </li>
               );

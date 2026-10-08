@@ -50,7 +50,7 @@ test("CIO decision readiness is compact by default with accessible expandable de
   assert.match(health, /<summary className="cio-health-summary-row">/);
   assert.doesNotMatch(health, /<details[^>]*\sopen(?:=|>)/);
   assert.match(health, /cio-health-issue-count/);
-  assert.match(health, /role="progressbar"/);
+  assert.match(health, /<progress/);
   assert.match(styles, /\.cio-health-summary-row:focus-visible/);
   assert.match(styles, /\.cio-health-card\[open\] \.cio-health-chevron/);
 });
@@ -67,7 +67,7 @@ test("CIO overview shows current-year contribution pace when the snapshot provid
   assert.match(progressCard, /On track for/);
   assert.match(progressCard, /Behind .* pace/);
   assert.match(progressCard, /Recorded invested change YTD/);
-  assert.match(progressCard, /role="progressbar"/);
+  assert.match(progressCard, /<progress/);
   assert.match(progressCard, /contributionGrowthRateBps/);
   assert.match(styles, /\.cio-contribution-card\.is-on-track/);
   assert.match(styles, /\.cio-contribution-card\.is-behind/);

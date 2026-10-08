@@ -28,10 +28,10 @@ export function CioAllocationCard({
         </div>
         <Button variant="ghost" size="sm" onClick={() => onConfigure("policy")}>Edit policy</Button>
       </header>
-      <div className="cio-segmented-control" role="group" aria-label="Allocation dimension">
+      <fieldset className="cio-segmented-control" aria-label="Allocation dimension">
         <Button variant="ghost" className={view === "asset" ? "is-active" : ""} onClick={() => setView("asset")} aria-pressed={view === "asset"}>Asset class</Button>
         <Button variant="ghost" className={view === "geography" ? "is-active" : ""} onClick={() => setView("geography")} aria-pressed={view === "geography"}>Geography</Button>
-      </div>
+      </fieldset>
       <AllocationChart
         title={view === "asset" ? "Asset class" : "Geographic"}
         buckets={buckets}

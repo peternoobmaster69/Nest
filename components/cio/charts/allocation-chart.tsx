@@ -26,6 +26,14 @@ export function AllocationChart({
         {visible.map((bucket, index) => {
           const band = bandByClass.get(bucket.key as CioPolicyBand["assetClass"]);
           const inBand = !band || (bucket.allocationBps >= band.minimumBps && bucket.allocationBps <= band.maximumBps);
+          let policyStatus = bucket.isUnknown ? <span className="is-warning">Needs classification</span> : null;
+          if (band) {
+            policyStatus = (
+              <span className={inBand ? "is-good" : "is-warning"}>
+                {inBand ? "Within" : "Outside"} {formatCioPercent(band.minimumBps)}–{formatCioPercent(band.maximumBps)} band
+              </span>
+            );
+          }
           return (
             <div className="cio-allocation-row" key={bucket.key}>
               <div className="cio-allocation-row-copy">
@@ -49,11 +57,7 @@ export function AllocationChart({
               </div>
               <div className="cio-allocation-meta">
                 <span>{formatCioMoney(bucket.valueCents, currency)}</span>
-                {band ? (
-                  <span className={inBand ? "is-good" : "is-warning"}>
-                    {inBand ? "Within" : "Outside"} {formatCioPercent(band.minimumBps)}–{formatCioPercent(band.maximumBps)} band
-                  </span>
-                ) : bucket.isUnknown ? <span className="is-warning">Needs classification</span> : null}
+                {policyStatus}
               </div>
             </div>
           );

@@ -68,8 +68,8 @@ test("temporary retirement scenario results are gated by the open scenario panel
 
 test("closing a retirement scenario resets transient results and restores default inputs", async () => {
   const card = await source("components/cio/cio-retirement-card.tsx");
-  const handler = arrowFunctionContaining(card, "setScenarioOpen(false)");
-  const closeIndex = handler.body.indexOf("setScenarioOpen(false)");
+  const handler = arrowFunctionContaining(card, "setScenarioOpen((open) => !open)");
+  const closeIndex = handler.body.indexOf("setScenarioOpen((open) => !open)");
   const mutationResetIndex = handler.body.indexOf("mutation.reset()");
 
   const assetsPath = "overview.totals.retirementIncludedAssetsCents";

@@ -259,7 +259,9 @@ test("cash-flow chart supports zoom limits, focus and pointer details, and clear
   ];
   const props = { points, formatShort: (cents) => String(cents / 100), formatFull: (cents) => `$${(cents / 100).toFixed(2)}` };
   const view = render(h(CashFlowChart, props));
-  const chart = view.getByRole("group", { name: "Cash flow over the last 12 months" });
+  const group = view.getByRole("group", { name: "Cash flow over the last 12 months" });
+  assert.equal(group.tagName, "FIELDSET");
+  const chart = group.querySelector("svg");
   assert.equal(chart.style.width, "800px");
   const zoomIn = view.getByRole("button", { name: "Zoom in cash flow months" });
   const zoomOut = view.getByRole("button", { name: "Zoom out cash flow months" });
@@ -277,6 +279,13 @@ test("cash-flow chart supports zoom limits, focus and pointer details, and clear
   assert.match(view.container.querySelector(".chart-cursor-tooltip").textContent, /AugustIn \$100\.00/);
   fireEvent.blur(august);
   assert.ok(!view.container.querySelector(".chart-cursor-tooltip"));
+  fireEvent.keyDown(august, { key: "Escape" });
+  assert.ok(!view.container.querySelector(".chart-cursor-tooltip"));
+  for (const key of ["Enter", " "]) {
+    fireEvent.keyDown(august, { key });
+    assert.match(view.container.querySelector(".chart-cursor-tooltip").textContent, /August/);
+    fireEvent.blur(august);
+  }
   fireEvent.pointerEnter(september, { clientX: 785, clientY: 80 });
   fireEvent.pointerMove(september, { clientX: 785, clientY: 90 });
   assert.match(view.container.querySelector(".chart-cursor-tooltip").textContent, /Net -\$50\.00/);
@@ -290,4 +299,14 @@ test("cash-flow chart supports zoom limits, focus and pointer details, and clear
   view.rerender(h(CashFlowChart, { ...props, points: [] }));
   assert.ok(!view.container.querySelector(".chart-cursor-tooltip"));
   assert.equal(view.container.querySelectorAll(".cash-flow-net-point").length, 0);
+});
+
+test("a dense cash-flow chart keeps its final month label while spacing intermediate labels", () => {
+  const points = Array.from({ length: 30 }, (_, index) => ({ key: `month-${index}`, label: `Month ${index}`, inflowCents: 100, outflowCents: 0, netCents: 100 }));
+  const view = render(h(CashFlowChart, { points, formatShort: String, formatFull: String }));
+  const labels = [...view.container.querySelectorAll(".cash-flow-month-label")].map((node) => node.textContent);
+  assert.equal(labels.length, 11);
+  assert.equal(labels.at(-1), "Month 29");
+  assert.ok(!labels.includes("Month 1"));
+  assert.equal(view.getAllByRole("button", { name: /^Month/ }).length, 30);
 });

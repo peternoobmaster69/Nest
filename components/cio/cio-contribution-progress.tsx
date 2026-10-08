@@ -8,7 +8,7 @@ export function CioContributionProgressCard({ overview }: Readonly<{ overview: C
 
   const onTrack = progress.status === "ON_TRACK";
   const paceAmount = Math.abs(progress.paceGapCents);
-  const progressPercentage = Math.min(100, progress.annualProgressBps / 100);
+  const progressPercentage = Math.min(100, Math.max(0, progress.annualProgressBps / 100));
   const sourceLabel = progress.targetSource === "OVERRIDE"
     ? "configured annual target"
     : "retirement-eligible recurring flows";
@@ -35,15 +35,9 @@ export function CioContributionProgressCard({ overview }: Readonly<{ overview: C
         <div><dt>Annual target</dt><dd>{formatCioMoney(progress.annualTargetCents, overview.baseCurrency)}</dd></div>
       </dl>
 
-      <div
-        className="cio-contribution-progress-track"
-        role="progressbar"
-        aria-label={`${progress.year} annual contribution progress`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(progressPercentage)}
-      >
-        <span style={{ width: `${progressPercentage}%` }} />
+      <div className="cio-contribution-progress-track">
+        <progress className="sr-only" aria-label={`${progress.year} annual contribution progress`} max={100} value={Math.round(progressPercentage)} />
+        <span style={{ width: `${progressPercentage}%` }} aria-hidden="true" />
         <i style={{ left: `${Math.min(100, progress.calendarProgressBps / 100)}%` }} aria-hidden="true" />
       </div>
       <div className="cio-contribution-meta">

@@ -312,7 +312,7 @@ export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSet
             <div className="settings-section-title">Choose workspace</div>
             <div className="settings-section-copy">All settings below apply to the selected workspace.</div>
           </div>
-          <div className="workspace-picker-options" role="group" aria-label="Available workspaces">
+          <fieldset className="workspace-picker-options" aria-label="Available workspaces">
             {(context.data?.workspaces ?? []).map((workspace) => (
               <Button
                 key={workspace.id}
@@ -325,7 +325,7 @@ export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSet
                 {workspace.name}
               </Button>
             ))}
-          </div>
+          </fieldset>
 
           <form className="workspace-create-form" onSubmit={onCreateWorkspace}>
             <Input

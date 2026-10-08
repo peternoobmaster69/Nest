@@ -57,7 +57,7 @@ export function RetirementProjectionChart({
             return `${pointIndex ? "L" : "M"} ${x(point.date)} ${y(value)}`;
           }).join(" ");
           const last = scenario.points.at(-1);
-          const lastValue = last ? (mode === "nominal" ? last.nominalCents : last.realCents) : 0;
+          const lastValue = mode === "nominal" ? (last?.nominalCents ?? 0) : (last?.realCents ?? 0);
           return (
             <g className={`cio-projection-series cio-projection-series-${index + 1}`} key={scenario.scenario}>
               <path d={path} vectorEffect="non-scaling-stroke" />
@@ -76,7 +76,7 @@ export function RetirementProjectionChart({
 
       <details className="cio-chart-table-toggle">
         <summary>View yearly projection table</summary>
-        <div className="cio-segmented-control cio-projection-table-filter" role="group" aria-label="Yearly projection scenario">
+        <fieldset className="cio-segmented-control cio-projection-table-filter" aria-label="Yearly projection scenario">
           {scenarios.map((scenario) => (
             <Button
               key={scenario.scenario}
@@ -90,7 +90,7 @@ export function RetirementProjectionChart({
               {formatCioLabel(scenario.scenario)} · {formatCioPercent(scenario.nominalReturnBps)}
             </Button>
           ))}
-        </div>
+        </fieldset>
         <div className="cio-table-scroll">
           <table className="cio-data-table">
             <caption>{formatCioLabel(tableScenario.scenario)} yearly projection using the configured {formatCioPercent(tableScenario.nominalReturnBps)} nominal return.</caption>

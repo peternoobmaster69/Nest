@@ -153,7 +153,7 @@
 .cio-severity-dot.is-info { background: var(--teal); }
 
 .cio-content-grid { min-width: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: var(--space-4); align-items: start; }
-.cio-segmented-control { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: var(--space-4); border-radius: var(--r-md); background: var(--color-surface-subtle); }
+.cio-segmented-control { min-inline-size: 0; display: inline-flex; gap: 2px; padding: 3px; margin-bottom: var(--space-4); border: 0; border-radius: var(--r-md); background: var(--color-surface-subtle); }
 .cio-segmented-control .btn { min-height: 32px; padding: 6px 12px; border: 0; border-radius: 9px; color: var(--text-tertiary); background: transparent; box-shadow: none; }
 .cio-segmented-control .btn.is-active { color: var(--text-primary); background: var(--color-surface-raised); box-shadow: var(--shadow-sm); }
 .cio-segmented-control.is-compact { flex: 0 0 auto; margin: 0; }

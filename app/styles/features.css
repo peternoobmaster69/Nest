@@ -757,6 +757,7 @@
 }
 
 .segmented-toggle {
+  min-inline-size: 0;
   display: inline-flex;
   border: 1px solid var(--border-default);
   border-radius: var(--r-sm);
@@ -2691,6 +2692,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .cash-flow-chart-wrap {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
@@ -10504,6 +10509,8 @@ html[data-modal-scroll-lock="true"] .privacy-consent-banner {
 }
 
 .workspace-picker-options {
+  min-inline-size: 0;
+  border: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

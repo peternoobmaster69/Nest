@@ -29,15 +29,15 @@ export function CashFlowChart({
   formatFull: (value: number) => string;
 }>) {
   const shellRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLFieldSetElement>(null);
   const [measuredWidth, setMeasuredWidth] = useState(0);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const tooltip = useChartCursorTooltip<CashFlowPoint>(shellRef);
 
   useEffect(() => {
-    const chartElement = chartRef.current;
-    if (!chartElement) return;
+    // The chart wrapper is always rendered before this effect runs.
+    const chartElement = chartRef.current!;
 
     const updateWidth = () => {
       setMeasuredWidth(Math.floor(chartElement.getBoundingClientRect().width));
@@ -90,9 +90,9 @@ export function CashFlowChart({
   const zoomIn = () => setZoomLevel((current) => Math.min(CASH_FLOW_MAX_ZOOM, current + CASH_FLOW_ZOOM_STEP));
   const resetZoom = () => setZoomLevel(CASH_FLOW_MIN_ZOOM);
   const setTooltipFromFocus = (index: number) => {
-    const shellElement = shellRef.current;
-    const chartElement = chartRef.current;
-    if (!shellElement || !chartElement) return;
+    // Focus events come from points inside the mounted chart wrapper.
+    const shellElement = shellRef.current!;
+    const chartElement = chartRef.current!;
 
     const shellRect = shellElement.getBoundingClientRect();
     const chartRect = chartElement.getBoundingClientRect();
@@ -141,19 +141,17 @@ export function CashFlowChart({
         </Button>
       </div>
 
-      <div ref={chartRef} className="cash-flow-chart-wrap">
+      <fieldset ref={chartRef} className="cash-flow-chart-wrap" aria-label="Cash flow over the last 12 months">
         <svg
           className="cash-flow-chart"
           style={{ width: `${chartWidth}px`, minWidth: `${chartWidth}px` }}
           viewBox={`0 0 ${chartWidth} ${CASH_FLOW_CHART_HEIGHT}`}
-          role="group"
-          aria-label="Cash flow over the last 12 months"
           onPointerLeave={clearActivePoint}
         >
-          {[top, zeroY, top + plotHeight].map((y, index) => (
+          {[["top", top], ["zero", zeroY], ["bottom", top + plotHeight]].map(([position, y]) => (
             <line
-              key={index}
-              className={index === 1 ? "cash-flow-zero-line" : "cash-flow-grid-line"}
+              key={position}
+              className={position === "zero" ? "cash-flow-zero-line" : "cash-flow-grid-line"}
               x1={left}
               x2={chartWidth - right}
               y1={y}
@@ -204,6 +202,13 @@ export function CashFlowChart({
                     setTooltipFromFocus(index);
                   }}
                   onBlur={clearActivePoint}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setActiveIndex(index);
+                      setTooltipFromFocus(index);
+                    }
+                  }}
                   onClick={(event) => {
                     setActiveIndex(index);
                     tooltip.showAtPointer(event, point);
@@ -262,7 +267,7 @@ export function CashFlowChart({
             </>
           ) : null}
         </svg>
-      </div>
+      </fieldset>
 
       {activePoint && tooltip.position ? (
         <ChartCursorTooltip position={tooltip.position}>

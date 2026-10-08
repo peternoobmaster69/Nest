@@ -25,7 +25,7 @@
 .transaction-agent-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--bg-subtle); color: var(--text-secondary); font-size: 11px; font-weight: 600; vertical-align: middle; }
 .transaction-agent-edit { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
 .transaction-agent-edit input { flex: 1 1 140px; min-width: 0; min-height: 36px; }
-.transaction-agent-toggle { display: inline-flex; gap: 4px; }
+.transaction-agent-toggle { min-inline-size: 0; display: inline-flex; gap: 4px; border: 0; }
 .transaction-agent-picker > .btn { margin-top: 8px; }
 .transaction-agent-actions > .btn-secondary { width: 100%; min-height: 40px; white-space: normal; overflow-wrap: anywhere; }
 

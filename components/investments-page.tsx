@@ -1199,7 +1199,7 @@ export function InvestmentsPage() {
               </label>
               <div className="profile-field">
                 <span>Is liquid (Available to withdraw anytime?)</span>
-                <div className="segmented-toggle inv-liquidity-toggle" role="group" aria-label="Is liquid">
+                <fieldset className="segmented-toggle inv-liquidity-toggle" aria-label="Is liquid">
                   <Button
                     type="button"
                     className={`segmented-toggle-btn inv-liquidity-toggle-btn ${isLiquid ? "is-active" : ""}`}
@@ -1216,7 +1216,7 @@ export function InvestmentsPage() {
                   >
                     No
                   </Button>
-                </div>
+                </fieldset>
               </div>
               {accountError ? <div className="profile-error">{accountError}</div> : null}
               </div>

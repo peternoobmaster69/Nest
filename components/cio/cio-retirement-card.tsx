@@ -1,15 +1,47 @@
 "use client";
 
-import { SubmitEvent, useMemo, useState } from "react";
+import { SubmitEvent, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Calculator, Info } from "lucide-react";
-import type { CioRetirementProjection, CioRetirementStatus } from "@/lib/domains/cio/types";
+import type { CioRetirementProjection, CioRetirementScenario, CioRetirementStatus } from "@/lib/domains/cio/types";
 import type { CioSnapshot, CioSetupSection } from "@/components/cio/types";
 import { RetirementProjectionChart } from "@/components/cio/charts/retirement-projection-chart";
 import { formatCioDate, formatCioMoney, moneyInputFromCents, centsFromMoneyInput } from "@/components/cio/cio-format";
 import { apiFetch, mutationFailureMessage } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/form-field";
+
+function RetirementSummary({ scenario, mode, currency }: Readonly<{
+  scenario: CioRetirementScenario;
+  mode: "nominal" | "real";
+  currency: string;
+}>) {
+  const values = mode === "real"
+    ? { fund: scenario.fundAtRetirementRealCents, income: scenario.sustainableMonthlyIncomeRealCents, gap: scenario.targetGapOrSurplusRealCents }
+    : { fund: scenario.fundAtRetirementNominalCents, income: scenario.sustainableMonthlyIncomeNominalCents, gap: scenario.targetGapOrSurplusNominalCents };
+  return (
+    <div className="cio-retirement-summary">
+      <div><span>Base fund at retirement</span><strong>{formatCioMoney(values.fund, currency)}</strong></div>
+      <div><span>Sustainable monthly income</span><strong>{formatCioMoney(values.income, currency)}</strong></div>
+      <div><span>Base target gap / surplus</span><strong className={values.gap < 0 ? "is-negative" : "is-positive"}>{formatCioMoney(values.gap, currency)}</strong></div>
+    </div>
+  );
+}
+
+function ProjectionDetails({ projection, mode, currency }: Readonly<{
+  projection: CioRetirementProjection;
+  mode: "nominal" | "real";
+  currency: string;
+}>) {
+  const baseScenario = projection.scenarios.find((scenario) => scenario.scenario === "BASE");
+  return (
+    <>
+      {baseScenario ? <RetirementSummary scenario={baseScenario} mode={mode} currency={currency} /> : null}
+      <RetirementProjectionChart scenarios={projection.scenarios} mode={mode} currency={currency} />
+      <p className="cio-assumption-note"><Info size={15} aria-hidden="true" /> Projection date {formatCioDate(projection.assumptions.asOfDate)} to {formatCioDate(projection.assumptions.retirementDate)}. This is deterministic planning, not a guarantee.</p>
+    </>
+  );
+}
 
 export function CioRetirementCard({
   overview,
@@ -42,20 +74,12 @@ export function CioRetirementCard({
   });
   const persistedProjection = overview.retirement.status === "READY" ? overview.retirement.projection : null;
   const projection = scenarioOpen && mutation.data ? mutation.data : persistedProjection;
-  const baseScenario = useMemo(() => projection?.scenarios.find((scenario) => scenario.scenario === "BASE") ?? null, [projection]);
 
   const toggleScenario = () => {
-    if (scenarioOpen) {
-      mutation.reset();
-      setAssets(savedAssets);
-      setAnnualContribution(savedAnnualContribution);
-      setScenarioOpen(false);
-      return;
-    }
     mutation.reset();
     setAssets(savedAssets);
     setAnnualContribution(savedAnnualContribution);
-    setScenarioOpen(true);
+    setScenarioOpen((open) => !open);
   };
 
   const submitScenario = (event: SubmitEvent) => {
@@ -72,25 +96,15 @@ export function CioRetirementCard({
           <p>Bear, base, and bull outcomes use your saved assumptions and current retirement assets.</p>
         </div>
         {projection ? (
-          <div className="cio-segmented-control is-compact" role="group" aria-label="Projection value basis">
+          <fieldset className="cio-segmented-control is-compact" aria-label="Projection value basis">
             <Button variant="ghost" className={mode === "real" ? "is-active" : ""} onClick={() => setMode("real")} aria-pressed={mode === "real"}>Today&apos;s money</Button>
             <Button variant="ghost" className={mode === "nominal" ? "is-active" : ""} onClick={() => setMode("nominal")} aria-pressed={mode === "nominal"}>Nominal</Button>
-          </div>
+          </fieldset>
         ) : null}
       </header>
 
       {projection ? (
-        <>
-          {baseScenario ? (
-            <div className="cio-retirement-summary">
-              <div><span>Base fund at retirement</span><strong>{formatCioMoney(mode === "real" ? baseScenario.fundAtRetirementRealCents : baseScenario.fundAtRetirementNominalCents, overview.baseCurrency)}</strong></div>
-              <div><span>Sustainable monthly income</span><strong>{formatCioMoney(mode === "real" ? baseScenario.sustainableMonthlyIncomeRealCents : baseScenario.sustainableMonthlyIncomeNominalCents, overview.baseCurrency)}</strong></div>
-              <div><span>Base target gap / surplus</span><strong className={(mode === "real" ? baseScenario.targetGapOrSurplusRealCents : baseScenario.targetGapOrSurplusNominalCents) < 0 ? "is-negative" : "is-positive"}>{formatCioMoney(mode === "real" ? baseScenario.targetGapOrSurplusRealCents : baseScenario.targetGapOrSurplusNominalCents, overview.baseCurrency)}</strong></div>
-            </div>
-          ) : null}
-          <RetirementProjectionChart scenarios={projection.scenarios} mode={mode} currency={overview.baseCurrency} />
-          <p className="cio-assumption-note"><Info size={15} aria-hidden="true" /> Projection date {formatCioDate(projection.assumptions.asOfDate)} to {formatCioDate(projection.assumptions.retirementDate)}. This is deterministic planning, not a guarantee.</p>
-        </>
+        <ProjectionDetails projection={projection} mode={mode} currency={overview.baseCurrency} />
       ) : (
         <div className="cio-empty-inline">
           <Calculator size={24} aria-hidden="true" />

@@ -12,24 +12,24 @@ function NavigationLoaderContent() {
   const searchParams = useSearchParams();
   const routeKey = `${pathname}?${searchParams.toString()}`;
   const previousRouteKey = useRef(routeKey);
-  const navigationStartedAt = useRef(0);
-  const progressInterval = useRef<number | null>(null);
-  const hideTimeout = useRef<number | null>(null);
-  const stalledTimeout = useRef<number | null>(null);
+  const navigationStartedAt = useRef<number | null>(null);
+  const progressInterval = useRef<number | undefined>(undefined);
+  const hideTimeout = useRef<number | undefined>(undefined);
+  const stalledTimeout = useRef<number | undefined>(undefined);
   const [isNavigating, setIsNavigating] = useState(false);
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const clearTimer = (timer: { current: number | null }) => {
-      if (timer.current !== null) window.clearTimeout(timer.current);
-      timer.current = null;
+    const clearTimer = (timer: { current: number | undefined }) => {
+      window.clearTimeout(timer.current);
+      timer.current = undefined;
     };
 
     const beginNavigation = () => {
-      if (navigationStartedAt.current > 0) return;
+      if (navigationStartedAt.current !== null) return;
       clearTimer(hideTimeout);
       clearTimer(stalledTimeout);
-      if (progressInterval.current !== null) window.clearInterval(progressInterval.current);
+      window.clearInterval(progressInterval.current);
 
       navigationStartedAt.current = performance.now();
       performance.clearMarks(ROUTE_START_MARK);
@@ -41,9 +41,9 @@ function NavigationLoaderContent() {
         setProgress((current) => Math.min(92, current + Math.max(1, (92 - current) * 0.16)));
       }, 180);
       stalledTimeout.current = window.setTimeout(() => {
-        navigationStartedAt.current = 0;
-        if (progressInterval.current !== null) window.clearInterval(progressInterval.current);
-        progressInterval.current = null;
+        navigationStartedAt.current = null;
+        window.clearInterval(progressInterval.current);
+        progressInterval.current = undefined;
         setIsNavigating(false);
         setProgress(0);
       }, 15_000);
@@ -67,7 +67,7 @@ function NavigationLoaderContent() {
     return () => {
       document.removeEventListener("click", onDocumentClick, true);
       window.removeEventListener("popstate", beginNavigation);
-      if (progressInterval.current !== null) window.clearInterval(progressInterval.current);
+      window.clearInterval(progressInterval.current);
       clearTimer(hideTimeout);
       clearTimer(stalledTimeout);
     };
@@ -76,14 +76,14 @@ function NavigationLoaderContent() {
   useEffect(() => {
     if (previousRouteKey.current === routeKey) return;
     previousRouteKey.current = routeKey;
-    if (navigationStartedAt.current <= 0) return;
+    if (navigationStartedAt.current === null) return;
 
     const durationMs = performance.now() - navigationStartedAt.current;
-    navigationStartedAt.current = 0;
-    if (progressInterval.current !== null) window.clearInterval(progressInterval.current);
-    progressInterval.current = null;
-    if (stalledTimeout.current !== null) window.clearTimeout(stalledTimeout.current);
-    stalledTimeout.current = null;
+    navigationStartedAt.current = null;
+    window.clearInterval(progressInterval.current);
+    progressInterval.current = undefined;
+    window.clearTimeout(stalledTimeout.current);
+    stalledTimeout.current = undefined;
 
     performance.clearMarks(ROUTE_END_MARK);
     performance.mark(ROUTE_END_MARK);
@@ -96,7 +96,7 @@ function NavigationLoaderContent() {
     hideTimeout.current = window.setTimeout(() => {
       setIsNavigating(false);
       setProgress(0);
-      hideTimeout.current = null;
+      hideTimeout.current = undefined;
     }, 180);
   }, [pathname, routeKey]);
 
@@ -105,17 +105,11 @@ function NavigationLoaderContent() {
   const displayProgress = Math.min(progress, 100);
 
   return (
-    <div
-      className="navigation-loader"
-      role="progressbar"
-      aria-label="Loading page"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(displayProgress)}
-      aria-busy={isNavigating}
-    >
+    <div className="navigation-loader">
+      <progress className="sr-only" aria-label="Loading page" max={100} value={Math.round(displayProgress)} aria-busy={isNavigating} />
       <div
         className="navigation-loader-bar"
+        aria-hidden="true"
         style={{
           transform: `translateX(${-100 + displayProgress}%)`,
           opacity: displayProgress < 100 ? 1 : 0,
