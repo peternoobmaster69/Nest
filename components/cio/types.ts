@@ -1,54 +1,49 @@
-import type { CioSnapshot } from "@/lib/domains/cio/types";
+import type {
+  CioAssetClass,
+  CioGeography,
+  CioLiquidityClass,
+  CioPortfolioRole,
+  CioRiskLevel,
+  CioClassificationStatus,
+  CioExposureDimension,
+  CioPositionSide,
+  CioFlowType,
+  CioFlowCadence,
+  CioPlanningScope,
+} from "@/lib/domains/cio/types";
 
-export type { CioSnapshot };
+export type {
+  CioSnapshot,
+  CioAssetClass,
+  CioGeography,
+  CioLiquidityClass,
+  CioPortfolioRole,
+  CioRiskLevel,
+  CioClassificationStatus,
+  CioExposureDimension,
+  CioPositionSide,
+  CioFlowType,
+  CioFlowCadence,
+  CioPlanningScope,
+} from "@/lib/domains/cio/types";
+export {
+  CIO_ASSET_CLASSES,
+  CIO_GEOGRAPHIES,
+  CIO_LIQUIDITY_CLASSES,
+  CIO_PORTFOLIO_ROLES,
+  CIO_RISK_LEVELS,
+  CIO_CLASSIFICATION_STATUSES,
+  CIO_EXPOSURE_DIMENSIONS,
+  CIO_POSITION_SIDES,
+  CIO_FLOW_TYPES,
+  CIO_FLOW_CADENCES,
+  CIO_PLANNING_SCOPES,
+} from "@/lib/domains/cio/types";
 export type {
   CioStrategyReportModel,
   CioStrategyReportSummary,
 } from "@/lib/domains/cio/report-types";
 export type { CioStrategyRecommendation } from "@/lib/domains/cio/strategy-recommendations";
-
-export const CIO_ASSET_CLASSES = [
-  "CASH",
-  "FIXED_INCOME",
-  "EQUITY",
-  "REIT",
-  "COMMODITY",
-  "PROPERTY",
-  "ALTERNATIVE",
-  "UNKNOWN",
-] as const;
-
-export const CIO_GEOGRAPHIES = [
-  "SINGAPORE",
-  "UNITED_STATES",
-  "CHINA",
-  "DEVELOPED_EX_US",
-  "EMERGING_EX_CHINA",
-  "GLOBAL",
-  "UNKNOWN",
-] as const;
-
-export const CIO_LIQUIDITY_CLASSES = ["IMMEDIATE", "LIQUID", "RESTRICTED", "LOCKED"] as const;
-export const CIO_PORTFOLIO_ROLES = ["EMERGENCY", "CORE", "STABILIZER", "SATELLITE", "GOAL", "OTHER"] as const;
-export const CIO_RISK_LEVELS = ["LOW", "MODERATE", "HIGH", "VERY_HIGH", "UNKNOWN"] as const;
-export const CIO_CLASSIFICATION_STATUSES = ["UNCLASSIFIED", "SUGGESTED", "USER_CONFIRMED"] as const;
-export const CIO_EXPOSURE_DIMENSIONS = ["ASSET_CLASS", "GEOGRAPHY", "SECURITY"] as const;
-export const CIO_POSITION_SIDES = ["ASSET", "LIABILITY"] as const;
-export const CIO_FLOW_TYPES = ["EXTERNAL_CONTRIBUTION", "INTERNAL_REALLOCATION", "EXTERNAL_WITHDRAWAL"] as const;
-export const CIO_FLOW_CADENCES = ["WEEKLY", "MONTHLY", "QUARTERLY", "ANNUAL"] as const;
-export const CIO_PLANNING_SCOPES = ["INDIVIDUAL", "HOUSEHOLD"] as const;
-
-export type CioAssetClass = (typeof CIO_ASSET_CLASSES)[number];
-export type CioGeography = (typeof CIO_GEOGRAPHIES)[number];
-export type CioLiquidityClass = (typeof CIO_LIQUIDITY_CLASSES)[number];
-export type CioPortfolioRole = (typeof CIO_PORTFOLIO_ROLES)[number];
-export type CioRiskLevel = (typeof CIO_RISK_LEVELS)[number];
-export type CioClassificationStatus = (typeof CIO_CLASSIFICATION_STATUSES)[number];
-export type CioExposureDimension = (typeof CIO_EXPOSURE_DIMENSIONS)[number];
-export type CioPositionSide = (typeof CIO_POSITION_SIDES)[number];
-export type CioFlowType = (typeof CIO_FLOW_TYPES)[number];
-export type CioFlowCadence = (typeof CIO_FLOW_CADENCES)[number];
-export type CioPlanningScope = (typeof CIO_PLANNING_SCOPES)[number];
 
 export type CioProfile = {
   id: string;

@@ -242,6 +242,13 @@ export class AskNestToolInputError extends Error {
   }
 }
 
+const comparisonPeriodProperties = {
+  period_a_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the newer or primary period." },
+  period_a_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the newer or primary period." },
+  period_b_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the comparison period." },
+  period_b_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the comparison period." },
+};
+
 const nullableString = { type: ["string", "null"] } as const;
 const ALL_CARD_STATEMENTS_HREF = "/credit-transactions?cardId=all&month=all";
 
@@ -270,10 +277,7 @@ const ASK_NEST_TOOLS: FunctionTool[] = [
       type: "object",
       additionalProperties: false,
       properties: {
-        period_a_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the newer or primary period." },
-        period_a_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the newer or primary period." },
-        period_b_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the comparison period." },
-        period_b_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the comparison period." },
+        ...comparisonPeriodProperties,
         account_name: { ...nullableString, description: "Optional account or bank name fragment, otherwise null." },
         budget_name: { ...nullableString, description: "Optional budget/sub-account name fragment, otherwise null." },
       },
@@ -465,10 +469,7 @@ const ASK_NEST_TOOLS: FunctionTool[] = [
       type: "object",
       additionalProperties: false,
       properties: {
-        period_a_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the newer or primary period." },
-        period_a_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the newer or primary period." },
-        period_b_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the comparison period." },
-        period_b_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the comparison period." },
+        ...comparisonPeriodProperties,
         account_name: { ...nullableString, description: "Optional account or bank name, including common abbreviations, otherwise null." },
       },
       required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name"],
@@ -483,10 +484,7 @@ const ASK_NEST_TOOLS: FunctionTool[] = [
       type: "object",
       additionalProperties: false,
       properties: {
-        period_a_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the newer or primary period." },
-        period_a_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the newer or primary period." },
-        period_b_start: { type: "string", description: "Inclusive YYYY-MM-DD start for the comparison period." },
-        period_b_end: { type: "string", description: "Inclusive YYYY-MM-DD end for the comparison period." },
+        ...comparisonPeriodProperties,
         account_name: { ...nullableString, description: "Optional account or bank name, otherwise null." },
       },
       required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name"],

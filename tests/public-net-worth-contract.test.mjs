@@ -7,13 +7,15 @@ const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
 
 test("public net-worth API returns total and liquid amounts", async () => {
-  const [route, payload] = await Promise.all([
+  const [route, sharing, payload] = await Promise.all([
     source("app/api/public/net-worth/[token]/route.ts"),
+    source("lib/api/public-workspace.ts"),
     source("lib/net-worth.ts"),
   ]);
 
-  assert.match(route, /publicNetWorthEnabled:\s*true/);
-  assert.match(route, /publicNetWorthToken:\s*token/);
+  assert.match(route, /load: getWorkspaceNetWorthPayload/);
+  assert.match(sharing, /publicNetWorthEnabled:\s*true/);
+  assert.match(sharing, /publicNetWorthToken:\s*token/);
   assert.match(payload, /isLiquid:\s*true/);
   assert.match(payload, /where:\s*\{ workspaceId, isActive: true, isSavings: true \}/);
   assert.match(payload, /account\.isLiquid \? \(account\.entries\[0\]\?\.currentValueCents \?\? 0\) : 0/);

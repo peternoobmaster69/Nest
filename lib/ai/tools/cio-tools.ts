@@ -85,48 +85,36 @@ export const CIO_ASK_NEST_TOOL_NAMES = [
   "plan_cio_new_money",
 ] as const;
 
+const cioAsOfParameters = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
+  },
+  required: ["as_of_date"],
+};
+
 const CIO_ASK_NEST_TOOLS: FunctionTool[] = [
   {
     type: "function",
     name: "get_cio_overview",
     description: "Get the deterministic Nest CIO overview for the authorized workspace, including asset totals, allocation, liquidity, recurring flows, retirement readiness, data completeness, and policy exceptions. This is read-only and never executes a trade or transfer.",
     strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
-      },
-      required: ["as_of_date"],
-    },
+    parameters: cioAsOfParameters,
   },
   {
     type: "function",
     name: "get_cio_policy_status",
     description: "Get the authorized workspace's configured investment-policy limits and deterministic exceptions. Use this for policy, emergency-reserve, concentration, stale-data, or rebalancing-review questions. This tool only provides decision support and never places orders.",
     strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
-      },
-      required: ["as_of_date"],
-    },
+    parameters: cioAsOfParameters,
   },
   {
     type: "function",
     name: "get_cio_strategy_recommendations",
     description: "Get read-only deterministic personalized household strategy recommendations for liquidity, allocation, contribution direction, concentration, and retirement. Recommendations use confirmed policy and execute no trade, transfer, purchase, or sale. This tool never recommends an individual security.",
     strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
-      },
-      required: ["as_of_date"],
-    },
+    parameters: cioAsOfParameters,
   },
   {
     type: "function",
@@ -165,14 +153,7 @@ const CIO_ASK_NEST_TOOLS: FunctionTool[] = [
     name: "get_cio_advisor_brief",
     description: "Get Nest's read-only deterministic CIO advisory brief: strategy status and stance, prioritized recommendations, asset-class drift against confirmed bands with currency differences, new money needed to reach every band minimum, liquidity floor shortfall and months to restore it, contribution pace with monthly equivalents, and retirement levers (required annual and monthly contribution, additional contribution, earliest funded retirement date, required base return). Use it for broad advice, strategy, what-should-I-do, trade-off, and how-far-off questions. It never executes a trade or recommends an individual security.",
     strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        as_of_date: { ...nullableDateParameter, description: "Optional YYYY-MM-DD data date, otherwise null for today." },
-      },
-      required: ["as_of_date"],
-    },
+    parameters: cioAsOfParameters,
   },
   {
     type: "function",
@@ -508,27 +489,7 @@ async function getCioStrategyRecommendations(rawArgs: unknown, context: CioToolC
     workspaceId: context.workspaceId,
     asOfDate: args.as_of_date ?? undefined,
   });
-  const recommendations = result.recommendations.map((item) => ({
-    code: item.code,
-    category: item.category,
-    severity: item.severity,
-    title: item.title,
-    action: item.action,
-    rationale: item.rationale,
-    scopeKey: item.scopeKey,
-    current: item.current?.unit === "CENTS"
-      ? { label: item.current.label, amount: money(item.current.value, result.baseCurrency) }
-      : item.current?.unit === "BPS"
-        ? { label: item.current.label, percentage: percentage(item.current.value) }
-        : item.current,
-    target: item.target?.unit === "CENTS"
-      ? { label: item.target.label, amount: money(item.target.value, result.baseCurrency) }
-      : item.target?.unit === "BPS"
-        ? { label: item.target.label, percentage: percentage(item.target.value) }
-        : item.target,
-    annualChange: money(item.annualChangeCents, result.baseCurrency),
-    requiresUserConfirmation: item.requiresUserConfirmation,
-  }));
+  const recommendations = result.recommendations.map((item) => recommendationOutput(item, result.baseCurrency));
   return {
     output: {
       ok: true,
@@ -664,7 +625,6 @@ function recommendationOutput(item: CioStrategyRecommendation, currency: string)
     current: strategyMetric(item.current, currency),
     target: strategyMetric(item.target, currency),
     annualChange: money(item.annualChangeCents, currency),
-    monthlyChangeEquivalent: money(item.annualChangeCents === null ? null : monthlyEquivalentCents(item.annualChangeCents), currency),
     requiresUserConfirmation: item.requiresUserConfirmation,
   };
 }
@@ -692,7 +652,10 @@ async function getCioAdvisorBrief(rawArgs: unknown, context: CioToolContext): Pr
       currency,
       strategyStatus: brief.strategyStatus,
       executiveStance: brief.executiveStance,
-      recommendations: brief.recommendations.map((item) => recommendationOutput(item, currency)),
+      recommendations: brief.recommendations.map((item) => ({
+        ...recommendationOutput(item, currency),
+        monthlyChangeEquivalent: money(item.annualChangeCents === null ? null : monthlyEquivalentCents(item.annualChangeCents), currency),
+      })),
       allocation: {
         policyConfirmed: brief.allocation.policyConfirmed,
         total: money(brief.allocation.totalCents, currency),

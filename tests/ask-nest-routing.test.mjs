@@ -111,6 +111,7 @@ test("application CommonJS imports and ESM evaluations select the same tools and
   const application = createRequire(import.meta.url)("../lib/ai/ask-nest-intent.mjs");
   const cases = [
     ["AAPL price and news", "/investments"],
+    ["$aapl price and headlines", "/investments"],
     ["AAPL headlines", "/investments"],
     ["AAPL close", "/investments"],
     ["Show spending on groceries", "/transactions"],
