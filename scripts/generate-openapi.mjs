@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, relative, sep } from "node:path";
 import process from "node:process";
+import ts from "typescript";
 import { z } from "zod";
 import {
   BulkImportSchema,
@@ -258,33 +259,123 @@ async function routeFiles(directory) {
 
 function openApiPath(file) {
   const directory = relative(apiRoot, resolve(file, "..")).split(sep);
-  return `/api/${directory.map((part) => {
-    const catchAll = part.match(/^\[\.\.\.(.+)]$/);
-    const dynamic = part.match(/^\[(.+)]$/);
-    return catchAll ? `{${catchAll[1]}}` : dynamic ? `{${dynamic[1]}}` : part;
-  }).join("/")}`.replace(/\/$/, "");
+  return ["/api", ...directory.filter(Boolean).map((part) => {
+    if (part.startsWith("[[...") && part.endsWith("]]")) return `{${part.slice(5, -2)}}`;
+    if (part.startsWith("[...") && part.endsWith("]")) return `{${part.slice(4, -1)}}`;
+    if (part.startsWith("[") && part.endsWith("]")) return `{${part.slice(1, -1)}}`;
+    return part;
+  })].join("/");
 }
 
-function operationFor({ method, file, source, path }) {
+function exportedNames(statement) {
+  if (ts.isExportDeclaration(statement)) {
+    if (statement.isTypeOnly || !statement.exportClause || !ts.isNamedExports(statement.exportClause)) return [];
+    return statement.exportClause.elements.filter((element) => !element.isTypeOnly).map((element) => element.name.text);
+  }
+  const modifiers = statement.modifiers ?? [];
+  if (!modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+    || modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) return [];
+  if (ts.isFunctionDeclaration(statement) && statement.name) return [statement.name.text];
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.filter((declaration) => ts.isIdentifier(declaration.name)).map((declaration) => declaration.name.text);
+  }
+  return [];
+}
+
+function routeMetadata(source, file) {
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const bodySchemas = [];
+  const parsedSchemas = [];
+  function visit(node) {
+    if (ts.isCallExpression(node)) {
+      const expression = node.expression;
+      if (ts.isIdentifier(expression) && expression.text === "parseJsonBody"
+        && node.arguments.length >= 2 && ts.isIdentifier(node.arguments[1])) bodySchemas.push(node.arguments[1].text);
+      if (ts.isPropertyAccessExpression(expression) && ["parse", "safeParse"].includes(expression.name.text)
+        && ts.isIdentifier(expression.expression) && expression.expression.text.endsWith("Schema")) parsedSchemas.push(expression.expression.text);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  return { methods: new Set(ast.statements.flatMap(exportedNames)), schemaNames: [...new Set([...bodySchemas, ...parsedSchemas])] };
+}
+
+function successStatusFor(method, path, cioContract) {
+  if (cioContract?.successStatus) return cioContract.successStatus;
+  if (!path.startsWith("/api/admin/agents")) return "200";
+  if (method === "DELETE") return "204";
+  if (method === "POST" && (path.endsWith("/examples") || path.endsWith("/fine-tuning"))) return "201";
+  return "200";
+}
+
+function operationSecurity(path) {
+  if (path === "/api/auth/{nextauth}" || path.startsWith("/api/public/") || path.startsWith("/api/passkeys/authenticate/")) return [];
+  if (path.startsWith("/api/cron/")) return [{ cronSecret: [] }];
+  return [{ sessionCookie: [] }, { secureSessionCookie: [] }];
+}
+
+function addCioContract(operation, contract) {
+  operation.summary = contract.summary;
+  operation.description = contract.sameOrigin
+    ? `Requires ${contract.role} access to the selected workspace and enforces the shared same-origin mutation check.`
+    : `Requires ${contract.role} access to the selected workspace. This operation is read-only and does not require the mutation-only same-origin check.`;
+  operation.parameters.push({ $ref: "#/components/parameters/WorkspaceIdHeader" });
+  operation.responses["404"] = { $ref: "#/components/responses/NotFound" };
+  operation["x-required-workspace-role"] = contract.role;
+  operation["x-same-origin-required"] = contract.sameOrigin;
+}
+
+function addAdminAgentContract(operation, method, path, successResponse) {
+  operation.description = "Requires the configured platform administrator. Agent configuration and curated examples are global; workspace roles do not grant administrator access.";
+  operation["x-required-admin"] = true;
+  operation["x-same-origin-required"] = method !== "GET";
+  operation.responses["404"] = { $ref: "#/components/responses/NotFound" };
+  const agentParam = operation.parameters.find((parameter) => parameter.name === "agentId");
+  if (agentParam) agentParam.schema.enum = ["ask-nest", "transaction-assistant", "smart-review"];
+  if (path.endsWith("/dataset")) {
+    operation.parameters.push({ name: "purpose", in: "query", required: false, schema: { type: "string", enum: ["TRAINING", "EVALUATION"], default: "TRAINING" } });
+    successResponse.content = { "application/x-ndjson": { schema: { type: "string" } } };
+  }
+}
+
+function addTransactionAgentContract(operation, method) {
+  operation.summary = method === "GET" ? "Restore a transaction draft" : "Draft, clarify, confirm, or cancel a transaction";
+  operation["x-required-workspace-role"] = "EDITOR";
+  operation["x-same-origin-required"] = method === "POST";
+  operation.parameters.push({ $ref: "#/components/parameters/WorkspaceIdHeader" });
+  if (method === "GET") {
+    delete operation["x-request-schemas"];
+    operation.parameters.push({ name: "draftId", in: "query", required: true, schema: { type: "string", maxLength: 191 } });
+  }
+}
+
+function addJsonRequestBody(operation, registeredSchema, cioContract) {
+  if (registeredSchema) operation["x-request-schemas"] = [registeredSchema];
+  operation.requestBody = {
+    required: true,
+    content: {
+      "application/json": {
+        schema: registeredSchema ? { $ref: `#/components/schemas/${registeredSchema}` } : { type: "object" },
+      },
+    },
+  };
+  if (cioContract && registeredSchema) {
+    operation.responses["413"] = { $ref: "#/components/responses/RequestTooLarge" };
+    operation.responses["415"] = { $ref: "#/components/responses/UnsupportedMediaType" };
+  }
+}
+
+function operationFor({ method, file, schemaNames, path }) {
   const operationKey = `${method} ${path}`;
   const cioContract = cioOperationContract[operationKey];
   const isAdminAgent = path.startsWith("/api/admin/agents");
-  const params = [...path.matchAll(/\{([^}]+)}/g)].map((match) => ({
-    name: match[1],
+  const params = path.split("/").filter((part) => part.startsWith("{") && part.endsWith("}")).map((part) => ({
+    name: part.slice(1, -1),
     in: "path",
     required: true,
     schema: { type: "string", maxLength: 191 },
   }));
-  const schemaNames = [...new Set([
-    ...[...source.matchAll(/parseJsonBody\(request,\s*([A-Za-z0-9_]+)/g)].map((match) => match[1]),
-    ...[...source.matchAll(/([A-Za-z0-9_]+Schema)\.(?:safeParse|parse)\(/g)].map((match) => match[1]),
-  ])];
-  const isPublic = path === "/api/auth/{nextauth}" ||
-    path.startsWith("/api/public/") ||
-    path.startsWith("/api/passkeys/authenticate/");
-  const isCron = path.startsWith("/api/cron/");
-  const successStatus = cioContract?.successStatus ?? (isAdminAgent && method === "DELETE" ? "204" :
-    isAdminAgent && method === "POST" && (path.endsWith("/examples") || path.endsWith("/fine-tuning")) ? "201" : "200");
+  const successStatus = successStatusFor(method, path, cioContract);
   const successResponse = { description: successStatus === "201" ? "Resource created" : "Successful response" };
   if (cioContract?.responseContentType) {
     successResponse.content = {
@@ -296,11 +387,7 @@ function operationFor({ method, file, source, path }) {
   const operation = {
     operationId: `${method.toLowerCase()}_${path.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "")}`,
     tags: [path.split("/")[2] || "api"],
-    security: isPublic
-      ? []
-      : isCron
-        ? [{ cronSecret: [] }]
-        : [{ sessionCookie: [] }, { secureSessionCookie: [] }],
+    security: operationSecurity(path),
     parameters: params,
     responses: {
       [successStatus]: successResponse,
@@ -314,16 +401,7 @@ function operationFor({ method, file, source, path }) {
     },
     "x-source-handler": relative(root, file).split(sep).join("/"),
   };
-  if (cioContract) {
-    operation.summary = cioContract.summary;
-    operation.description = cioContract.sameOrigin
-      ? `Requires ${cioContract.role} access to the selected workspace and enforces the shared same-origin mutation check.`
-      : `Requires ${cioContract.role} access to the selected workspace. This operation is read-only and does not require the mutation-only same-origin check.`;
-    operation.parameters.push({ $ref: "#/components/parameters/WorkspaceIdHeader" });
-    operation.responses["404"] = { $ref: "#/components/responses/NotFound" };
-    operation["x-required-workspace-role"] = cioContract.role;
-    operation["x-same-origin-required"] = cioContract.sameOrigin;
-  }
+  if (cioContract) addCioContract(operation, cioContract);
   if (method === "DELETE" && path === "/api/budgets/plan") {
     operation.parameters.push(
       { name: "workspaceId", in: "query", required: true, schema: { type: "string", maxLength: 191 } },
@@ -337,48 +415,12 @@ function operationFor({ method, file, source, path }) {
     );
     operation["x-request-schemas"] = ["BudgetPlanDeleteSchema"];
   }
-  if (isAdminAgent) {
-    operation.description = "Requires the configured platform administrator. Agent configuration and curated examples are global; workspace roles do not grant administrator access.";
-    operation["x-required-admin"] = true;
-    operation["x-same-origin-required"] = method !== "GET";
-    operation.responses["404"] = { $ref: "#/components/responses/NotFound" };
-    const agentParam = operation.parameters.find((parameter) => parameter.name === "agentId");
-    if (agentParam) agentParam.schema.enum = ["ask-nest", "transaction-assistant", "smart-review"];
-    if (path.endsWith("/dataset")) {
-      operation.parameters.push({ name: "purpose", in: "query", required: false, schema: { type: "string", enum: ["TRAINING", "EVALUATION"], default: "TRAINING" } });
-      successResponse.content = { "application/x-ndjson": { schema: { type: "string" } } };
-    }
-  }
+  if (isAdminAgent) addAdminAgentContract(operation, method, path, successResponse);
   const acceptsJsonBody = method === "POST" || method === "PUT" || method === "PATCH" || (isAdminAgent && method === "DELETE");
   if ((acceptsJsonBody || !cioContract) && schemaNames.length) operation["x-request-schemas"] = schemaNames;
   const registeredSchema = requestSchemaByOperation[operationKey];
-  if (path === "/api/ai/transactions") {
-    operation.summary = method === "GET" ? "Restore a transaction draft" : "Draft, clarify, confirm, or cancel a transaction";
-    operation["x-required-workspace-role"] = "EDITOR";
-    operation["x-same-origin-required"] = method === "POST";
-    operation.parameters.push({ $ref: "#/components/parameters/WorkspaceIdHeader" });
-    if (method === "GET") {
-      delete operation["x-request-schemas"];
-      operation.parameters.push({ name: "draftId", in: "query", required: true, schema: { type: "string", maxLength: 191 } });
-    }
-  }
-  if (registeredSchema && acceptsJsonBody) operation["x-request-schemas"] = [registeredSchema];
-  if (acceptsJsonBody) {
-    operation.requestBody = {
-      required: true,
-      content: {
-        "application/json": {
-          schema: registeredSchema
-            ? { $ref: `#/components/schemas/${registeredSchema}` }
-            : { type: "object" },
-        },
-      },
-    };
-    if (cioContract && registeredSchema) {
-      operation.responses["413"] = { $ref: "#/components/responses/RequestTooLarge" };
-      operation.responses["415"] = { $ref: "#/components/responses/UnsupportedMediaType" };
-    }
-  }
+  if (path === "/api/ai/transactions") addTransactionAgentContract(operation, method);
+  if (acceptsJsonBody) addJsonRequestBody(operation, registeredSchema, cioContract);
   return operation;
 }
 
@@ -387,10 +429,11 @@ const paths = {};
 for (const file of files) {
   const source = await readFile(file, "utf8");
   const path = openApiPath(file);
+  const { methods, schemaNames } = routeMetadata(source, file);
   for (const method of METHODS) {
-    if (!new RegExp(`export\\s+(?:async\\s+)?function\\s+${method}\\b|export\\s*\\{[^}]*\\b${method}\\b`, "m").test(source)) continue;
+    if (!methods.has(method)) continue;
     paths[path] ??= {};
-    paths[path][method.toLowerCase()] = operationFor({ method, file, source, path });
+    paths[path][method.toLowerCase()] = operationFor({ method, file, schemaNames, path });
   }
 }
 
