@@ -1,3 +1,4 @@
+import "@/app/styles/landing.css";
 import { LandingContact } from "@/components/landing-contact";
 import { LandingScrollMotion } from "@/components/landing-scroll-motion";
 import { LandingSignInDialog } from "@/components/landing-signin-dialog";

@@ -1,5 +1,7 @@
 "use client";
 
+import "@/app/styles/cio.css";
+
 import { useState } from "react";
 import type { CioSetupSection } from "@/components/cio/types";
 import { CioOverview } from "@/components/cio/cio-overview";

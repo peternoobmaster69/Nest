@@ -1,9 +1,13 @@
 "use client";
 
+import "@/app/styles/ask-nest.css";
+import "@/app/styles/transaction-agent.css";
+import "@/app/styles/ask-nest-mascot.css";
+
 import { suggestedQuestions } from "@/lib/ai/ask-nest-prompts";
 import { draftPlaceholder, draftSummary, TransactionAgentCard, useTransactionAgent, type AgentSession } from "@/components/transaction-agent";
 import { AskNestVisualizationView, formatAsOf, renderWithFormattedDates } from "@/components/ask-nest-visualization";
-import { couldBeTransaction, isTransactionRequest } from "@/lib/ai/transaction-agent-contracts";
+import { couldBeTransaction, isTransactionRequest } from "@/lib/ai/transaction-request";
 import { workspaceFetch } from "@/lib/workspace-client";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import Link from "next/link";

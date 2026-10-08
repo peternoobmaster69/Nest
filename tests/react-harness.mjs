@@ -1,3 +1,4 @@
+import "./register-styles.mjs";
 import { Window } from "happy-dom";
 
 export async function createReactHarness() {

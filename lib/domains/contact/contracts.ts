@@ -1,15 +1,7 @@
 import { z } from "zod";
 
-export const CONTACT_TOPICS = ["general", "hosting", "feedback", "bug"] as const;
-
-export const CONTACT_TOPIC_LABELS: Record<(typeof CONTACT_TOPICS)[number], string> = {
-  general: "General question",
-  hosting: "Hosting or self-hosting",
-  feedback: "Feedback or idea",
-  bug: "Something isn't working",
-};
-
-export const CONTACT_MESSAGE_MAX_LENGTH = 4000;
+import { CONTACT_MESSAGE_MAX_LENGTH, CONTACT_TOPICS } from "./topics";
+export { CONTACT_MESSAGE_MAX_LENGTH, CONTACT_TOPIC_LABELS, CONTACT_TOPICS } from "./topics";
 
 export const ContactRequestSchema = z.object({
   name: z.string().trim().min(1, "Enter your name.").max(120, "Name is too long."),

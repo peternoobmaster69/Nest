@@ -1,5 +1,7 @@
 "use client";
 
+import "@/app/styles/admin-agents.css";
+
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, Bot, Brain, Check, CreditCard, FlaskConical, Settings2, Sparkles } from "lucide-react";

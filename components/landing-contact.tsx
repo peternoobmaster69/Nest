@@ -10,9 +10,8 @@ import {
   CONTACT_MESSAGE_MAX_LENGTH,
   CONTACT_TOPIC_LABELS,
   CONTACT_TOPICS,
-  ContactRequestSchema,
-  type ContactRequest,
-} from "@/lib/domains/contact/contracts";
+} from "@/lib/domains/contact/topics";
+import type { ContactRequest } from "@/lib/domains/contact/contracts";
 
 type FieldErrors = Partial<Record<"name" | "email" | "topic" | "message", string>>;
 type Status = "idle" | "sending" | "sent";
@@ -74,7 +73,8 @@ export function LandingContact() {
     if (field in errors) setErrors((current) => ({ ...current, [field]: undefined }));
   };
 
-  const validate = (): FieldErrors => {
+  const validate = async (): Promise<FieldErrors> => {
+    const { ContactRequestSchema } = await import("@/lib/domains/contact/contracts");
     const next: FieldErrors = {};
     const result = ContactRequestSchema.safeParse(form);
     if (result.success) return next;
@@ -87,13 +87,15 @@ export function LandingContact() {
 
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const nextErrors = validate();
-    setErrors(nextErrors);
     setFormError(null);
-    if (Object.values(nextErrors).some(Boolean)) return;
-
     setStatus("sending");
     try {
+      const nextErrors = await validate();
+      setErrors(nextErrors);
+      if (Object.values(nextErrors).some(Boolean)) {
+        setStatus("idle");
+        return;
+      }
       const response = await fetch("/api/public/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -138,10 +140,10 @@ export function LandingContact() {
     body = (
       <form className="lp-contact-form" onSubmit={submit} noValidate>
         <div className="lp-contact-row">
-          <TextField label="Name" name="name" autoComplete="name" required maxLength={120} value={form.name} onChange={update("name")} error={errors.name} />
-          <TextField label="Email" name="email" type="email" autoComplete="email" inputMode="email" required maxLength={254} value={form.email} onChange={update("email")} error={errors.email} />
+          <TextField label="Name" name="name" autoComplete="name" required maxLength={120} value={form.name} onChange={update("name")} error={errors.name} disabled={status === "sending"} />
+          <TextField label="Email" name="email" type="email" autoComplete="email" inputMode="email" required maxLength={254} value={form.email} onChange={update("email")} error={errors.email} disabled={status === "sending"} />
         </div>
-        <SelectField label="Topic" name="topic" value={form.topic} onChange={update("topic")} error={errors.topic}>
+        <SelectField label="Topic" name="topic" value={form.topic} onChange={update("topic")} error={errors.topic} disabled={status === "sending"}>
           {CONTACT_TOPICS.map((topic) => <option key={topic} value={topic}>{CONTACT_TOPIC_LABELS[topic]}</option>)}
         </SelectField>
         <TextAreaField
@@ -151,6 +153,7 @@ export function LandingContact() {
           rows={5}
           maxLength={CONTACT_MESSAGE_MAX_LENGTH}
           value={form.message}
+          disabled={status === "sending"}
           onChange={update("message")}
           error={errors.message}
           hint={`${form.message.length}/${CONTACT_MESSAGE_MAX_LENGTH}`}
@@ -158,7 +161,7 @@ export function LandingContact() {
         {/* Honeypot: hidden from people and assistive tech; bots tend to fill it. */}
         <div className="lp-contact-trap" aria-hidden="true">
           <label htmlFor="lp-contact-website">Website</label>
-          <Input id="lp-contact-website" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={update("website")} />
+          <Input id="lp-contact-website" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={update("website")} disabled={status === "sending"} />
         </div>
         {formError ? <p className="lp-contact-error" role="alert">{formError}</p> : null}
         <div className="lp-contact-actions">

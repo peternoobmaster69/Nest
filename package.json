@@ -9,7 +9,7 @@
     "postinstall": "node scripts/patch-argparse-compatibility.mjs",
     "predev": "npm run prisma:generate",
     "dev": "node scripts/run-next-with-system-ca.mjs dev",
-    "test": "node --experimental-test-module-mocks --import tsx --import ./scripts/collect-coverage-sources.mjs --test tests/*.test.mjs",
+    "test": "node --experimental-test-module-mocks --import tsx --import ./tests/register-styles.mjs --import ./scripts/collect-coverage-sources.mjs --test tests/*.test.mjs",
     "test:coverage": "c8 --reporter=none npm test && node scripts/report-coverage.mjs",
     "coverage:check": "node scripts/sonar.mjs coverage",
     "sonar": "npm run test:coverage && npm run sonar:scan",

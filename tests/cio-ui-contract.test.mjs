@@ -139,10 +139,10 @@ test("CIO strategy reports can be generated, grouped as snapshots, and downloade
 });
 
 test("CIO charts provide readable equivalents and responsive accessible styling", async () => {
-  const [allocation, retirement, globals, styles, utilities] = await Promise.all([
+  const [allocation, retirement, page, styles, utilities] = await Promise.all([
     source("components/cio/charts/allocation-chart.tsx"),
     source("components/cio/charts/retirement-projection-chart.tsx"),
-    source("app/globals.css"),
+    source("components/cio-page.tsx"),
     source("app/styles/cio.css"),
     source("app/styles/utilities.css"),
   ]);
@@ -160,7 +160,7 @@ test("CIO charts provide readable equivalents and responsive accessible styling"
   assert.match(retirement, /<caption>/);
   assert.match(retirement, /x\(point\.date\)/);
   assert.match(retirement, /point\.date/);
-  assert.match(globals, /@import "\.\/styles\/cio\.css"/);
+  assert.match(page, /import "@\/app\/styles\/cio\.css"/);
   assert.match(styles, /@container cio \(max-width: 720px\)/);
   assert.match(utilities, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /stroke-dasharray/);
