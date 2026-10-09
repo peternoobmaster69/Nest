@@ -5,13 +5,14 @@ import { correctLedgerTransactionInPosting, createLedgerTransaction, executePost
 import { AiConfigurationError } from "./config";
 import { interpretTransactionMessage, type TransactionInterpreter } from "./transaction-agent-parser";
 import { getAgentConfiguration } from "./agent-runtime";
+import { type AgentConfiguration } from "./agent-catalog";
 import { AgentPolicyError, assertAgentCapability, assertAgentEnabled } from "./agent-policy";
 import {
   AgentEditError, agentMoney, agentToday, applyAgentEdit, applyPendingReply, normalizeAccountName, parseAgentAmount,
   parseTransactionFallback, planTransactionReview, shiftAgentDate, validAgentDate, type AgentUsage,
 } from "./transaction-agent-core";
 import {
-  EMPTY_TRANSACTION_INTENT, type AgentBudget, type AgentLastSaved, type AgentState, type AgentTransaction,
+  EMPTY_TRANSACTION_INTENT, type AgentBudget, type AgentChoice, type AgentLastSaved, type AgentPending, type AgentReview, type AgentState, type AgentTransaction,
   type TransactionAgentRequest, type TransactionAgentView, type TransactionIntent,
 } from "./transaction-agent-contracts";
 
@@ -152,36 +153,50 @@ async function findTargets(scope: Scope, intent: TransactionIntent) {
   return { rows: [], relaxed: false };
 }
 
-async function plan(scope: Scope, state: AgentState, budgets: AgentBudget[], currency: string): Promise<AgentState> {
+type DraftContext = { scope: Scope; budgets: AgentBudget[]; currency: string; configuration: AgentConfiguration };
+
+function targetSearchMessage(described: boolean, count: number, relaxed: boolean) {
+  if (!described) return "Which transaction should I correct? Here are the most recent. You can also describe it, for example “yesterday’s lunch”.";
+  if (!count) return "I couldn’t find an ordinary transaction matching that. Try a different description, date, or amount. Card payments and receivables are edited on their own pages.";
+  if (relaxed) return "I couldn’t find an exact match. Is it one of these?";
+  const overflow = count > 10 ? " These are the 10 most recent matches. Give a date or amount to narrow it down." : "";
+  return `Which one should I correct?${overflow}`;
+}
+
+function targetDescription(row: Prisma.TransactionGetPayload<{ select: typeof transactionSelect }>, budgets: AgentBudget[], currency: string) {
+  const sign = row.direction === "CREDIT" || row.direction === "Incoming" ? "+" : "−";
+  const budgetName = budgets.find((budget) => budget.id === row.budgetId)?.name ?? "Unassigned";
+  return `${row.date.toISOString().slice(0, 10)} · ${sign}${agentMoney(row.amountCents, currency)} · ${budgetName}`;
+}
+
+async function planCorrection(context: DraftContext, state: AgentState, usage: AgentUsage): Promise<AgentState> {
+  const { scope, budgets, currency } = context;
+  const intent = state.intent;
+  if (state.transactionId) {
+    const target = await loadTarget(scope, state.transactionId);
+    if (!target) return { ...state, transactionId: null, choices: [], review: null, pending: "target", message: "That transaction can’t be corrected here any more (it may have been changed, or linked to a card or receivable). Describe another one." };
+    return planTransactionReview(state, budgets, target, currency, agentToday(), usage);
+  }
+  if (intent.targetDate && !validAgentDate(intent.targetDate)) return { ...state, pending: "target", message: "What date was the original transaction? For example 2026-09-29 or “yesterday”.", choices: [], review: null };
+  if (intent.targetAmount && !parseAgentAmount(intent.targetAmount)) return { ...state, pending: "target", message: "What was the original amount? For example 10 or 10.50.", choices: [], review: null };
+  const { rows, relaxed } = await findTargets(scope, intent);
+  const described = Boolean(intent.targetQuery || intent.targetDate || intent.targetAmount);
+  // Only a single exact match for the user's description can go directly to review.
+  if (rows.length === 1 && !relaxed && described) {
+    const next = planTransactionReview({ ...state, transactionId: rows[0].id }, budgets, serializeTransaction(rows[0]), currency, agentToday(), usage);
+    return { ...next, transactionId: rows[0].id };
+  }
+  return {
+    ...state, review: null, pending: "target", message: targetSearchMessage(described, rows.length, relaxed),
+    choices: rows.slice(0, 10).map((row) => ({ kind: "transaction", id: row.id, label: row.subject, detail: targetDescription(row, budgets, currency) })),
+  };
+}
+
+async function plan(context: DraftContext, state: AgentState): Promise<AgentState> {
+  const { scope, budgets, currency } = context;
   const intent = state.intent;
   const usage = await loadUsage(scope, intent.subject ?? intent.targetQuery);
-  if (intent.operation === "UPDATE" && !intent.clarification) {
-    if (state.transactionId) {
-      const target = await loadTarget(scope, state.transactionId);
-      if (!target) return { ...state, transactionId: null, choices: [], review: null, pending: "target", message: "That transaction can’t be corrected here any more (it may have been changed, or linked to a card or receivable). Describe another one." };
-      return planTransactionReview(state, budgets, target, currency, agentToday(), usage);
-    }
-    if (intent.targetDate && !validAgentDate(intent.targetDate)) return { ...state, pending: "target", message: "What date was the original transaction? For example 2026-09-29 or “yesterday”.", choices: [], review: null };
-    if (intent.targetAmount && !parseAgentAmount(intent.targetAmount)) return { ...state, pending: "target", message: "What was the original amount? For example 10 or 10.50.", choices: [], review: null };
-    const { rows, relaxed } = await findTargets(scope, intent);
-    const described = Boolean(intent.targetQuery || intent.targetDate || intent.targetAmount);
-    // One exact match for what the person described goes straight to review, which shows the original next to the change.
-    if (rows.length === 1 && !relaxed && described) {
-      const next = planTransactionReview({ ...state, transactionId: rows[0].id }, budgets, serializeTransaction(rows[0]), currency, agentToday(), usage);
-      return { ...next, transactionId: rows[0].id };
-    }
-    const describe = (row: (typeof rows)[number]) => `${row.date.toISOString().slice(0, 10)} · ${row.direction === "CREDIT" || row.direction === "Incoming" ? "+" : "−"}${agentMoney(row.amountCents, currency)} · ${budgets.find((b) => b.id === row.budgetId)?.name ?? "Unassigned"}`;
-    const message = !described
-      ? `Which transaction should I correct? Here are the most recent. You can also describe it, for example “yesterday’s lunch”.`
-      : !rows.length
-      ? "I couldn’t find an ordinary transaction matching that. Try a different description, date, or amount. Card payments and receivables are edited on their own pages."
-      : relaxed ? "I couldn’t find an exact match. Is it one of these?"
-        : `Which one should I correct?${rows.length > 10 ? " These are the 10 most recent matches. Give a date or amount to narrow it down." : ""}`;
-    return {
-      ...state, review: null, pending: "target", message,
-      choices: rows.slice(0, 10).map((row) => ({ kind: "transaction", id: row.id, label: row.subject, detail: describe(row) })),
-    };
-  }
+  if (intent.operation === "UPDATE" && !intent.clarification) return planCorrection(context, state, usage);
   const next = planTransactionReview(state, budgets, null, currency, agentToday(), usage);
   if (next.review?.operation === "CREATE") {
     const after = next.review.after;
@@ -211,118 +226,192 @@ function mergeIntent(state: AgentState, intent: TransactionIntent, budgets: Agen
 
 type AdvanceInput = Exclude<TransactionAgentRequest, { action: "confirm" }> | { action: "refresh"; draftId: string; revision: number; notice: string };
 
+type EditInput = Extract<AdvanceInput, { action: "edit" }>;
+type DraftAction =
+  | { kind: "cancel" }
+  | { kind: "select"; choice: AgentChoice; message: string }
+  | { kind: "edit"; input: EditInput }
+  | { kind: "refresh"; message: string | null; notice: string | null }
+  | { kind: "message"; message: string };
+
+async function prepareDraft(scope: Scope, input: AdvanceInput) {
+  if (input.action === "start") {
+    const state: AgentState = { intent: { ...EMPTY_TRANSACTION_INTENT }, budgetId: null, transactionId: null, message: "Preparing your draft…", choices: [], review: null, messages: [] };
+    return prisma.transactionAgentDraft.create({ data: { ...scope, stateJson: JSON.stringify(state), expiresAt: new Date(Date.now() + DRAFT_LIFETIME_MS) } });
+  }
+  const draft = await getTransactionAgentDraft(scope, input.draftId);
+  assertEditable(draft, input.revision);
+  return draft;
+}
+
+function messageChoice(state: AgentState, message: string | null) {
+  if (!message || !state.choices.length) return null;
+  const normalized = normalizeAccountName(message);
+  const exact = state.choices.filter((choice) => normalizeAccountName(choice.label) === normalized);
+  if (exact.length === 1) return exact[0];
+  const ordinal = /^\d{1,3}$/.test(message) ? state.choices[Number(message) - 1] : null;
+  if (ordinal) return ordinal;
+  const affirmative = /^(?:y|yes|yep|yeah|yes please|ok|okay|sure|correct|that one|that's it|thats it)[.!]?$/i.test(message);
+  return affirmative && state.choices.length === 1 ? state.choices[0] : null;
+}
+
+function resolveDraftAction(input: AdvanceInput, state: AgentState): DraftAction {
+  const message = input.action === "start" || input.action === "message" ? input.message : null;
+  const selection = input.action === "select" ? input.selection : messageChoice(state, message);
+  const choice = selection && state.choices.find((option) => option.kind === selection.kind && option.id === selection.id);
+  if (selection && !choice) throw new PostingConflictError("That option is no longer available. Reload the draft.");
+  if (input.action === "cancel" || (message && /^(?:cancel|never ?mind|stop|forget it|scrap (?:it|that)|no thanks)[.!]?$/i.test(message))) return { kind: "cancel" };
+  if (choice) return { kind: "select", choice, message: message ?? choice.label };
+  if (input.action === "edit") return { kind: "edit", input };
+  if (input.action === "refresh") return { kind: "refresh", message: null, notice: input.notice };
+  if (message && /^(?:refresh|review again|refresh draft|try again)[.!]?$/i.test(message)) return { kind: "refresh", message, notice: null };
+  // The remaining validated actions are start/message, both of which require text.
+  return { kind: "message", message: message! };
+}
+
+async function applyDraftSelection(context: DraftContext, state: AgentState, action: Extract<DraftAction, { kind: "select" }>) {
+  const selection = action.choice;
+  if (selection.kind === "budget") {
+    const selectedBudget = context.budgets.find((budget) => budget.id === selection.id);
+    if (!selectedBudget) throw new PostingConflictError("That sub-account is no longer available. Reload the draft.");
+    state.budgetId = selectedBudget.id;
+    state.pickBudget = false;
+    state.intent.accountQuery = selectedBudget.name;
+    state.intent.bankQuery = selectedBudget.accountName;
+  } else state.transactionId = selection.id;
+  appendMessage(state, "user", action.message);
+  return plan(context, state);
+}
+
+function editMessage(input: EditInput) {
+  if (input.field === "budget") return "Choose a different sub-account";
+  const field = input.field === "subject" ? "description" : input.field;
+  let value = input.value;
+  if (input.field === "direction") value = input.value === "DEBIT" ? "deduct" : "add";
+  return `Change ${field} to ${value}`;
+}
+
+async function applyDraftEdit(context: DraftContext, state: AgentState, input: EditInput, previousPending: AgentPending) {
+  try {
+    state = applyAgentEdit({ ...state, pending: previousPending }, input.field, input.value);
+    appendMessage(state, "user", editMessage(input));
+    return await plan(context, state);
+  } catch (error) {
+    if (!(error instanceof AgentEditError)) throw error;
+    state = await plan(context, state);
+    state.message = `${error.message} ${state.message}`;
+    return state;
+  }
+}
+
+async function recoverInterpretation(context: DraftContext, state: AgentState, message: string, previousPending: AgentPending, error: unknown) {
+  if (error instanceof PostingConflictError || error instanceof AgentPolicyError) throw error;
+  // Simple new commands remain available during a provider outage and still require review.
+  const fallback = state.intent.operation === "CLARIFY" && !state.budgetId ? parseTransactionFallback(message) : null;
+  if (fallback) {
+    mergeIntent(state, fallback, context.budgets);
+    return plan(context, state);
+  }
+  state.pending = previousPending;
+  const unconfigured = error instanceof AiConfigurationError || (error instanceof Error && error.name === "AiConfigurationError");
+  state.message = unconfigured
+    ? "The assistant can’t understand free-form requests until the Azure AI workload is configured. Simple commands like “Deduct $10 from Transit for bus fare” still work."
+    : "I couldn’t interpret that just now. Nothing has changed. Please try again, or rephrase it as a simple command like “Deduct $10 from Transit for bus fare”.";
+  return state;
+}
+
+async function interpretDraftMessage(context: DraftContext, state: AgentState, message: string, previousPending: AgentPending, interpret: TransactionInterpreter) {
+  const { scope, budgets, currency, configuration } = context;
+  appendMessage(state, "user", message);
+  // Short answers to the current question are resolved locally.
+  const direct = applyPendingReply({ ...state, pending: previousPending }, message, agentToday(), budgets.find((budget) => budget.id === state.budgetId)?.name ?? null);
+  if (direct) {
+    state.intent = direct;
+    return plan(context, state);
+  }
+  try {
+    const intent = await interpret(message, { ...state, pending: previousPending }, scope.userId, currency, {
+      accountNames: [...new Set(budgets.map((budget) => budget.name))], bankNames: [...new Set(budgets.map((budget) => budget.accountName))], configuration,
+    });
+    mergeIntent(state, intent, budgets);
+    return await plan(context, state);
+  } catch (error) {
+    return recoverInterpretation(context, state, message, previousPending, error);
+  }
+}
+
+async function applyDraftAction(context: DraftContext, state: AgentState, action: Exclude<DraftAction, { kind: "cancel" }>, previousPending: AgentPending, interpret: TransactionInterpreter) {
+  switch (action.kind) {
+    case "select": return applyDraftSelection(context, state, action);
+    case "edit": return applyDraftEdit(context, state, action.input, previousPending);
+    case "message": return interpretDraftMessage(context, state, action.message, previousPending, interpret);
+    case "refresh": {
+      if (action.message) appendMessage(state, "user", action.message);
+      const next = await plan(context, state);
+      if (action.notice !== null) next.message = `${action.notice} ${next.message}`;
+      return next;
+    }
+  }
+}
+
+function operationCapability(operation: TransactionIntent["operation"]) {
+  if (operation === "CREATE") return "create-transactions";
+  return operation === "UPDATE" ? "correct-transactions" : null;
+}
+
+function restrictDraftCapabilities(state: AgentState, configuration: AgentConfiguration) {
+  const required = operationCapability(state.intent.operation);
+  if (!required || configuration.capabilities.includes(required)) return;
+  state.review = null;
+  state.choices = [];
+  const action = state.intent.operation === "UPDATE" ? "Correcting" : "Creating";
+  state.message = `${action} transactions is disabled by your administrator.`;
+}
+
+function draftStatus(state: AgentState) {
+  if (state.intent.operation === "CANCEL") return "CANCELLED";
+  return state.review ? "REVIEW" : "CLARIFY";
+}
+
 export async function advanceTransactionAgent(auth: Scope, input: AdvanceInput, interpret: TransactionInterpreter = interpretTransactionMessage) {
   const configuration = await getAgentConfiguration("transaction-assistant");
   if (input.action !== "cancel") assertAgentEnabled(configuration);
   const scope = toScope(auth);
-  let draft: TransactionAgentDraft;
-  if (input.action === "start") {
-    const state: AgentState = { intent: { ...EMPTY_TRANSACTION_INTENT }, budgetId: null, transactionId: null, message: "Preparing your draft…", choices: [], review: null, messages: [] };
-    draft = await prisma.transactionAgentDraft.create({ data: { ...scope, stateJson: JSON.stringify(state), expiresAt: new Date(Date.now() + DRAFT_LIFETIME_MS) } });
-  } else {
-    draft = await getTransactionAgentDraft(scope, input.draftId);
-    assertEditable(draft, input.revision);
-  }
+  const draft = await prepareDraft(scope, input);
   let state = readState(draft);
-  let selection = input.action === "select" ? input.selection : null;
-  const message = input.action === "start" || input.action === "message" ? input.message : null;
-  // Numbered replies, exact labels, and a single-choice "yes" are resolved without a model.
-  if (message && state.choices.length) {
-    const normalized = normalizeAccountName(message);
-    const exact = state.choices.filter((c) => normalizeAccountName(c.label) === normalized);
-    const ordinal = /^\d{1,3}$/.test(message) ? state.choices[Number(message) - 1] : null;
-    if (exact.length === 1) selection = exact[0];
-    else if (ordinal) selection = ordinal;
-    else if (/^(?:y|yes|yep|yeah|yes please|ok|okay|sure|correct|that one|that's it|thats it)[.!]?$/i.test(message) && state.choices.length === 1) selection = state.choices[0];
-  }
-  if (selection && !state.choices.some((c) => c.kind === selection.kind && c.id === selection.id)) throw new PostingConflictError("That option is no longer available. Reload the draft.");
-
-  const previousChoices = state.choices;
+  const action = resolveDraftAction(input, state);
   const previousPending = state.pending ?? null;
   state = { ...state, review: null, choices: [] };
-  // Invalidate the old review BEFORE a model call. Concurrent confirmation cannot save it.
+  // Reserve the revision before a provider call so the old review cannot be confirmed concurrently.
   const reserved = await prisma.transactionAgentDraft.updateMany({
     where: { id: draft.id, ...scope, revision: draft.revision, status: draft.status },
     data: { revision: { increment: 1 }, status: "CLARIFY", stateJson: JSON.stringify(state) },
   });
   if (reserved.count !== 1) throw new PostingConflictError("This draft changed. Reload it before continuing.");
   const revision = draft.revision + 1;
-  if (input.action === "cancel" || (message && /^(?:cancel|never ?mind|stop|forget it|scrap (?:it|that)|no thanks)[.!]?$/i.test(message))) {
+  if (action.kind === "cancel") {
     state.intent.operation = "CANCEL";
     state.message = "Cancelled. No transaction was changed.";
   } else {
-    const { budgets, currency } = await loadContext(scope);
-    if (input.action === "start") state.lastSaved = await loadLastSaved(scope, input.previousDraftId, budgets);
-    if (selection) {
-      if (selection.kind === "budget") {
-        const selectedBudget = budgets.find((b) => b.id === selection.id);
-        if (!selectedBudget) throw new PostingConflictError("That sub-account is no longer available. Reload the draft.");
-        state.budgetId = selectedBudget.id;
-        state.pickBudget = false;
-        state.intent.accountQuery = selectedBudget.name;
-        state.intent.bankQuery = selectedBudget.accountName;
-      } else state.transactionId = selection.id;
-      appendMessage(state, "user", message ?? `${previousChoices.find((c) => c.id === selection.id)?.label}`);
-      state = await plan(scope, state, budgets, currency);
-    } else if (input.action === "edit") {
-      try {
-        state = applyAgentEdit({ ...state, pending: previousPending }, input.field, input.value);
-        appendMessage(state, "user", input.field === "budget" ? "Choose a different sub-account" : `Change ${input.field === "subject" ? "description" : input.field} to ${input.field === "direction" ? (input.value === "DEBIT" ? "deduct" : "add") : input.value}`);
-        state = await plan(scope, state, budgets, currency);
-      } catch (error) {
-        if (!(error instanceof AgentEditError)) throw error;
-        state = await plan(scope, state, budgets, currency);
-        state.message = `${error.message} ${state.message}`;
-      }
-    } else if (input.action === "refresh" || (message && /^(?:refresh|review again|refresh draft|try again)[.!]?$/i.test(message))) {
-      if (message) appendMessage(state, "user", message);
-      state = await plan(scope, state, budgets, currency);
-      if (input.action === "refresh") state.message = `${input.notice} ${state.message}`;
-    } else if (message) {
-      appendMessage(state, "user", message);
-      // A short, obvious answer to the question just asked needs no model call.
-      const direct = applyPendingReply({ ...state, pending: previousPending }, message, agentToday(), budgets.find((b) => b.id === state.budgetId)?.name ?? null);
-      if (direct) {
-        state.intent = direct;
-        state = await plan(scope, state, budgets, currency);
-      } else {
-        try {
-          const intent = await interpret(message, { ...state, pending: previousPending }, scope.userId, currency, {
-            accountNames: [...new Set(budgets.map((b) => b.name))], bankNames: [...new Set(budgets.map((b) => b.accountName))],
-            configuration,
-          });
-          mergeIntent(state, intent, budgets);
-          state = await plan(scope, state, budgets, currency);
-        } catch (error) {
-          if (error instanceof PostingConflictError || error instanceof AgentPolicyError) throw error;
-          // Keep simple, new commands working during an AI outage. Everything still goes through review.
-          const fallback = state.intent.operation === "CLARIFY" && !state.budgetId ? parseTransactionFallback(message) : null;
-          if (fallback) {
-            mergeIntent(state, fallback, budgets);
-            state = await plan(scope, state, budgets, currency);
-          } else {
-            state.pending = previousPending;
-            const unconfigured = error instanceof AiConfigurationError || (error instanceof Error && error.name === "AiConfigurationError");
-            state.message = unconfigured
-              ? "The assistant can’t understand free-form requests until the Azure AI workload is configured. Simple commands like “Deduct $10 from Transit for bus fare” still work."
-              : "I couldn’t interpret that just now. Nothing has changed. Please try again, or rephrase it as a simple command like “Deduct $10 from Transit for bus fare”.";
-          }
-        }
-      }
-    }
+    const context = { scope, configuration, ...await loadContext(scope) };
+    if (input.action === "start") state.lastSaved = await loadLastSaved(scope, input.previousDraftId, context.budgets);
+    state = await applyDraftAction(context, state, action, previousPending, interpret);
   }
-  const requiredCapability = state.intent.operation === "CREATE" ? "create-transactions" : state.intent.operation === "UPDATE" ? "correct-transactions" : null;
-  if (requiredCapability && !configuration.capabilities.includes(requiredCapability)) {
-    state.review = null;
-    state.choices = [];
-    state.message = `${state.intent.operation === "UPDATE" ? "Correcting" : "Creating"} transactions is disabled by your administrator.`;
-  }
+  restrictDraftCapabilities(state, configuration);
   appendMessage(state, "assistant", state.message);
-  const status = state.intent.operation === "CANCEL" ? "CANCELLED" : state.review ? "REVIEW" : "CLARIFY";
-  const saved = await prisma.transactionAgentDraft.updateMany({ where: { id: draft.id, ...scope, revision, status: "CLARIFY" }, data: { stateJson: JSON.stringify(state), status } });
+  const saved = await prisma.transactionAgentDraft.updateMany({ where: { id: draft.id, ...scope, revision, status: "CLARIFY" }, data: { stateJson: JSON.stringify(state), status: draftStatus(state) } });
   if (saved.count !== 1) throw new PostingConflictError("This draft changed. Reload it before continuing.");
-  draft = await getTransactionAgentDraft(scope, draft.id);
-  return transactionAgentView(draft);
+  return transactionAgentView(await getTransactionAgentDraft(scope, draft.id));
+}
+
+function savedTransactionMessage(review: AgentReview, currency: string) {
+  if (review.before) return "Correction saved. The original and its correction are kept in the history.";
+  const after = review.after;
+  const balance = review.balances.find((budget) => budget.id === after.budgetId);
+  const verb = after.direction === "DEBIT" ? "Deducted" : "Added";
+  const preposition = after.direction === "DEBIT" ? "from" : "to";
+  const balanceMessage = balance ? `, which now has ${agentMoney(balance.afterCents, currency)}` : "";
+  return `Saved. ${verb} ${agentMoney(after.amountCents, currency)} ${preposition} ${balance?.name ?? "the sub-account"}${balanceMessage}.`;
 }
 
 export async function confirmTransactionAgent(auth: Scope, input: Extract<TransactionAgentRequest, { action: "confirm" }>) {
@@ -374,11 +463,7 @@ export async function confirmTransactionAgent(auth: Scope, input: Extract<Transa
       state.savedTransactionId = transactionId;
       state.choices = [];
       state.pending = null;
-      const balance = review.balances.find((b) => b.id === after.budgetId);
-      const verb = after.direction === "DEBIT" ? "Deducted" : "Added";
-      state.message = review.before
-        ? "Correction saved. The original and its correction are kept in the history."
-        : `Saved. ${verb} ${agentMoney(after.amountCents, currency)} ${after.direction === "DEBIT" ? "from" : "to"} ${balance?.name ?? "the sub-account"}${balance ? `, which now has ${agentMoney(balance.afterCents, currency)}` : ""}.`;
+      state.message = savedTransactionMessage(review, currency);
       if (state.intent.deferred) state.message += ` Next, you asked me to: “${state.intent.deferred}”.`;
       appendMessage(state, "assistant", state.message);
       const saved = await db.transactionAgentDraft.update({ where: { id: draft.id }, data: { status: "SAVED", stateJson: JSON.stringify(state) } });

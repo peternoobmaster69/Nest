@@ -10,6 +10,10 @@ const files = new Map();
 const calls = [];
 const logs = [];
 const databaseReads = [];
+// Keep the real functions before module mocking synchronizes the built-in exports.
+// The loader may read or write its compile cache while the mock is installed.
+const readFile = fs.readFile;
+const writeFile = fs.writeFile;
 let cases;
 let provider;
 let invocation = 0;
@@ -19,11 +23,11 @@ mock.module("node:fs/promises", { defaultExport: fs, namedExports: {
   readFile: async (file, ...options) => {
     if (String(file) === datasetUrl) return JSON.stringify(cases);
     if (files.has(String(file))) return files.get(String(file));
-    return fs.readFile(file, ...options);
+    return readFile(file, ...options);
   },
   writeFile: async (file, contents, ...options) => {
     if (String(file).startsWith("/virtual/nest-eval/")) { files.set(String(file), contents); return; }
-    return fs.writeFile(file, contents, ...options);
+    return writeFile(file, contents, ...options);
   },
 } });
 

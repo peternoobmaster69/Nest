@@ -96,7 +96,9 @@ const db = {
   },
 };
 globalThis.prisma = db;
-const { advanceTransactionAgent: advance, confirmTransactionAgent: confirm, getTransactionAgentDraft } = await import("../lib/ai/transaction-agent.ts");
+const { advanceTransactionAgent: advance, confirmTransactionAgent: confirm, getTransactionAgentDraft, transactionAgentView } = await import("../lib/ai/transaction-agent.ts");
+const { PostingConflictError } = await import("../lib/posting-service.ts");
+const { AgentPolicyError } = await import("../lib/ai/agent-policy.ts");
 // Matches what requireWorkspaceAccess returns. Extra fields must never reach Prisma queries.
 const scope = { workspaceId: "workspace", userId: "user", role: "OWNER" };
 const interpreted = (overrides) => async () => ({ ...EMPTY_TRANSACTION_INTENT, operation: "CREATE", amount: "10", direction: "DEBIT", ...overrides });
@@ -109,7 +111,8 @@ const setAgentPolicy = (overrides) => {
   const { capabilities, ...configuration } = { ...defaultAgentConfiguration("transaction-assistant"), ...overrides };
   agentConfiguration = { ...configuration, revision: 1, capabilitiesJson: JSON.stringify(capabilities), updatedAt: new Date() };
 };
-beforeEach(() => {
+beforeEach((context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-08T12:00:00Z") });
   agentConfiguration = null;
   drafts = []; transactions = []; idempotency = []; postings = []; sequence = 0;
   budgets = [{ id: "transit", accountId: "bank", name: "Transit", workspaceId: "workspace", availableCents: 10000, isActive: true }, { id: "food", accountId: "bank", name: "Food", workspaceId: "workspace", availableCents: 20000, isActive: true }];
@@ -346,3 +349,244 @@ test("choices are ordered by how this workspace used them for similar descriptio
   assert.equal(draft.choices[0].suggested, true);
   assert.equal(draft.review, null, "history never selects on its own");
 });
+
+test("draft preparation rejects unsupported workspace currencies and an oversized sub-account context", async (t) => {
+  t.mock.method(db.workspace, "findUniqueOrThrow", async ({ where }) => {
+    assert.equal(where.id, "workspace");
+    return { baseCurrency: "invalid-currency" };
+  });
+  await assert.rejects(completeDraft(), /valid workspace currency/);
+  budgets = Array.from({ length: 501 }, (_, index) => ({ ...budgets[0], id: `budget-${index}` }));
+  await assert.rejects(completeDraft(), /too many sub-accounts/);
+  assert.equal(transactions.length, 0);
+  assert.equal(postings.length, 0);
+});
+
+test("expired draft views hide actionable content but preserve saved and cancelled receipts", async () => {
+  const draft = await completeDraft();
+  const stored = drafts.find(({ id }) => id === draft.draftId);
+  stored.expiresAt = new Date(0);
+  const expired = transactionAgentView(stored);
+  assert.equal(expired.status, "EXPIRED");
+  assert.equal(expired.pending, null);
+  assert.equal(expired.review, null);
+  assert.deepEqual(expired.choices, []);
+  assert.match(expired.message, /expired/);
+  assert.deepEqual(expired.messages, draft.messages);
+  for (const status of ["SAVED", "CANCELLED"]) {
+    stored.status = status;
+    assert.equal(transactionAgentView(stored).status, status);
+  }
+});
+
+test("correction searches reject invalid original dates and amounts before selecting a transaction", async () => {
+  for (const [change, message] of [[{ targetDate: "2026-13-40" }, /What date was the original/], [{ targetAmount: "0" }, /What was the original amount/]]) {
+    const draft = await advance(scope, { action: "start", message: "Correct an old transaction" }, interpreted({ operation: "UPDATE", ...change }));
+    assert.equal(draft.pending, "target");
+    assert.equal(draft.review, null);
+    assert.match(draft.message, message);
+  }
+  assert.equal(transactions.length, 0);
+});
+
+test("unsuccessful correction searches relax useful filters and explain when nothing matches", async () => {
+  for (const target of [{ targetQuery: "Missing purchase", targetDate: "2026-09-29", targetAmount: "15" }, { targetDate: "2026-09-29", targetAmount: "15" }]) {
+    const draft = await advance(scope, { action: "start", message: "Correct an old transaction" }, interpreted({ operation: "UPDATE", ...target }));
+    assert.equal(draft.review, null);
+    assert.deepEqual(draft.choices, []);
+    assert.match(draft.message, /couldn’t find an ordinary transaction/);
+  }
+});
+
+test("large correction searches cap choices, normalize legacy credit directions, and label unassigned transactions", async () => {
+  for (let index = 0; index < 12; index++) {
+    await seedTransaction({ id: `credit-${index}`, subject: `Salary ${index}`, budgetId: index === 0 ? null : "food", direction: index === 0 ? "Incoming" : "CREDIT", amountCents: 1000, date: new Date("2026-09-29T00:00:00Z") });
+  }
+  const listed = await advance(scope, { action: "start", message: "Correct a salary" }, interpreted({ operation: "UPDATE", targetQuery: "Salary" }));
+  assert.equal(listed.choices.length, 10);
+  assert.match(listed.message, /10 most recent matches/);
+  assert.match(listed.choices[0].detail, /\+SGD\s10\.00 · Unassigned/);
+  const selected = await advance(scope, { action: "select", ...ref(listed), selection: { kind: "transaction", id: "credit-1" } }, noModel);
+  assert.equal(selected.review.before.direction, "CREDIT");
+  assert.equal(selected.review.before.id, "credit-1");
+  assert.equal(postings.length, 0);
+});
+
+test("selected correction targets that disappear return to target selection without changing money", async () => {
+  await seedTransaction({ id: "lunch", subject: "Lunch", amountCents: 1000, date: new Date("2026-09-29T00:00:00Z") });
+  const draft = await advance(scope, { action: "start", message: "Change lunch" }, interpreted({ operation: "UPDATE", targetQuery: "Lunch" }));
+  transactions = [];
+  const refreshed = await advance(scope, { action: "message", ...ref(draft), message: "refresh" }, noModel);
+  assert.equal(refreshed.review, null);
+  assert.equal(refreshed.pending, "target");
+  assert.match(refreshed.message, /can’t be corrected here any more/);
+  assert.equal(postings.length, 0);
+});
+
+test("last-saved context handles removed budgets and deleted transactions without choosing another user's data", async () => {
+  const saved = await confirm(scope, { action: "confirm", ...ref(await completeDraft()) });
+  budgets[0].isActive = false;
+  let seen;
+  const inspect = async (_message, state) => {
+    seen = state.lastSaved;
+    return { ...EMPTY_TRANSACTION_INTENT, clarification: "Describe a new request." };
+  };
+  await advance(scope, { action: "start", previousDraftId: saved.draftId, message: "What did I save?" }, inspect);
+  assert.equal(seen.transactionId, saved.savedTransactionId);
+  assert.equal(seen.budgetName, null);
+  transactions = [];
+  await advance(scope, { action: "start", previousDraftId: saved.draftId, message: "What did I save?" }, inspect);
+  assert.equal(seen, null);
+});
+
+test("exact choice labels are handled locally, and a vague yes does not choose between multiple accounts", async () => {
+  const initial = await advance(scope, { action: "start", message: "Deduct $10" }, interpreted({}));
+  const selected = await advance(scope, { action: "message", ...ref(initial), message: "Food" }, noModel);
+  assert.equal(selected.pending, "subject");
+  assert.equal(JSON.parse(drafts.find(({ id }) => id === selected.draftId).stateJson).budgetId, "food");
+  let providerCalls = 0;
+  const ambiguous = await advance(scope, { action: "start", message: "Deduct $10" }, interpreted({}));
+  const stillChoosing = await advance(scope, { action: "message", ...ref(ambiguous), message: "yes" }, async () => {
+    providerCalls++;
+    return { ...EMPTY_TRANSACTION_INTENT, clarification: "Choose which sub-account." };
+  });
+  assert.equal(providerCalls, 1);
+  assert.equal(stillChoosing.review, null);
+  assert.equal(transactions.length, 0);
+});
+
+test("removed sub-accounts cannot be selected from an earlier draft", async () => {
+  const draft = await advance(scope, { action: "start", message: "Deduct $10" }, interpreted({}));
+  budgets[0].isActive = false;
+  await assert.rejects(advance(scope, { action: "select", ...ref(draft), selection: { kind: "budget", id: "transit" } }, noModel), /sub-account is no longer available/);
+  assert.equal(transactions.length, 0);
+});
+
+test("agent hints discard invented account names and inline edits describe both direction changes", async () => {
+  let draft = await advance(scope, { action: "start", message: "Deduct $10 for bus fare" }, interpreted({ subject: "Bus fare", accountCandidates: ["Transit", "Invented account"] }));
+  const state = JSON.parse(drafts.find(({ id }) => id === draft.draftId).stateJson);
+  assert.deepEqual(state.intent.accountCandidates, ["Transit"]);
+  draft = await advance(scope, { action: "select", ...ref(draft), selection: { kind: "budget", id: "transit" } }, noModel);
+  for (const [field, value, expected] of [["subject", "Train fare", "Change description to Train fare"], ["direction", "CREDIT", "Change direction to add"], ["direction", "DEBIT", "Change direction to deduct"]]) {
+    draft = await advance(scope, { action: "edit", ...ref(draft), field, value }, noModel);
+    assert.ok(draft.messages.some(({ role, content }) => role === "user" && content === expected));
+  }
+  assert.equal(draft.review.after.subject, "Train fare");
+  assert.equal(draft.review.after.direction, "DEBIT");
+  assert.equal(transactions.length, 0);
+});
+
+test("unexpected edit-planning failures propagate after invalidating the earlier review", async (t) => {
+  const draft = await completeDraft();
+  t.mock.method(db.transaction, "groupBy", async ({ where }) => {
+    assert.equal(where.workspaceId, "workspace");
+    throw new Error("Database unavailable");
+  });
+  await assert.rejects(advance(scope, { action: "edit", ...ref(draft), field: "amount", value: "12" }, noModel), /Database unavailable/);
+  const stored = drafts.find(({ id }) => id === draft.draftId);
+  assert.equal(stored.status, "CLARIFY");
+  assert.equal(JSON.parse(stored.stateJson).review, null);
+  assert.equal(transactions.length, 0);
+});
+
+test("policy and posting errors are never replaced with an AI fallback", async () => {
+  for (const error of [new AgentPolicyError("Capability denied"), new PostingConflictError("Invalid posting context")]) {
+    await assert.rejects(advance(scope, { action: "start", message: "Deduct $10 from Transit for bus fare" }, async () => { throw error; }), (actual) => actual === error);
+  }
+  assert.equal(transactions.length, 0);
+  assert.equal(postings.length, 0);
+});
+
+test("unconfigured and non-Error provider failures preserve a useful clarification", async () => {
+  const named = Object.assign(new Error("Module boundary"), { name: "AiConfigurationError" });
+  const unavailableDraft = await advance(scope, { action: "start", message: "What about my purchase?" }, async () => { throw named; });
+  assert.match(unavailableDraft.message, /until the Azure AI workload is configured/);
+  const failed = await advance(scope, { action: "start", message: "What about my purchase?" }, async () => Promise.reject({ reason: "provider failure" }));
+  assert.match(failed.message, /couldn’t interpret/);
+  assert.equal(failed.review, null);
+});
+
+test("disabled create and correction capabilities prevent review even when the interpreter returns a valid intent", async () => {
+  setAgentPolicy({ capabilities: [] });
+  const creating = await completeDraft();
+  assert.equal(creating.review, null);
+  assert.match(creating.message, /Creating transactions is disabled/);
+  await seedTransaction({ id: "lunch", subject: "Lunch", amountCents: 1000, date: new Date("2026-09-29T00:00:00Z") });
+  const correcting = await advance(scope, { action: "start", message: "Change lunch to $12" }, interpreted({ operation: "UPDATE", amount: "12", targetQuery: "Lunch" }));
+  assert.equal(correcting.review, null);
+  assert.deepEqual(correcting.choices, []);
+  assert.match(correcting.message, /Correcting transactions is disabled/);
+  assert.equal(postings.length, 0);
+});
+
+test("revision reservation conflicts stop interpretation before any financial write", async (t) => {
+  const initial = await completeDraft();
+  let providerCalls = 0;
+  t.mock.method(db.transactionAgentDraft, "updateMany", async ({ data }) => {
+    assert.deepEqual(data.revision, { increment: 1 });
+    return { count: 0 };
+  });
+  await assert.rejects(advance(scope, { action: "message", ...ref(initial), message: "Change the amount" }, async () => { providerCalls++; return EMPTY_TRANSACTION_INTENT; }), /This draft changed/);
+  assert.equal(providerCalls, 0);
+  assert.equal(transactions.length, 0);
+});
+
+test("a draft revision changed during interpretation cannot be overwritten", async (t) => {
+  const initial = await completeDraft();
+  const update = db.transactionAgentDraft.updateMany;
+  t.mock.method(db.transactionAgentDraft, "updateMany", async (args) => args.data.revision ? update(args) : { count: 0 });
+  await assert.rejects(advance(scope, { action: "message", ...ref(initial), message: "Change the amount" }, interpreted({ accountQuery: "Transit", subject: "Bus fare", amount: "12" })), /This draft changed/);
+  const stored = drafts.find(({ id }) => id === initial.draftId);
+  assert.equal(stored.revision, initial.revision + 1);
+  assert.equal(stored.status, "CLARIFY");
+  assert.equal(JSON.parse(stored.stateJson).review, null);
+  assert.equal(transactions.length, 0);
+});
+
+test("credit receipts describe added money, and legacy reviews without balance labels still record a receipt", async () => {
+  const draft = await advance(scope, { action: "start", message: "Add $10 to Food for refund" }, interpreted({ direction: "CREDIT", accountQuery: "Food", subject: "Refund" }));
+  const stored = drafts.find(({ id }) => id === draft.draftId);
+  const state = JSON.parse(stored.stateJson);
+  state.review.balances = [];
+  stored.stateJson = JSON.stringify(state);
+  const saved = await confirm(scope, { action: "confirm", ...ref(draft) });
+  assert.match(saved.message, /Added SGD\s10\.00 to the sub-account\./);
+  assert.equal(budgets[1].availableCents, 21000);
+  assert.equal(transactions.length, 1);
+});
+
+for (const invalidation of ["status", "review"]) {
+  test(`confirmation rechecks ${invalidation} after acquiring the draft lock`, async (t) => {
+    const draft = await completeDraft();
+    const query = db.$queryRaw;
+    t.mock.method(db, "$queryRaw", async (statement) => {
+      if (statement.strings.join("").includes("FROM [TransactionAgentDraft]")) {
+        const stored = drafts.find(({ id }) => id === draft.draftId);
+        if (invalidation === "status") stored.status = "CLARIFY";
+        else {
+          const state = JSON.parse(stored.stateJson);
+          state.review = null;
+          stored.stateJson = JSON.stringify(state);
+        }
+      }
+      return query(statement);
+    });
+    await assert.rejects(confirm(scope, { action: "confirm", ...ref(draft) }), /review is no longer available/);
+    assert.equal(transactions.length, 0);
+    assert.equal(postings.length, 0);
+    assert.equal(budgets[0].availableCents, 10000);
+  });
+}
+
+for (const change of ["deleted", "changed"]) {
+  test(`correction confirmation rejects a ${change} original without a reversal`, async () => {
+    await seedTransaction({ id: "lunch", subject: "Lunch", amountCents: 1000, date: new Date("2026-09-29T00:00:00Z") });
+    const draft = await advance(scope, { action: "start", message: "Change lunch to $12" }, interpreted({ operation: "UPDATE", amount: "12", targetQuery: "Lunch" }));
+    if (change === "deleted") transactions = [];
+    else transactions[0].subject = "Lunch with a colleague";
+    await assert.rejects(confirm(scope, { action: "confirm", ...ref(draft) }), /transaction changed since you reviewed it/);
+    assert.equal(postings.length, 0);
+    assert.ok(transactions.every(({ voidedAt }) => voidedAt === null));
+    assert.equal(budgets[1].availableCents, 20000);
+  });
+}

@@ -237,7 +237,8 @@ test("cash-flow filters select the correct sub-account and reset when the chosen
     budgets: { dining: { inflowCents: 1_500, outflowCents: 500, netCents: 1_000 } },
   }] });
   const view = show();
-  const point = await view.findByRole("button", { name: /^September: In/ });
+  // This is the shell's first lazy chart import; allow for a busy full-suite worker.
+  const point = await view.findByRole("button", { name: /^September: In/ }, { timeout: 5_000 });
   assert.match(point.getAttribute("aria-label"), /130\.00/);
   const flow = view.getByRole("region", { name: "Cash flow" });
   fireEvent.click(within(flow).getByRole("button", { name: "Dining", exact: true }));
