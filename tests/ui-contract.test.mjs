@@ -217,7 +217,10 @@ test("dashboard uses one responsive overview and a clear content hierarchy", asy
 });
 
 test("transaction sub-account cards keep compact uniform geometry", async () => {
-  const component = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+  const component = (await Promise.all([
+    "components/transactions-page.tsx",
+    "components/transactions/transaction-budget-grid.tsx",
+  ].map((file) => readFile(path.join(root, file), "utf8")))).join("\n");
   const source = await readAppStyles(root);
 
   assert.match(component, /hasDisplayedDiscrepancy \? \([\s\S]*?className="tx-reconciliation"[\s\S]*?\) : null/);
@@ -858,7 +861,9 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(styles, /@media\s*\(display-mode:\s*standalone\)[\s\S]*?html,[\s\S]*?body\s*\{[^}]*height:\s*100%[^}]*min-height:\s*100%[^}]*\}[\s\S]*?\.app-shell\s*\{[^}]*height:\s*100%/s);
   assert.match(shell, /id="main-content" tabIndex=\{-1\}/);
   assert.match(shell, /aria-controls="mobile-more-menu"/);
-  assert.match(transactions, /className="budget-mini budget-mini-compact tx-account-card"[\s\S]*?role="button"[\s\S]*?aria-pressed=/);
+  const transactionBudgets = await readFile(path.join(root, "components/transactions/transaction-budget-grid.tsx"), "utf8");
+  assert.match(transactionBudgets, /<Button[^>]*className="tx-account-card-select"[^>]*aria-pressed=/);
+  assert.doesNotMatch(transactionBudgets, /role="button"/);
   assert.match(dialog, /<dialog open/);
   assert.match(dialog, /"aria-labelledby": labelledBy/);
   assert.match(navigationLoader, /performance\.measure\(ROUTE_MEASURE/);

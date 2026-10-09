@@ -12398,7 +12398,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 /* Sub-accounts collapse expander; column counts at each breakpoint are
-   mirrored in transactions-page.tsx (subAccountGridColumns). Doubled class
+   mirrored in transaction-budget-grid.tsx (columns). Doubled class
    beats the later-loaded .btn base (display: inline-flex) so margin centers. */
 .btn.tx-account-grid-more {
   display: flex;
@@ -12547,12 +12547,41 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .tx-account-card {
+  position: relative;
+  isolation: isolate;
   box-sizing: border-box;
   height: 68px;
   min-height: 68px;
   max-height: 68px;
   padding: 6px 8px;
   overflow: hidden;
+}
+
+.tx-account-card-select {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-base);
+  border: 0;
+  border-radius: inherit;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tx-account-card-select:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
+}
+
+.tx-account-card .tx-account-card-body {
+  pointer-events: none;
+}
+
+.tx-account-card .tx-subaccount-edit-btn,
+.tx-account-card .tx-account-receivable-btn {
+  position: relative;
+  z-index: var(--z-raised);
+  pointer-events: auto;
 }
 
 .tx-account-card .bm-name {
@@ -12805,7 +12834,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 @media (max-width: 1024px) {
-  /* Column count mirrored in transactions-page.tsx (subAccountGridColumns). */
+  /* Column count mirrored in transaction-budget-grid.tsx (columns). */
   .tx-account-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
@@ -12823,7 +12852,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 @media (max-width: 768px) {
-  /* Column count mirrored in transactions-page.tsx (subAccountGridColumns). */
+  /* Column count mirrored in transaction-budget-grid.tsx (columns). */
   .tx-account-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

@@ -9,7 +9,7 @@ import { useMoneyFormat } from "@/lib/use-money-format";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { SubmitEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SubmitEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -19,7 +19,7 @@ import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction, confirmMoneyChange } from "@/lib/confirm-destructive";
-import { AlertTriangle, ArrowLeftRight, Check, ChevronDown, ChevronUp, Layers3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Check, Layers3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { TransactionOperationControl } from "@/components/transactions/transaction-operation-control";
 import { TransactionMonthList } from "@/components/transactions/transaction-month-list";
 import { TransactionCorrectionDialog } from "@/components/transactions/transaction-correction-dialog";
+import { TransactionBudgetGrid } from "@/components/transactions/transaction-budget-grid";
 import { TransactionBudgetDialog } from "@/components/transactions/transaction-budget-dialog";
 import type { TransactionLineageResponse } from "@/components/transactions/transaction-lineage-panel";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
@@ -155,8 +156,6 @@ export function TransactionsPage() {
   const [bankFilterHydrated, setBankFilterHydrated] = useState(false);
   const [activeBudgetFilterId, setActiveBudgetFilterId] = useSessionState<string>("nest:view:transactions:budget", "ALL");
   const [activeGroupFilterId, setActiveGroupFilterId] = useSessionState<string>("nest:view:transactions:group", "ALL");
-  const [isSubAccountsExpanded, setIsSubAccountsExpanded] = useSessionState<boolean>("nest:view:transactions:subaccounts-expanded", false);
-  const [subAccountGridColumns, setSubAccountGridColumns] = useState(8);
   const [hydratedUrlFilterKey, setHydratedUrlFilterKey] = useState<string | null>(null);
   const urlFilterHydrated = hydratedUrlFilterKey === urlFilterKey;
   const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
@@ -180,8 +179,6 @@ export function TransactionsPage() {
   const [receivableInfoBudgetId, setReceivableInfoBudgetId] = useState<string | null>(null);
   const recentTransactionsRef = useRef<HTMLElement | null>(null);
   const subAccountsRef = useRef<HTMLElement | null>(null);
-  const subAccountsGridWrapRef = useRef<HTMLDivElement | null>(null);
-  const subAccountsGridHeightBeforeToggle = useRef<number | null>(null);
   const bankPickerRef = useRef<HTMLDivElement | null>(null);
   const transactionGroupPickerRef = useRef<HTMLDivElement | null>(null);
   const transactionGroupPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -494,46 +491,6 @@ export function TransactionsPage() {
     if (!txBankStorageKey || !bankFilterHydrated) return;
     setBrowserCookie(txBankStorageKey, selectedBankId || ALL_BANKS_FILTER);
   }, [txBankStorageKey, selectedBankId, bankFilterHydrated]);
-
-  useEffect(() => {
-    // Keep in sync with the .tx-account-grid column breakpoints in app/styles/features.css.
-    const updateColumns = () => {
-      if (window.matchMedia("(max-width: 768px)").matches) setSubAccountGridColumns(3);
-      else if (window.matchMedia("(max-width: 1024px)").matches) setSubAccountGridColumns(6);
-      else setSubAccountGridColumns(8);
-    };
-    updateColumns();
-    window.addEventListener("resize", updateColumns);
-    return () => window.removeEventListener("resize", updateColumns);
-  }, []);
-
-  const toggleSubAccountsExpanded = () => {
-    // FLIP: record the wrapper's height before React swaps the card list so
-    // the layout effect can animate from it to the post-render height.
-    subAccountsGridHeightBeforeToggle.current =
-      subAccountsGridWrapRef.current?.getBoundingClientRect().height ?? null;
-    setIsSubAccountsExpanded((v) => !v);
-  };
-
-  useLayoutEffect(() => {
-    const wrap = subAccountsGridWrapRef.current;
-    const fromHeight = subAccountsGridHeightBeforeToggle.current;
-    subAccountsGridHeightBeforeToggle.current = null;
-    if (!wrap || fromHeight === null) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const toHeight = wrap.getBoundingClientRect().height;
-    if (fromHeight === toHeight) return;
-    wrap.style.overflow = "hidden";
-    const animation = wrap.animate(
-      [{ height: `${fromHeight}px` }, { height: `${toHeight}px` }],
-      { duration: 240, easing: "ease-in-out" },
-    );
-    const clearClip = () => {
-      wrap.style.overflow = "";
-    };
-    animation.onfinish = clearClip;
-    animation.oncancel = clearClip;
-  }, [isSubAccountsExpanded]);
 
   useEffect(() => {
     if (activeBudgetFilterId === "ALL") return;
@@ -994,20 +951,6 @@ export function TransactionsPage() {
     if (!effectiveSelectedBankId) return budgets.data;
     return budgets.data.filter((b) => b.accountId === effectiveSelectedBankId);
   }, [budgets.data, effectiveSelectedBankId]);
-  const collapsedBudgetCount = subAccountGridColumns * 2 - 1; // pinned "All accounts" card fills one slot
-  const hasHiddenSubAccounts = visibleBudgets.length > collapsedBudgetCount;
-  const displayedBudgets = useMemo(() => {
-    if (isSubAccountsExpanded || !hasHiddenSubAccounts) return visibleBudgets;
-    const collapsed = visibleBudgets.slice(0, collapsedBudgetCount);
-    // Keep the active filter's card visible while collapsed (e.g. a persisted
-    // filter after reload) by pulling it into the last visible slot.
-    const activeIndex =
-      activeBudgetFilterId === "ALL" ? -1 : visibleBudgets.findIndex((b) => b.id === activeBudgetFilterId);
-    if (activeIndex >= collapsedBudgetCount) {
-      collapsed[collapsed.length - 1] = visibleBudgets[activeIndex];
-    }
-    return collapsed;
-  }, [isSubAccountsExpanded, hasHiddenSubAccounts, visibleBudgets, collapsedBudgetCount, activeBudgetFilterId]);
   const editingTransaction = useMemo(
     () => transactionList.find((tx) => tx.id === editingTxId) ?? null,
     [transactionList, editingTxId],
@@ -1734,143 +1677,19 @@ export function TransactionsPage() {
             </div>
           </div>
         ) : null}
-        <div ref={subAccountsGridWrapRef} id="tx-account-grid-wrap">
-        <div id="tx-account-grid" className="account-cards-grid tx-account-grid">
-          {/*
-            Transactions page: compact account chips with only name + amount.
-          */}
-          <div
-            className="budget-mini budget-mini-compact tx-account-card"
-            role="button"
-            tabIndex={0}
-            aria-pressed={activeBudgetFilterId === "ALL"}
-            aria-label="Show transactions from all sub-accounts"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                event.currentTarget.click();
-              }
-            }}
-            onClick={() => {
-              setActiveBudgetFilterId("ALL");
-              if (subAccountsRef.current) {
-                const rect = subAccountsRef.current.getBoundingClientRect();
-                if (rect.top > 0) {
-                  subAccountsRef.current.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
-                }
-              }
-            }}
-            style={{
-              borderColor: activeBudgetFilterId === "ALL" ? "var(--brand-500)" : undefined,
-              boxShadow: activeBudgetFilterId === "ALL" ? "var(--shadow-sm)" : undefined,
-            }}
-          >
-            <div className="tx-account-card-body">
-              <div className="bm-name" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <span aria-hidden="true">📁</span>
-                <span>All accounts</span>
-              </div>
-              <div className={`bm-amount ${getAmountToneClass(visibleBudgetTotalCents)}`}>
-                {formatCents(visibleBudgetTotalCents)}
-              </div>
-              <div className="bm-target tx-account-card-footer tx-account-card-footer-empty" aria-hidden="true">
-                —
-              </div>
-            </div>
-          </div>
-          {displayedBudgets.map((b) => (
-            <div
-              key={b.id}
-              className="budget-mini budget-mini-compact tx-account-card"
-              role="button"
-              tabIndex={0}
-              aria-pressed={activeBudgetFilterId === b.id}
-              aria-label={`Show transactions from ${b.name}`}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  event.currentTarget.click();
-                }
-              }}
-              onClick={() => {
-                setActiveBudgetFilterId(b.id);
-                if (subAccountsRef.current) {
-                  const rect = subAccountsRef.current.getBoundingClientRect();
-                  if (rect.top > 0) {
-                    subAccountsRef.current.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
-                  }
-                }
-              }}
-              style={{
-                borderColor: activeBudgetFilterId === b.id ? "var(--brand-500)" : undefined,
-                boxShadow: activeBudgetFilterId === b.id ? "var(--shadow-sm)" : undefined,
-                position: "relative",
-              }}
-            >
-              <div className="tx-account-card-body">
-                <div className="tx-account-card-head">
-                  <div className="bm-name">{b.name}</div>
-                  <Button
-                    type="button"
-                    className="bm-edit-btn tx-subaccount-edit-btn"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openEditBudgetModal(b);
-                    }}
-                    aria-label={`Edit ${b.name}`}
-                    title="Edit sub-account"
-                  >
-                    ✎
-                  </Button>
-                </div>
-                <div className={`bm-amount ${getAmountToneClass(b.availableCents)}`}>{formatCents(b.availableCents)}</div>
-                {b.receivableReservedCents && b.availableCents > 0 ? (
-                  <div className="bm-target tx-account-card-footer tx-account-card-receivable">
-                    <span>({formatCents(b.receivableReservedCents)})</span>
-                    <Button
-                      type="button"
-                      className="tx-account-receivable-btn"
-                      aria-label={`Show receivable breakdown for ${b.name}`}
-                      title="Show receivable breakdown"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setReceivableInfoBudgetId(b.id);
-                      }}
-                    >
-                      i
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="bm-target tx-account-card-footer tx-account-card-footer-empty" aria-hidden="true">
-                    —
-                  </div>
-                )}
-              </div>
-              <span
-                aria-hidden="true"
-                className="tx-account-card-icon"
-              >
-                {getBudgetIcon(b.name, b.icon)}
-              </span>
-            </div>
-          ))}
-        </div>
-        </div>
-        {hasHiddenSubAccounts ? (
-          <Button
-            type="button"
-            className="btn btn-ghost btn-sm tx-account-grid-more"
-            aria-expanded={isSubAccountsExpanded}
-            aria-controls="tx-account-grid-wrap"
-            onClick={toggleSubAccountsExpanded}
-          >
-            {isSubAccountsExpanded ? (
-              <>Show fewer <ChevronUp size={14} aria-hidden="true" /></>
-            ) : (
-              <>Show all {visibleBudgets.length} sub-accounts <ChevronDown size={14} aria-hidden="true" /></>
-            )}
-          </Button>
-        ) : null}
+        <TransactionBudgetGrid
+          budgets={visibleBudgets}
+          activeId={activeBudgetFilterId}
+          totalCents={visibleBudgetTotalCents}
+          formatAmount={formatCents}
+          onSelect={(id) => {
+            setActiveBudgetFilterId(id);
+            const section = subAccountsRef.current!;
+            if (section.getBoundingClientRect().top > 0) section.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
+          }}
+          onEdit={openEditBudgetModal}
+          onReceivables={setReceivableInfoBudgetId}
+        />
       </section>
 
       {activeBudgetFilterId !== "ALL" ? (
