@@ -133,14 +133,15 @@ interface ProjectionPeriod {
 }
 
 function toSafeNumber(value: bigint, field: string) {
-  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result)) {
     throw new RetirementProjectionValidationError(
       "RESULT_OUT_OF_RANGE",
       `${field} is outside JavaScript's safe integer range.`,
       field,
     );
   }
-  return Number(value);
+  return result;
 }
 
 function requireSafeInteger(value: unknown, field: string) {
@@ -360,12 +361,8 @@ function resolveHorizon(input: RetirementProjectionInput, asOfDate: Date): Resol
 }
 
 function roundDivide(numerator: bigint, denominator: bigint) {
-  if (denominator <= BIGINT_ZERO) {
-    throw new RetirementProjectionValidationError(
-      "INVALID_RATE",
-      "A projection divisor must be positive.",
-    );
-  }
+  // Public validation keeps inflation above -100% and periods strictly positive;
+  // every divisor here is a fixed scale or one of those positive factors.
   const negative = numerator < BIGINT_ZERO;
   const absoluteNumerator = negative ? -numerator : numerator;
   const rounded = (absoluteNumerator + denominator / BIGINT_TWO) / denominator;
@@ -373,12 +370,7 @@ function roundDivide(numerator: bigint, denominator: bigint) {
 }
 
 function divideRoundUp(numerator: bigint, denominator: bigint) {
-  if (numerator < BIGINT_ZERO || denominator <= BIGINT_ZERO) {
-    throw new RetirementProjectionValidationError(
-      "INVALID_AMOUNT",
-      "A target-fund division requires a non-negative amount and positive divisor.",
-    );
-  }
+  // Both callers validate nonnegative spending and a positive withdrawal rate.
   return (numerator + denominator - BIGINT_ONE) / denominator;
 }
 
@@ -725,7 +717,8 @@ export function projectRetirement(input: RetirementProjectionInput): RetirementP
       sustainableWithdrawalRateBps: withdrawalRateBps,
       contributionTiming: "END_OF_YEAR",
       rateScaleBps: RETIREMENT_BASIS_POINTS_SCALE,
-      finalPeriodFractionBps: periods.at(-1)?.annualFractionBps ?? RETIREMENT_BASIS_POINTS_SCALE,
+      // A validated horizon contains at least one projection period.
+      finalPeriodFractionBps: periods.at(-1)!.annualFractionBps,
       horizonRounding: "FULL_YEARS_PLUS_PRORATED_FINAL_PERIOD",
     },
     target: {

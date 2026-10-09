@@ -17,6 +17,75 @@ export function differenceInUtcDays(later: Date, earlier: Date) {
   return Math.max(0, Math.floor((laterDay - earlierDay) / DAY_MS));
 }
 
+function assessValuation(investment: CioQualityInvestment, asOfDate: Date, staleAfterDays: number, warnings: CioDataQualityWarning[]) {
+  const setupHref = `/investments?accountId=${encodeURIComponent(investment.id)}`;
+  if (!investment.latestValuationDate) {
+    warnings.push({
+      code: "MISSING_VALUATION",
+      severity: "CRITICAL",
+      message: "An investment has no valuation on or before the data date and is excluded from money totals.",
+      entityId: investment.id,
+      setupHref,
+    });
+    return 0;
+  }
+  const currentValueCents = investment.currentValueCents;
+  const isNegative = currentValueCents !== null && currentValueCents < 0;
+  if (isNegative) {
+    warnings.push({
+      code: "NEGATIVE_VALUATION",
+      severity: "CRITICAL",
+      message: "An investment has a negative current valuation. It remains in the financial-asset total but is excluded from allocation, liquidity, and retirement assets until reviewed.",
+      entityId: investment.id,
+      setupHref,
+      actual: { unit: "CENTS", value: currentValueCents },
+      threshold: { unit: "CENTS", value: 0 },
+    });
+  }
+  const ageDays = differenceInUtcDays(asOfDate, investment.latestValuationDate);
+  if (ageDays > staleAfterDays) {
+    warnings.push({
+      code: "STALE_VALUATION",
+      severity: "WARNING",
+      message: `An investment valuation is ${ageDays} days old; the configured freshness limit is ${staleAfterDays} days.`,
+      entityId: investment.id,
+      setupHref,
+      actual: { unit: "DAYS", value: ageDays },
+      threshold: { unit: "DAYS", value: staleAfterDays },
+    });
+  }
+  return Number(!isNegative);
+}
+
+function assessClassification(investment: CioQualityInvestment, warnings: CioDataQualityWarning[]) {
+  let earned = 0;
+  if (investment.hasConfirmedProfile) earned += 1;
+  else warnings.push({
+    code: "UNCLASSIFIED_INVESTMENT",
+    severity: "WARNING",
+    message: "An investment does not have a user-confirmed CIO classification.",
+    entityId: investment.id,
+    setupHref: `/cio?setup=investment&investmentId=${encodeURIComponent(investment.id)}`,
+  });
+  if (investment.hasAssetClassExposure) earned += 1;
+  else warnings.push({
+    code: "UNKNOWN_EXPOSURE",
+    severity: "WARNING",
+    message: "An investment does not have a complete known asset-class exposure and remains wholly or partly under UNKNOWN.",
+    entityId: investment.id,
+    setupHref: `/cio?setup=exposures&investmentId=${encodeURIComponent(investment.id)}`,
+  });
+  if (investment.hasGeographyExposure) earned += 1;
+  else warnings.push({
+    code: "UNKNOWN_EXPOSURE",
+    severity: "WARNING",
+    message: "An investment does not have a complete known geography exposure and remains wholly or partly under UNKNOWN.",
+    entityId: investment.id,
+    setupHref: `/cio?setup=exposures&investmentId=${encodeURIComponent(investment.id)}`,
+  });
+  return earned;
+}
+
 export function assessCioDataQuality(params: {
   asOfDate: Date;
   investments: readonly CioQualityInvestment[];
@@ -78,66 +147,9 @@ export function assessCioDataQuality(params: {
 
   for (const investment of params.investments) {
     possible += 4;
-    if (investment.latestValuationDate) {
-      valuationDates.push(investment.latestValuationDate);
-      const ageDays = differenceInUtcDays(params.asOfDate, investment.latestValuationDate);
-      if (investment.currentValueCents !== null && investment.currentValueCents < 0) {
-        warnings.push({
-          code: "NEGATIVE_VALUATION",
-          severity: "CRITICAL",
-          message: "An investment has a negative current valuation. It remains in the financial-asset total but is excluded from allocation, liquidity, and retirement assets until reviewed.",
-          entityId: investment.id,
-          setupHref: `/investments?accountId=${encodeURIComponent(investment.id)}`,
-          actual: { unit: "CENTS", value: investment.currentValueCents },
-          threshold: { unit: "CENTS", value: 0 },
-        });
-      } else {
-        earned += 1;
-      }
-      if (ageDays > params.staleAfterDays) {
-        warnings.push({
-          code: "STALE_VALUATION",
-          severity: "WARNING",
-          message: `An investment valuation is ${ageDays} days old; the configured freshness limit is ${params.staleAfterDays} days.`,
-          entityId: investment.id,
-          setupHref: `/investments?accountId=${encodeURIComponent(investment.id)}`,
-          actual: { unit: "DAYS", value: ageDays },
-          threshold: { unit: "DAYS", value: params.staleAfterDays },
-        });
-      }
-    } else {
-      warnings.push({
-        code: "MISSING_VALUATION",
-        severity: "CRITICAL",
-        message: "An investment has no valuation on or before the data date and is excluded from money totals.",
-        entityId: investment.id,
-        setupHref: `/investments?accountId=${encodeURIComponent(investment.id)}`,
-      });
-    }
-    if (investment.hasConfirmedProfile) earned += 1;
-    else warnings.push({
-      code: "UNCLASSIFIED_INVESTMENT",
-      severity: "WARNING",
-      message: "An investment does not have a user-confirmed CIO classification.",
-      entityId: investment.id,
-      setupHref: `/cio?setup=investment&investmentId=${encodeURIComponent(investment.id)}`,
-    });
-    if (investment.hasAssetClassExposure) earned += 1;
-    else warnings.push({
-      code: "UNKNOWN_EXPOSURE",
-      severity: "WARNING",
-      message: "An investment does not have a complete known asset-class exposure and remains wholly or partly under UNKNOWN.",
-      entityId: investment.id,
-      setupHref: `/cio?setup=exposures&investmentId=${encodeURIComponent(investment.id)}`,
-    });
-    if (investment.hasGeographyExposure) earned += 1;
-    else warnings.push({
-      code: "UNKNOWN_EXPOSURE",
-      severity: "WARNING",
-      message: "An investment does not have a complete known geography exposure and remains wholly or partly under UNKNOWN.",
-      entityId: investment.id,
-      setupHref: `/cio?setup=exposures&investmentId=${encodeURIComponent(investment.id)}`,
-    });
+    if (investment.latestValuationDate) valuationDates.push(investment.latestValuationDate);
+    earned += assessValuation(investment, params.asOfDate, params.staleAfterDays, warnings);
+    earned += assessClassification(investment, warnings);
   }
 
   for (const id of params.duplicatePlanningPositionIds ?? []) {
@@ -159,7 +171,8 @@ export function assessCioDataQuality(params: {
     });
   }
 
-  const completenessBps = possible === 0 ? 0 : Math.round((earned * 10_000) / possible);
+  // The household profile and policy always contribute two possible points.
+  const completenessBps = Math.round((earned * 10_000) / possible);
   const orderedDates = valuationDates.toSorted((left, right) => left.getTime() - right.getTime());
   return {
     completenessBps,

@@ -181,6 +181,11 @@ const policyInclude = {
   geographyLimits: { orderBy: { geography: "asc" as const } },
 };
 
+function confirmationTimestamp(value: string | null | undefined) {
+  if (value == null) return value;
+  return new Date();
+}
+
 export async function getCioPolicy(workspaceId: string, db: CioDb = prisma) {
   return db.cioInvestmentPolicy.findUnique({ where: { workspaceId }, include: policyInclude });
 }
@@ -194,9 +199,7 @@ export async function upsertCioPolicy(
     const { assetClassBands, geographyLimits, ...scalarInput } = input;
     const scalarData = {
       ...scalarInput,
-      confirmedAt: scalarInput.confirmedAt === undefined
-        ? undefined
-        : scalarInput.confirmedAt === null ? null : new Date(),
+      confirmedAt: confirmationTimestamp(scalarInput.confirmedAt),
     };
     const policy = await tx.cioInvestmentPolicy.upsert({
       where: { workspaceId: params.workspaceId },

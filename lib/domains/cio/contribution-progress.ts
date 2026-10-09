@@ -23,6 +23,11 @@ function safeNumber(value: bigint, field: string) {
   return Number(value);
 }
 
+function annualProgress(actual: bigint, target: bigint) {
+  if (target > BigInt(0)) return Number(roundedRatio(actual * BigInt(10_000), target));
+  return actual >= BigInt(0) ? 10_000 : 0;
+}
+
 export function calculateCioContributionProgress(params: {
   asOfDate: Date;
   actualYtdCents: number;
@@ -44,9 +49,7 @@ export function calculateCioContributionProgress(params: {
   const expected = roundedRatio(target * BigInt(elapsedDays), BigInt(daysInYear));
   const paceGap = actual - expected;
   const remaining = target > actual ? target - actual : BigInt(0);
-  const annualProgressBps = target > BigInt(0)
-    ? Number(roundedRatio(actual * BigInt(10_000), target))
-    : actual >= BigInt(0) ? 10_000 : 0;
+  const annualProgressBps = annualProgress(actual, target);
   const calendarProgressBps = Number(roundedRatio(
     BigInt(elapsedDays) * BigInt(10_000),
     BigInt(daysInYear),

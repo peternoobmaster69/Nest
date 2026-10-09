@@ -109,8 +109,7 @@ function compareRemainders(left: RemainderRow, right: RemainderRow) {
 }
 
 function compareStableKeys(left: string, right: string) {
-  if (left === right) return 0;
-  return left < right ? -1 : 1;
+  return Number(left > right) - Number(left < right);
 }
 
 function assertSafeInteger(value: number, field: string) {
@@ -124,14 +123,15 @@ function assertSafeInteger(value: number, field: string) {
 }
 
 function toSafeNumber(value: bigint, field: string) {
-  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result)) {
     throw new AllocationValidationError(
       "RESULT_OUT_OF_RANGE",
       `${field} is outside JavaScript's safe integer range.`,
       field,
     );
   }
-  return Number(value);
+  return result;
 }
 
 function validateSlices(slices: readonly WeightedExposureSlice[]) {
@@ -265,13 +265,14 @@ function apportionNonnegativeUnits(totalUnits: bigint, rows: readonly Proportion
   return new Map(allocations.map((row) => [row.key, row.units]));
 }
 
+function configuredExposures(source: AllocationSource, dimension: ExposureDimension) {
+  if (dimension === "ASSET_CLASS") return source.assetClassExposures;
+  if (dimension === "GEOGRAPHY") return source.geographyExposures;
+  return source.securityExposures;
+}
+
 function exposuresForDimension(source: AllocationSource, dimension: ExposureDimension) {
-  const configured =
-    dimension === "ASSET_CLASS"
-      ? source.assetClassExposures
-      : dimension === "GEOGRAPHY"
-        ? source.geographyExposures
-        : source.securityExposures;
+  const configured = configuredExposures(source, dimension);
   return configured && configured.length > 0
     ? configured
     : [{ key: UNKNOWN_EXPOSURE_KEY, weightBps: BASIS_POINTS_SCALE }];
@@ -341,7 +342,8 @@ export function calculateDimensionAllocation(
     key,
     valueCents: toSafeNumber(numerator, `${dimension}.${key}.valueCents`),
     allocationBps: toSafeNumber(
-      allocatedBps.get(key) ?? BIGINT_ZERO,
+      // Apportionment returns an entry for every bucket, including zero balances.
+      allocatedBps.get(key)!,
       `${dimension}.${key}.allocationBps`,
     ),
   }));

@@ -108,14 +108,15 @@ function assertSafeInteger(value: number, field: string) {
 }
 
 function toSafeNumber(value: bigint, field: string) {
-  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result)) {
     throw new CashflowValidationError(
       "RESULT_OUT_OF_RANGE",
       `${field} is outside JavaScript's safe integer range.`,
       field,
     );
   }
-  return Number(value);
+  return result;
 }
 
 function parseDate(value: CashflowDateInput | null | undefined, field: string) {
@@ -196,6 +197,19 @@ function validateFlow(flow: RecurringFlow, index?: number) {
       `${prefix}.includeInRetirementProjection`,
     );
   }
+  validateFlowEndpoints(flow, prefix);
+  const start = flow.startDate == null ? null : parseDate(flow.startDate, `${prefix}.startDate`);
+  const end = flow.endDate == null ? null : parseDate(flow.endDate, `${prefix}.endDate`);
+  if (start && end && start.getTime() > end.getTime()) {
+    throw new CashflowValidationError(
+      "INVALID_DATE_RANGE",
+      `${prefix}.startDate cannot be after endDate.`,
+      prefix,
+    );
+  }
+}
+
+function validateFlowEndpoints(flow: RecurringFlow, prefix: string) {
   if (flow.sourceAccountId && flow.sourceInvestmentId) {
     throw new CashflowValidationError(
       "INVALID_FLOW",
@@ -234,15 +248,6 @@ function validateFlow(flow: RecurringFlow, index?: number) {
     );
   }
 
-  const start = flow.startDate == null ? null : parseDate(flow.startDate, `${prefix}.startDate`);
-  const end = flow.endDate == null ? null : parseDate(flow.endDate, `${prefix}.endDate`);
-  if (start && end && start.getTime() > end.getTime()) {
-    throw new CashflowValidationError(
-      "INVALID_DATE_RANGE",
-      `${prefix}.startDate cannot be after endDate.`,
-      prefix,
-    );
-  }
 }
 
 export function annualizeRecurringAmount(amountCents: number, cadence: RecurringFlowCadence) {
@@ -331,6 +336,11 @@ function finalizeTotals(totals: MutableFlowTotals, field: string): AnnualizedFlo
   };
 }
 
+function newWealthImpact(type: RecurringFlowType, annualizedCents: number) {
+  if (type === "EXTERNAL_CONTRIBUTION") return annualizedCents;
+  return type === "EXTERNAL_WITHDRAWAL" ? -annualizedCents : 0;
+}
+
 export function summarizeRecurringFlows(
   flows: readonly RecurringFlow[],
   asOfInput: CashflowDateInput | RecurringFlowSummaryOptions,
@@ -354,12 +364,7 @@ export function summarizeRecurringFlows(
 
     const annualizedCents = annualizeRecurringAmount(flow.amountCents, flow.cadence);
     const active = isRecurringFlowActiveAsOf(flow, asOf);
-    const newWealthImpactCents =
-      flow.type === "EXTERNAL_CONTRIBUTION"
-        ? annualizedCents
-        : flow.type === "EXTERNAL_WITHDRAWAL"
-          ? -annualizedCents
-          : 0;
+    const newWealthImpactCents = newWealthImpact(flow.type, annualizedCents);
     if (active) {
       addToTotals(activeTotals, flow.type, annualizedCents);
       if (flow.includeInRetirementProjection) {
@@ -382,15 +387,7 @@ export function summarizeRecurringFlows(
     });
   }
 
-  sourceBreakdown.sort((left, right) => {
-    if (left.id === right.id) {
-      return 0;
-    }
-    if (left.id < right.id) {
-      return -1;
-    }
-    return 1;
-  });
+  sourceBreakdown.sort((left, right) => Number(left.id > right.id) - Number(left.id < right.id));
   const active = finalizeTotals(activeTotals, "active");
   const retirementEligible = finalizeTotals(retirementTotals, "retirementEligible");
   return {
