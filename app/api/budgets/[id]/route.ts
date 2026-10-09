@@ -1,5 +1,6 @@
+import { runSecureApiRoute } from "@/lib/api-security";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -13,7 +14,7 @@ const UpdateBudgetSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update budget" }, async () => {
     const { id } = await params;
     const parsed = UpdateBudgetSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -36,17 +37,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
 
     return NextResponse.json(updated);
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to update budget", message }, { status: 500 });
-  }
+  });
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to delete budget" }, async () => {
     const { id } = await params;
 
     const existing = await prisma.budgetEnvelope.findUnique({
@@ -61,11 +56,5 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
     await prisma.budgetEnvelope.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to delete budget", message }, { status: 500 });
-  }
+  });
 }

@@ -1,22 +1,13 @@
+import { runSecureApiRoute } from "@/lib/api-security";
 import { CorrectTransactionSchema } from "@/lib/domains/ledger/transaction-contracts";
-import {
-  correctLedgerTransaction,
-  getIdempotencyKey,
-  PostingConflictError,
-} from "@/lib/domains/ledger";
+import { correctLedgerTransaction, getIdempotencyKey } from "@/lib/domains/ledger";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-const CORRECTION_VALIDATION_ERRORS = new Set([
-  "A transaction group requires a selected sub-account.",
-  "Selected sub-account does not belong to this transaction account.",
-  "Selected group does not belong to this sub-account.",
-]);
-
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to correct transaction" }, async () => {
     const { id } = await params;
     const parsed = CorrectTransactionSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -50,17 +41,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       postingGroupId: posting.postingGroupId,
       replayed: posting.replayed,
     });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof PostingConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (CORRECTION_VALIDATION_ERRORS.has(message)) {
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-    return NextResponse.json({ error: "Failed to correct transaction", message }, { status: 500 });
-  }
+  });
 }

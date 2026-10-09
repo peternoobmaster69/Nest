@@ -1,7 +1,8 @@
+import { ApiRequestError, runSecureApiRoute } from "@/lib/api-security";
 import { prisma } from "@/lib/prisma";
 import { getSmartReviewFingerprint, isSmartReviewGeneratedAtFresh } from "@/lib/ai/smart-review";
-import { claimCreditCardTransaction, createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { claimCreditCardTransaction, createLedgerTransaction, executePosting, getIdempotencyKey } from "@/lib/domains/ledger";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -44,8 +45,62 @@ const CreditTxnAccountingSchema = z.discriminatedUnion("action", [
   }
 });
 
+type AccountingInput = z.infer<typeof CreditTxnAccountingSchema>;
+
+async function validateSmartReview(data: AccountingInput, workspaceId: string, userId: string, transactionId: string) {
+  if (!data.smartReviewGeneratedAt) return;
+  if (!isSmartReviewGeneratedAtFresh(data.smartReviewGeneratedAt)) {
+    throw new ApiRequestError(409, "This Smart Review suggestion expired. Refresh suggestions before approving it.");
+  }
+  const currentFingerprint = await getSmartReviewFingerprint({ workspaceId, userId, transactionId });
+  if (currentFingerprint !== data.smartReviewFingerprint) {
+    throw new ApiRequestError(409, "This Smart Review suggestion is stale. Refresh suggestions before approving it.");
+  }
+}
+
+async function resolveDestination(workspaceId: string, data: Extract<AccountingInput, { action: "DEDUCT" }>, sourceBudgetId: string) {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
+  });
+  const accountId = data.destinationAccountId ?? workspace?.receivableDefaultAccountId;
+  const budgetId = data.destinationBudgetId ?? workspace?.receivableDefaultBudgetId;
+  if (!accountId && !budgetId) return null;
+  if (!accountId || !budgetId) {
+    throw new ApiRequestError(400, "Select both destination account and destination sub account.");
+  }
+  const destination = await prisma.budgetEnvelope.findFirst({
+    where: { id: budgetId, workspaceId, accountId, isActive: true, account: { kind: "BANK", isActive: true } },
+    select: { id: true, accountId: true },
+  });
+  if (!destination) throw new ApiRequestError(400, "Selected destination sub account is invalid.");
+  if (destination.id === sourceBudgetId) {
+    throw new ApiRequestError(400, "Source and destination sub accounts must be different.");
+  }
+  return { accountId: destination.accountId, budgetId: destination.id };
+}
+
+async function resolveReceivableSource(data: Extract<AccountingInput, { action: "RECEIVABLE" }>) {
+  if (!data.accountId && !data.budgetId) return null;
+  if (!data.accountId || !data.budgetId) {
+    throw new ApiRequestError(400, "Select both deduction account and subaccount.");
+  }
+  const account = await prisma.financialAccount.findFirst({
+    where: { id: data.accountId, kind: "BANK", isActive: true },
+    select: { id: true, workspaceId: true },
+  });
+  if (!account) throw new ApiRequestError(400, "Selected deduction account is invalid.");
+  await requireWorkspaceAccess(account.workspaceId, "EDITOR");
+  const budget = await prisma.budgetEnvelope.findFirst({
+    where: { id: data.budgetId, workspaceId: account.workspaceId, accountId: account.id, isActive: true },
+    select: { id: true },
+  });
+  if (!budget) throw new ApiRequestError(400, "Selected deduction subaccount is invalid.");
+  return { workspaceId: account.workspaceId, accountId: account.id, budgetId: budget.id };
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to account for credit transaction" }, async () => {
     const { id } = await params;
     const parsed = CreditTxnAccountingSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -73,25 +128,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { userId, workspaceId } = await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
     const idempotencyKey = getIdempotencyKey(request, `credit-account:${existing.id}`);
 
-    if (parsed.data.smartReviewFingerprint && parsed.data.smartReviewGeneratedAt) {
-      if (!isSmartReviewGeneratedAtFresh(parsed.data.smartReviewGeneratedAt)) {
-        return NextResponse.json(
-          { error: "This Smart Review suggestion expired. Refresh suggestions before approving it." },
-          { status: 409 },
-        );
-      }
-      const currentFingerprint = await getSmartReviewFingerprint({
-        workspaceId,
-        userId,
-        transactionId: existing.id,
-      });
-      if (!currentFingerprint || currentFingerprint !== parsed.data.smartReviewFingerprint) {
-        return NextResponse.json(
-          { error: "This Smart Review suggestion is stale. Refresh suggestions before approving it." },
-          { status: 409 },
-        );
-      }
-    }
+    await validateSmartReview(parsed.data, workspaceId, userId, existing.id);
+
+    const operation = {
+      workspaceId,
+      operation: "CREDIT_TRANSACTION_ACCOUNT",
+      idempotencyKey,
+      actorUserId: userId,
+      sourceType: "CREDIT_CARD_TRANSACTION",
+      sourceId: existing.id,
+      request: { creditCardTransactionId: existing.id, ...parsed.data },
+    };
 
     if (parsed.data.action === "DEDUCT") {
       const account = await prisma.financialAccount.findFirst({
@@ -120,49 +167,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: "Selected sub account is invalid." }, { status: 400 });
       }
 
-      // Fetch workspace to get the receivable default subaccount
-      const workspace = await prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { receivableDefaultAccountId: true, receivableDefaultBudgetId: true },
-      });
-
-      const destinationAccountId = parsed.data.destinationAccountId ?? workspace?.receivableDefaultAccountId;
-      const destinationBudgetId = parsed.data.destinationBudgetId ?? workspace?.receivableDefaultBudgetId;
-      let destination:
-        | { accountId: string; accountName: string; budgetId: string; budgetName: string }
-        | null = null;
-      if (destinationAccountId || destinationBudgetId) {
-        if (!destinationAccountId || !destinationBudgetId) {
-          return NextResponse.json({ error: "Select both destination account and destination sub account." }, { status: 400 });
-        }
-        const selectedDestination = await prisma.budgetEnvelope.findFirst({
-          where: {
-            id: destinationBudgetId,
-            workspaceId,
-            accountId: destinationAccountId,
-            isActive: true,
-            account: { kind: "BANK", isActive: true },
-          },
-          select: {
-            id: true,
-            name: true,
-            accountId: true,
-            account: { select: { name: true } },
-          },
-        });
-        if (!selectedDestination) {
-          return NextResponse.json({ error: "Selected destination sub account is invalid." }, { status: 400 });
-        }
-        if (selectedDestination.id === budget.id) {
-          return NextResponse.json({ error: "Source and destination sub accounts must be different." }, { status: 400 });
-        }
-        destination = {
-          accountId: selectedDestination.accountId,
-          accountName: selectedDestination.account.name,
-          budgetId: selectedDestination.id,
-          budgetName: selectedDestination.name,
-        };
-      }
+      const destination = await resolveDestination(workspaceId, parsed.data, budget.id);
 
       // Pre-capture values to avoid accessing inside transaction
       const {
@@ -174,15 +179,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         creditCard: { cardName, last4Digit },
       } = existing;
 
-      const posting = await executePosting({
-        workspaceId,
-        operation: "CREDIT_TRANSACTION_ACCOUNT",
-        idempotencyKey,
-        actorUserId: userId,
-        sourceType: "CREDIT_CARD_TRANSACTION",
-        sourceId: creditCardTxnId,
-        request: { creditCardTransactionId: creditCardTxnId, ...parsed.data },
-      }, async (db, postingGroupId) => {
+      const posting = await executePosting(operation, async (db, postingGroupId) => {
           await claimCreditCardTransaction(db, creditCardTxnId);
 
           // Create DEBIT transaction from the selected subaccount
@@ -257,62 +254,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const receivablePayload = parsed.data;
-    let sourceAccount:
-      | {
-          id: string;
-          workspaceId: string;
-        }
-      | null = null;
-    let sourceBudget:
-      | {
-          id: string;
-        }
-      | null = null;
+    const source = await resolveReceivableSource(receivablePayload);
 
-    if (receivablePayload.accountId || receivablePayload.budgetId) {
-      if (!receivablePayload.accountId || !receivablePayload.budgetId) {
-        return NextResponse.json({ error: "Select both deduction account and subaccount." }, { status: 400 });
-      }
-
-      const account = await prisma.financialAccount.findFirst({
-        where: {
-          id: receivablePayload.accountId,
-          kind: "BANK",
-          isActive: true,
-        },
-        select: { id: true, workspaceId: true },
-      });
-      if (!account) {
-        return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
-      }
-      await requireWorkspaceAccess(account.workspaceId, "EDITOR");
-
-      const budget = await prisma.budgetEnvelope.findFirst({
-        where: {
-          id: receivablePayload.budgetId,
-          workspaceId: account.workspaceId,
-          accountId: account.id,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      if (!budget) {
-        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
-      }
-
-      sourceAccount = account;
-      sourceBudget = budget;
-    }
-
-    const posting = await executePosting({
-      workspaceId,
-      operation: "CREDIT_TRANSACTION_ACCOUNT",
-      idempotencyKey,
-      actorUserId: userId,
-      sourceType: "CREDIT_CARD_TRANSACTION",
-      sourceId: existing.id,
-      request: { creditCardTransactionId: existing.id, ...parsed.data },
-    }, async (db, postingGroupId) => {
+    const posting = await executePosting(operation, async (db, postingGroupId) => {
       await claimCreditCardTransaction(db, existing.id);
       const receivable = await db.receivable.create({
         data: {
@@ -323,11 +267,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           transactionDate: receivablePayload.transactionDate ? new Date(receivablePayload.transactionDate) : null,
           remarkTogether: receivablePayload.remarks?.trim() || `Created from ${existing.creditCard.cardName} ••${existing.creditCard.last4Digit}`,
           notes: receivablePayload.notes,
-          accountId: sourceAccount?.workspaceId === workspaceId ? sourceAccount.id : null,
-          budgetId: sourceAccount?.workspaceId === workspaceId ? sourceBudget?.id : null,
-          sourceWorkspaceId: sourceAccount?.workspaceId,
-          sourceAccountId: sourceAccount?.id,
-          sourceBudgetId: sourceBudget?.id,
+          accountId: source?.workspaceId === workspaceId ? source.accountId : null,
+          budgetId: source?.workspaceId === workspaceId ? source.budgetId : null,
+          sourceWorkspaceId: source?.workspaceId,
+          sourceAccountId: source?.accountId,
+          sourceBudgetId: source?.budgetId,
           status: "OPEN",
         },
         select: { id: true },
@@ -347,14 +291,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       postingGroupId: posting.postingGroupId,
       replayed: posting.replayed,
     });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof PostingConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to account for credit transaction", message }, { status: 500 });
-  }
+  });
 }

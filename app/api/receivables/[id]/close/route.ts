@@ -1,14 +1,8 @@
+import { runSecureApiRoute } from "@/lib/api-security";
 import { prisma } from "@/lib/prisma";
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
-import {
-  claimReceivable,
-  createLedgerTransaction,
-  createPostingGroupRecord,
-  executePosting,
-  getIdempotencyKey,
-  PostingConflictError,
-} from "@/lib/domains/ledger";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { claimReceivable, createLedgerTransaction, createPostingGroupRecord, executePosting, getIdempotencyKey } from "@/lib/domains/ledger";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -17,13 +11,14 @@ const CloseReceivableSchema = z.object({
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to close receivable" }, async () => {
     const { id } = await params;
-    let body = {};
+    const raw = await request.text();
+    let body: unknown;
     try {
-      body = await request.json();
+      body = raw.trim() ? JSON.parse(raw) : {};
     } catch {
-      // Empty body is fine
+      return NextResponse.json({ error: "Request body must contain valid JSON" }, { status: 400 });
     }
     const parsed = CloseReceivableSchema.safeParse(body);
     if (!parsed.success) {
@@ -245,14 +240,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       postingGroupId: posting.postingGroupId,
       replayed: posting.replayed,
     });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof PostingConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to close receivable", message }, { status: 500 });
-  }
+  });
 }

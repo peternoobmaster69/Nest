@@ -73,11 +73,11 @@ test("monthly budget confirmation's claim state is permitted by the database", a
 
 test("cross-workspace receivables keep source aliases out of local composite foreign keys", async () => {
   const route = await read("app/api/credit-transactions/[id]/accounting/route.ts");
-  assert.match(route, /accountId: sourceAccount\?\.workspaceId === workspaceId \? sourceAccount\.id : null/);
-  assert.match(route, /budgetId: sourceAccount\?\.workspaceId === workspaceId \? sourceBudget\?\.id : null/);
-  assert.match(route, /sourceWorkspaceId: sourceAccount\?\.workspaceId/);
-  assert.match(route, /sourceAccountId: sourceAccount\?\.id/);
-  assert.match(route, /sourceBudgetId: sourceBudget\?\.id/);
+  assert.match(route, /accountId: source\?\.workspaceId === workspaceId \? source\.accountId : null/);
+  assert.match(route, /budgetId: source\?\.workspaceId === workspaceId \? source\.budgetId : null/);
+  assert.match(route, /sourceWorkspaceId: source\?\.workspaceId/);
+  assert.match(route, /sourceAccountId: source\?\.accountId/);
+  assert.match(route, /sourceBudgetId: source\?\.budgetId/);
 });
 
 test("the consolidated retention route covers security and operational records", async () => {

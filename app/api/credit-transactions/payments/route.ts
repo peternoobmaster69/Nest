@@ -1,7 +1,8 @@
+import { runSecureApiRoute } from "@/lib/api-security";
 import { applyBudgetAvailableDelta } from "@/lib/budget-ledger";
 import { createLedgerTransaction, executePosting, getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -13,7 +14,7 @@ const CreateCreditCardPaymentSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to create credit card payment" }, async () => {
     const { userId, workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
     const parsed = CreateCreditCardPaymentSchema.safeParse(await request.json());
 
@@ -188,25 +189,18 @@ export async function POST(request: Request) {
       return {
         bankTransactionId: bankTransaction.id,
         paymentTransaction,
+        outstandingAmountCents: currentOutstandingCents - amountCents,
       };
     });
 
+    const { outstandingAmountCents: savedOutstanding, ...paymentResult } = posting.result;
     return NextResponse.json({
       ok: true,
       paidAmountCents: amountCents,
-      outstandingAmountCents: outstandingAmountCents - amountCents,
-      ...posting.result,
+      outstandingAmountCents: savedOutstanding ?? outstandingAmountCents - amountCents,
+      ...paymentResult,
       postingGroupId: posting.postingGroupId,
       replayed: posting.replayed,
     });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof PostingConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to create credit card payment", message }, { status: 500 });
-  }
+  });
 }

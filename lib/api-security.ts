@@ -10,6 +10,7 @@ import {
   type WorkspaceRole,
 } from "@/lib/workspace-auth";
 import { logEvent } from "@/lib/observability/logger";
+import { PostingConflictError, PostingValidationError } from "@/lib/posting-errors";
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024;
 
@@ -108,6 +109,12 @@ function knownApiErrorResponse(error: unknown, requestId: string) {
   if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
     const code = error instanceof ApiRequestError ? error.code : apiErrorCodeForStatus(error.status);
     return Response.json({ error: error.message, code, requestId }, { status: error.status });
+  }
+  if (error instanceof PostingConflictError) {
+    return Response.json({ error: error.message, code: "CONFLICT", requestId }, { status: 409 });
+  }
+  if (error instanceof PostingValidationError) {
+    return Response.json({ error: error.message, code: "INVALID_REQUEST", requestId }, { status: 400 });
   }
   if (error instanceof ZodError) {
     return Response.json(

@@ -1,5 +1,6 @@
+import { ApiRequestError, runSecureApiRoute } from "@/lib/api-security";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { staleWriteResponse } from "@/lib/concurrency";
@@ -19,8 +20,46 @@ const UpdateReceivableSchema = z.object({
   budgetId: z.string().nullable().optional(),
 });
 
+async function resolveSourceWorkspace(data: z.infer<typeof UpdateReceivableSchema>) {
+  let sourceWorkspaceId: string | null | undefined;
+  if (data.accountId != null) {
+    const account = await prisma.financialAccount.findUnique({
+      where: { id: data.accountId },
+      select: { id: true, workspaceId: true, kind: true, isActive: true },
+    });
+    if (account?.kind !== "BANK" || !account.isActive) {
+      throw new ApiRequestError(400, "Selected deduction account is invalid.");
+    }
+    await requireWorkspaceAccess(account.workspaceId, "EDITOR");
+    sourceWorkspaceId = account.workspaceId;
+  } else if (data.accountId === null) {
+    sourceWorkspaceId = null;
+  }
+
+  if (data.budgetId != null) {
+    if (data.accountId == null || !sourceWorkspaceId) {
+      throw new ApiRequestError(400, "Selected deduction subaccount is invalid.");
+    }
+    const budget = await prisma.budgetEnvelope.findFirst({
+      where: { id: data.budgetId, workspaceId: sourceWorkspaceId, accountId: data.accountId, isActive: true },
+      select: { id: true },
+    });
+    if (!budget) throw new ApiRequestError(400, "Selected deduction subaccount is invalid.");
+  }
+  return sourceWorkspaceId;
+}
+
+function localReference(value: string | null | undefined, sourceWorkspaceId: string | null | undefined, workspaceId: string) {
+  if (value === undefined) return undefined;
+  return sourceWorkspaceId === workspaceId ? value : null;
+}
+
+function transactionDate(value: string | null | undefined) {
+  return value == null ? value : new Date(value);
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update receivable" }, async () => {
     const { id } = await params;
     const parsed = UpdateReceivableSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -37,38 +76,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
-    let sourceWorkspaceId: string | null | undefined = undefined;
-    if (parsed.data.accountId !== undefined && parsed.data.accountId !== null) {
-      const account = await prisma.financialAccount.findUnique({
-        where: { id: parsed.data.accountId },
-        select: { id: true, workspaceId: true, kind: true, isActive: true },
-      });
-      if (account?.kind !== "BANK" || !account.isActive) {
-        return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
-      }
-      await requireWorkspaceAccess(account.workspaceId, "EDITOR");
-      sourceWorkspaceId = account.workspaceId;
-    } else if (parsed.data.accountId === null) {
-      sourceWorkspaceId = null;
-    }
-
-    if (parsed.data.budgetId !== undefined && parsed.data.budgetId !== null) {
-      if (parsed.data.accountId === undefined || parsed.data.accountId === null || !sourceWorkspaceId) {
-        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
-      }
-      const budget = await prisma.budgetEnvelope.findFirst({
-        where: {
-          id: parsed.data.budgetId,
-          workspaceId: sourceWorkspaceId,
-          accountId: parsed.data.accountId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      if (!budget) {
-        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
-      }
-    }
+    const sourceWorkspaceId = await resolveSourceWorkspace(parsed.data);
 
     const result = await prisma.receivable.updateMany({
       where: { id, updatedAt: new Date(parsed.data.expectedUpdatedAt) },
@@ -76,29 +84,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         title: parsed.data.title,
         amountCents: parsed.data.amountCents,
         date: parsed.data.date ? new Date(parsed.data.date) : undefined,
-        transactionDate:
-          parsed.data.transactionDate === undefined
-            ? undefined
-            : parsed.data.transactionDate === null
-              ? null
-              : new Date(parsed.data.transactionDate),
+        transactionDate: transactionDate(parsed.data.transactionDate),
         remarkTogether: parsed.data.remarks,
         notes: parsed.data.notes,
         status: parsed.data.status,
         isFamily: parsed.data.isFamily,
         isMom: parsed.data.isMom,
-        accountId:
-          parsed.data.accountId === undefined
-            ? undefined
-            : sourceWorkspaceId === existing.workspaceId
-              ? parsed.data.accountId
-              : null,
-        budgetId:
-          parsed.data.budgetId === undefined
-            ? undefined
-            : sourceWorkspaceId === existing.workspaceId
-              ? parsed.data.budgetId
-              : null,
+        accountId: localReference(parsed.data.accountId, sourceWorkspaceId, existing.workspaceId),
+        budgetId: localReference(parsed.data.budgetId, sourceWorkspaceId, existing.workspaceId),
         sourceWorkspaceId,
         sourceAccountId: parsed.data.accountId,
         sourceBudgetId: parsed.data.budgetId,
@@ -110,17 +103,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     const updated = await prisma.receivable.findUniqueOrThrow({ where: { id } });
     return NextResponse.json(updated);
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to update receivable", message }, { status: 500 });
-  }
+  });
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to delete receivable" }, async () => {
     const { id } = await params;
 
     const existing = await prisma.receivable.findUnique({
@@ -135,11 +122,5 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
     await prisma.receivable.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to delete receivable", message }, { status: 500 });
-  }
+  });
 }

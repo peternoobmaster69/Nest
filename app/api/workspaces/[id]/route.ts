@@ -1,17 +1,18 @@
+import { runSecureApiRoute } from "@/lib/api-security";
 import { clearActiveWorkspaceCookie, getActiveWorkspaceCookie, setActiveWorkspaceCookie } from "@/lib/active-workspace";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireSensitiveWorkspaceAction } from "@/lib/workspace-auth";
+import { requireSensitiveWorkspaceAction } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const UpdateWorkspaceSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
+  name: z.string().trim().min(1).max(120).optional(),
   isShared: z.boolean().optional(),
   sidebarMoneyPages: z.record(z.string(), z.boolean()).optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update workspace" }, async () => {
     const { id } = await params;
     const parsed = UpdateWorkspaceSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -33,27 +34,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       select: { id: true, name: true, isShared: true, sidebarMoneyPages: true },
     });
 
+    const changes: string[] = [];
+    if (parsed.data.name !== undefined) changes.push(`name="${updated.name}"`);
+    if (parsed.data.isShared !== undefined) changes.push(`isShared=${updated.isShared}`);
     await prisma.workspaceAuditLog.create({
       data: {
         workspaceId: id,
         actorUserId: auth.userId,
         action: "WORKSPACE_UPDATED",
-        details: `Workspace updated: ${parsed.data.name ? `name="${updated.name}" ` : ""}${parsed.data.isShared !== undefined ? `isShared=${updated.isShared}` : ""}`.trim(),
+        details: ["Workspace updated:", ...changes].join(" "),
       },
     });
 
     return NextResponse.json(updated);
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to update workspace", message }, { status: 500 });
-  }
+  });
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to delete workspace" }, async () => {
     const { id } = await params;
     const activeWorkspaceCookie = await getActiveWorkspaceCookie();
     const auth = await requireSensitiveWorkspaceAction(id);
@@ -86,11 +84,5 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       return clearActiveWorkspaceCookie(response);
     }
     return response;
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to delete workspace", message }, { status: 500 });
-  }
+  });
 }

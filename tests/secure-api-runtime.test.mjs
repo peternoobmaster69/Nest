@@ -15,6 +15,7 @@ mock.module("../lib/workspace-auth.ts", { namedExports: {
 } });
 mock.module("../lib/observability/logger.ts", { namedExports: { logEvent: (...args) => calls.push({ type: "log", args }) } });
 const { runSecureApiRoute: run, parseJsonBody, assertSameOriginRequest, ApiRequestError } = require("../lib/api-security.ts");
+const { PostingConflictError, PostingValidationError } = require("../lib/posting-errors.ts");
 const request = (path = "/api/fixture", options = {}) => new Request(`https://nest.example.test${path}`, options);
 const logs = () => calls.filter(({ type }) => type === "log").map(({ args }) => args);
 beforeEach((t) => {
@@ -71,6 +72,8 @@ test("known failures preserve safe details, validation issues, retry hints, and 
   const validation = z.object({ name: z.string().min(1) }).safeParse({ name: "" }).error;
   for (const [error, status, code, level, retryAfter] of [
     [new ApiRequestError(409, "The record changed", "RECORD_CHANGED"), 409, "RECORD_CHANGED", "info", null],
+    [new PostingConflictError("This entry has already been posted"), 409, "CONFLICT", "info", null],
+    [new PostingValidationError("Select a sub-account for this transaction group"), 400, "INVALID_REQUEST", "info", null],
     [new AuthError(401, "Sign in"), 401, "UNAUTHENTICATED", "info", null],
     [validation, 422, "UNPROCESSABLE_ENTITY", "info", null],
     [Object.assign(new Error("Too many"), { retryAfter: 12 }), 429, "RATE_LIMITED", "warn", "12"],

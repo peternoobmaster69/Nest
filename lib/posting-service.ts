@@ -2,13 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { applyTransactionBudgetDelta } from "@/lib/budget-ledger";
 import { prisma } from "@/lib/prisma";
+import { PostingConflictError, PostingValidationError } from "@/lib/posting-errors";
 
-export class PostingConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PostingConflictError";
-  }
-}
+export { PostingConflictError, PostingValidationError } from "@/lib/posting-errors";
 
 type PostingOperation = {
   workspaceId: string;
@@ -354,6 +350,52 @@ export async function correctLedgerTransaction(params: {
   });
 }
 
+async function resolveCorrectionAllocation(
+  db: Prisma.TransactionClient,
+  current: CorrectionSourceTransaction,
+  replacement: LedgerTransactionCorrection,
+) {
+  const nextBudgetId = replacement.budgetId === undefined
+    ? current.budgetId
+    : replacement.budgetId;
+  const budgetChanged = nextBudgetId !== current.budgetId;
+  let nextGroupId = replacement.groupId;
+  if (nextGroupId === undefined) nextGroupId = budgetChanged ? null : current.groupId;
+
+  if (nextGroupId && !nextBudgetId) {
+    throw new PostingValidationError("A transaction group requires a selected sub-account.");
+  }
+
+  if (nextBudgetId) {
+    const budget = await db.budgetEnvelope.findFirst({
+      where: {
+        id: nextBudgetId,
+        workspaceId: current.workspaceId,
+        accountId: current.accountId,
+        ...(budgetChanged ? { isActive: true } : {}),
+      },
+      select: { id: true },
+    });
+    if (!budget) {
+      throw new PostingValidationError("Selected sub-account does not belong to this transaction account.");
+    }
+  }
+
+  if (nextGroupId) {
+    const group = await db.transactionGroup.findFirst({
+      where: {
+        id: nextGroupId,
+        workspaceId: current.workspaceId,
+        budgetId: nextBudgetId!,
+      },
+      select: { id: true },
+    });
+    if (!group) throw new PostingValidationError("Selected group does not belong to this sub-account.");
+  }
+
+  return { nextBudgetId, nextGroupId };
+}
+
 /** Apply a correction within an existing atomic posting, retaining reversal history. */
 export async function correctLedgerTransactionInPosting(
   db: Prisma.TransactionClient,
@@ -381,46 +423,7 @@ export async function correctLedgerTransactionInPosting(
   }
   assertTransactionCanBeCorrected(current);
 
-  const nextBudgetId = params.replacement.budgetId === undefined
-    ? current.budgetId
-    : params.replacement.budgetId;
-  const budgetChanged = nextBudgetId !== current.budgetId;
-  const nextGroupId = params.replacement.groupId !== undefined
-    ? params.replacement.groupId
-    : budgetChanged
-      ? null
-      : current.groupId;
-
-  if (nextGroupId && !nextBudgetId) {
-    throw new Error("A transaction group requires a selected sub-account.");
-  }
-
-  if (nextBudgetId) {
-    const budget = await db.budgetEnvelope.findFirst({
-      where: {
-        id: nextBudgetId,
-        workspaceId: current.workspaceId,
-        accountId: current.accountId,
-        ...(budgetChanged ? { isActive: true } : {}),
-      },
-      select: { id: true },
-    });
-    if (!budget) {
-      throw new Error("Selected sub-account does not belong to this transaction account.");
-    }
-  }
-
-  if (nextGroupId) {
-    const group = await db.transactionGroup.findFirst({
-      where: {
-        id: nextGroupId,
-        workspaceId: current.workspaceId,
-        budgetId: nextBudgetId!,
-      },
-      select: { id: true },
-    });
-    if (!group) throw new Error("Selected group does not belong to this sub-account.");
-  }
+  const { nextBudgetId, nextGroupId } = await resolveCorrectionAllocation(db, current, params.replacement);
 
   const nextDirection = params.replacement.direction ?? normalizeTransactionDirection(current.direction);
   const nextAmountCents = params.replacement.amountCents ?? current.amountCents;

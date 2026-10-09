@@ -1,5 +1,6 @@
+import { runSecureApiRoute } from "@/lib/api-security";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -21,7 +22,7 @@ const transactionOptionSelect = {
 } as const;
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { errorMessage: "Failed to fetch group transactions" }, async () => {
     const { id } = await params;
     const search = new URL(request.url).searchParams.get("search")?.trim() ?? "";
     if (search.length > 100) {
@@ -83,17 +84,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       })),
       candidateLimit: search ? 150 : 100,
     });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to fetch group transactions", message }, { status: 500 });
-  }
+  });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update transaction group" }, async () => {
     const { id } = await params;
     const parsed = UpdateTransactionGroupSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -157,17 +152,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
 
     return NextResponse.json(updated);
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to update transaction group", message }, { status: 500 });
-  }
+  });
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to delete transaction group" }, async () => {
     const { id } = await params;
     const group = await prisma.transactionGroup.findUnique({
       where: { id },
@@ -182,11 +171,5 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     });
 
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to delete transaction group", message }, { status: 500 });
-  }
+  });
 }

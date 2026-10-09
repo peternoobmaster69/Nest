@@ -2,9 +2,10 @@ import { applyTransactionBudgetDelta } from "@/lib/budget-ledger";
 import { executePosting, getIdempotencyKey, PostingConflictError, reverseLedgerTransaction } from "@/lib/domains/ledger";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { ApiRequestError, runSecureApiRoute } from "@/lib/api-security";
 
 const UpdateTransactionSchema = z.object({
   subject: z.string().min(1).max(120).optional(),
@@ -21,7 +22,7 @@ const UpdateTransactionSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update transaction" }, async () => {
     const { id } = await params;
     const parsed = UpdateTransactionSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -40,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       },
     });
     if (!existing) {
-      throw new Error("Transaction not found");
+      throw new ApiRequestError(404, "Transaction not found");
     }
 
     const { userId } = await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
@@ -80,7 +81,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         select: { id: true },
       });
       if (!budget) {
-        throw new Error("Selected budget does not belong to this transaction account.");
+        throw new ApiRequestError(400, "Selected budget does not belong to this transaction account.");
       }
 
       if (parsed.data.groupId) {
@@ -92,7 +93,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           },
           select: { id: true },
         });
-        if (!group) throw new Error("Selected group does not belong to this sub-account.");
+        if (!group) throw new ApiRequestError(400, "Selected group does not belong to this sub-account.");
       }
 
       const updated = await db.transaction.update({
@@ -121,29 +122,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       postingGroupId: posting.postingGroupId,
       replayed: posting.replayed,
     });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof PostingConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (message === "Transaction not found") {
-      return NextResponse.json({ error: message }, { status: 404 });
-    }
-    if (message === "Selected budget does not belong to this transaction account.") {
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-    if (message === "Selected group does not belong to this sub-account.") {
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-    return NextResponse.json({ error: "Failed to update transaction", message }, { status: 500 });
-  }
+  });
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to delete transaction" }, async () => {
     const { id } = await params;
 
     const existing = await prisma.transaction.findUnique({
@@ -158,7 +141,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     });
 
     if (!existing) {
-      throw new Error("Transaction not found");
+      throw new ApiRequestError(404, "Transaction not found");
     }
 
     const { userId } = await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
@@ -171,17 +154,5 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     });
 
     return NextResponse.json({ ...posting.result, postingGroupId: posting.postingGroupId, replayed: posting.replayed });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof PostingConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (message === "Transaction not found") {
-      return NextResponse.json({ error: message }, { status: 404 });
-    }
-    return NextResponse.json({ error: "Failed to delete transaction", message }, { status: 500 });
-  }
+  });
 }
