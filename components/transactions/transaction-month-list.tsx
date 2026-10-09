@@ -1,4 +1,6 @@
 import { Check } from "lucide-react";
+import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
 type TransactionRow = {
   id: string;
@@ -37,6 +39,62 @@ function amountTone(valueCents: number) {
   return "zero";
 }
 
+function transactionActionLabel(transaction: TransactionRow, grouping: boolean, selected: boolean) {
+  if (grouping) {
+    const action = selected ? "Deselect" : "Select";
+    return `${action} transaction ${transaction.subject}`;
+  }
+  const history = transaction.hasCorrectionHistory ? "; correction history available" : "";
+  return `Correct transaction ${transaction.subject}${history}`;
+}
+
+function TransactionDirection({ grouping, selected, income }: Readonly<{ grouping: boolean; selected: boolean; income: boolean }>) {
+  let tone = income ? "income" : "expense";
+  let content: ReactNode = income ? "→" : "←";
+  if (grouping) {
+    tone = "select";
+    content = selected ? <Check size={17} aria-hidden="true" /> : null;
+  }
+  return <span className={`tx-recent-arrow ${tone}${selected ? " is-selected" : ""}`}>{content}</span>;
+}
+
+function TransactionListRow<T extends TransactionRow>({ transaction, deleting, selected, deepLinked, grouping, formatAmount, onActivate }: Readonly<{
+  transaction: T;
+  deleting: boolean;
+  selected: boolean;
+  deepLinked: boolean;
+  grouping: boolean;
+  formatAmount: (value: number) => string;
+  onActivate: (transaction: T) => void;
+}>) {
+  const income = transaction.direction === "CREDIT";
+  const signedAmount = income ? transaction.amountCents : -transaction.amountCents;
+  return (
+    <Button
+      type="button"
+      id={`transaction-${transaction.id}`}
+      className={`crud-row tx-recent-row${deleting ? " crud-row-deleting" : ""}${selected ? " is-selected" : ""}${deepLinked ? " is-deep-linked" : ""}`}
+      onClick={() => onActivate(transaction)}
+      disabled={deleting}
+      aria-label={transactionActionLabel(transaction, grouping, selected)}
+      aria-pressed={grouping ? selected : undefined}
+    >
+      <TransactionDirection grouping={grouping} selected={selected} income={income} />
+      <span className="tx-recent-main">
+        <span className="tx-recent-subject">{transaction.subject}</span>
+        <span className={`tx-recent-amount ${amountTone(signedAmount)}`}>
+          {income ? "+" : "−"}{formatAmount(transaction.amountCents)}
+        </span>
+        <span className="tx-recent-date">
+          {formatTransactionDate(transaction.date)}
+          {transaction.group ? <span className="tx-row-group-pill">{transaction.group.icon || "📌"} {transaction.group.name}</span> : null}
+          {transaction.hasCorrectionHistory ? <span className="tx-row-correction-pill">Corrected</span> : null}
+        </span>
+      </span>
+    </Button>
+  );
+}
+
 export function TransactionMonthList<T extends TransactionRow>({
   groups,
   summaries,
@@ -47,7 +105,7 @@ export function TransactionMonthList<T extends TransactionRow>({
   grouping,
   formatAmount,
   onActivate,
-}: {
+}: Readonly<{
   groups: MonthGroup<T>[];
   summaries: Map<string, MonthSummary>;
   useServerSummaries: boolean;
@@ -57,7 +115,7 @@ export function TransactionMonthList<T extends TransactionRow>({
   grouping: boolean;
   formatAmount: (value: number) => string;
   onActivate: (transaction: T) => void;
-}) {
+}>) {
   return groups.map((group) => {
     const summary = useServerSummaries ? summaries.get(group.monthKey) : undefined;
     const income = summary?.incomeCents ?? group.totalIncome;
@@ -73,46 +131,9 @@ export function TransactionMonthList<T extends TransactionRow>({
           </div>
         </div>
         <div className="tx-month-list">
-          {group.transactions.map((transaction) => {
-            const deleting = deletingIds.includes(transaction.id);
-            const incomeTransaction = transaction.direction === "CREDIT";
-            const selected = selectedIds.includes(transaction.id);
-            const deepLinked = targetId === transaction.id;
-            const signedAmount = incomeTransaction ? transaction.amountCents : -transaction.amountCents;
-            return (
-              <div
-                key={transaction.id}
-                id={`transaction-${transaction.id}`}
-                className={`crud-row tx-recent-row${deleting ? " crud-row-deleting" : ""}${selected ? " is-selected" : ""}${deepLinked ? " is-deep-linked" : ""}`}
-                onClick={() => { if (!deleting) onActivate(transaction); }}
-                onKeyDown={(event) => {
-                  if (!deleting && (event.key === "Enter" || event.key === " ")) {
-                    event.preventDefault();
-                    onActivate(transaction);
-                  }
-                }}
-                role="button"
-                tabIndex={deleting ? -1 : 0}
-                aria-label={grouping ? `${selected ? "Deselect" : "Select"} transaction ${transaction.subject}` : `Correct transaction ${transaction.subject}${transaction.hasCorrectionHistory ? "; correction history available" : ""}`}
-                aria-pressed={grouping ? selected : undefined}
-              >
-                <div className={`tx-recent-arrow ${grouping ? "select" : incomeTransaction ? "income" : "expense"}${selected ? " is-selected" : ""}`}>
-                  {grouping ? (selected ? <Check size={17} aria-hidden="true" /> : null) : incomeTransaction ? "→" : "←"}
-                </div>
-                <div className="tx-recent-main">
-                  <span className="tx-recent-subject">{transaction.subject}</span>
-                  <span className={`tx-recent-amount ${amountTone(signedAmount)}`}>
-                    {incomeTransaction ? "+" : "−"}{formatAmount(transaction.amountCents)}
-                  </span>
-                  <span className="tx-recent-date">
-                    {formatTransactionDate(transaction.date)}
-                    {transaction.group ? <span className="tx-row-group-pill">{transaction.group.icon || "📌"} {transaction.group.name}</span> : null}
-                    {transaction.hasCorrectionHistory ? <span className="tx-row-correction-pill">Corrected</span> : null}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+          {group.transactions.map((transaction) => (
+            <TransactionListRow key={transaction.id} transaction={transaction} deleting={deletingIds.includes(transaction.id)} selected={selectedIds.includes(transaction.id)} deepLinked={targetId === transaction.id} grouping={grouping} formatAmount={formatAmount} onActivate={onActivate} />
+          ))}
         </div>
       </div>
     );

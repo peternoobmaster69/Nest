@@ -5903,6 +5903,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 /* Compact transaction list (matches screenshot design) */
 .tx-recent-row {
   display: flex;
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
   align-items: center;
   gap: 10px;
   overflow: visible;
