@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { projectRetirement } from "../lib/domains/cio/retirement-projection.ts";
+import { snapshot, policy } from "./cio-strategy-fixtures.mjs";
 import {
   buildCioStrategyRecommendations,
   solveRequiredAnnualRetirementContributionCents,
 } from "../lib/domains/cio/strategy-recommendations.ts";
 import { composeCioStrategyReportModel } from "../lib/domains/cio/strategy-report-service.ts";
-import { renderCioStrategyReportPdf } from "../lib/domains/cio/strategy-report-pdf.tsx";
+import { CioStrategyReportDocument, renderCioStrategyReportPdf } from "../lib/domains/cio/strategy-report-pdf.tsx";
 import {
   CIO_STRATEGY_REPORT_COOLDOWN_DAYS,
   cioStrategyReportNextAvailableAt,
@@ -20,155 +21,6 @@ test("CIO strategy reports have a rolling 30-day generation cooldown", () => {
   assert.equal(isCioStrategyReportOnCooldown(generatedAt, new Date("2026-07-31T10:29:59.999Z")), true);
   assert.equal(isCioStrategyReportOnCooldown(generatedAt, new Date("2026-07-31T10:30:00.000Z")), false);
 });
-
-function retirementStatus() {
-  const result = projectRetirement({
-    asOfDate: "2026-07-30",
-    targetRetirementDate: "2046-07-30",
-    currentRetirementAssetsCents: 37_151_300,
-    annualExternalContributionCents: 4_052_000,
-    contributionGrowthBps: 0,
-    bearReturnBps: 400,
-    baseReturnBps: 600,
-    bullReturnBps: 800,
-    inflationBps: 250,
-    targetMonthlyRetirementSpendingCents: 700_000,
-    sustainableWithdrawalRateBps: 300,
-  });
-  return {
-    status: "READY",
-    missingFields: [],
-    projection: {
-      assumptions: {
-        asOfDate: result.assumptions.asOfDate,
-        retirementDate: result.assumptions.resolvedTargetRetirementDate,
-        horizonYears: result.assumptions.projectionYears,
-        currentRetirementAssetsCents: result.assumptions.currentRetirementAssetsCents,
-        annualExternalContributionCents: result.assumptions.annualExternalContributionCents,
-        contributionGrowthRateBps: result.assumptions.contributionGrowthBps,
-        inflationRateBps: result.assumptions.inflationBps,
-        bearReturnBps: result.assumptions.bearReturnBps,
-        baseReturnBps: result.assumptions.baseReturnBps,
-        bullReturnBps: result.assumptions.bullReturnBps,
-        targetMonthlySpendingTodayCents: result.assumptions.targetMonthlyRetirementSpendingCents,
-        sustainableWithdrawalRateBps: result.assumptions.sustainableWithdrawalRateBps,
-        contributionTiming: "END_OF_YEAR",
-        finalPeriodFractionBps: result.assumptions.finalPeriodFractionBps,
-        horizonRounding: result.assumptions.horizonRounding,
-      },
-      scenarios: ["bear", "base", "bull"].map((key) => {
-        const scenario = result.scenarios[key];
-        return {
-          scenario: key.toUpperCase(),
-          nominalReturnBps: scenario.nominalReturnBps,
-          points: [],
-          fundAtRetirementNominalCents: scenario.outcome.nominalFundCents,
-          fundAtRetirementRealCents: scenario.outcome.realFundCents,
-          sustainableMonthlyIncomeNominalCents: scenario.outcome.nominalSustainableMonthlyIncomeCents,
-          sustainableMonthlyIncomeRealCents: scenario.outcome.realSustainableMonthlyIncomeCents,
-          targetFundNominalCents: result.target.nominalFundAtRetirementCents,
-          targetFundRealCents: result.target.realFundCents,
-          targetGapOrSurplusNominalCents: scenario.outcome.nominalTargetSurplusCents - scenario.outcome.nominalTargetGapCents,
-          targetGapOrSurplusRealCents: scenario.outcome.realTargetSurplusCents - scenario.outcome.realTargetGapCents,
-        };
-      }),
-    },
-  };
-}
-
-function snapshot() {
-  return {
-    asOfDate: "2026-07-30",
-    baseCurrency: "SGD",
-    totals: {
-      bankControlCents: 1_000_000,
-      savingsSubAccountCents: 1_000_000,
-      investmentCurrentValueCents: 37_151_300,
-      financialAssetsCents: 38_151_300,
-      planningPositionAssetsCents: 61_200_000,
-      planningLiabilitiesCents: 25_000_000,
-      planningNetWorthCents: 74_351_300,
-      investableAssetsCents: 37_151_300,
-      retirementIncludedAssetsCents: 37_151_300,
-    },
-    liquidity: {
-      immediateCents: 1_000_000,
-      liquidCents: 2_000_000,
-      restrictedCents: 12_000_000,
-      lockedCents: 0,
-      readilyAvailableCents: 3_000_000,
-      essentialMonthlyExpenseCents: 800_000,
-      emergencyRunwayMonths: 3.75,
-    },
-    allocation: {
-      totalCents: 37_151_300,
-      assetClasses: [
-        { key: "EQUITY", valueCents: 29_721_040, allocationBps: 8_000, sourceCount: 1, isUnknown: false },
-        { key: "FIXED_INCOME", valueCents: 3_715_130, allocationBps: 1_000, sourceCount: 1, isUnknown: false },
-        { key: "CASH", valueCents: 3_715_130, allocationBps: 1_000, sourceCount: 1, isUnknown: false },
-      ],
-      geographies: [{ key: "GLOBAL", valueCents: 37_151_300, allocationBps: 10_000, sourceCount: 1, isUnknown: false }],
-      securities: [{ key: "UNKNOWN", valueCents: 37_151_300, allocationBps: 10_000, sourceCount: 1, isUnknown: true }],
-      securityBucketCount: 1,
-      securitiesTruncated: false,
-      omittedSecurityValueCents: 0,
-      omittedSecurityAllocationBps: 0,
-    },
-    investments: [{
-      id: "investment-1",
-      latestValuationDate: "2026-07-29",
-      investedCents: 30_000_000,
-      currentValueCents: 37_151_300,
-      valuationAgeDays: 1,
-      isStale: false,
-      liquidityClass: "LIQUID",
-      liquiditySource: "CIO_PROFILE",
-      portfolioRole: "CORE",
-      includeInRetirementProjection: true,
-      classificationStatus: "USER_CONFIRMED",
-    }],
-    recurringFlows: {
-      externalContributionAnnualCents: 4_052_000,
-      externalWithdrawalAnnualCents: 0,
-      netExternalContributionAnnualCents: 4_052_000,
-      internalReallocationAnnualCents: 2_600_000,
-      retirementEligibleNetExternalAnnualCents: 4_052_000,
-      breakdown: [],
-    },
-    annualContributions: {
-      derivedExternalAnnualCents: 4_052_000,
-      overrideExternalAnnualCents: null,
-      usedExternalAnnualCents: 4_052_000,
-      source: "DERIVED",
-      internalReallocationAnnualCents: 2_600_000,
-    },
-    dataQuality: {
-      completenessBps: 10_000,
-      completenessPercentage: 100,
-      latestValuationDate: "2026-07-29",
-      oldestValuationDate: "2026-07-29",
-      warnings: [],
-    },
-    policyExceptions: [],
-    retirement: retirementStatus(),
-    evidence: [{ id: "workspace-financial-assets", kind: "WORKSPACE", label: "Workspace financial assets", href: "/cio", asOfDate: "2026-07-30" }],
-  };
-}
-
-const policy = {
-  confirmedAt: new Date("2026-07-01T00:00:00.000Z"),
-  minimumLiquidityReserveCents: 4_000_000,
-  minimumLiquidityMonths: 4,
-  maximumAccountConcentrationBps: 5_000,
-  maximumSingleSecurityConcentrationBps: 500,
-  maximumSatelliteAllocationBps: 1_000,
-  assetClassBands: [
-    { assetClass: "EQUITY", minimumBps: 6_500, targetBps: 6_750, maximumBps: 7_000 },
-    { assetClass: "FIXED_INCOME", minimumBps: 1_500, targetBps: 1_750, maximumBps: 2_000 },
-    { assetClass: "CASH", minimumBps: 800, targetBps: 1_000, maximumBps: 1_200 },
-  ],
-  geographyLimits: [],
-};
 
 test("strategy recommendations prioritize liquidity, contribution-led allocation, and retirement sufficiency", () => {
   const current = snapshot();
@@ -236,6 +88,66 @@ test("an unfunded retirement target is surfaced for review instead of appearing 
   assert.ok(recommendations.some((item) => item.code === "REVIEW_UNFUNDED_RETIREMENT_TARGET"));
 });
 
+test("incomplete plans prioritize setup and explain missing retirement assumptions", () => {
+  for (const completenessBps of [0, 6000]) {
+    const current = snapshot();
+    current.dataQuality.completenessBps = completenessBps;
+    current.retirement = { status: "NOT_READY", missingFields: ["targetRetirementDate", "inflationRateBps"], projection: null };
+    const recommendations = buildCioStrategyRecommendations({ snapshot: current, policy: null, profile: null });
+    assert.equal(recommendations[0].code, "COMPLETE_CIO_SETUP");
+    assert.equal(recommendations[0].severity, completenessBps === 0 ? "CRITICAL" : "HIGH");
+    assert.ok(recommendations.some((item) => item.code === "CONFIRM_INVESTMENT_POLICY"));
+    const retirement = recommendations.find((item) => item.code === "COMPLETE_RETIREMENT_ASSUMPTIONS");
+    assert.deepEqual(retirement.current, { unit: "COUNT", value: 2, label: "Missing assumptions" });
+    assert.ok(recommendations.every((item) => item.requiresUserConfirmation));
+  }
+});
+
+test("a funded plan inside every configured band recommends maintaining contributions and allocation", () => {
+  const current = snapshot();
+  current.retirement.projection.assumptions.targetMonthlySpendingTodayCents = 0;
+  current.liquidity.essentialMonthlyExpenseCents = null;
+  const recommendations = buildCioStrategyRecommendations({
+    snapshot: current, profile: null,
+    policy: { confirmed: true, minimumLiquidityReserveCents: null, minimumLiquidityMonths: null, assetClassBands: current.allocation.assetClasses.map((item) => ({ assetClass: item.key, minimumBps: 0, targetBps: item.allocationBps, maximumBps: 10000 })) },
+  });
+  assert.deepEqual(recommendations.map((item) => item.code), ["MAINTAIN_RETIREMENT_CONTRIBUTIONS", "MAINTAIN_CONFIRMED_ALLOCATION"]);
+  assert.equal(recommendations[0].target.value, 0);
+  assert.equal(recommendations[0].annualChangeCents, 0);
+  assert.equal(solveRequiredAnnualRetirementContributionCents(current.retirement.projection.assumptions), 0);
+});
+
+test("missing asset classes are treated as zero allocation and equally ranked actions have deterministic ordering", () => {
+  const current = snapshot();
+  current.allocation.assetClasses = [];
+  const recommendations = buildCioStrategyRecommendations({ snapshot: current, policy: { ...policy, confirmed: true }, profile: null });
+  const allocation = recommendations.filter((item) => item.code === "DIRECT_NEW_CONTRIBUTIONS_TO_UNDERWEIGHT_ASSET");
+  assert.deepEqual(allocation.map((item) => item.scopeKey), ["CASH", "EQUITY", "FIXED_INCOME"]);
+  assert.ok(allocation.every((item) => item.current.value === 0));
+});
+
+test("concentration actions retain supported units, nullable limits, bounded evidence, and a four-action limit", () => {
+  const current = snapshot();
+  const codes = ["ACCOUNT_CONCENTRATION", "SECURITY_CONCENTRATION", "GEOGRAPHY_CONCENTRATION", "SATELLITE_ALLOCATION_EXCEEDED"];
+  current.policyExceptions = codes.map((code, index) => ({
+    code, title: code, actual: { unit: ["CENTS", "BPS", "COUNT", "MONTHS"][index], value: index === 0 ? null : 100 },
+    threshold: index === 0 ? undefined : { unit: ["CENTS", "BPS", "CENTS", "MONTHS"][index], value: index === 1 ? null : 50 },
+    evidence: Array.from({ length: 10 }, (_, number) => ({ id: `evidence-${number}` })),
+  }));
+  current.policyExceptions.push({ ...current.policyExceptions[1], code: "UNSUPPORTED" }, { ...current.policyExceptions[1], title: "Fifth supported exception" });
+  const recommendations = buildCioStrategyRecommendations({ snapshot: current, policy: null, profile: null });
+  const concentration = recommendations.filter((item) => item.code === "LIMIT_CONCENTRATION_WITH_FUTURE_FLOWS");
+  assert.equal(concentration.length, 4);
+  assert.deepEqual(concentration.map((item) => item.current?.unit ?? null), [null, "BPS", "COUNT", "COUNT"]);
+  assert.deepEqual(concentration.map((item) => item.target?.unit ?? null), [null, null, "CENTS", "COUNT"]);
+  assert.ok(concentration.every((item) => item.evidenceIds.length === 8));
+  assert.ok(concentration.every((item) => item.title !== "Fifth supported exception"));
+  current.policyExceptions = [{ ...current.policyExceptions[0], actual: { unit: "CENTS", value: 100 }, threshold: { unit: "BPS", value: 50 } }];
+  const cents = buildCioStrategyRecommendations({ snapshot: current, policy: null, profile: null }).find((item) => item.category === "CONCENTRATION");
+  assert.equal(cents.current.unit, "CENTS");
+  assert.equal(cents.target.unit, "BPS");
+});
+
 test("report composition is deterministic, validated, and renders a PDF", async () => {
   const report = composeCioStrategyReportModel({
     snapshot: snapshot(),
@@ -255,4 +167,50 @@ test("report composition is deterministic, validated, and renders a PDF", async 
   const pdf = await renderCioStrategyReportPdf(report);
   assert.equal(pdf.subarray(0, 4).toString("ascii"), "%PDF");
   assert.ok(pdf.byteLength > 10_000);
+});
+
+function documentText(element) {
+  if (element == null || typeof element === "boolean") return "";
+  if (typeof element === "string" || typeof element === "number") return String(element);
+  if (Array.isArray(element)) return element.map(documentText).join("");
+  if (typeof element.type === "function") return documentText(element.type(element.props));
+  const rendered = element.props.render?.({ pageNumber: 1, totalPages: 8 }) ?? "";
+  return documentText(element.props.children) + rendered + "\n";
+}
+
+test("reports with incomplete records render explicit missing-data explanations and all metric units", async () => {
+  const current = snapshot();
+  current.retirement = { status: "NOT_READY", missingFields: ["targetRetirementDate"], projection: null };
+  current.investments = [];
+  current.allocation.assetClasses[0] = { ...current.allocation.assetClasses[0], key: "UNKNOWN", isUnknown: true };
+  current.liquidity.essentialMonthlyExpenseCents = null;
+  current.liquidity.emergencyRunwayMonths = null;
+  current.dataQuality.latestValuationDate = null;
+  current.dataQuality.oldestValuationDate = null;
+  current.dataQuality.warnings = [{ code: "MISSING_PROFILE", severity: "WARNING", message: "Complete the household profile" }];
+  current.policyExceptions = [{ code: "UNCONFIRMED_POLICY", severity: "WARNING", title: "Confirm guardrails", reviewAction: "Review the household policy" }];
+  const report = composeCioStrategyReportModel({ snapshot: current, workspaceName: "Home", investments: [], policy: null, profile: null, generatedAt: new Date("2026-07-30T10:00:00.000Z") });
+  const original = report.recommendations[0];
+  report.recommendations.push(
+    { ...original, id: "runway", severity: "MEDIUM", current: { unit: "MONTHS", value: 1.5, label: "Runway" }, target: null },
+    { ...original, id: "missing-count", severity: "LOW", current: null, target: { unit: "COUNT", value: 2, label: "Records to complete" } },
+  );
+  const content = documentText(CioStrategyReportDocument({ report }));
+  for (const expected of ["No investment accounts are available", "The investment policy is not confirmed", "The retirement projection is not ready", "targetRetirementDate", "Runway: 1.5 months", "Records to complete: 2", "Not configured", "Complete the household profile", "Review the household policy", "Latest valuation: Not available", "Not set", "Unknown (incomplete)"]) assert.ok(content.includes(expected), expected);
+  const pdf = await renderCioStrategyReportPdf(report);
+  assert.equal(pdf.subarray(0, 4).toString("ascii"), "%PDF");
+});
+
+test("report investment rows and legacy retirement data remain readable when optional fields are missing", () => {
+  const current = snapshot();
+  current.investments.push({ ...current.investments[0], id: "unclassified", currentValueCents: null, portfolioRole: null });
+  const report = composeCioStrategyReportModel({ snapshot: current, workspaceName: "Household", investments: [], policy, profile: null, generatedAt: new Date("2026-07-30T10:00:00.000Z") });
+  report.retirement.retirementDate = null;
+  const content = documentText(CioStrategyReportDocument({ report }));
+  assert.ok(content.includes("Recorded investment"));
+  assert.ok(content.includes("Unknown institution"));
+  assert.ok(content.includes("Not set"));
+  assert.ok(content.includes("Not configured"));
+  assert.ok(content.includes("No policy exceptions were produced"));
+  assert.ok(content.includes("PAGE 1 OF 8"));
 });

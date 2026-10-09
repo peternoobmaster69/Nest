@@ -14,7 +14,7 @@ import {
 import { assessCioDataQuality } from "../lib/domains/cio/data-quality.ts";
 import { evaluateCioPolicy } from "../lib/domains/cio/policy-engine.ts";
 import { upsertCioProfile } from "../lib/domains/cio/repository.ts";
-import { buildCioSnapshot } from "../lib/domains/cio/snapshot-service.ts";
+import { buildCioSnapshot, runWorkspaceRetirementProjection } from "../lib/domains/cio/snapshot-service.ts";
 
 const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
@@ -70,6 +70,123 @@ function snapshotInvestment({
     }],
   };
 }
+
+function completeProfile(overrides = {}) {
+  return {
+    primaryBirthDate: null, primaryCurrentAge: 40, primaryAgeAsOfDate: new Date("2026-10-09T00:00:00.000Z"), partnerBirthDate: null,
+    targetRetirementAge: 65, targetRetirementDate: null, targetMonthlyRetirementSpendingCents: 100_000, essentialMonthlySpendingCents: 50_000,
+    minimumImmediateBankCashCents: null, inflationRateBps: 200, bearReturnBps: 100, baseReturnBps: 300, bullReturnBps: 500,
+    sustainableWithdrawalRateBps: 400, annualExternalContributionOverrideCents: null, contributionGrowthRateBps: 0,
+    updatedAt: new Date("2026-10-09T00:00:00.000Z"), ...overrides,
+  };
+}
+
+test("snapshot dates reject invalid calendars and normalize timestamps to UTC days", async () => {
+  for (const asOfDate of ["not a date", "2026-02-30", new Date(Number.NaN)]) {
+    await assert.rejects(buildCioSnapshot({ workspaceId: "workspace-1", asOfDate, db: snapshotDatabase() }), /Invalid CIO as-of date/);
+  }
+  const timestamp = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: "2026-10-09T23:59:59.000Z", db: snapshotDatabase() });
+  assert.equal(timestamp.asOfDate, "2026-10-09");
+  const today = await buildCioSnapshot({ workspaceId: "workspace-1", db: snapshotDatabase() });
+  assert.equal(today.asOfDate, new Date().toISOString().slice(0, 10));
+});
+
+test("snapshot totals reject integer overflow before producing a misleading financial summary", async () => {
+  for (const startingCents of [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER]) {
+    const db = snapshotDatabase({ bankControls: [{ id: "a", startingCents, updatedAt: new Date(0) }, { id: "b", startingCents, updatedAt: new Date(0) }] });
+    await assert.rejects(buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: "2026-10-09", db }), /bank control total exceeds the supported calculation range/);
+  }
+});
+
+test("a dated retirement override does not require a birth date and preserves explicit zero assumptions", async () => {
+  const projection = await runWorkspaceRetirementProjection({
+    workspaceId: "workspace-1", db: snapshotDatabase(),
+    input: { asOfDate: "2026-10-09", targetRetirementDate: "2027-10-09T00:00:00.000Z", currentRetirementAssetsCents: 100_000, annualExternalContributionCents: 0, contributionGrowthRateBps: 0, inflationRateBps: 0, bearReturnBps: 0, baseReturnBps: 0, bullReturnBps: 0, targetMonthlySpendingTodayCents: 0, sustainableWithdrawalRateBps: 400 },
+  });
+  assert.equal(projection.asOfDate, "2026-10-09");
+  assert.equal(projection.baseCurrency, "SGD");
+  assert.equal(projection.retirement.status, "READY");
+  assert.equal(projection.retirement.projection.assumptions.annualExternalContributionCents, 0);
+  assert.equal(projection.retirement.projection.assumptions.inflationRateBps, 0);
+  assert.ok(projection.retirement.projection.scenarios.every((scenario) => scenario.points.every((point) => point.age === null)));
+});
+
+for (const [birthDate, expectedAge] of [["1986-10-10", 39], ["1986-10-09", 40], ["1986-09-09", 40], ["1986-11-09", 39]]) {
+  test(`retirement ages respect the birthday ${birthDate}`, async () => {
+    const profile = completeProfile({ primaryBirthDate: new Date(`${birthDate}T00:00:00.000Z`), primaryCurrentAge: null, primaryAgeAsOfDate: null });
+    const result = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: "2026-10-09", db: snapshotDatabase({ householdProfile: profile }) });
+    assert.equal(result.retirement.status, "READY");
+    assert.equal(result.retirement.projection.scenarios[0].points[0].age, expectedAge);
+    assert.match(result.retirement.projection.assumptions.retirementDate, /^2051-/);
+  });
+}
+
+test("age-based overrides replace a saved retirement date and dated overrides replace a saved age", async () => {
+  const datedProfile = completeProfile({ targetRetirementDate: new Date("2040-10-09T00:00:00.000Z"), targetRetirementAge: null });
+  const ageResult = await buildCioSnapshot({ workspaceId: "workspace-1", retirementOverrides: { asOfDate: "2026-10-09", targetRetirementAge: 60 }, db: snapshotDatabase({ householdProfile: datedProfile }) });
+  assert.equal(ageResult.retirement.projection.assumptions.retirementDate, "2046-10-09");
+  const dateResult = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: "2026-10-09", retirementOverrides: { targetRetirementDate: "2036-10-09T00:00:00.000Z" }, db: snapshotDatabase({ householdProfile: completeProfile() }) });
+  assert.equal(dateResult.retirement.projection.assumptions.retirementDate, "2036-10-09");
+  assert.equal(dateResult.retirement.projection.scenarios[0].points.at(-1).age, 50);
+});
+
+test("incomplete household assumptions are reported without fabricating a retirement projection", async () => {
+  const profile = completeProfile(Object.fromEntries([
+    "primaryBirthDate", "primaryCurrentAge", "primaryAgeAsOfDate", "targetRetirementAge", "targetRetirementDate", "targetMonthlyRetirementSpendingCents", "essentialMonthlySpendingCents", "inflationRateBps", "bearReturnBps", "baseReturnBps", "bullReturnBps", "sustainableWithdrawalRateBps",
+  ].map((key) => [key, null])));
+  const result = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: "2026-10-09", db: snapshotDatabase({ householdProfile: profile }) });
+  assert.equal(result.retirement.status, "NOT_READY");
+  assert.equal(result.retirement.projection, null);
+  for (const field of ["inflationRateBps", "bearReturnBps", "baseReturnBps", "bullReturnBps", "targetMonthlyRetirementSpendingCents", "sustainableWithdrawalRateBps", "targetRetirementDateOrAge"]) assert.ok(result.retirement.missingFields.includes(field), field);
+  const missingAge = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: "2026-10-09", db: snapshotDatabase({ householdProfile: completeProfile({ primaryAgeAsOfDate: null }) }) });
+  assert.ok(missingAge.retirement.missingFields.includes("primaryBirthDateOrCurrentAge"));
+});
+
+test("snapshot evidence uses the latest eligible balances and excludes missing valuations from totals", async () => {
+  const asOf = new Date("2026-10-09T00:00:00.000Z");
+  const balances = ["2026-10-06", "2026-10-08", "2026-10-07"].map((date, index) => ({ id: `bank-${index}`, startingCents: 100, availableCents: 50, updatedAt: new Date(`${date}T00:00:00.000Z`) }));
+  const missing = { ...snapshotInvestment({ id: "missing", asOf, currentValueCents: 0 }), entries: [] };
+  const result = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: asOf, db: snapshotDatabase({ bankControls: balances, savingsSubAccounts: balances, investments: [missing] }) });
+  assert.equal(result.evidence.find((item) => item.id === "bank-controls").asOfDate, "2026-10-08");
+  assert.equal(result.evidence.find((item) => item.id === "savings-sub-accounts").asOfDate, "2026-10-08");
+  assert.equal(result.evidence.find((item) => item.id === "investment-missing").label, "Investment missing valuation");
+  assert.equal(result.investments[0].latestValuationDate, null);
+  assert.equal(result.totals.investmentCurrentValueCents, 0);
+});
+
+test("snapshot planning includes confirmed assets and external flows while flagging duplicate records", async () => {
+  const asOf = new Date("2026-10-09T00:00:00.000Z");
+  const investment = snapshotInvestment({ id: "core", asOf, currentValueCents: 500, cioProfile: { classificationStatus: "USER_CONFIRMED", liquidityClass: "LIQUID", portfolioRole: "CORE", includeInRetirementProjection: true }, cioExposures: [
+    { dimension: "ASSET_CLASS", exposureKey: "EQUITY", weightBps: 10000 }, { dimension: "GEOGRAPHY", exposureKey: "GLOBAL", weightBps: 10000 }, { dimension: "SECURITY", exposureKey: "FUND", weightBps: 10000 },
+  ] });
+  const flow = { id: "contribution", type: "EXTERNAL_CONTRIBUTION", amountCents: 100, cadence: "MONTHLY", startsOn: new Date("2026-01-01T00:00:00.000Z"), endsOn: null, includeInRetirementProjection: true, label: null, sourceFinancialAccountId: null, sourceInvestmentAccountId: null, destinationInvestmentAccountId: "core", updatedAt: asOf };
+  const position = { id: "duplicate", side: "ASSET", category: "CASH", label: "  CORE  ", currentValueCents: 200, asOfDate: asOf, liquidityClass: "IMMEDIATE", includeInInvestableAllocation: true, includeInRetirementProjection: true };
+  const db = snapshotDatabase({ householdProfile: completeProfile(), investments: [investment], planningPositions: [position, { ...position, id: "custom-asset", category: "BUSINESS", label: "Business interest", currentValueCents: 300, includeInRetirementProjection: false }], recurringFlows: [flow, { ...flow, id: "future", label: "Future contribution", startsOn: new Date("2027-01-01T00:00:00.000Z") }] });
+  const result = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: asOf, db });
+  assert.equal(result.totals.retirementIncludedAssetsCents, 700);
+  assert.equal(result.totals.investableAssetsCents, 1000);
+  assert.equal(result.allocation.assetClasses.find((item) => item.key === "UNKNOWN").valueCents, 300);
+  assert.equal(result.annualContributions.usedExternalAnnualCents, 1200);
+  assert.equal(result.contributionProgress.targetSource, "DERIVED");
+  assert.deepEqual(result.recurringFlows.breakdown.map((item) => [item.id, item.label, item.amountCents]), [["contribution", "Recurring flow", 100]]);
+  assert.equal(result.retirement.projection.assumptions.annualExternalContributionCents, 1200);
+  assert.ok(result.dataQuality.warnings.some((warning) => warning.code === "POSSIBLE_DUPLICATE"));
+  assert.ok(result.evidence.some((item) => item.id === "recurring-flow-contribution"));
+  db.cioHouseholdProfile.findUnique = async () => completeProfile({ annualExternalContributionOverrideCents: 600, contributionGrowthRateBps: null });
+  const overridden = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: asOf, db });
+  assert.equal(overridden.retirement.projection.assumptions.annualExternalContributionCents, 600);
+  assert.equal(overridden.retirement.projection.assumptions.contributionGrowthRateBps, 0);
+});
+
+test("snapshot truncation remains visible and legacy workspaces retain the default currency", async () => {
+  const asOf = new Date("2026-10-09T00:00:00.000Z");
+  const db = snapshotDatabase({ bankControls: Array.from({ length: 501 }, (_, index) => ({ id: `bank-${index}`, startingCents: 1, updatedAt: asOf })) });
+  db.workspace.findUnique = async () => ({ id: "workspace-1", baseCurrency: "" });
+  const result = await buildCioSnapshot({ workspaceId: "workspace-1", asOfDate: asOf, db });
+  assert.equal(result.baseCurrency, "SGD");
+  assert.equal(result.totals.bankControlCents, 500);
+  assert.ok(result.dataQuality.warnings.some((warning) => warning.code === "DATA_TRUNCATED"));
+});
 
 test("CIO input contracts enforce bounded mutually consistent data", () => {
   assert.equal(CioProfileInputSchema.safeParse({

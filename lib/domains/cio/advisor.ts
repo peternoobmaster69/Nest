@@ -180,6 +180,26 @@ function addUtcYears(isoDate: string, years: number) {
 
 export type CioRetirementLevers = ReturnType<typeof solveCioRetirementLevers>;
 
+function solveRequiredBaseReturn(assumptions: CioRetirementProjectionAssumptions) {
+  // Base return is solved inside the configured bear..bull range so the scenario ordering stays valid.
+  const funded = (baseReturnBps: number) => baseOutcome(assumptions, { baseReturnBps })?.realTargetGapCents === 0;
+  let requiredBaseReturn: { status: "SOLVED" | "FUNDED_AT_BEAR_RETURN" | "ABOVE_BULL_RETURN"; bps: number | null };
+  if (funded(assumptions.bearReturnBps)) requiredBaseReturn = { status: "FUNDED_AT_BEAR_RETURN", bps: assumptions.bearReturnBps };
+  else if (!funded(assumptions.bullReturnBps)) requiredBaseReturn = { status: "ABOVE_BULL_RETURN", bps: null };
+  else {
+    let lower = assumptions.bearReturnBps;
+    let upper = assumptions.bullReturnBps;
+    while (lower + 1 < upper) {
+      const candidate = lower + Math.floor((upper - lower) / 2);
+      if (funded(candidate)) upper = candidate;
+      else lower = candidate;
+    }
+    requiredBaseReturn = { status: "SOLVED", bps: upper };
+  }
+
+  return requiredBaseReturn;
+}
+
 /** The deterministic levers that close or widen the base-case retirement gap. */
 export function solveCioRetirementLevers(assumptions: CioRetirementProjectionAssumptions) {
   const currentAnnual = assumptions.annualExternalContributionCents;
@@ -198,21 +218,7 @@ export function solveCioRetirementLevers(assumptions: CioRetirementProjectionAss
     }
   }
 
-  // Base return is solved inside the configured bear..bull range so the scenario ordering stays valid.
-  const funded = (baseReturnBps: number) => baseOutcome(assumptions, { baseReturnBps })?.realTargetGapCents === 0;
-  let requiredBaseReturn: { status: "SOLVED" | "FUNDED_AT_BEAR_RETURN" | "ABOVE_BULL_RETURN"; bps: number | null };
-  if (funded(assumptions.bearReturnBps)) requiredBaseReturn = { status: "FUNDED_AT_BEAR_RETURN", bps: assumptions.bearReturnBps };
-  else if (!funded(assumptions.bullReturnBps)) requiredBaseReturn = { status: "ABOVE_BULL_RETURN", bps: null };
-  else {
-    let lower = assumptions.bearReturnBps;
-    let upper = assumptions.bullReturnBps;
-    while (lower + 1 < upper) {
-      const candidate = lower + Math.floor((upper - lower) / 2);
-      if (funded(candidate)) upper = candidate;
-      else lower = candidate;
-    }
-    requiredBaseReturn = { status: "SOLVED", bps: upper };
-  }
+  const requiredBaseReturn = solveRequiredBaseReturn(assumptions);
 
   const gapOrSurplusReal = current ? current.realTargetSurplusCents - current.realTargetGapCents : null;
   return {
@@ -244,6 +250,12 @@ function liquidityFloorCents(snapshot: CioSnapshot, policy: CioRecommendationPol
     : 0;
   const floor = Math.max(policy.minimumLiquidityReserveCents ?? 0, monthsFloor);
   return floor > 0 ? floor : null;
+}
+
+function monthsToRestoreReserve(shortfall: number | null, netMonthly: number) {
+  if (shortfall === null) return null;
+  if (shortfall === 0) return 0;
+  return netMonthly > 0 ? Math.ceil(shortfall / netMonthly) : null;
 }
 
 /** One deterministic advisory brief: posture, drift, liquidity, contribution pace, and retirement levers. */
@@ -300,7 +312,7 @@ export function buildCioAdvisorBrief(params: {
       policyFloorCents: floor,
       policyShortfallCents: shortfall,
       // Assumes all recorded net external contributions were redirected to the reserve.
-      monthsToRestoreAtNetContributions: shortfall && netMonthly > 0 ? Math.ceil(shortfall / netMonthly) : shortfall === 0 ? 0 : null,
+      monthsToRestoreAtNetContributions: monthsToRestoreReserve(shortfall, netMonthly),
     },
     contributions: {
       usedAnnualCents: snapshot.annualContributions.usedExternalAnnualCents,

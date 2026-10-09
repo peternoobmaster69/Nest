@@ -103,8 +103,7 @@ function label(value: string) {
   return value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function metricValue(metric: CioStrategyRecommendation["current"], currency: string) {
-  if (!metric) return "—";
+function metricValue(metric: NonNullable<CioStrategyRecommendation["current"]>, currency: string) {
   if (metric.unit === "CENTS") return money(metric.value, currency);
   if (metric.unit === "BPS") return percent(metric.value);
   if (metric.unit === "MONTHS") return `${metric.value.toFixed(1)} months`;
@@ -161,11 +160,9 @@ function MetricCard({ value, label: itemLabel }: Readonly<{ value: string; label
 }
 
 function RecommendationCard({ item, currency }: Readonly<{ item: CioStrategyRecommendation; currency: string }>) {
-  const severityStyle = item.severity === "CRITICAL"
-    ? styles.recommendationCritical
-    : item.severity === "HIGH"
-      ? styles.recommendationHigh
-      : undefined;
+  let severityStyle: Style | undefined;
+  if (item.severity === "CRITICAL") severityStyle = styles.recommendationCritical;
+  else if (item.severity === "HIGH") severityStyle = styles.recommendationHigh;
   return (
     <View style={severityStyle ? [styles.recommendation, severityStyle] : styles.recommendation} wrap={false}>
       <View style={styles.recommendationHeading}>

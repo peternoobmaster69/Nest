@@ -84,6 +84,74 @@ test("apportioned cents always sum to the original amount", () => {
   }
 });
 
+test("new-money planning keeps unknown holdings visible and cannot satisfy a fully committed band by dilution", () => {
+  const unknown = snapshot({ allocation: { totalCents: 100, assetClasses: [{ key: "UNKNOWN", valueCents: 100, allocationBps: 10000 }] } });
+  const equityOnly = { ...policy, assetClassBands: [{ assetClass: "EQUITY", minimumBps: 10000, targetBps: 10000, maximumBps: 10000 }] };
+  assert.equal(newMoneyToReachMinimumsCents(unknown, equityOnly), null);
+  const plan = planCioNewMoneyAllocation(unknown, equityOnly, 100);
+  assert.deepEqual(plan.unknown, { valueCents: 100, allocationBps: 10000 });
+  assert.deepEqual(plan.stillOutsideBands, ["EQUITY"]);
+  assert.equal(plan.bands[0].allocationCents, 100);
+  assert.equal(plan.bands[0].afterBps, 5000);
+  const noAssets = snapshot({ allocation: { totalCents: 0, assetClasses: [] } });
+  const zeroPlan = planCioNewMoneyAllocation(noAssets, equityOnly, 0);
+  assert.equal(zeroPlan.bands[0].currentBps, 0);
+  assert.equal(zeroPlan.bands[0].allocationShareBps, 0);
+  assert.deepEqual(apportionCents(0, [1, 2]), [0, 0]);
+  assert.deepEqual(apportionCents(3, [-1, 1]), [0, 3]);
+  assert.deepEqual(apportionCents(3, []), []);
+});
+
+test("well-funded policy bands need no new money and excess contributions still follow target weights", () => {
+  const narrow = { ...policy, assetClassBands: [{ assetClass: "EQUITY", minimumBps: 1000, targetBps: 2000, maximumBps: 10000 }] };
+  assert.equal(newMoneyToReachMinimumsCents(snapshot(), narrow), 0);
+  const plan = planCioNewMoneyAllocation(snapshot(), narrow, 1000);
+  assert.equal(plan.bands[0].allocationCents, 1000);
+  assert.equal(plan.bands[0].afterCents, 8_001_000);
+});
+
+test("retirement levers distinguish a funded plan, a solved return, and an unsupported contribution target", () => {
+  const funded = solveCioRetirementLevers({ ...assumptions, targetMonthlySpendingTodayCents: 0, annualExternalContributionCents: 0 });
+  assert.equal(funded.requiredAnnualContributionCents, 0);
+  assert.equal(funded.additionalMonthlyContributionCents, 0);
+  assert.equal(funded.requiredBaseReturn.status, "FUNDED_AT_BEAR_RETURN");
+  assert.equal(funded.earliestFundedRetirementDate, "2027-07-30");
+  const solvable = { ...assumptions, currentRetirementAssetsCents: 1_000_000, annualExternalContributionCents: 0, targetMonthlySpendingTodayCents: 10000, sustainableWithdrawalRateBps: 400, inflationRateBps: 0, bearReturnBps: 0, baseReturnBps: 300, bullReturnBps: 1000 };
+  const solved = solveCioRetirementLevers(solvable);
+  assert.equal(solved.requiredBaseReturn.status, "SOLVED");
+  assert.ok(solved.requiredBaseReturn.bps > 0 && solved.requiredBaseReturn.bps < 1000);
+  for (const [rate, fundedAtRate] of [[solved.requiredBaseReturn.bps, true], [solved.requiredBaseReturn.bps - 1, false]]) {
+    const projection = projectRetirement({ asOfDate: solvable.asOfDate, targetRetirementDate: solvable.retirementDate, currentRetirementAssetsCents: solvable.currentRetirementAssetsCents, annualExternalContributionCents: 0, contributionGrowthBps: 0, bearReturnBps: 0, baseReturnBps: rate, bullReturnBps: 1000, inflationBps: 0, targetMonthlyRetirementSpendingCents: 10000, sustainableWithdrawalRateBps: 400 });
+    assert.equal(projection.scenarios.base.outcome.realTargetGapCents === 0, fundedAtRate);
+  }
+  const unfunded = solveCioRetirementLevers({ ...assumptions, retirementDate: "2027-07-30", horizonYears: 1, currentRetirementAssetsCents: 0, annualExternalContributionCents: 0, targetMonthlySpendingTodayCents: 2_147_483_647 });
+  assert.equal(unfunded.requiredAnnualContributionCents, null);
+  assert.equal(unfunded.additionalAnnualContributionCents, null);
+  assert.equal(unfunded.requiredMonthlyContributionCents, null);
+  assert.equal(unfunded.additionalMonthlyContributionCents, null);
+  assert.equal(unfunded.requiredBaseReturn.status, "ABOVE_BULL_RETURN");
+  assert.equal(unfunded.earliestFundedRetirementDate, null);
+});
+
+test("advisor reserve recovery distinguishes missing floors, funded floors, and no available contributions", () => {
+  const notReady = { status: "NOT_READY", missingFields: ["targetRetirementDate"] };
+  for (const [reserve, months, available, netAnnual, expectedFloor, expectedMonths] of [
+    [null, null, 1000, 1200, null, null],
+    [1000, null, 1000, 1200, 1000, 0],
+    [1000, null, 200, 0, 1000, null],
+    [1000, null, 200, -1200, 1000, null],
+  ]) {
+    const current = snapshot({ retirement: notReady, liquidity: { readilyAvailableCents: available, essentialMonthlyExpenseCents: null, emergencyRunwayMonths: null }, recurringFlows: { netExternalContributionAnnualCents: netAnnual } });
+    const brief = buildCioAdvisorBrief({ snapshot: current, policy: { ...policy, minimumLiquidityReserveCents: reserve, minimumLiquidityMonths: months }, profile: null, recommendations: [] });
+    assert.equal(brief.liquidity.policyFloorCents, expectedFloor);
+    assert.equal(brief.liquidity.monthsToRestoreAtNetContributions, expectedMonths);
+  }
+  const progress = { year: 2026, status: "BEHIND", actualYtdCents: 1000, expectedToDateCents: 2000, annualTargetCents: 4000, paceGapCents: -1000, remainingAnnualCents: 3000, annualProgressBps: 2500, calendarProgressBps: 5000 };
+  const brief = buildCioAdvisorBrief({ snapshot: snapshot({ retirement: notReady, contributionProgress: progress }), policy: { ...policy, confirmed: false }, profile: null, recommendations: [] });
+  assert.deepEqual(brief.contributions.progress, progress);
+  assert.equal(brief.allocation.policyConfirmed, false);
+});
+
 test("new money fills target shortfalls first without selling", () => {
   const plan = planCioNewMoneyAllocation(snapshot(), policy, 2_000_000);
   assert.equal(plan.status, "PLANNED");

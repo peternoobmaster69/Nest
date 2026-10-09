@@ -147,6 +147,23 @@ function ageAtDate(birthDate: Date, date: Date) {
   return age;
 }
 
+function currentAgeAtDate(profile: CioSnapshotData["householdProfile"], date: Date) {
+  if (profile?.primaryBirthDate) return ageAtDate(profile.primaryBirthDate, date);
+  if (profile?.primaryCurrentAge == null || !profile.primaryAgeAsOfDate) return null;
+  return profile.primaryCurrentAge + ageAtDate(profile.primaryAgeAsOfDate, date);
+}
+
+function projectionAge(profile: CioSnapshotData["householdProfile"], currentAge: number | null, startDate: Date, date: Date) {
+  if (profile?.primaryBirthDate) return ageAtDate(profile.primaryBirthDate, date);
+  return currentAge === null ? null : currentAge + ageAtDate(startDate, date);
+}
+
+function retirementTarget(override: CioRetirementProjectionInput, profile: CioSnapshotData["householdProfile"]) {
+  if (override.targetRetirementDate !== undefined) return { targetDateValue: override.targetRetirementDate, targetAge: null };
+  if (override.targetRetirementAge !== undefined) return { targetDateValue: undefined, targetAge: override.targetRetirementAge };
+  return { targetDateValue: profile?.targetRetirementDate?.toISOString(), targetAge: profile?.targetRetirementAge ?? null };
+}
+
 function convertProjection(
   result: RetirementProjectionResult,
   profile: CioSnapshotData["householdProfile"],
@@ -179,9 +196,7 @@ function convertProjection(
         return {
           date: point.date,
           year: date.getUTCFullYear(),
-          age: profile?.primaryBirthDate
-            ? ageAtDate(profile.primaryBirthDate, date)
-            : currentAge === null ? null : currentAge + ageAtDate(projectionStartDate, date),
+          age: projectionAge(profile, currentAge, projectionStartDate, date),
           nominalCents: point.nominalValueCents,
           realCents: point.realValueCents,
           annualContributionCents: point.contributionCents,
@@ -215,7 +230,7 @@ function buildRetirementStatus(params: {
   const override = params.overrides ?? {};
   const missing: string[] = [];
   const value = <T>(overrideValue: T | undefined, profileValue: T | null | undefined, field: string): T | null => {
-    const resolved = overrideValue === undefined ? profileValue ?? null : overrideValue;
+    const resolved = overrideValue ?? profileValue ?? null;
     if (resolved === null) missing.push(field);
     return resolved;
   };
@@ -225,21 +240,8 @@ function buildRetirementStatus(params: {
   const bullReturnBps = value(override.bullReturnBps, profile?.bullReturnBps, "bullReturnBps");
   const spending = value(override.targetMonthlySpendingTodayCents, profile?.targetMonthlyRetirementSpendingCents, "targetMonthlyRetirementSpendingCents");
   const withdrawalRate = value(override.sustainableWithdrawalRateBps, profile?.sustainableWithdrawalRateBps, "sustainableWithdrawalRateBps");
-  const targetDateValue = override.targetRetirementDate !== undefined
-    ? override.targetRetirementDate
-    : override.targetRetirementAge !== undefined
-      ? undefined
-      : profile?.targetRetirementDate?.toISOString();
-  const targetAge = override.targetRetirementAge !== undefined
-    ? override.targetRetirementAge
-    : override.targetRetirementDate !== undefined
-      ? null
-      : profile?.targetRetirementAge ?? null;
-  let currentAge: number | null = null;
-  if (profile?.primaryBirthDate) currentAge = ageAtDate(profile.primaryBirthDate, params.asOfDate);
-  else if (profile?.primaryCurrentAge !== null && profile?.primaryCurrentAge !== undefined && profile.primaryAgeAsOfDate) {
-    currentAge = profile.primaryCurrentAge + ageAtDate(profile.primaryAgeAsOfDate, params.asOfDate);
-  }
+  const { targetDateValue, targetAge } = retirementTarget(override, profile);
+  const currentAge = currentAgeAtDate(profile, params.asOfDate);
   if (!targetDateValue && targetAge === null) missing.push("targetRetirementDateOrAge");
   if (!targetDateValue && targetAge !== null && !profile?.primaryBirthDate && currentAge === null) missing.push("primaryBirthDateOrCurrentAge");
   if (missing.length) return { status: "NOT_READY", missingFields: [...new Set(missing)], projection: null };
@@ -275,6 +277,57 @@ function buildRetirementStatus(params: {
     }
     throw error;
   }
+}
+
+function snapshotEvidence(data: CioSnapshotData, investmentSnapshots: CioSnapshot["investments"], asOfDate: Date): CioEvidenceRef[] {
+  const latestBankControlDate = data.bankControls.reduce<Date | null>(
+    (latest, account) => latest === null || account.updatedAt > latest ? account.updatedAt : latest,
+    null,
+  );
+  const latestSavingsSubAccountDate = data.savingsSubAccounts.reduce<Date | null>(
+    (latest, account) => latest === null || account.updatedAt > latest ? account.updatedAt : latest,
+    null,
+  );
+  return [
+    { id: "workspace-financial-assets", kind: "WORKSPACE", label: "Workspace financial assets", href: "/cio", asOfDate: isoDate(asOfDate) },
+    { id: "bank-controls", kind: "BANK_CONTROL", label: `${data.bankControls.length} eligible bank control balance${data.bankControls.length === 1 ? "" : "s"}`, href: "/", asOfDate: latestBankControlDate ? isoDate(latestBankControlDate) : isoDate(asOfDate) },
+    { id: "savings-sub-accounts", kind: "SAVINGS_SUB_ACCOUNT", label: `${data.savingsSubAccounts.length} planning-eligible savings sub-account${data.savingsSubAccounts.length === 1 ? "" : "s"}`, href: "/transactions", asOfDate: latestSavingsSubAccountDate ? isoDate(latestSavingsSubAccountDate) : isoDate(asOfDate) },
+    ...(data.householdProfile ? [{
+      id: "cio-household-profile",
+      kind: "CIO_PROFILE" as const,
+      label: "CIO household assumptions",
+      href: "/cio?setup=profile",
+      asOfDate: isoDate(data.householdProfile.updatedAt),
+    }] : []),
+    ...(data.investmentPolicy ? [{
+      id: "cio-investment-policy",
+      kind: "CIO_POLICY" as const,
+      label: data.investmentPolicy.confirmedAt ? "Confirmed CIO investment policy" : "Draft CIO investment policy",
+      href: "/cio?setup=policy",
+      asOfDate: isoDate(data.investmentPolicy.updatedAt),
+    }] : []),
+    ...investmentSnapshots.slice(0, 20).map((investment) => ({
+      id: `investment-${investment.id}`,
+      kind: "INVESTMENT_VALUATION" as const,
+      label: investment.latestValuationDate ? "Recorded investment valuation" : "Investment missing valuation",
+      href: `/investments?accountId=${encodeURIComponent(investment.id)}`,
+      asOfDate: investment.latestValuationDate ?? isoDate(asOfDate),
+    })),
+    ...data.planningPositions.slice(0, 10).map((position) => ({
+      id: `planning-position-${position.id}`,
+      kind: "PLANNING_POSITION" as const,
+      label: `${position.side === "ASSET" ? "Asset" : "Liability"} planning position`,
+      href: `/cio?setup=positions&id=${encodeURIComponent(position.id)}`,
+      asOfDate: isoDate(position.asOfDate),
+    })),
+    ...data.recurringFlows.slice(0, 10).map((flow) => ({
+      id: `recurring-flow-${flow.id}`,
+      kind: "RECURRING_FLOW" as const,
+      label: "Configured recurring planning flow",
+      href: "/cio?setup=flows",
+      asOfDate: isoDate(flow.updatedAt),
+    })),
+  ];
 }
 
 export async function buildCioSnapshot(params: {
@@ -474,54 +527,7 @@ export async function buildCioSnapshot(params: {
     truncatedSections,
   });
 
-  const latestBankControlDate = data.bankControls.reduce<Date | null>(
-    (latest, account) => latest === null || account.updatedAt > latest ? account.updatedAt : latest,
-    null,
-  );
-  const latestSavingsSubAccountDate = data.savingsSubAccounts.reduce<Date | null>(
-    (latest, account) => latest === null || account.updatedAt > latest ? account.updatedAt : latest,
-    null,
-  );
-  const evidence: CioEvidenceRef[] = [
-    { id: "workspace-financial-assets", kind: "WORKSPACE", label: "Workspace financial assets", href: "/cio", asOfDate: isoDate(asOfDate) },
-    { id: "bank-controls", kind: "BANK_CONTROL", label: `${data.bankControls.length} eligible bank control balance${data.bankControls.length === 1 ? "" : "s"}`, href: "/", asOfDate: latestBankControlDate ? isoDate(latestBankControlDate) : isoDate(asOfDate) },
-    { id: "savings-sub-accounts", kind: "SAVINGS_SUB_ACCOUNT", label: `${data.savingsSubAccounts.length} planning-eligible savings sub-account${data.savingsSubAccounts.length === 1 ? "" : "s"}`, href: "/transactions", asOfDate: latestSavingsSubAccountDate ? isoDate(latestSavingsSubAccountDate) : isoDate(asOfDate) },
-    ...(data.householdProfile ? [{
-      id: "cio-household-profile",
-      kind: "CIO_PROFILE" as const,
-      label: "CIO household assumptions",
-      href: "/cio?setup=profile",
-      asOfDate: isoDate(data.householdProfile.updatedAt),
-    }] : []),
-    ...(data.investmentPolicy ? [{
-      id: "cio-investment-policy",
-      kind: "CIO_POLICY" as const,
-      label: data.investmentPolicy.confirmedAt ? "Confirmed CIO investment policy" : "Draft CIO investment policy",
-      href: "/cio?setup=policy",
-      asOfDate: isoDate(data.investmentPolicy.updatedAt),
-    }] : []),
-    ...investmentSnapshots.slice(0, 20).map((investment) => ({
-      id: `investment-${investment.id}`,
-      kind: "INVESTMENT_VALUATION" as const,
-      label: investment.latestValuationDate ? "Recorded investment valuation" : "Investment missing valuation",
-      href: `/investments?accountId=${encodeURIComponent(investment.id)}`,
-      asOfDate: investment.latestValuationDate ?? isoDate(asOfDate),
-    })),
-    ...data.planningPositions.slice(0, 10).map((position) => ({
-      id: `planning-position-${position.id}`,
-      kind: "PLANNING_POSITION" as const,
-      label: `${position.side === "ASSET" ? "Asset" : "Liability"} planning position`,
-      href: `/cio?setup=positions&id=${encodeURIComponent(position.id)}`,
-      asOfDate: isoDate(position.asOfDate),
-    })),
-    ...data.recurringFlows.slice(0, 10).map((flow) => ({
-      id: `recurring-flow-${flow.id}`,
-      kind: "RECURRING_FLOW" as const,
-      label: "Configured recurring planning flow",
-      href: "/cio?setup=flows",
-      asOfDate: isoDate(flow.updatedAt),
-    })),
-  ];
+  const evidence = snapshotEvidence(data, investmentSnapshots, asOfDate);
   const policyExceptions = evaluateCioPolicy({
     minimumImmediateBankCashCents: data.householdProfile?.minimumImmediateBankCashCents,
     immediateBankCashCents: bankControlCents,

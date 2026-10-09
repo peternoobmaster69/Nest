@@ -77,7 +77,8 @@ const severityOrder: Record<CioStrategyRecommendationSeverity, number> = {
 };
 
 function recommendationId(code: CioStrategyRecommendationCode, scopeKey?: string | null) {
-  return `${code.toLowerCase()}${scopeKey ? `:${scopeKey.toLowerCase()}` : ""}`;
+  const normalizedCode = code.toLowerCase();
+  return scopeKey ? `${normalizedCode}:${scopeKey.toLowerCase()}` : normalizedCode;
 }
 
 function evidenceIds(snapshot: CioSnapshot) {
@@ -151,6 +152,12 @@ export function solveRequiredAnnualRetirementContributionCents(
   }
 }
 
+function exceptionMetric(value: CioPolicyException["actual"] | CioPolicyException["threshold"], label: string) {
+  if (value?.value == null) return null;
+  const unit = value.unit === "CENTS" || value.unit === "BPS" ? value.unit : "COUNT";
+  return metric(unit, value.value, label);
+}
+
 function concentrationRecommendations(
   snapshot: CioSnapshot,
   exceptions: readonly CioPolicyException[],
@@ -174,56 +181,89 @@ function concentrationRecommendations(
       action: "Direct new contributions away from the concentrated exposure until it returns within the confirmed limit.",
       rationale: "Using future cash flows can reduce concentration without forcing an immediate sale or creating a trade instruction.",
       scopeKey: exception.code,
-      current: exception.actual.value === null
-        ? null
-        : metric(exception.actual.unit === "CENTS" ? "CENTS" : exception.actual.unit === "BPS" ? "BPS" : "COUNT", exception.actual.value, "Current"),
-      target: exception.threshold?.value === null || exception.threshold?.value === undefined
-        ? null
-        : metric(exception.threshold.unit === "CENTS" ? "CENTS" : exception.threshold.unit === "BPS" ? "BPS" : "COUNT", exception.threshold.value, "Policy limit"),
+      current: exceptionMetric(exception.actual, "Current"),
+      target: exceptionMetric(exception.threshold, "Policy limit"),
       annualChangeCents: null,
       evidenceIds: exception.evidence.map((item) => item.id).slice(0, 8),
       requiresUserConfirmation: true,
     }));
 }
 
-export function buildCioStrategyRecommendations(params: {
-  snapshot: CioSnapshot;
-  policy: CioRecommendationPolicy | null;
-  profile: CioRecommendationProfile | null;
-}) {
-  const { snapshot, policy, profile } = params;
+function confirmedPolicyRecommendations(snapshot: CioSnapshot, policy: CioRecommendationPolicy, sharedEvidence: string[]) {
   const recommendations: CioStrategyRecommendation[] = [];
-  const sharedEvidence = evidenceIds(snapshot);
-
-  if (snapshot.dataQuality.completenessBps < 10_000) {
+  const monthsFloor = policy.minimumLiquidityMonths !== null && snapshot.liquidity.essentialMonthlyExpenseCents !== null
+    ? policy.minimumLiquidityMonths * snapshot.liquidity.essentialMonthlyExpenseCents
+    : 0;
+  const liquidityFloor = Math.max(policy.minimumLiquidityReserveCents ?? 0, monthsFloor);
+  if (liquidityFloor > 0 && snapshot.liquidity.readilyAvailableCents < liquidityFloor) {
     recommendations.push({
-      id: recommendationId("COMPLETE_CIO_SETUP"),
-      code: "COMPLETE_CIO_SETUP",
-      category: "DATA_QUALITY",
-      severity: snapshot.dataQuality.completenessBps < 5_000 ? "CRITICAL" : "HIGH",
-      priority: 10,
-      title: "Complete the CIO data foundation",
-      action: "Resolve missing or stale valuations, classifications, exposure weights, and planning assumptions before making higher-conviction allocation changes.",
-      rationale: "Incomplete inputs reduce the reliability of allocation, concentration, liquidity, and retirement conclusions.",
-      scopeKey: null,
-      current: metric("BPS", snapshot.dataQuality.completenessBps, "Data completeness"),
-      target: metric("BPS", 10_000, "Required completeness"),
-      annualChangeCents: null,
+      id: recommendationId("REBUILD_LIQUID_RESERVE"),
+      code: "REBUILD_LIQUID_RESERVE",
+      category: "LIQUIDITY",
+      severity: "CRITICAL",
+      priority: 25,
+      title: "Restore the emergency-liquidity reserve",
+      action: "Prioritize immediate and liquid reserves over additional long-term or locked investments until the policy floor is met.",
+      rationale: "A funded liquidity layer reduces the chance that long-term assets must be disturbed at an unfavorable time.",
+      scopeKey: "READILY_AVAILABLE",
+      current: metric("CENTS", snapshot.liquidity.readilyAvailableCents, "Readily available"),
+      target: metric("CENTS", liquidityFloor, "Policy floor"),
+      annualChangeCents: liquidityFloor - snapshot.liquidity.readilyAvailableCents,
       evidenceIds: sharedEvidence,
       requiresUserConfirmation: true,
     });
   }
 
-  if (!policy?.confirmed) {
+  const allocationActions: CioStrategyRecommendation[] = [];
+  for (const band of policy.assetClassBands) {
+    const actual = snapshot.allocation.assetClasses.find((item) => item.key === band.assetClass)?.allocationBps ?? 0;
+    if (actual < band.minimumBps) {
+      allocationActions.push({
+        id: recommendationId("DIRECT_NEW_CONTRIBUTIONS_TO_UNDERWEIGHT_ASSET", band.assetClass),
+        code: "DIRECT_NEW_CONTRIBUTIONS_TO_UNDERWEIGHT_ASSET",
+        category: "ALLOCATION",
+        severity: "HIGH",
+        priority: 50,
+        title: `${band.assetClass} is below its confirmed band`,
+        action: `Direct a larger share of new investable contributions toward ${band.assetClass} until it returns to its confirmed target band.`,
+        rationale: "Contribution-led rebalancing moves the portfolio toward policy without requiring an immediate sale.",
+        scopeKey: band.assetClass,
+        current: metric("BPS", actual, "Current allocation"),
+        target: metric("BPS", band.targetBps, "Confirmed target"),
+        annualChangeCents: null,
+        evidenceIds: sharedEvidence,
+        requiresUserConfirmation: true,
+      });
+    } else if (actual > band.maximumBps) {
+      allocationActions.push({
+        id: recommendationId("PAUSE_NEW_CONTRIBUTIONS_TO_OVERWEIGHT_ASSET", band.assetClass),
+        code: "PAUSE_NEW_CONTRIBUTIONS_TO_OVERWEIGHT_ASSET",
+        category: "ALLOCATION",
+        severity: "HIGH",
+        priority: 51,
+        title: `${band.assetClass} is above its confirmed band`,
+        action: `Do not prioritize additional contributions to ${band.assetClass}; route new investable cash toward underweight policy assets instead.`,
+        rationale: "Pausing additions can reduce the overweight through cash flows while avoiding an automatic sell instruction.",
+        scopeKey: band.assetClass,
+        current: metric("BPS", actual, "Current allocation"),
+        target: metric("BPS", band.targetBps, "Confirmed target"),
+        annualChangeCents: null,
+        evidenceIds: sharedEvidence,
+        requiresUserConfirmation: true,
+      });
+    }
+  }
+  recommendations.push(...allocationActions);
+  if (policy.assetClassBands.length > 0 && allocationActions.length === 0) {
     recommendations.push({
-      id: recommendationId("CONFIRM_INVESTMENT_POLICY"),
-      code: "CONFIRM_INVESTMENT_POLICY",
+      id: recommendationId("MAINTAIN_CONFIRMED_ALLOCATION"),
+      code: "MAINTAIN_CONFIRMED_ALLOCATION",
       category: "ALLOCATION",
-      severity: "HIGH",
-      priority: 15,
-      title: "Confirm household investment guardrails",
-      action: "Set and confirm asset-class bands, liquidity floors, and concentration limits before Nest recommends contribution routing.",
-      rationale: "Nest does not invent a risk budget or allocation target and present it as household policy.",
+      severity: "LOW",
+      priority: 80,
+      title: "Maintain the confirmed strategic allocation",
+      action: "Continue current contribution discipline and review allocation quarterly; rebalance with new money before considering sales.",
+      rationale: "Every configured asset class is currently inside its confirmed policy band.",
       scopeKey: null,
       current: null,
       target: null,
@@ -232,114 +272,11 @@ export function buildCioStrategyRecommendations(params: {
       requiresUserConfirmation: true,
     });
   }
+  return recommendations;
+}
 
-  const immediateFloor = profile?.minimumImmediateBankCashCents ?? 0;
-  if (immediateFloor > 0 && snapshot.totals.bankControlCents < immediateFloor) {
-    const shortfall = immediateFloor - snapshot.totals.bankControlCents;
-    recommendations.push({
-      id: recommendationId("REBUILD_IMMEDIATE_CASH"),
-      code: "REBUILD_IMMEDIATE_CASH",
-      category: "LIQUIDITY",
-      severity: "CRITICAL",
-      priority: 20,
-      title: "Rebuild same-day bank cash first",
-      action: "Direct the next available external savings to immediate bank cash until the configured floor is restored.",
-      rationale: "Same-day cash protects the investment plan from forced withdrawals or sales during an emergency.",
-      scopeKey: "IMMEDIATE_CASH",
-      current: metric("CENTS", snapshot.totals.bankControlCents, "Immediate bank cash"),
-      target: metric("CENTS", immediateFloor, "Configured floor"),
-      annualChangeCents: shortfall,
-      evidenceIds: sharedEvidence,
-      requiresUserConfirmation: true,
-    });
-  }
-
-  if (policy?.confirmed) {
-    const monthsFloor = policy.minimumLiquidityMonths !== null && snapshot.liquidity.essentialMonthlyExpenseCents !== null
-      ? policy.minimumLiquidityMonths * snapshot.liquidity.essentialMonthlyExpenseCents
-      : 0;
-    const liquidityFloor = Math.max(policy.minimumLiquidityReserveCents ?? 0, monthsFloor);
-    if (liquidityFloor > 0 && snapshot.liquidity.readilyAvailableCents < liquidityFloor) {
-      recommendations.push({
-        id: recommendationId("REBUILD_LIQUID_RESERVE"),
-        code: "REBUILD_LIQUID_RESERVE",
-        category: "LIQUIDITY",
-        severity: "CRITICAL",
-        priority: 25,
-        title: "Restore the emergency-liquidity reserve",
-        action: "Prioritize immediate and liquid reserves over additional long-term or locked investments until the policy floor is met.",
-        rationale: "A funded liquidity layer reduces the chance that long-term assets must be disturbed at an unfavorable time.",
-        scopeKey: "READILY_AVAILABLE",
-        current: metric("CENTS", snapshot.liquidity.readilyAvailableCents, "Readily available"),
-        target: metric("CENTS", liquidityFloor, "Policy floor"),
-        annualChangeCents: liquidityFloor - snapshot.liquidity.readilyAvailableCents,
-        evidenceIds: sharedEvidence,
-        requiresUserConfirmation: true,
-      });
-    }
-
-    const allocationActions: CioStrategyRecommendation[] = [];
-    for (const band of policy.assetClassBands) {
-      const actual = snapshot.allocation.assetClasses.find((item) => item.key === band.assetClass)?.allocationBps ?? 0;
-      if (actual < band.minimumBps) {
-        allocationActions.push({
-          id: recommendationId("DIRECT_NEW_CONTRIBUTIONS_TO_UNDERWEIGHT_ASSET", band.assetClass),
-          code: "DIRECT_NEW_CONTRIBUTIONS_TO_UNDERWEIGHT_ASSET",
-          category: "ALLOCATION",
-          severity: "HIGH",
-          priority: 50,
-          title: `${band.assetClass} is below its confirmed band`,
-          action: `Direct a larger share of new investable contributions toward ${band.assetClass} until it returns to its confirmed target band.`,
-          rationale: "Contribution-led rebalancing moves the portfolio toward policy without requiring an immediate sale.",
-          scopeKey: band.assetClass,
-          current: metric("BPS", actual, "Current allocation"),
-          target: metric("BPS", band.targetBps, "Confirmed target"),
-          annualChangeCents: null,
-          evidenceIds: sharedEvidence,
-          requiresUserConfirmation: true,
-        });
-      } else if (actual > band.maximumBps) {
-        allocationActions.push({
-          id: recommendationId("PAUSE_NEW_CONTRIBUTIONS_TO_OVERWEIGHT_ASSET", band.assetClass),
-          code: "PAUSE_NEW_CONTRIBUTIONS_TO_OVERWEIGHT_ASSET",
-          category: "ALLOCATION",
-          severity: "HIGH",
-          priority: 51,
-          title: `${band.assetClass} is above its confirmed band`,
-          action: `Do not prioritize additional contributions to ${band.assetClass}; route new investable cash toward underweight policy assets instead.`,
-          rationale: "Pausing additions can reduce the overweight through cash flows while avoiding an automatic sell instruction.",
-          scopeKey: band.assetClass,
-          current: metric("BPS", actual, "Current allocation"),
-          target: metric("BPS", band.targetBps, "Confirmed target"),
-          annualChangeCents: null,
-          evidenceIds: sharedEvidence,
-          requiresUserConfirmation: true,
-        });
-      }
-    }
-    recommendations.push(...allocationActions);
-    if (policy.assetClassBands.length > 0 && allocationActions.length === 0) {
-      recommendations.push({
-        id: recommendationId("MAINTAIN_CONFIRMED_ALLOCATION"),
-        code: "MAINTAIN_CONFIRMED_ALLOCATION",
-        category: "ALLOCATION",
-        severity: "LOW",
-        priority: 80,
-        title: "Maintain the confirmed strategic allocation",
-        action: "Continue current contribution discipline and review allocation quarterly; rebalance with new money before considering sales.",
-        rationale: "Every configured asset class is currently inside its confirmed policy band.",
-        scopeKey: null,
-        current: null,
-        target: null,
-        annualChangeCents: null,
-        evidenceIds: sharedEvidence,
-        requiresUserConfirmation: true,
-      });
-    }
-  }
-
-  recommendations.push(...concentrationRecommendations(snapshot, snapshot.policyExceptions));
-
+function retirementRecommendations(snapshot: CioSnapshot, sharedEvidence: string[]) {
+  const recommendations: CioStrategyRecommendation[] = [];
   if (snapshot.retirement.status === "READY") {
     const assumptions = snapshot.retirement.projection.assumptions;
     const requiredAnnual = solveRequiredAnnualRetirementContributionCents(assumptions);
@@ -414,6 +351,83 @@ export function buildCioStrategyRecommendations(params: {
       requiresUserConfirmation: true,
     });
   }
+
+  return recommendations;
+}
+
+export function buildCioStrategyRecommendations(params: {
+  snapshot: CioSnapshot;
+  policy: CioRecommendationPolicy | null;
+  profile: CioRecommendationProfile | null;
+}) {
+  const { snapshot, policy, profile } = params;
+  const recommendations: CioStrategyRecommendation[] = [];
+  const sharedEvidence = evidenceIds(snapshot);
+
+  if (snapshot.dataQuality.completenessBps < 10_000) {
+    recommendations.push({
+      id: recommendationId("COMPLETE_CIO_SETUP"),
+      code: "COMPLETE_CIO_SETUP",
+      category: "DATA_QUALITY",
+      severity: snapshot.dataQuality.completenessBps < 5_000 ? "CRITICAL" : "HIGH",
+      priority: 10,
+      title: "Complete the CIO data foundation",
+      action: "Resolve missing or stale valuations, classifications, exposure weights, and planning assumptions before making higher-conviction allocation changes.",
+      rationale: "Incomplete inputs reduce the reliability of allocation, concentration, liquidity, and retirement conclusions.",
+      scopeKey: null,
+      current: metric("BPS", snapshot.dataQuality.completenessBps, "Data completeness"),
+      target: metric("BPS", 10_000, "Required completeness"),
+      annualChangeCents: null,
+      evidenceIds: sharedEvidence,
+      requiresUserConfirmation: true,
+    });
+  }
+
+  if (!policy?.confirmed) {
+    recommendations.push({
+      id: recommendationId("CONFIRM_INVESTMENT_POLICY"),
+      code: "CONFIRM_INVESTMENT_POLICY",
+      category: "ALLOCATION",
+      severity: "HIGH",
+      priority: 15,
+      title: "Confirm household investment guardrails",
+      action: "Set and confirm asset-class bands, liquidity floors, and concentration limits before Nest recommends contribution routing.",
+      rationale: "Nest does not invent a risk budget or allocation target and present it as household policy.",
+      scopeKey: null,
+      current: null,
+      target: null,
+      annualChangeCents: null,
+      evidenceIds: sharedEvidence,
+      requiresUserConfirmation: true,
+    });
+  }
+
+  const immediateFloor = profile?.minimumImmediateBankCashCents ?? 0;
+  if (immediateFloor > 0 && snapshot.totals.bankControlCents < immediateFloor) {
+    const shortfall = immediateFloor - snapshot.totals.bankControlCents;
+    recommendations.push({
+      id: recommendationId("REBUILD_IMMEDIATE_CASH"),
+      code: "REBUILD_IMMEDIATE_CASH",
+      category: "LIQUIDITY",
+      severity: "CRITICAL",
+      priority: 20,
+      title: "Rebuild same-day bank cash first",
+      action: "Direct the next available external savings to immediate bank cash until the configured floor is restored.",
+      rationale: "Same-day cash protects the investment plan from forced withdrawals or sales during an emergency.",
+      scopeKey: "IMMEDIATE_CASH",
+      current: metric("CENTS", snapshot.totals.bankControlCents, "Immediate bank cash"),
+      target: metric("CENTS", immediateFloor, "Configured floor"),
+      annualChangeCents: shortfall,
+      evidenceIds: sharedEvidence,
+      requiresUserConfirmation: true,
+    });
+  }
+
+  if (policy?.confirmed) recommendations.push(...confirmedPolicyRecommendations(snapshot, policy, sharedEvidence));
+
+  recommendations.push(...concentrationRecommendations(snapshot, snapshot.policyExceptions));
+
+  recommendations.push(...retirementRecommendations(snapshot, sharedEvidence));
 
   return recommendations
     .toSorted((left, right) => left.priority - right.priority || severityOrder[left.severity] - severityOrder[right.severity] || left.id.localeCompare(right.id))
