@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { readAppStyles } from "./read-app-styles.mjs";
 import { AskNestRequestSchema } from "../lib/ai/ask-nest-contracts.ts";
+import { resolveTransactionUrlFilters } from "../lib/transaction-view-filters.ts";
 
 const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
@@ -271,7 +272,10 @@ test("Transactions supports Ask Nest deep links and multiple custom months", asy
   const tools = await source("lib/ai/ask-nest-tools.ts");
   const styles = await readAppStyles(root);
 
-  assert.match(page, /searchParams\.get\(["']view["']\) === ["']ask-nest["']/);
+  assert.match(page, /resolveTransactionUrlFilters\(searchParams, bankAccounts\.data, budgets\.data\)/);
+  assert.deepEqual(resolveTransactionUrlFilters(new URLSearchParams("view=ask-nest"), [], []).dates, {
+    activeQuickSelect: null, customMonths: [], dateFilter: {},
+  });
   assert.match(page, /searchParams\.get\(["']transactionId["']\)/);
   assert.match(page, /params\.set\(["']transactionId["'], targetTransactionId\)/);
   assert.match(page, /document\.getElementById\(`transaction-\$\{targetTransactionId\}`\)/);

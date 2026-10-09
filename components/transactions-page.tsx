@@ -11,15 +11,13 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SubmitEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useSessionState } from "@/lib/use-session-state";
 import { getMotionSafeScrollBehavior } from "@/lib/motion";
-import { getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction, confirmMoneyChange } from "@/lib/confirm-destructive";
-import { AlertTriangle, ArrowLeftRight, Check, Layers3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
+import { ArrowLeftRight, Check, Layers3, Pencil, Plus, Search, X } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
@@ -28,6 +26,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { TransactionOperationControl } from "@/components/transactions/transaction-operation-control";
 import { TransactionMonthList } from "@/components/transactions/transaction-month-list";
 import { TransactionCorrectionDialog } from "@/components/transactions/transaction-correction-dialog";
+import { TransactionBankSelector } from "@/components/transactions/transaction-bank-selector";
+import { TransactionBankReconciliation } from "@/components/transactions/transaction-bank-reconciliation";
+import { TransactionBankBalanceDialog } from "@/components/transactions/transaction-bank-balance-dialog";
+import { parseNonNegativeCents } from "@/lib/amount-input";
 import { TransactionBudgetGrid } from "@/components/transactions/transaction-budget-grid";
 import { TransactionBudgetDialog } from "@/components/transactions/transaction-budget-dialog";
 import type { TransactionLineageResponse } from "@/components/transactions/transaction-lineage-panel";
@@ -158,7 +160,6 @@ export function TransactionsPage() {
   const [activeGroupFilterId, setActiveGroupFilterId] = useSessionState<string>("nest:view:transactions:group", "ALL");
   const [hydratedUrlFilterKey, setHydratedUrlFilterKey] = useState<string | null>(null);
   const urlFilterHydrated = hydratedUrlFilterKey === urlFilterKey;
-  const [failedBankLogos, setFailedBankLogos] = useState<Record<string, boolean>>({});
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
   const [deletingTransactionIds, setDeletingTransactionIds] = useState<string[]>([]);
   const [editSubject, setEditSubject] = useState("");
@@ -171,6 +172,7 @@ export function TransactionsPage() {
   const [editGroupId, setEditGroupId] = useState("");
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
   const [editBankBalance, setEditBankBalance] = useState("");
+  const nextBankBalanceCents = parseNonNegativeCents(editBankBalance);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferTitle, setTransferTitle] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
@@ -179,7 +181,6 @@ export function TransactionsPage() {
   const [receivableInfoBudgetId, setReceivableInfoBudgetId] = useState<string | null>(null);
   const recentTransactionsRef = useRef<HTMLElement | null>(null);
   const subAccountsRef = useRef<HTMLElement | null>(null);
-  const bankPickerRef = useRef<HTMLDivElement | null>(null);
   const transactionGroupPickerRef = useRef<HTMLDivElement | null>(null);
   const transactionGroupPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const transactionGroupCardsRef = useRef<HTMLDivElement | null>(null);
@@ -274,7 +275,6 @@ export function TransactionsPage() {
 
   const bankAccounts = useQuery(bankAccountsQueryOptions(workspaceId));
   const bankAccountOptions = useMemo(() => bankAccounts.data ?? [], [bankAccounts.data]);
-  const hasMultipleBankAccounts = bankAccountOptions.length > 1;
   const effectiveSelectedBankId = bankAccountOptions.length === 1 ? bankAccountOptions[0].id : selectedBankId;
 
   // Query for accurate month aggregation data (not paginated)
@@ -570,18 +570,6 @@ export function TransactionsPage() {
       row?.focus({ preventScroll: true });
     });
   }, [targetTransactionId, transactionList, transactions.isLoading, urlFilterHydrated]);
-
-  // Close bank picker when clicking outside
-  useEffect(() => {
-    if (!isBankPickerOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!bankPickerRef.current?.contains(event.target as Node)) {
-        setIsBankPickerOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isBankPickerOpen]);
 
   useEffect(() => {
     if (!isTransactionGroupPickerOpen) return;
@@ -1033,15 +1021,6 @@ export function TransactionsPage() {
   );
   const displayedBankBalanceCents = selectedBank ? selectedBank.currentBalanceCents : totalBankBalanceCents;
   const displayedLinkedBudgetCents = selectedBank ? visibleBudgetTotalCents : totalLinkedBudgetCents;
-  const displayedDiscrepancyCents = displayedBankBalanceCents - displayedLinkedBudgetCents;
-  const hasDisplayedDiscrepancy = displayedDiscrepancyCents !== 0;
-  const displayedDiscrepancyAmount = formatCents(Math.abs(displayedDiscrepancyCents));
-  const displayedDiscrepancyLabel = displayedDiscrepancyCents > 0
-    ? `${displayedDiscrepancyAmount} unallocated`
-    : `${displayedDiscrepancyAmount} over-allocated`;
-  const displayedDiscrepancyDescription = displayedDiscrepancyCents > 0
-    ? "Bank balance is higher than the sub-account total."
-    : "Sub-accounts exceed the bank balance.";
   const receivableInfoBudget = useMemo(
     () => visibleBudgets.find((budget) => budget.id === receivableInfoBudgetId) ?? null,
     [visibleBudgets, receivableInfoBudgetId],
@@ -1245,10 +1224,19 @@ export function TransactionsPage() {
     setEditBankBalance("");
   };
 
+  const reloadBankBalance = async () => {
+    const result = await bankAccounts.refetch();
+    if (result.isError || !result.data) return;
+    updateBankBalance.reset();
+    if (editingBankAccount) {
+      setEditingBankAccount(result.data.find((bank) => bank.id === editingBankAccount.id) ?? null);
+    }
+  };
+
   const onSubmitBankBalance = async (event: SubmitEvent) => {
     event.preventDefault();
-    if (!editingBankAccount || !editBankBalance) return;
-    const nextBalanceCents = Math.round(Number(editBankBalance) * 100);
+    if (updateBankBalance.isPending || !editingBankAccount || nextBankBalanceCents === null) return;
+    const nextBalanceCents = nextBankBalanceCents;
     const confirmed = await confirmMoneyChange({
       title: "Confirm bank balance adjustment",
       message: "This changes the account starting balance used by reconciliation.",
@@ -1517,93 +1505,17 @@ export function TransactionsPage() {
         <TransactionsInitialSkeleton />
       ) : (
         <>
-          {/* Compact Bank Selector */}
-        <div className="bank-selector-row" style={{ marginBottom: "10px" }}>
-          <div className="bank-selector-summary">
-            <div className="bank-selector-main">
-              {selectedBank ? (
-                (() => {
-                  const bankMeta = getSingaporeBankByName(selectedBank.bankName || selectedBank.name);
-                  const logo = getBankLogoUrl(bankMeta);
-                  return logo && !failedBankLogos[selectedBank.id] ? (
-                    <Image
-                      src={logo}
-                      alt={bankMeta?.name || "Bank"}
-                      width={44}
-                      height={24}
-                      sizes="44px"
-                      className={`bank-logo-img ${bankMeta?.code === "DBS" ? "bank-logo-img-dbs" : ""}`}
-                      loading="lazy"
-                      onError={() => setFailedBankLogos((prev) => ({ ...prev, [selectedBank.id]: true }))}
-                    />
-                  ) : bankMeta ? (
-                    <span className="bank-icon" style={{ backgroundColor: bankMeta.color }}>
-                      {bankMeta.short}
-                    </span>
-                  ) : (
-                    <span className="bank-icon bank-icon-default">BNK</span>
-                  );
-                })()
-              ) : (
-                <span className="bank-icon bank-icon-default">ALL</span>
-              )}
-              <div className={`bank-selector-amount ${getAmountToneClass(displayedBankBalanceCents)}`}>
-                {formatCents(displayedBankBalanceCents)}
-              </div>
-            </div>
-            <div className="bank-selector-actions" ref={bankPickerRef}>
-              {hasMultipleBankAccounts ? (
-                <Button
-                  type="button"
-                  className="bm-edit-btn tx-bank-action-btn"
-                  onClick={() => setIsBankPickerOpen((open) => !open)}
-                  aria-label="Choose bank"
-                  title="Choose bank"
-                >
-                  ▾
-                </Button>
-              ) : null}
-              {selectedBank ? (
-                <Button
-                  type="button"
-                  className="bm-edit-btn tx-bank-action-btn"
-                  onClick={() => openEditBankBalance(selectedBank)}
-                  aria-label={`Edit ${selectedBank.name} balance`}
-                  title="Edit balance"
-                >
-                  ✎
-                </Button>
-              ) : null}
-              {isBankPickerOpen && hasMultipleBankAccounts ? (
-                <div className="bank-selector-menu" role="menu" aria-label="Bank options">
-                  <Button
-                    type="button"
-                    className={`bank-selector-option${selectedBankId === "" ? " is-active" : ""}`}
-                    onClick={() => {
-                      setSelectedBankId("");
-                      setIsBankPickerOpen(false);
-                    }}
-                  >
-                    All banks
-                  </Button>
-                  {bankAccountOptions.map((bank) => (
-                    <Button
-                      key={bank.id}
-                      type="button"
-                      className={`bank-selector-option${selectedBankId === bank.id ? " is-active" : ""}`}
-                      onClick={() => {
-                        setSelectedBankId(bank.id);
-                        setIsBankPickerOpen(false);
-                      }}
-                    >
-                      {bank.name}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
+          <TransactionBankSelector
+            accounts={bankAccountOptions}
+            selected={selectedBank}
+            balanceCents={displayedBankBalanceCents}
+            open={isBankPickerOpen}
+            busy={updateBankBalance.isPending}
+            formatAmount={formatCents}
+            onOpenChange={setIsBankPickerOpen}
+            onSelect={setSelectedBankId}
+            onEdit={openEditBankBalance}
+          />
 
       <section ref={subAccountsRef} className="card tx-subaccounts-section">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1623,60 +1535,18 @@ export function TransactionsPage() {
             </Button>
           </div>
         </div>
-        {hasDisplayedDiscrepancy ? (
-          <div className="tx-reconciliation" role="status" aria-live="polite">
-            <div className="tx-reconciliation-status">
-              <span className="tx-reconciliation-icon" aria-hidden="true"><AlertTriangle size={15} /></span>
-              <div className="tx-reconciliation-copy">
-                <strong>{displayedDiscrepancyLabel}</strong>
-                <span>{displayedDiscrepancyDescription}</span>
-              </div>
-            </div>
-
-            <dl className="tx-reconciliation-values">
-              <div>
-                <dt>Bank</dt>
-                <dd>{formatCents(displayedBankBalanceCents)}</dd>
-              </div>
-              <div>
-                <dt>Sub-accounts</dt>
-                <dd>{formatCents(displayedLinkedBudgetCents)}</dd>
-              </div>
-            </dl>
-
-            <div className="tx-reconciliation-actions">
-            {selectedBank ? (
-                <>
-                  <Button
-                    type="button"
-                    className="btn btn-ghost btn-xs tx-reconciliation-action"
-                    onClick={() => openEditBankBalance(selectedBank)}
-                  >
-                    <Pencil size={13} aria-hidden="true" /> Edit bank
-                  </Button>
-                  <Button
-                    type="button"
-                    className="btn btn-primary btn-xs tx-reconciliation-action"
-                    onClick={syncSelectedBankBalance}
-                    disabled={updateBankBalance.isPending}
-                    title="Update bank balance to match the sub-account total"
-                  >
-                    <RefreshCw size={13} aria-hidden="true" />
-                    {updateBankBalance.isPending ? "Updating…" : "Use sub-account total"}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  className="btn btn-ghost btn-xs tx-reconciliation-action"
-                  onClick={() => setIsBankPickerOpen(true)}
-                >
-                  Choose bank
-                </Button>
-              )}
-            </div>
-          </div>
-        ) : null}
+        <TransactionBankReconciliation
+          bankBalanceCents={displayedBankBalanceCents}
+          budgetBalanceCents={displayedLinkedBudgetCents}
+          selected={Boolean(selectedBank)}
+          pending={updateBankBalance.isPending}
+          error={editingBankAccount ? null : updateBankBalance.error}
+          formatAmount={formatCents}
+          onEdit={() => openEditBankBalance(selectedBank!)}
+          onChoose={() => setIsBankPickerOpen(true)}
+          onSync={syncSelectedBankBalance}
+          onReload={reloadBankBalance}
+        />
         <TransactionBudgetGrid
           budgets={visibleBudgets}
           activeId={activeBudgetFilterId}
@@ -2420,43 +2290,18 @@ export function TransactionsPage() {
       )}
 
       {editingBankAccount && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={closeEditBankBalance} title="Edit bank balance" surface="custom" overlayClassName="profile-modal-overlay">
-          <dialog open className="profile-modal txn-modal">
-            <div className="profile-modal-head">
-              <h3>Edit Bank Balance</h3>
-              <ModalCloseButton onClick={closeEditBankBalance} label="Close Edit Bank Balance" />
-            </div>
-            <form className="modal-form-shell" onSubmit={onSubmitBankBalance}>
-              <div className="profile-modal-body txn-modal-body txn-modal-form txn-bank-balance-form">
-              <div className="form-group">
-                <label htmlFor="transactions-editing-bank-account-name" className="label">Bank Account</label>
-                <Input id="transactions-editing-bank-account-name" className="input" value={editingBankAccount.name} disabled />
-              </div>
-              <div className="form-group">
-                <label className="label">Balance ({baseCurrency})</label>
-                <NumericCalculatorInput
-                  step="0.01"
-                  min="0"
-                  value={editBankBalance}
-                  onValueChange={setEditBankBalance}
-                  required
-                />
-              </div>
-              {updateBankBalance.isError ? (
-                <div style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
-                  {(updateBankBalance.error as Error).message || "Failed to save bank balance"}
-                </div>
-              ) : null}
-              </div>
-              <div className="txn-modal-actions">
-                <Button type="button" className="btn btn-ghost" onClick={closeEditBankBalance}>Cancel</Button>
-                <Button type="submit" className="btn btn-primary" disabled={updateBankBalance.isPending}>
-                  {updateBankBalance.isPending ? "Saving..." : "Save Balance"}
-                </Button>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>,
+        <TransactionBankBalanceDialog
+          name={editingBankAccount.name}
+          currency={baseCurrency}
+          balance={editBankBalance}
+          valid={nextBankBalanceCents !== null}
+          pending={updateBankBalance.isPending}
+          error={updateBankBalance.error}
+          onChange={setEditBankBalance}
+          onClose={closeEditBankBalance}
+          onSubmit={onSubmitBankBalance}
+          onReload={reloadBankBalance}
+        />,
         document.body
       )}
 

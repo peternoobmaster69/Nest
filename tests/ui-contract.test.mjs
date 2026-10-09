@@ -159,7 +159,7 @@ test("sidebar does not expose the credit alert diagnostics route", async () => {
 
 test("dashboard and transactions share the bank selector presentation", async () => {
   const dashboard = await readFile(path.join(root, "components/dashboard-shell.tsx"), "utf8");
-  const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+  const transactions = await readFile(path.join(root, "components/transactions/transaction-bank-selector.tsx"), "utf8");
   const dashboardSkeleton = await readFile(path.join(root, "components/skeletons/DashboardSkeleton.tsx"), "utf8");
   const transactionsSkeleton = await readFile(path.join(root, "components/skeletons/TransactionsSkeleton.tsx"), "utf8");
   const styles = await readAppStyles(root);
@@ -220,12 +220,13 @@ test("transaction sub-account cards keep compact uniform geometry", async () => 
   const component = (await Promise.all([
     "components/transactions-page.tsx",
     "components/transactions/transaction-budget-grid.tsx",
+    "components/transactions/transaction-bank-reconciliation.tsx",
   ].map((file) => readFile(path.join(root, file), "utf8")))).join("\n");
   const source = await readAppStyles(root);
 
-  assert.match(component, /hasDisplayedDiscrepancy \? \([\s\S]*?className="tx-reconciliation"[\s\S]*?\) : null/);
-  assert.match(component, /displayedDiscrepancyAmount} unallocated/);
-  assert.match(component, /displayedDiscrepancyAmount} over-allocated/);
+  assert.match(component, /if \(!discrepancy\) return null/);
+  assert.match(component, /amount} unallocated/);
+  assert.match(component, /amount} over-allocated/);
   assert.match(component, /<dt>Bank<\/dt>[\s\S]*?<dt>Sub-accounts<\/dt>/);
   assert.match(component, /> Edit bank/);
   assert.match(component, /Use sub-account total/);
