@@ -22,16 +22,22 @@ type FlowForm = {
   retirement: boolean; notes: string;
 };
 
-const FLOW_TYPE_COPY: Record<CioFlowType, { option: string; hint: string }> = {
+const FLOW_TYPE_COPY: Record<CioFlowType, { option: string; hint: string; nameHint: string; retirementHint: string }> = {
   EXTERNAL_CONTRIBUTION: {
+    nameHint: "Example: Monthly ETF contribution.",
+    retirementHint: "Counts this contribution toward the annual savings used by the retirement projection.",
     option: "Contribution - new money coming in",
     hint: "New money from outside your tracked Nest holdings, such as $500 of salary invested each month. It increases projected savings.",
   },
   EXTERNAL_WITHDRAWAL: {
+    nameHint: "Example: Annual retirement withdrawal.",
+    retirementHint: "Subtracts this withdrawal from the annual savings used by the retirement projection.",
     option: "Withdrawal - money leaving the plan",
     hint: "Money taken out for spending outside the portfolio, such as a yearly tuition payment or retirement drawdown. It reduces projected savings.",
   },
   INTERNAL_REALLOCATION: {
+    nameHint: "Example: Monthly cash-to-ETF transfer.",
+    retirementHint: "Marks this move as retirement-related in reporting. It still adds no new savings to the retirement projection.",
     option: "Internal reallocation - money moved within Nest",
     hint: "Money moved from one tracked Nest holding to another, such as bank cash into an ETF. It is tracked but never counted as new savings.",
   },
@@ -67,7 +73,7 @@ export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }
   const context = useQuery({ queryKey: queryKeys.context(workspaceId), queryFn: () => apiFetch<AppShellContext>("/api/context"), enabled: open });
   const investments = useQuery({
     queryKey: queryKeys.investments(workspaceId),
-    queryFn: () => apiFetch<InvestmentOption[]>(`/api/investments?workspaceId=${encodeURIComponent(workspaceId ?? "")}`, { cache: "no-store" }),
+    queryFn: () => apiFetch<InvestmentOption[]>(`/api/investments?workspaceId=${encodeURIComponent(workspaceId!)}`, { cache: "no-store" }),
     enabled: open && Boolean(workspaceId),
   });
   const saveMutation = useMutation({
@@ -129,110 +135,144 @@ export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }
   };
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    const amount = Number(form.amount);
-    const amountCents = centsFromMoneyInput(form.amount) ?? 0;
-    const sourceFinancialAccountId = form.type === "EXTERNAL_CONTRIBUTION" ? "" : form.sourceFinancialAccountId;
-    const sourceInvestmentAccountId = form.type === "EXTERNAL_CONTRIBUTION" ? "" : form.sourceInvestmentAccountId;
-    const destinationInvestmentAccountId = form.type === "EXTERNAL_WITHDRAWAL" ? "" : form.destinationInvestmentAccountId;
-    const hasSource = Boolean(sourceFinancialAccountId || sourceInvestmentAccountId);
-    const hasDestination = Boolean(destinationInvestmentAccountId);
-    if (!form.label.trim()) {
-      setFormError("Give this plan a short name, such as \"Monthly ETF contribution\" or \"Annual retirement withdrawal\".");
-      return;
-    }
-    if (!form.amount.trim() || !Number.isFinite(amount) || amountCents <= 0 || !Number.isSafeInteger(amountCents)) {
-      setFormError("Enter an amount greater than 0. Use the flow type, not a minus sign, to show whether money comes in or goes out.");
-      return;
-    }
-    if (!form.startsOn) {
-      setFormError("Choose when this recurring plan starts.");
-      return;
-    }
-    if (form.endsOn && form.endsOn < form.startsOn) {
-      setFormError("Choose an end date that is on or after the start date, or leave it blank for an ongoing plan.");
-      return;
-    }
-    if (form.type === "EXTERNAL_CONTRIBUTION" && hasSource) {
-      setFormError("Choose Internal reallocation when money comes from a bank account or investment already tracked in Nest.");
-      return;
-    }
-    if (form.type === "INTERNAL_REALLOCATION" && (!hasSource || !hasDestination)) {
-      setFormError("For an internal reallocation, choose where the money comes from (one bank account or investment) and which investment receives it.");
-      return;
-    }
-    if (sourceInvestmentAccountId && sourceInvestmentAccountId === destinationInvestmentAccountId) {
-      setFormError("Choose a different destination investment; moving money to the same investment is not a reallocation.");
-      return;
-    }
-    if (form.type !== "INTERNAL_REALLOCATION" && hasSource && hasDestination) {
-      setFormError("A movement between existing holdings must be recorded as an internal reallocation.");
-      return;
-    }
+    const result = prepareFlow(form);
+    if ("error" in result) { setFormError(result.error); return; }
     setFormError("");
-    saveMutation.mutate({ id: editingId, payload: {
-      type: form.type, label: form.label.trim(), amountCents, cadence: form.cadence,
-      startsOn: toIsoDate(form.startsOn)!, endsOn: toIsoDate(form.endsOn), sourceFinancialAccountId: sourceFinancialAccountId || null,
-      sourceInvestmentAccountId: sourceInvestmentAccountId || null, destinationInvestmentAccountId: destinationInvestmentAccountId || null,
-      includeInRetirementProjection: form.retirement, notes: form.notes.trim() || null,
-    } });
+    saveMutation.mutate({ id: editingId, payload: result.payload });
   };
   const remove = async (flow: CioRecurringFlow) => {
     const accepted = await confirm({ title: "Delete recurring flow?", message: `${flow.label} will no longer contribute to annual flow or retirement calculations.`, confirmLabel: "Delete", cancelLabel: "Cancel", destructive: true });
     if (accepted) deleteMutation.mutate(flow.id);
   };
-  const investmentLabel = (investment: InvestmentOption) => investment.displayName || `${investment.institutionName} · ${investment.productName}`;
   const bankAccounts = context.data?.accounts?.filter((account) => account.kind === "BANK") ?? [];
-  const showSources = form.type !== "EXTERNAL_CONTRIBUTION";
-  const showDestination = form.type !== "EXTERNAL_WITHDRAWAL";
-  const isInternal = form.type === "INTERNAL_REALLOCATION";
-  const retirementHint = form.type === "EXTERNAL_CONTRIBUTION"
-    ? "Counts this contribution toward the annual savings used by the retirement projection."
-    : form.type === "EXTERNAL_WITHDRAWAL"
-      ? "Subtracts this withdrawal from the annual savings used by the retirement projection."
-      : "Marks this move as retirement-related in reporting. It still adds no new savings to the retirement projection.";
+
+  let content = (
+    <div className="cio-manager-layout">
+      <p className="cio-readonly-note" role="note"><strong>What belongs here?</strong> Add a planned money movement that repeats, such as monthly investing, a yearly withdrawal, or a standing transfer between holdings. Do not add past or one-off transfers, and do not duplicate ordinary spending unless it is a planned portfolio withdrawal. This is a forecast only; Nest will not move money.</p>
+      {formOpen ? (
+        <FlowEditor form={form} editing={Boolean(editingId)} currency={currency} closeForm={closeForm} submit={submit} set={set} changeType={changeType} chooseSource={chooseSource} chooseDestination={chooseDestination} bankAccounts={bankAccounts} investments={investments.data ?? []} saving={saveMutation.isPending} error={formError || (saveMutation.isError ? mutationFailureMessage(saveMutation.error) : "")} />
+      ) : null}
+      <div className="cio-manager-list" aria-label="Recurring flows">
+        {flows.data?.length ? flows.data.map((flow) => (
+          <FlowRow key={flow.id} flow={flow} currency={currency} startEdit={startEdit} remove={remove} />
+        )) : <div className="cio-form-empty"><strong>No recurring plans yet</strong><p>Add a repeating contribution, withdrawal, or movement between tracked holdings.</p></div>}
+        {deleteMutation.isError ? <p className="form-error" role="alert">{mutationFailureMessage(deleteMutation.error)}</p> : null}
+      </div>
+    </div>
+  );
+  if (flows.isError) content = <QueryError title="Recurring flows could not be loaded" message={flows.error instanceof Error ? flows.error.message : undefined} onRetry={() => void flows.refetch()} />;
+  else if (flows.isLoading) content = <div className="cio-dialog-loading" aria-busy="true">Loading flows…</div>;
 
   return (
     <Dialog open={open} onClose={onClose} closeDisabled={saveMutation.isPending || deleteMutation.isPending} title="Recurring planning flows" description="Plan repeating contributions, withdrawals, and movements between your holdings." size="xl" contentClassName="cio-dialog" footer={
-      <><Button variant="ghost" onClick={onClose}>Close</Button>{!formOpen ? <Button variant="primary" onClick={startNew}><Plus size={16} /> Add recurring flow</Button> : null}</>
+      <><Button variant="ghost" onClick={onClose} disabled={saveMutation.isPending || deleteMutation.isPending}>Close</Button>{!formOpen ? <Button variant="primary" onClick={startNew}><Plus size={16} /> Add recurring flow</Button> : null}</>
     }>
-      {flows.isError ? <QueryError title="Recurring flows could not be loaded" message={flows.error instanceof Error ? flows.error.message : undefined} onRetry={() => void flows.refetch()} /> : flows.isLoading ? <div className="cio-dialog-loading" aria-busy="true">Loading flows…</div> : (
-        <div className="cio-manager-layout">
-          <p className="cio-readonly-note" role="note"><strong>What belongs here?</strong> Add a planned money movement that repeats, such as monthly investing, a yearly withdrawal, or a standing transfer between holdings. Do not add past or one-off transfers, and do not duplicate ordinary spending unless it is a planned portfolio withdrawal. This is a forecast only; Nest will not move money.</p>
-          {formOpen ? (
-            <form className="cio-manager-form" onSubmit={submit} noValidate>
-              <div className="cio-manager-form-heading"><div><h3>{editingId ? "Edit recurring flow" : "New recurring flow"}</h3><p>Enter a positive amount for each occurrence in {currency}; the flow type sets its direction.</p></div><Button variant="ghost" size="sm" onClick={closeForm}>Cancel</Button></div>
-              <p className="cio-readonly-note" role="note">{FLOW_TYPE_COPY[form.type].hint}</p>
-              <div className="form-grid form-grid-2">
-                <SelectField label="What happens to the money?" value={form.type} onChange={(e) => changeType(e.target.value as CioFlowType)}>{CIO_FLOW_TYPES.map((value) => <option key={value} value={value}>{FLOW_TYPE_COPY[value].option}</option>)}</SelectField>
-                <TextField label="Name" value={form.label} onChange={(e) => set("label", e.target.value)} hint={form.type === "EXTERNAL_CONTRIBUTION" ? "Example: Monthly ETF contribution." : form.type === "EXTERNAL_WITHDRAWAL" ? "Example: Annual retirement withdrawal." : "Example: Monthly cash-to-ETF transfer."} maxLength={160} required />
-                <TextField label={`Amount each time (${currency})`} inputMode="decimal" value={form.amount} onChange={(e) => set("amount", e.target.value)} hint="Use a positive amount. The selected flow type determines whether it adds, subtracts, or only moves money." required />
-                <SelectField label="How often (cadence)?" value={form.cadence} hint={CADENCE_HINTS[form.cadence]} onChange={(e) => set("cadence", e.target.value as CioFlowCadence)}>{CIO_FLOW_CADENCES.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>
-                <TextField label="First occurrence" type="date" value={form.startsOn} onChange={(e) => set("startsOn", e.target.value)} hint="The first date this plan should count." required />
-                <TextField label="Last occurrence (optional)" type="date" value={form.endsOn} onChange={(e) => set("endsOn", e.target.value)} hint="Leave blank if the plan continues indefinitely." />
-                {showSources ? <>
-                  <SelectField label={`Source bank account${isInternal ? "" : " (optional)"}`} value={form.sourceFinancialAccountId} hint={isInternal ? "Choose this or a source investment, not both." : "Link the Nest bank account the withdrawal leaves, or leave blank if it is outside Nest."} onChange={(e) => chooseSource("sourceFinancialAccountId", e.target.value)}><option value="">{isInternal ? "None - use an investment source" : "None / outside Nest"}</option>{bankAccounts.map((account) => <option value={account.id} key={account.id}>{account.name}</option>)}</SelectField>
-                  <SelectField label={`Source investment${isInternal ? "" : " (optional)"}`} value={form.sourceInvestmentAccountId} hint={isInternal ? "Choose this or a source bank account, not both." : "Link the Nest investment the withdrawal leaves, or leave blank if it is outside Nest."} onChange={(e) => chooseSource("sourceInvestmentAccountId", e.target.value)}><option value="">{isInternal ? "None - use a bank source" : "None / outside Nest"}</option>{investments.data?.map((investment) => <option value={investment.id} key={investment.id}>{investmentLabel(investment)}</option>)}</SelectField>
-                </> : null}
-                {showDestination ? <SelectField label={`Destination investment${isInternal ? "" : " (optional)"}`} value={form.destinationInvestmentAccountId} hint={isInternal ? "Choose the tracked Nest investment that receives the money." : "Optionally link the tracked Nest investment receiving this new money."} onChange={(e) => chooseDestination(e.target.value)}><option value="">{isInternal ? "Choose an investment" : "None / destination not tracked"}</option>{investments.data?.map((investment) => <option value={investment.id} key={investment.id}>{investmentLabel(investment)}</option>)}</SelectField> : null}
-              </div>
-              <label className="cio-check-row"><Input type="checkbox" checked={form.retirement} onChange={(e) => set("retirement", e.target.checked)} /><span><strong>Include in retirement projection</strong><small>{retirementHint}</small></span></label>
-              <TextAreaField label="Notes (optional)" value={form.notes} onChange={(e) => set("notes", e.target.value)} hint="Add context that will help you recognise or review this plan later." maxLength={1000} rows={3} />
-              {formError || saveMutation.isError ? <p className="form-error" role="alert">{formError || mutationFailureMessage(saveMutation.error)}</p> : null}
-              <div className="cio-manager-form-actions"><Button variant="primary" type="submit" loading={saveMutation.isPending}>{editingId ? "Save changes" : "Add flow"}</Button></div>
-            </form>
-          ) : null}
-          <div className="cio-manager-list" aria-label="Recurring flows">
-            {flows.data?.length ? flows.data.map((flow) => (
-              <article className="cio-manager-row" key={flow.id}>
-                <div className="cio-manager-row-main"><span className="cio-side-badge">{formatCioLabel(flow.cadence)}</span><div><strong>{flow.label}</strong><small>{formatCioLabel(flow.type)} · from {formatCioDate(flow.startsOn)}{flow.endsOn ? ` to ${formatCioDate(flow.endsOn)}` : " · ongoing"}</small></div></div>
-                <div className="cio-manager-row-value"><strong>{formatCioMoney(flow.amountCents, currency)} each time</strong><small>{flow.includeInRetirementProjection ? flow.type === "INTERNAL_REALLOCATION" ? "Retirement-related; not new savings" : "Included in retirement projection" : "Excluded from retirement projection"}</small></div>
-                <div className="cio-manager-row-actions"><Button variant="ghost" iconOnly aria-label={`Edit ${flow.label}`} onClick={() => startEdit(flow)}><Pencil size={16} /></Button><Button variant="ghost" iconOnly aria-label={`Delete ${flow.label}`} onClick={() => void remove(flow)}><Trash2 size={16} /></Button></div>
-              </article>
-            )) : <div className="cio-form-empty"><strong>No recurring plans yet</strong><p>Add a repeating contribution, withdrawal, or movement between tracked holdings.</p></div>}
-            {deleteMutation.isError ? <p className="form-error" role="alert">{mutationFailureMessage(deleteMutation.error)}</p> : null}
-          </div>
-        </div>
-      )}
+      {content}
     </Dialog>
+  );
+}
+
+function prepareFlow(form: FlowForm): { error: string } | { payload: CioFlowPayload } {
+  const amountCents = centsFromMoneyInput(form.amount)!;
+  const sourceFinancialAccountId = form.type === "EXTERNAL_CONTRIBUTION" ? "" : form.sourceFinancialAccountId;
+  const sourceInvestmentAccountId = form.type === "EXTERNAL_CONTRIBUTION" ? "" : form.sourceInvestmentAccountId;
+  const destinationInvestmentAccountId = form.type === "EXTERNAL_WITHDRAWAL" ? "" : form.destinationInvestmentAccountId;
+  const hasSource = Boolean(sourceFinancialAccountId || sourceInvestmentAccountId);
+  const hasDestination = Boolean(destinationInvestmentAccountId);
+  if (!form.label.trim()) {
+    return { error: "Give this plan a short name, such as \"Monthly ETF contribution\" or \"Annual retirement withdrawal\"." };
+  }
+  if (amountCents <= 0 || !Number.isSafeInteger(amountCents)) {
+    return { error: "Enter an amount greater than 0. Use the flow type, not a minus sign, to show whether money comes in or goes out." };
+  }
+  if (!form.startsOn) {
+    return { error: "Choose when this recurring plan starts." };
+  }
+  if (form.endsOn && form.endsOn < form.startsOn) {
+    return { error: "Choose an end date that is on or after the start date, or leave it blank for an ongoing plan." };
+  }
+
+  if (form.type === "INTERNAL_REALLOCATION" && (!hasSource || !hasDestination)) {
+    return { error: "For an internal reallocation, choose where the money comes from (one bank account or investment) and which investment receives it." };
+  }
+  if (sourceInvestmentAccountId && sourceInvestmentAccountId === destinationInvestmentAccountId) {
+    return { error: "Choose a different destination investment; moving money to the same investment is not a reallocation." };
+  }
+
+  return { payload: {
+    type: form.type, label: form.label.trim(), amountCents, cadence: form.cadence,
+    startsOn: toIsoDate(form.startsOn)!, endsOn: toIsoDate(form.endsOn), sourceFinancialAccountId: sourceFinancialAccountId || null,
+    sourceInvestmentAccountId: sourceInvestmentAccountId || null, destinationInvestmentAccountId: destinationInvestmentAccountId || null,
+    includeInRetirementProjection: form.retirement, notes: form.notes.trim() || null,
+  } };
+}
+
+type FlowEditorProps = {
+  form: FlowForm; editing: boolean; currency: string; closeForm: () => void; submit: (event: SubmitEvent) => void;
+  set: <K extends keyof FlowForm>(field: K, value: FlowForm[K]) => void;
+  changeType: (type: CioFlowType) => void;
+  chooseSource: (field: "sourceFinancialAccountId" | "sourceInvestmentAccountId", value: string) => void;
+  chooseDestination: (value: string) => void;
+  bankAccounts: { id: string; name: string }[]; investments: InvestmentOption[]; saving: boolean; error: string;
+};
+
+function investmentLabel(investment: InvestmentOption) {
+  return investment.displayName || `${investment.institutionName} · ${investment.productName}`;
+}
+
+function FlowEditor({ form, editing, currency, closeForm, submit, set, changeType, chooseSource, chooseDestination, bankAccounts, investments, saving, error }: Readonly<FlowEditorProps>) {
+  const showSources = form.type !== "EXTERNAL_CONTRIBUTION";
+  const showDestination = form.type !== "EXTERNAL_WITHDRAWAL";
+  return (
+    <form className="cio-manager-form" onSubmit={submit} noValidate>
+      <div className="cio-manager-form-heading"><div><h3>{editing ? "Edit recurring flow" : "New recurring flow"}</h3><p>Enter a positive amount for each occurrence in {currency}; the flow type sets its direction.</p></div><Button variant="ghost" size="sm" onClick={closeForm} disabled={saving}>Cancel</Button></div>
+      <p className="cio-readonly-note" role="note">{FLOW_TYPE_COPY[form.type].hint}</p>
+      <div className="form-grid form-grid-2">
+        <SelectField label="What happens to the money?" value={form.type} onChange={(e) => changeType(e.target.value as CioFlowType)}>{CIO_FLOW_TYPES.map((value) => <option key={value} value={value}>{FLOW_TYPE_COPY[value].option}</option>)}</SelectField>
+        <TextField label="Name" value={form.label} onChange={(e) => set("label", e.target.value)} hint={FLOW_TYPE_COPY[form.type].nameHint} maxLength={160} required />
+        <TextField label={`Amount each time (${currency})`} inputMode="decimal" value={form.amount} onChange={(e) => set("amount", e.target.value)} hint="Use a positive amount. The selected flow type determines whether it adds, subtracts, or only moves money." required />
+        <SelectField label="How often (cadence)?" value={form.cadence} hint={CADENCE_HINTS[form.cadence]} onChange={(e) => set("cadence", e.target.value as CioFlowCadence)}>{CIO_FLOW_CADENCES.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>
+        <TextField label="First occurrence" type="date" value={form.startsOn} onChange={(e) => set("startsOn", e.target.value)} hint="The first date this plan should count." required />
+        <TextField label="Last occurrence (optional)" type="date" value={form.endsOn} onChange={(e) => set("endsOn", e.target.value)} hint="Leave blank if the plan continues indefinitely." />
+        {showSources ? <FlowSourceFields form={form} chooseSource={chooseSource} bankAccounts={bankAccounts} investments={investments} /> : null}
+        {showDestination ? <FlowDestinationField form={form} chooseDestination={chooseDestination} investments={investments} /> : null}
+      </div>
+      <label className="cio-check-row"><Input type="checkbox" checked={form.retirement} onChange={(e) => set("retirement", e.target.checked)} /><span><strong>Include in retirement projection</strong><small>{FLOW_TYPE_COPY[form.type].retirementHint}</small></span></label>
+      <TextAreaField label="Notes (optional)" value={form.notes} onChange={(e) => set("notes", e.target.value)} hint="Add context that will help you recognise or review this plan later." maxLength={1000} rows={3} />
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      <div className="cio-manager-form-actions"><Button variant="primary" type="submit" loading={saving}>{editing ? "Save changes" : "Add flow"}</Button></div>
+    </form>
+  );
+}
+
+function flowRetirementLabel(flow: CioRecurringFlow) {
+  if (!flow.includeInRetirementProjection) return "Excluded from retirement projection";
+  return flow.type === "INTERNAL_REALLOCATION" ? "Retirement-related; not new savings" : "Included in retirement projection";
+}
+
+function FlowRow({ flow, currency, startEdit, remove }: Readonly<{
+  flow: CioRecurringFlow; currency: string; startEdit: (flow: CioRecurringFlow) => void; remove: (flow: CioRecurringFlow) => Promise<void>;
+}>) {
+  return (
+    <article className="cio-manager-row">
+      <div className="cio-manager-row-main"><span className="cio-side-badge">{formatCioLabel(flow.cadence)}</span><div><strong>{flow.label}</strong><small>{formatCioLabel(flow.type)} · from {formatCioDate(flow.startsOn)}{flow.endsOn ? ` to ${formatCioDate(flow.endsOn)}` : " · ongoing"}</small></div></div>
+      <div className="cio-manager-row-value"><strong>{formatCioMoney(flow.amountCents, currency)} each time</strong><small>{flowRetirementLabel(flow)}</small></div>
+      <div className="cio-manager-row-actions"><Button variant="ghost" iconOnly aria-label={`Edit ${flow.label}`} onClick={() => startEdit(flow)}><Pencil size={16} /></Button><Button variant="ghost" iconOnly aria-label={`Delete ${flow.label}`} onClick={() => void remove(flow)}><Trash2 size={16} /></Button></div>
+    </article>
+  );
+}
+
+function FlowSourceFields({ form, chooseSource, bankAccounts, investments }: Readonly<Pick<FlowEditorProps, "form" | "chooseSource" | "bankAccounts" | "investments">>) {
+  const isInternal = form.type === "INTERNAL_REALLOCATION";
+  return (<>
+      <SelectField label={`Source bank account${isInternal ? "" : " (optional)"}`} value={form.sourceFinancialAccountId} hint={isInternal ? "Choose this or a source investment, not both." : "Link the Nest bank account the withdrawal leaves, or leave blank if it is outside Nest."} onChange={(e) => chooseSource("sourceFinancialAccountId", e.target.value)}><option value="">{isInternal ? "None - use an investment source" : "None / outside Nest"}</option>{bankAccounts.map((account) => <option value={account.id} key={account.id}>{account.name}</option>)}</SelectField>
+      <SelectField label={`Source investment${isInternal ? "" : " (optional)"}`} value={form.sourceInvestmentAccountId} hint={isInternal ? "Choose this or a source bank account, not both." : "Link the Nest investment the withdrawal leaves, or leave blank if it is outside Nest."} onChange={(e) => chooseSource("sourceInvestmentAccountId", e.target.value)}><option value="">{isInternal ? "None - use a bank source" : "None / outside Nest"}</option>{investments.map((investment) => <option value={investment.id} key={investment.id}>{investmentLabel(investment)}</option>)}</SelectField>
+  </>);
+}
+
+function FlowDestinationField({ form, chooseDestination, investments }: Readonly<Pick<FlowEditorProps, "form" | "chooseDestination" | "investments">>) {
+  const isInternal = form.type === "INTERNAL_REALLOCATION";
+  return (
+    <SelectField label={`Destination investment${isInternal ? "" : " (optional)"}`} value={form.destinationInvestmentAccountId} hint={isInternal ? "Choose the tracked Nest investment that receives the money." : "Optionally link the tracked Nest investment receiving this new money."} onChange={(e) => chooseDestination(e.target.value)}><option value="">{isInternal ? "Choose an investment" : "None / destination not tracked"}</option>{investments.map((investment) => <option value={investment.id} key={investment.id}>{investmentLabel(investment)}</option>)}</SelectField>
   );
 }
