@@ -21,11 +21,8 @@ function reportDate(value: string) {
     : new Intl.DateTimeFormat("en-SG", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
 }
 
-function reportDay(value: string) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat("en-SG", { dateStyle: "medium" }).format(parsed);
+function reportDay(value: Date) {
+  return new Intl.DateTimeFormat("en-SG", { dateStyle: "medium" }).format(value);
 }
 
 function statusLabel(value: CioStrategyReportSummary["strategyStatus"]) {
@@ -136,15 +133,15 @@ export function CioStrategyReportsCard({ canEdit }: Readonly<{ canEdit: boolean 
     mutationFn: downloadReportPdf,
     onError: (error) => toast.error(error instanceof Error ? error.message : "The PDF could not be downloaded."),
   });
-  const latest = reports.data?.[0];
-  const cooldownEndsAt = latest ? cioStrategyReportNextAvailableAt(latest.generatedAt) : null;
-  const reportOnCooldown = latest ? isCioStrategyReportOnCooldown(latest.generatedAt) : false;
-  const canGenerate = canEdit && !reportOnCooldown;
-  const generateTitle = !canEdit
-    ? "Editor access is required"
-    : reportOnCooldown && cooldownEndsAt
-      ? `The next report can be generated on ${reportDate(cooldownEndsAt.toISOString())}.`
-      : "Generate a strategy report";
+  const archive = reports.data ?? [];
+  const latest = archive[0];
+  const cooldownEndsAt = latest && isCioStrategyReportOnCooldown(latest.generatedAt)
+    ? cioStrategyReportNextAvailableAt(latest.generatedAt)
+    : null;
+  const canGenerate = canEdit && cooldownEndsAt === null;
+  let generateTitle = "Generate a strategy report";
+  if (!canEdit) generateTitle = "Editor access is required";
+  else if (cooldownEndsAt) generateTitle = `The next report can be generated on ${reportDate(cooldownEndsAt.toISOString())}.`;
 
   return (
     <section className="cio-card cio-reports-card" aria-labelledby="cio-strategy-reports-title">
@@ -158,8 +155,8 @@ export function CioStrategyReportsCard({ canEdit }: Readonly<{ canEdit: boolean 
           <Button variant="primary" onClick={() => generate.mutate()} loading={generate.isPending} disabled={!canGenerate} title={generateTitle}>
             <FileText size={16} aria-hidden="true" /> Generate report
           </Button>
-          {reportOnCooldown && cooldownEndsAt ? (
-            <span>Next report {reportDay(cooldownEndsAt.toISOString())}</span>
+          {cooldownEndsAt ? (
+            <span>Next report {reportDay(cooldownEndsAt)}</span>
           ) : null}
         </div>
       </div>
@@ -169,8 +166,8 @@ export function CioStrategyReportsCard({ canEdit }: Readonly<{ canEdit: boolean 
       {!reports.isLoading && !reports.isError && !latest ? <div className="cio-report-empty"><FileText size={22} aria-hidden="true" /><div><strong>No strategy report yet</strong><p>Generate one after the household profile, policy, valuations, and exposures are current.</p></div></div> : null}
       {latest ? (
         <div className="cio-report-snapshot-list" aria-label="Strategy report snapshots">
-          {reports.data?.map((report, index) => (
-            <StrategyReportSnapshot key={report.id} report={report} latest={index === 0} downloading={download.isPending && download.variables?.id === report.id} onDownload={() => download.mutate(report)} />
+          {archive.map((report, index) => (
+            <StrategyReportSnapshot key={report.id} report={report} latest={index === 0} downloading={download.isPending && download.variables.id === report.id} onDownload={() => download.mutate(report)} />
           ))}
         </div>
       ) : null}

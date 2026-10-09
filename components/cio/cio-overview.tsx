@@ -2,6 +2,7 @@
 
 import { MessageCircleQuestion, Settings2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useSyncExternalStore } from "react";
 import type { CioPolicy, CioSetupSection, CioSnapshot } from "@/components/cio/types";
 import { CioHealthSummary } from "@/components/cio/cio-health-summary";
 import { CioContributionProgressCard } from "@/components/cio/cio-contribution-progress";
@@ -14,6 +15,22 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
+
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
+function subscribeToDesktopLayout(onChange: () => void) {
+  const query = window.matchMedia(DESKTOP_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function desktopLayoutSnapshot() {
+  return window.matchMedia(DESKTOP_QUERY).matches;
+}
+
+function serverDesktopLayoutSnapshot() {
+  return false;
+}
 
 export function CioOverview({
   overview,
@@ -28,6 +45,7 @@ export function CioOverview({
 }>) {
   const router = useRouter();
   const workspaceId = useWorkspaceId();
+  const desktopLayout = useSyncExternalStore(subscribeToDesktopLayout, desktopLayoutSnapshot, serverDesktopLayoutSnapshot);
   const askCio = () => {
     document.querySelector<HTMLButtonElement>('[aria-controls="ask-nest-panel"]')?.click();
   };
@@ -44,7 +62,7 @@ export function CioOverview({
     <div className="cio-page">
       <PageHeader
         eyebrow={<span>As of {overview.asOfDate}</span>}
-        title={typeof window !== "undefined" && window.innerWidth >= 1024 ? "Your personal Chief Investment Officer (CIO)" : "Your personal CIO"}
+        title={desktopLayout ? "Your personal Chief Investment Officer (CIO)" : "Your personal CIO"}
         description="View of allocation, liquidity, and retirement readiness. Planning values stay separate from your net worth."
         actions={
           <>

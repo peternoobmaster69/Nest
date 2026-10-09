@@ -113,7 +113,7 @@ test("CIO strategy reports can be generated, grouped as snapshots, and downloade
   assert.match(reportCard, /method: "POST"/);
   assert.match(reportCard, /workspaceFetch\(`\/api\/cio\/reports\/\$\{encodeURIComponent\(report\.id\)\}\/pdf`/);
   assert.match(reportCard, /function StrategyReportSnapshot/);
-  assert.match(reportCard, /reports\.data\?\.map/);
+  assert.match(reportCard, /archive\.map/);
   assert.match(reportCard, /report\.topRecommendations\.map/);
   assert.match(reportCard, /<article className=\{`cio-report-snapshot/);
   assert.match(reportCard, /Latest snapshot/);
@@ -123,7 +123,7 @@ test("CIO strategy reports can be generated, grouped as snapshots, and downloade
   assert.match(reportCard, /Completeness/);
   assert.match(reportCard, /isCioStrategyReportOnCooldown/);
   assert.match(reportCard, /disabled=\{!canGenerate\}/);
-  assert.match(reportCard, /Next report \{reportDay\(cooldownEndsAt\.toISOString\(\)\)\}/);
+  assert.match(reportCard, /Next report \{reportDay\(cooldownEndsAt\)\}/);
   assert.match(reportCard, /CIO_STRATEGY_REPORT_COOLDOWN/);
   assert.match(reportCard, /recommendationStateLabel/);
   assert.match(reportCard, /recommendationCategoryLabel/);

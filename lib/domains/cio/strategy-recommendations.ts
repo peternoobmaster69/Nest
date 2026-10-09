@@ -425,9 +425,10 @@ export function buildCioStrategyRecommendations(params: {
 
   if (policy?.confirmed) recommendations.push(...confirmedPolicyRecommendations(snapshot, policy, sharedEvidence));
 
-  recommendations.push(...concentrationRecommendations(snapshot, snapshot.policyExceptions));
-
-  recommendations.push(...retirementRecommendations(snapshot, sharedEvidence));
+  recommendations.push(
+    ...concentrationRecommendations(snapshot, snapshot.policyExceptions),
+    ...retirementRecommendations(snapshot, sharedEvidence),
+  );
 
   return recommendations
     .toSorted((left, right) => left.priority - right.priority || severityOrder[left.severity] - severityOrder[right.severity] || left.id.localeCompare(right.id))
