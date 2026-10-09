@@ -8,7 +8,7 @@ import { useMoneyFormat } from "@/lib/use-money-format";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { type MouseEvent as ReactMouseEvent, SubmitEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SubmitEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -27,10 +27,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { TransactionOperationControl } from "@/components/transactions/transaction-operation-control";
 import { TransactionMonthList } from "@/components/transactions/transaction-month-list";
 import { TransactionCorrectionDialog } from "@/components/transactions/transaction-correction-dialog";
+import { TransactionBudgetDialog } from "@/components/transactions/transaction-budget-dialog";
 import type { TransactionLineageResponse } from "@/components/transactions/transaction-lineage-panel";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
 import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
-import { SavingsSubAccountCheckbox } from "@/components/savings-sub-account-checkbox";
 import {
   getTransactionPeriodParam,
   getTransactionQuickPeriodDateRange,
@@ -308,20 +308,6 @@ export function TransactionsPage() {
   const [createBudgetAccountId, setCreateBudgetAccountId] = useState("");
   const [createBudgetIsSavings, setCreateBudgetIsSavings] = useState(false);
 
-  // Icon options for budgets
-  const budgetIconOptions = [
-    "💰", "🏠", "🛡️", "✈️", "🍔", "🥬", "🚌", "🛍️", "💪", "💊", "🎬", "💡", "📚", "📈", "🚗", "📱", "🎯",
-    "🧾", "🏦", "💳", "🧮", "👶", "🎓", "🐶", "🎁", "🛠️", "💼", "🏥", "🚴", "🍜", "☕",
-    // Family/Parents & Religious
-    "👴", "👵", "👪", "👨‍👩‍👧‍👦", "⛪",
-    // Home & Cleaning
-    "🧹", "🧽", "🧼", "🪣", "🧺", "🛋️", "🛏️", "🚿", "🚽", "🪟", "🪴",
-    // Nature
-    "🍃", "🌿", "🌱",
-    // Globe/World
-    "🌍", "🗺️", "🧭",
-  ];
-
   const context = useQuery({
     queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<AppContext>("/api/context"),
@@ -590,7 +576,11 @@ export function TransactionsPage() {
   }, [txBankStorageKey]);
 
   useEffect(() => {
-    if (!bankAccountOptions.length) return;
+    if (!bankAccounts.data) return;
+    if (!bankAccountOptions.length) {
+      setSelectedBankId("");
+      return;
+    }
     if (bankAccountOptions.length === 1) {
       const onlyBankId = bankAccountOptions[0].id;
       if (selectedBankId !== onlyBankId) setSelectedBankId(onlyBankId);
@@ -599,7 +589,7 @@ export function TransactionsPage() {
     if (selectedBankId && !bankAccountOptions.some((b) => b.id === selectedBankId)) {
       setSelectedBankId("");
     }
-  }, [bankAccountOptions, selectedBankId]);
+  }, [bankAccountOptions, bankAccounts.data, selectedBankId]);
 
   useEffect(() => {
     if (!txBankStorageKey || !bankFilterHydrated) return;
@@ -999,6 +989,14 @@ export function TransactionsPage() {
   });
 
   // Budget management mutations
+  const onBudgetSaved = () => {
+    closeBudgetModal();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
+  };
+
   const createBudget = useMutation({
     mutationFn: (payload: { name: string; targetCents: number; accountId: string; icon?: string; isSavings: boolean }) =>
       fetchJson("/api/budgets", {
@@ -1013,17 +1011,7 @@ export function TransactionsPage() {
           isSavings: payload.isSavings,
         }),
       }),
-    onSuccess: () => {
-      setIsBudgetModalOpen(false);
-      setCreateBudgetName("");
-      setCreateBudgetTarget("");
-      setCreateBudgetAccountId("");
-      setCreateBudgetIsSavings(false);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
-    },
+    onSuccess: onBudgetSaved,
   });
 
   const updateBudget = useMutation({
@@ -1038,32 +1026,12 @@ export function TransactionsPage() {
           isSavings: payload.isSavings,
         }),
       }),
-    onSuccess: () => {
-      setEditingBudgetId(null);
-      setEditingBudgetName("");
-      setEditingBudgetIcon("");
-      setEditingBudgetIsSavings(false);
-      setEditingBudgetTarget("");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
-    },
+    onSuccess: onBudgetSaved,
   });
 
   const deleteBudget = useMutation({
     mutationFn: (id: string) => fetchJson(`/api/budgets/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      setEditingBudgetId(null);
-      setEditingBudgetName("");
-      setEditingBudgetIcon("");
-      setEditingBudgetIsSavings(false);
-      setEditingBudgetTarget("");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cioOverview(workspaceId), refetchType: "active" });
-    },
+    onSuccess: onBudgetSaved,
   });
 
   const correctTx = useMutation({
@@ -1600,6 +1568,7 @@ export function TransactionsPage() {
 
   const openEditBudgetModal = (budget: Budget) => {
     updateBudget.reset();
+    deleteBudget.reset();
     const resolvedIcon = budget.icon || getBudgetIcon(budget.name);
     setEditingBudgetId(budget.id);
     setEditingBudgetName(budget.name);
@@ -1622,9 +1591,8 @@ export function TransactionsPage() {
     setCreateBudgetIsSavings(false);
   };
 
-  const onCreateBudget = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    if (!workspaceId || !createBudgetAccountId || !createBudgetName.trim()) return;
+  const onCreateBudget = () => {
+    if (!workspaceId || !bankAccountOptions.some((account) => account.id === createBudgetAccountId) || !createBudgetName.trim()) return;
     const parsedTarget = createBudgetTarget.trim() ? Number(createBudgetTarget) : 0;
     createBudget.mutate({
       name: createBudgetName.trim(),
@@ -1637,6 +1605,7 @@ export function TransactionsPage() {
 
   const onUpdateBudget = () => {
     if (!editingBudgetId || !editingBudgetName.trim()) return;
+    deleteBudget.reset();
     const parsedTarget = editingBudgetTarget.trim() ? Number(editingBudgetTarget) : 0;
     updateBudget.mutate({
       id: editingBudgetId,
@@ -1653,8 +1622,11 @@ export function TransactionsPage() {
       workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
       reversal: "The sub-account cannot be restored automatically. Ledger entries remain in financial history.",
     }))) return;
+    updateBudget.reset();
     deleteBudget.mutate(editingBudgetId);
   };
+
+  const editBudgetError = updateBudget.error ?? deleteBudget.error;
 
   const activeBudget = budgets.data?.find((budget) => budget.id === activeBudgetFilterId);
   const visibleTransactionGroups = transactionGroups.data ?? [];
@@ -2974,112 +2946,31 @@ export function TransactionsPage() {
       )}
 
       {isBudgetModalOpen && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={closeBudgetModal} title="Sub-account" surface="custom" overlayClassName="profile-modal-overlay">
-          <dialog open className="profile-modal txn-modal">
-            <div className="profile-modal-head">
-              <h3>{editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}</h3>
-              <ModalCloseButton onClick={closeBudgetModal} label={`Close ${editingBudgetId ? "Edit Sub-Account" : "New Sub-Account"}`} />
-            </div>
-            <div className="profile-modal-body txn-modal-body" style={{ display: "grid", gap: "12px" }}>
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Name
-                <Input
-                  className="input"
-                  placeholder="Sub-account name"
-                  value={editingBudgetId ? editingBudgetName : createBudgetName}
-                  onChange={(e) => editingBudgetId ? setEditingBudgetName(e.target.value) : setCreateBudgetName(e.target.value)}
-                />
-              </label>
-              {!editingBudgetId && bankAccounts.data && bankAccounts.data.length > 1 ? (
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Bank Account
-                  <Select
-                    className="input"
-                    value={createBudgetAccountId}
-                    onChange={(e) => setCreateBudgetAccountId(e.target.value)}
-                  >
-                    <option value="" disabled>Select bank account</option>
-                    {(bankAccounts.data ?? []).map((bank) => (
-                      <option key={bank.id} value={bank.id}>
-                        {bank.name}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              ) : null}
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Monthly Limit (optional)
-                <NumericCalculatorInput
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={editingBudgetId ? editingBudgetTarget : createBudgetTarget}
-                  onValueChange={(v) => editingBudgetId ? setEditingBudgetTarget(v) : setCreateBudgetTarget(v)}
-                />
-              </label>
-              <SavingsSubAccountCheckbox
-                checked={editingBudgetId ? editingBudgetIsSavings : createBudgetIsSavings}
-                onCheckedChange={(checked) => {
-                  if (!editingBudgetId) return setCreateBudgetIsSavings(checked);
-                  setEditingBudgetIsSavings(checked);
-                  if (checked) setEditingBudgetIcon("🛡️");
-                  else if (editingBudgetIcon === "🛡️") setEditingBudgetIcon("");
-                }}
-              />
-              {editingBudgetId && !editingBudgetIsSavings ? (
-                <div>
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>Icon</div>
-                  <div className="icon-picker">
-                    {budgetIconOptions.map((icon) => (
-                      <Button
-                        key={icon}
-                        type="button"
-                        className={`icon-chip${editingBudgetIcon === icon ? " on" : ""}`}
-                        onClick={() => setEditingBudgetIcon(icon)}
-                        aria-label={`Select icon ${icon}`}
-                      >
-                        {icon}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <div className="txn-modal-actions">
-              {editingBudgetId ? (
-                <Button
-                  type="button"
-                  className="btn btn-ghost modal-action-destructive"
-                  onClick={confirmDeleteBudget}
-                  disabled={deleteBudget.isPending}
-                >
-                  {deleteBudget.isPending ? "Deleting..." : "Delete"}
-                </Button>
-              ) : (
-                <span />
-              )}
-              <div className="modal-action-group">
-                <Button type="button" className="btn btn-ghost" onClick={closeBudgetModal}>
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={editingBudgetId ? onUpdateBudget : onCreateBudget}
-                  disabled={
-                    (editingBudgetId
-                      ? updateBudget.isPending || !editingBudgetName.trim()
-                      : createBudget.isPending || !createBudgetName.trim() || !createBudgetAccountId)
-                  }
-                >
-                  {editingBudgetId
-                    ? (updateBudget.isPending ? "Saving..." : "Save")
-                    : (createBudget.isPending ? "Creating..." : "Create")}
-                </Button>
-              </div>
-            </div>
-          </dialog>
-        </Dialog>,
+        <TransactionBudgetDialog
+          editing={Boolean(editingBudgetId)}
+          name={editingBudgetId ? editingBudgetName : createBudgetName}
+          target={editingBudgetId ? editingBudgetTarget : createBudgetTarget}
+          isSavings={editingBudgetId ? editingBudgetIsSavings : createBudgetIsSavings}
+          icon={editingBudgetIcon}
+          accountId={createBudgetAccountId}
+          accounts={bankAccountOptions}
+          saving={createBudget.isPending || updateBudget.isPending}
+          deleting={deleteBudget.isPending}
+          error={editingBudgetId ? editBudgetError : createBudget.error}
+          onClose={closeBudgetModal}
+          onNameChange={editingBudgetId ? setEditingBudgetName : setCreateBudgetName}
+          onTargetChange={editingBudgetId ? setEditingBudgetTarget : setCreateBudgetTarget}
+          onSavingsChange={(checked) => {
+            if (!editingBudgetId) return setCreateBudgetIsSavings(checked);
+            setEditingBudgetIsSavings(checked);
+            if (checked) setEditingBudgetIcon("🛡️");
+            else if (editingBudgetIcon === "🛡️") setEditingBudgetIcon("");
+          }}
+          onIconChange={setEditingBudgetIcon}
+          onAccountChange={setCreateBudgetAccountId}
+          onSave={editingBudgetId ? onUpdateBudget : onCreateBudget}
+          onDelete={confirmDeleteBudget}
+        />,
         document.body
       )}
         </>
