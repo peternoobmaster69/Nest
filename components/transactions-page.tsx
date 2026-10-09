@@ -1,5 +1,6 @@
 "use client";
-import { getAmountToneClass, formatTransactionDate, formatTransactionGroupDateRange, normalizeTransactionGroupSearchValue } from "@/lib/transaction-presentation";
+import { getAmountToneClass, formatTransactionDate, formatTransactionGroupDateRange, normalizeTransactionGroupSearchValue, groupTransactionsByMonth, getBudgetIcon, getContextualGroupDefaults } from "@/lib/transaction-presentation";
+import { resolveTransactionUrlFilters, transactionMonthSummaryUrl } from "@/lib/transaction-view-filters";
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,8 +35,6 @@ import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 import {
   getTransactionPeriodParam,
   getTransactionQuickPeriodDateRange,
-  isTransactionQuickPeriod,
-  TRANSACTION_ALL_PERIOD,
   type TransactionQuickPeriod,
 } from "@/lib/transaction-date-filters";
 
@@ -137,95 +136,6 @@ type ReceivableBudgetSummary = {
   count: number;
   items: Receivable[];
 };
-
-// Month filter helpers - use UTC to avoid timezone shifts
-function formatMonthYear(year: number, month: number): string {
-  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function getMonthKey(dateString: string): string {
-  const date = new Date(dateString);
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + 1;
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-type TransactionsByMonth = {
-  monthKey: string;
-  monthLabel: string;
-  transactions: Transaction[];
-  totalIncome: number;
-  totalExpense: number;
-};
-
-function groupTransactionsByMonth(transactions: Transaction[]): TransactionsByMonth[] {
-  const groups = new Map<string, TransactionsByMonth>();
-
-  transactions.forEach((tx) => {
-    const monthKey = getMonthKey(tx.date);
-    const [year, month] = monthKey.split("-").map(Number);
-
-    if (!groups.has(monthKey)) {
-      groups.set(monthKey, {
-        monthKey,
-        monthLabel: formatMonthYear(year, month),
-        transactions: [],
-        totalIncome: 0,
-        totalExpense: 0,
-      });
-    }
-
-    const group = groups.get(monthKey)!;
-    group.transactions.push(tx);
-    if (tx.direction === "CREDIT") {
-      group.totalIncome += tx.amountCents;
-    } else {
-      group.totalExpense += tx.amountCents;
-    }
-  });
-
-  return Array.from(groups.values()).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-}
-
-function getBudgetIcon(name: string, icon?: string | null) {
-  if (icon) return icon;
-  const key = name.toLowerCase();
-  if (key.includes("save")) return "🛡️";
-  if (key.includes("loan")) return "🏠";
-  if (key.includes("insurance")) return "🧾";
-  if (key.includes("phone")) return "📱";
-  if (key.includes("credit")) return "💳";
-  return "💰";
-}
-
-function getContextualGroupDefaults(budget: Budget | undefined, transactions: Transaction[]) {
-  const name = budget?.name ?? "Transactions";
-  const key = name.toLocaleLowerCase();
-  const contexts = [
-    { match: /holiday|travel|vacation|trip/, icon: "🧳", example: "Japan trip" },
-    { match: /home|house|renovation|repair/, icon: "🛠️", example: "Kitchen renovation" },
-    { match: /health|medical|hospital|insurance/, icon: "🏥", example: "Insurance claim" },
-    { match: /car|vehicle|transport/, icon: "🚗", example: "Major service" },
-    { match: /gift|family|birthday/, icon: "🎁", example: "Mum's birthday" },
-    { match: /school|education|course/, icon: "🎓", example: "Design course" },
-    { match: /work|business|project/, icon: "💼", example: "Client project" },
-    { match: /wedding/, icon: "💍", example: "Wedding expenses" },
-  ];
-  const context = contexts.find((item) => item.match.test(key));
-  const dates = transactions.map((transaction) => new Date(transaction.date)).filter((date) => !Number.isNaN(date.getTime()));
-  const latestDate = dates.length ? new Date(Math.max(...dates.map((date) => date.getTime()))) : new Date();
-  const period = latestDate.toLocaleDateString(undefined, { month: "short", year: "numeric" });
-
-  return {
-    icon: context?.icon ?? budget?.icon ?? "📌",
-    suggestedName: `${name} · ${period}`,
-    placeholder: `e.g. ${context?.example ?? "Annual renewal"}`,
-  };
-}
 
 export function TransactionsPage() {
   const routeWorkspaceId = useWorkspaceId();
@@ -365,13 +275,6 @@ export function TransactionsPage() {
     staleTime: 0,
   });
 
-  // Debug: log budget icons
-  useEffect(() => {
-    if (budgets.data) {
-      console.log("[Transactions] Budget icons:", budgets.data.map(b => ({ id: b.id, name: b.name, icon: b.icon })));
-    }
-  }, [budgets.data]);
-
   const bankAccounts = useQuery(bankAccountsQueryOptions(workspaceId));
   const bankAccountOptions = useMemo(() => bankAccounts.data ?? [], [bankAccounts.data]);
   const hasMultipleBankAccounts = bankAccountOptions.length > 1;
@@ -385,7 +288,7 @@ export function TransactionsPage() {
         months: TransactionMonthSummary[];
         total: number;
       }>(
-        `/api/transactions/months?workspaceId=${workspaceId}${effectiveSelectedBankId ? `&accountId=${effectiveSelectedBankId}` : ""}${activeBudgetFilterId !== "ALL" ? `&budgetId=${activeBudgetFilterId}` : ""}`,
+        transactionMonthSummaryUrl(workspaceId ?? "", effectiveSelectedBankId, activeBudgetFilterId),
       ),
     enabled: Boolean(workspaceId),
   });
@@ -395,7 +298,10 @@ export function TransactionsPage() {
   const transactionGroupFilter = activeGroupFilterId !== "ALL" ? activeGroupFilterId : "";
 
   // Month/Year filter state
-  const [dateFilter, setDateFilter] = useSessionState<{ from?: string; to?: string }>("nest:view:transactions:dates", {});
+  const [dateFilter, setDateFilter] = useSessionState<{ from?: string; to?: string }>(
+    "nest:view:transactions:dates",
+    () => getTransactionQuickPeriodDateRange("thisMonth"),
+  );
   const [activeQuickSelect, setActiveQuickSelect] = useSessionState<string | null>("nest:view:transactions:quick-period", "thisMonth");
   const [selectedCustomMonths, setSelectedCustomMonths] = useSessionState<string[]>("nest:view:transactions:custom-months", []);
   const [draftCustomMonths, setDraftCustomMonths] = useState<string[]>([]);
@@ -408,13 +314,6 @@ export function TransactionsPage() {
   const currentMonthIndex = new Date().getMonth();
   const currentMonthLabel = MONTH_NAMES[currentMonthIndex];
   const previousMonthLabel = MONTH_NAMES[(currentMonthIndex + 11) % 12];
-
-  // Initialize with "This Month" active
-  useEffect(() => {
-    if (activeQuickSelect === "thisMonth" && !dateFilter.from) {
-      setDateFilter(getTransactionQuickPeriodDateRange("thisMonth"));
-    }
-  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -670,92 +569,19 @@ export function TransactionsPage() {
     if (urlFilterHydrated) return;
     if (!bankAccounts.data || !budgets.data) return;
 
-    const requestedAccountId = searchParams.get("accountId");
-    const requestedBudgetId = searchParams.get("budgetId");
-    const requestedAccountName = searchParams.get("accountName")?.trim().toLocaleLowerCase();
-    const requestedBudgetName = searchParams.get("budgetName")?.trim().toLocaleLowerCase();
-    const requestedGroupId = searchParams.get("groupId");
-    const requestedTransactionId = searchParams.get("transactionId");
-    const requestedFrom = searchParams.get("from");
-    const requestedTo = searchParams.get("to");
-    const requestedMonths = searchParams.get("months");
-    const requestedPeriod = searchParams.get("period");
-    const requestedAllPeriod = requestedPeriod === TRANSACTION_ALL_PERIOD;
-    const requestedQuickPeriod = isTransactionQuickPeriod(requestedPeriod) ? requestedPeriod : null;
-    const requestedSearch = searchParams.get("search")?.trim().slice(0, 120) ?? "";
-    const isAskNestView = searchParams.get("view") === "ask-nest";
-
-    if (
-      !isAskNestView &&
-      !requestedAccountId &&
-      !requestedBudgetId &&
-      !requestedGroupId &&
-      !requestedTransactionId &&
-      !requestedFrom &&
-      !requestedTo &&
-      !requestedMonths &&
-      !requestedAllPeriod &&
-      !requestedQuickPeriod &&
-      !requestedSearch
-    ) {
-      setHydratedUrlFilterKey(urlFilterKey);
-      return;
+    const requested = resolveTransactionUrlFilters(searchParams, bankAccounts.data, budgets.data);
+    if (requested) {
+      setSelectedBankId(requested.accountId);
+      requestedGroupIdRef.current = requested.budgetId === "ALL" ? null : requested.groupId;
+      setActiveBudgetFilterId(requested.budgetId);
+      setActiveGroupFilterId(requested.groupId);
+      if (requested.dates) {
+        setSelectedCustomMonths(requested.dates.customMonths);
+        setActiveQuickSelect(requested.dates.activeQuickSelect);
+        setDateFilter(requested.dates.dateFilter);
+      }
+      setSearchQuery(requested.search);
     }
-
-    const validAccountId =
-      requestedAccountId && bankAccounts.data.some((bank) => bank.id === requestedAccountId)
-        ? requestedAccountId
-        : requestedAccountName
-          ? bankAccounts.data.find((bank) => (
-              bank.name.toLocaleLowerCase().includes(requestedAccountName) ||
-              bank.bankName?.toLocaleLowerCase().includes(requestedAccountName)
-            ))?.id ?? ""
-          : "";
-    const validBudget = requestedBudgetId
-      ? budgets.data.find((budget) => budget.id === requestedBudgetId)
-      : requestedBudgetName
-        ? budgets.data.find((budget) => budget.name.toLocaleLowerCase().includes(requestedBudgetName))
-        : undefined;
-    const targetAccountId = validAccountId || validBudget?.accountId || "";
-
-    setSelectedBankId(targetAccountId);
-
-    if (validBudget && (!targetAccountId || validBudget.accountId === targetAccountId)) {
-      requestedGroupIdRef.current = requestedGroupId;
-      setActiveBudgetFilterId(validBudget.id);
-      setActiveGroupFilterId(requestedGroupId || "ALL");
-    } else {
-      setActiveBudgetFilterId("ALL");
-      setActiveGroupFilterId("ALL");
-    }
-
-    const validMonths = requestedMonths
-      ? [...new Set(requestedMonths.split(",").filter((value) => /^\d{4}-(0[1-9]|1[0-2])$/.test(value)))].slice(0, 24)
-      : [];
-    if (requestedAllPeriod) {
-      clearDateFilter();
-    } else if (requestedQuickPeriod) {
-      setSelectedCustomMonths([]);
-      setActiveQuickSelect(requestedQuickPeriod);
-      setDateFilter(getTransactionQuickPeriodDateRange(requestedQuickPeriod));
-    } else if (validMonths.length) {
-      const sorted = validMonths.toSorted((left, right) => left.localeCompare(right));
-      const [firstYear, firstMonth] = sorted[0].split("-").map(Number);
-      const [lastYear, lastMonth] = sorted.at(-1)!.split("-").map(Number);
-      setSelectedCustomMonths(sorted);
-      setActiveQuickSelect("custom");
-      setDateFilter({
-        from: new Date(Date.UTC(firstYear, firstMonth - 1, 1)).toISOString().split("T")[0],
-        to: new Date(Date.UTC(lastYear, lastMonth, 0)).toISOString().split("T")[0],
-      });
-    } else if (requestedFrom || requestedTo) {
-      setSelectedCustomMonths([]);
-      setActiveQuickSelect("custom");
-      setDateFilter({ from: requestedFrom || undefined, to: requestedTo || undefined });
-    } else if (isAskNestView) {
-      clearDateFilter();
-    }
-    setSearchQuery(requestedSearch);
 
     setHydratedUrlFilterKey(urlFilterKey);
   }, [urlFilterHydrated, urlFilterKey, bankAccounts.data, budgets.data, searchParams]);

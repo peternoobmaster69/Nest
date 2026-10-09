@@ -6,27 +6,24 @@ import {
   getTransactionPeriodParam,
   getTransactionQuickPeriodDateRange,
 } from "../lib/transaction-date-filters.ts";
+import { resolveTransactionUrlFilters } from "../lib/transaction-view-filters.ts";
 
 const root = process.cwd();
 
 test("transaction period URL state distinguishes All from Custom", async () => {
   const page = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
-  const hydration = page.slice(
-    page.indexOf("const requestedPeriod = searchParams.get"),
-    page.indexOf("setSearchQuery(requestedSearch)"),
-  );
-
   assert.equal(getTransactionPeriodParam(null), "all");
   assert.equal(getTransactionPeriodParam("custom"), "custom");
   assert.match(page, /period: getTransactionPeriodParam\(activeQuickSelect\)/);
   assert.match(page, /from: activeQuickSelect === "custom" && !customMonthsFilter \? dateFilter\.from : null/);
-  assert.match(hydration, /const requestedQuickPeriod = isTransactionQuickPeriod\(requestedPeriod\)/);
-  assert.match(hydration, /if \(requestedAllPeriod\) \{\s*clearDateFilter\(\)/);
-  assert.match(hydration, /else if \(requestedQuickPeriod\)[\s\S]*?setActiveQuickSelect\(requestedQuickPeriod\)/);
-  assert.ok(
-    hydration.indexOf("if (requestedAllPeriod)") < hydration.indexOf("else if (requestedFrom || requestedTo)"),
-    "All must clear stale date ranges before they can be classified as Custom",
-  );
+  const now = new Date(2026, 7, 11, 12);
+  for (const period of ["all", "thisMonth", "lastMonth", "thisYear"]) {
+    const parameters = new URLSearchParams({ period, months: "2020-01", from: "2020-01-01", to: "2020-01-31" });
+    const { dates } = resolveTransactionUrlFilters(parameters, [], [], now);
+    assert.equal(dates.activeQuickSelect, period === "all" ? null : period);
+    assert.deepEqual(dates.customMonths, []);
+    assert.deepEqual(dates.dateFilter, period === "all" ? {} : getTransactionQuickPeriodDateRange(period, now));
+  }
 });
 
 test("quick periods use local calendar boundaries without UTC date shifts", () => {
