@@ -13,7 +13,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/form-field";
-import { QueryError } from "@/components/ui/query-state";
+import { CioQueryContent } from "@/components/cio/cio-query-content";
 import { trimCharacters } from "@/lib/string-boundaries.mjs";
 
 type PositionForm = {
@@ -81,6 +81,10 @@ export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSav
     setForm((current) => ({ ...current, [field]: value }));
     clearErrors();
   };
+  const changeSide = (side: CioPositionSide) => {
+    setForm((current) => ({ ...current, side, investable: side === "ASSET" && current.investable, retirement: side === "ASSET" && current.retirement }));
+    clearErrors();
+  };
   const startNew = () => {
     setEditingId(null);
     setForm(emptyPosition());
@@ -97,7 +101,7 @@ export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSav
     event.preventDefault();
     const category = trimCharacters(form.category.trim().toUpperCase().replaceAll(/[^A-Z0-9_-]/g, "_"), "_");
     const amount = Number(form.amount);
-    const currentValueCents = centsFromMoneyInput(form.amount) ?? 0;
+    const currentValueCents = centsFromMoneyInput(form.amount);
     if (!form.label.trim()) {
       setFormError(`Give this ${form.side === "ASSET" ? "asset" : "debt"} a short name, such as "CPF balance" or "Home mortgage".`);
       return;
@@ -138,32 +142,13 @@ export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSav
 
   return (
     <Dialog open={open} onClose={onClose} closeDisabled={saveMutation.isPending || deleteMutation.isPending} title="Planning assets and debts" description="Add balances that matter to your CIO plan but are not already tracked in Nest." size="xl" contentClassName="cio-dialog" footer={
-      <><Button variant="ghost" onClick={onClose}>Close</Button>{!formOpen ? <Button variant="primary" onClick={startNew}><Plus size={16} /> Add asset or debt</Button> : null}</>
+      <><Button variant="ghost" onClick={onClose} disabled={saveMutation.isPending || deleteMutation.isPending}>Close</Button>{!formOpen ? <Button variant="primary" onClick={startNew}><Plus size={16} /> Add asset or debt</Button> : null}</>
     }>
-      {positions.isError ? <QueryError title="Planning assets and debts could not be loaded" message={positions.error instanceof Error ? positions.error.message : undefined} onRetry={() => void positions.refetch()} /> : positions.isLoading ? <div className="cio-dialog-loading" aria-busy="true">Loading planning balances…</div> : (
+      <CioQueryContent state={positions} title="Planning assets and debts could not be loaded" loadingText="Loading planning balances…" onRetry={() => void positions.refetch()}>
         <div className="cio-manager-layout">
           <p className="cio-readonly-note" role="note"><strong>What belongs here?</strong> Add an asset or debt that Nest does not already track, such as a home, mortgage, or CPF balance held elsewhere. Do not re-enter a Nest bank or investment account, and use recurring flows for regular deposits or withdrawals. These entries change CIO planning only, not dashboard balances or real accounts.</p>
           {formOpen ? (
-            <form className="cio-manager-form" onSubmit={submit} noValidate>
-              <div className="cio-manager-form-heading"><div><h3>{editingId ? "Edit planning balance" : "New planning balance"}</h3><p>Enter the current balance as a positive amount in {currency}.</p></div><Button variant="ghost" size="sm" onClick={closeForm}>Cancel</Button></div>
-              <div className="form-grid form-grid-2">
-                <SelectField label="Asset or liability?" value={form.side} hint={form.side === "ASSET" ? "Asset means something you own, such as property or an outside pension balance." : "Liability means money you owe, such as a mortgage or personal loan."} onChange={(e) => { const side = e.target.value as CioPositionSide; setForm((current) => ({ ...current, side, investable: side === "ASSET" ? current.investable : false, retirement: side === "ASSET" ? current.retirement : false })); clearErrors(); }}>{CIO_POSITION_SIDES.map((value) => <option key={value} value={value}>{value === "ASSET" ? "Asset - something you own" : "Liability - money you owe"}</option>)}</SelectField>
-                <TextField label="Category" value={form.category} onChange={(e) => set("category", e.target.value.toUpperCase())} hint={form.side === "ASSET" ? "Examples: CPF, PROPERTY, PENSION, or OTHER." : "Examples: MORTGAGE, LOAN, or OTHER."} maxLength={48} required />
-                <TextField label="Name" value={form.label} onChange={(e) => set("label", e.target.value)} hint={form.side === "ASSET" ? "Example: CPF Special Account or Family home." : "Example: Home mortgage or Education loan."} maxLength={160} required />
-                <TextField label={`${form.side === "ASSET" ? "Current value" : "Amount still owed"} (${currency})`} inputMode="decimal" min="0" step="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} hint="Enter a positive amount; Nest applies the asset or debt direction." required />
-                <TextField label="Balance checked on" type="date" value={form.asOfDate} onChange={(e) => set("asOfDate", e.target.value)} hint="The date this value was last accurate." required />
-                <SelectField label="Liquidity (how accessible is it?)" value={form.liquidityClass} hint={form.side === "ASSET" ? `${LIQUIDITY_COPY[form.liquidityClass].hint} This affects CIO's liquidity view.` : "A debt never counts as available cash, so this choice does not change available-money calculations."} onChange={(e) => set("liquidityClass", e.target.value as CioLiquidityClass)}>{CIO_LIQUIDITY_CLASSES.map((value) => <option key={value} value={value}>{LIQUIDITY_COPY[value].option}</option>)}</SelectField>
-              </div>
-              {form.side === "ASSET" ? (
-                <div className="cio-check-grid">
-                  <label className="cio-check-row"><Input type="checkbox" checked={form.investable} onChange={(e) => set("investable", e.target.checked)} /><span><strong>Include in investable allocation</strong><small>Turn on if this belongs in the portfolio mix you can allocate or rebalance. Usually off for a home, car, or emergency-only cash.</small></span></label>
-                  <label className="cio-check-row"><Input type="checkbox" checked={form.retirement} onChange={(e) => set("retirement", e.target.checked)} /><span><strong>Include in retirement projection</strong><small>Turn on if you expect to use this asset to fund retirement, such as CPF or a pension. Leave off if it will not be available for retirement spending.</small></span></label>
-                </div>
-              ) : <p className="cio-readonly-note" role="note">Debts reduce CIO planning net worth. They cannot be counted as investable assets or retirement savings.</p>}
-              <TextAreaField label="Notes (optional)" value={form.notes} onChange={(e) => set("notes", e.target.value)} hint="Add a useful assumption, restriction, or valuation source." maxLength={1000} rows={3} />
-              {formError || saveMutation.isError ? <p className="form-error" role="alert">{formError || mutationFailureMessage(saveMutation.error)}</p> : null}
-              <div className="cio-manager-form-actions"><Button variant="primary" type="submit" loading={saveMutation.isPending}>{editingId ? "Save changes" : "Add position"}</Button></div>
-            </form>
+            <PositionEditor form={form} set={set} changeSide={changeSide} currency={currency} closeForm={closeForm} submit={submit} editing={Boolean(editingId)} saving={saveMutation.isPending} error={formError || (saveMutation.isError ? mutationFailureMessage(saveMutation.error) : "")} />
           ) : null}
           <div className="cio-manager-list" aria-label="Planning positions">
             {positions.data?.length ? positions.data.map((position) => (
@@ -176,7 +161,39 @@ export function CioPositionsDialog({ open, workspaceId, currency, onClose, onSav
             {deleteMutation.isError ? <p className="form-error" role="alert">{mutationFailureMessage(deleteMutation.error)}</p> : null}
           </div>
         </div>
-      )}
+      </CioQueryContent>
     </Dialog>
+  );
+}
+
+
+type PositionEditorProps = {
+  form: PositionForm; currency: string; editing: boolean; saving: boolean; error: string;
+  set: <K extends keyof PositionForm>(field: K, value: PositionForm[K]) => void;
+  changeSide: (side: CioPositionSide) => void; closeForm: () => void; submit: (event: SubmitEvent) => void;
+};
+
+function PositionEditor({ form, currency, editing, saving, error, set, changeSide, closeForm, submit }: Readonly<PositionEditorProps>) {
+  return (
+  <form className="cio-manager-form" onSubmit={submit} noValidate>
+    <div className="cio-manager-form-heading"><div><h3>{editing ? "Edit planning balance" : "New planning balance"}</h3><p>Enter the current balance as a positive amount in {currency}.</p></div><Button variant="ghost" size="sm" onClick={closeForm} disabled={saving}>Cancel</Button></div>
+    <div className="form-grid form-grid-2">
+      <SelectField label="Asset or liability?" value={form.side} hint={form.side === "ASSET" ? "Asset means something you own, such as property or an outside pension balance." : "Liability means money you owe, such as a mortgage or personal loan."} onChange={(e) => changeSide(e.target.value as CioPositionSide)}>{CIO_POSITION_SIDES.map((value) => <option key={value} value={value}>{value === "ASSET" ? "Asset - something you own" : "Liability - money you owe"}</option>)}</SelectField>
+      <TextField label="Category" value={form.category} onChange={(e) => set("category", e.target.value.toUpperCase())} hint={form.side === "ASSET" ? "Examples: CPF, PROPERTY, PENSION, or OTHER." : "Examples: MORTGAGE, LOAN, or OTHER."} maxLength={48} required />
+      <TextField label="Name" value={form.label} onChange={(e) => set("label", e.target.value)} hint={form.side === "ASSET" ? "Example: CPF Special Account or Family home." : "Example: Home mortgage or Education loan."} maxLength={160} required />
+      <TextField label={`${form.side === "ASSET" ? "Current value" : "Amount still owed"} (${currency})`} inputMode="decimal" min="0" step="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} hint="Enter a positive amount; Nest applies the asset or debt direction." required />
+      <TextField label="Balance checked on" type="date" value={form.asOfDate} onChange={(e) => set("asOfDate", e.target.value)} hint="The date this value was last accurate." required />
+      <SelectField label="Liquidity (how accessible is it?)" value={form.liquidityClass} hint={form.side === "ASSET" ? `${LIQUIDITY_COPY[form.liquidityClass].hint} This affects CIO's liquidity view.` : "A debt never counts as available cash, so this choice does not change available-money calculations."} onChange={(e) => set("liquidityClass", e.target.value as CioLiquidityClass)}>{CIO_LIQUIDITY_CLASSES.map((value) => <option key={value} value={value}>{LIQUIDITY_COPY[value].option}</option>)}</SelectField>
+    </div>
+    {form.side === "ASSET" ? (
+      <div className="cio-check-grid">
+        <label className="cio-check-row"><Input type="checkbox" checked={form.investable} onChange={(e) => set("investable", e.target.checked)} /><span><strong>Include in investable allocation</strong><small>Turn on if this belongs in the portfolio mix you can allocate or rebalance. Usually off for a home, car, or emergency-only cash.</small></span></label>
+        <label className="cio-check-row"><Input type="checkbox" checked={form.retirement} onChange={(e) => set("retirement", e.target.checked)} /><span><strong>Include in retirement projection</strong><small>Turn on if you expect to use this asset to fund retirement, such as CPF or a pension. Leave off if it will not be available for retirement spending.</small></span></label>
+      </div>
+    ) : <p className="cio-readonly-note" role="note">Debts reduce CIO planning net worth. They cannot be counted as investable assets or retirement savings.</p>}
+    <TextAreaField label="Notes (optional)" value={form.notes} onChange={(e) => set("notes", e.target.value)} hint="Add a useful assumption, restriction, or valuation source." maxLength={1000} rows={3} />
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
+    <div className="cio-manager-form-actions"><Button variant="primary" type="submit" loading={saving}>{editing ? "Save changes" : "Add position"}</Button></div>
+  </form>
   );
 }

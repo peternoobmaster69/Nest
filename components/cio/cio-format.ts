@@ -41,6 +41,8 @@ export function moneyInputFromCents(value: number | null | undefined) {
   return value == null ? "" : String(value / 100);
 }
 
+export function centsFromMoneyInput(value: string, nullable?: false): number;
+export function centsFromMoneyInput(value: string, nullable: boolean): number | null;
 export function centsFromMoneyInput(value: string, nullable = false) {
   if (!value.trim()) return nullable ? null : 0;
   const amount = Number(value);
@@ -52,6 +54,8 @@ export function percentInputFromBps(value: number | null | undefined) {
   return value == null ? "" : String(value / 100);
 }
 
+export function bpsFromPercentInput(value: string, nullable?: false): number;
+export function bpsFromPercentInput(value: string, nullable: boolean): number | null;
 export function bpsFromPercentInput(value: string, nullable = false) {
   if (!value.trim()) return nullable ? null : 0;
   const percentage = Number(value);

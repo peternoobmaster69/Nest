@@ -14,7 +14,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/form-field";
-import { QueryError } from "@/components/ui/query-state";
+import { CioQueryContent } from "@/components/cio/cio-query-content";
 
 type FlowForm = {
   type: CioFlowType; label: string; amount: string; cadence: CioFlowCadence; startsOn: string; endsOn: string;
@@ -146,7 +146,7 @@ export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }
   };
   const bankAccounts = context.data?.accounts?.filter((account) => account.kind === "BANK") ?? [];
 
-  let content = (
+  const content = (
     <div className="cio-manager-layout">
       <p className="cio-readonly-note" role="note"><strong>What belongs here?</strong> Add a planned money movement that repeats, such as monthly investing, a yearly withdrawal, or a standing transfer between holdings. Do not add past or one-off transfers, and do not duplicate ordinary spending unless it is a planned portfolio withdrawal. This is a forecast only; Nest will not move money.</p>
       {formOpen ? (
@@ -160,20 +160,18 @@ export function CioFlowsDialog({ open, workspaceId, currency, onClose, onSaved }
       </div>
     </div>
   );
-  if (flows.isError) content = <QueryError title="Recurring flows could not be loaded" message={flows.error instanceof Error ? flows.error.message : undefined} onRetry={() => void flows.refetch()} />;
-  else if (flows.isLoading) content = <div className="cio-dialog-loading" aria-busy="true">Loading flows…</div>;
 
   return (
     <Dialog open={open} onClose={onClose} closeDisabled={saveMutation.isPending || deleteMutation.isPending} title="Recurring planning flows" description="Plan repeating contributions, withdrawals, and movements between your holdings." size="xl" contentClassName="cio-dialog" footer={
       <><Button variant="ghost" onClick={onClose} disabled={saveMutation.isPending || deleteMutation.isPending}>Close</Button>{!formOpen ? <Button variant="primary" onClick={startNew}><Plus size={16} /> Add recurring flow</Button> : null}</>
     }>
-      {content}
+      <CioQueryContent state={flows} title="Recurring flows could not be loaded" loadingText="Loading flows…" onRetry={() => void flows.refetch()}>{content}</CioQueryContent>
     </Dialog>
   );
 }
 
 function prepareFlow(form: FlowForm): { error: string } | { payload: CioFlowPayload } {
-  const amountCents = centsFromMoneyInput(form.amount)!;
+  const amountCents = centsFromMoneyInput(form.amount);
   const sourceFinancialAccountId = form.type === "EXTERNAL_CONTRIBUTION" ? "" : form.sourceFinancialAccountId;
   const sourceInvestmentAccountId = form.type === "EXTERNAL_CONTRIBUTION" ? "" : form.sourceInvestmentAccountId;
   const destinationInvestmentAccountId = form.type === "EXTERNAL_WITHDRAWAL" ? "" : form.destinationInvestmentAccountId;

@@ -18,10 +18,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SelectField, TextField } from "@/components/ui/form-field";
-import { QueryError } from "@/components/ui/query-state";
+import { CioQueryContent } from "@/components/cio/cio-query-content";
 
-type BandForm = { assetClass: CioAssetClass; minimum: string; target: string; maximum: string };
-type GeographyForm = { geography: CioGeography; maximum: string };
+type BandForm = { id: string; assetClass: CioAssetClass; minimum: string; target: string; maximum: string };
+type GeographyForm = { id: string; geography: CioGeography; maximum: string };
 type PolicyForm = {
   minimumReserve: string; minimumMonths: string; maximumAccount: string; maximumSecurity: string;
   maximumSatellite: string; staleDays: string; allowsOptions: string; allowsMargin: string;
@@ -99,9 +99,9 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: Readonl
 
     const assetClassBands = form.bands.map((band) => ({
       assetClass: band.assetClass,
-      minimumBps: bpsFromPercentInput(band.minimum) ?? 0,
-      targetBps: bpsFromPercentInput(band.target) ?? 0,
-      maximumBps: bpsFromPercentInput(band.maximum) ?? 0,
+      minimumBps: bpsFromPercentInput(band.minimum),
+      targetBps: bpsFromPercentInput(band.target),
+      maximumBps: bpsFromPercentInput(band.maximum),
     }));
     const unorderedBand = assetClassBands.find((band) => band.minimumBps > band.targetBps || band.targetBps > band.maximumBps);
     if (unorderedBand) return setFormError(`${formatCioLabel(unorderedBand.assetClass)} must run from lowest to highest: minimum, then target, then maximum. For example: 20%, 30%, 40%.`);
@@ -118,24 +118,26 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: Readonl
       allowsLeverage: triState(form.allowsLeverage), allowsAdditionalIlpTopUps: triState(form.allowsIlp),
       confirmedAt: form.confirmed ? policy.data?.confirmedAt ?? new Date().toISOString() : null,
       assetClassBands,
-      geographyLimits: form.geographies.map((limit) => ({ geography: limit.geography, maximumBps: bpsFromPercentInput(limit.maximum) ?? 0 })),
+      geographyLimits: form.geographies.map((limit) => ({ geography: limit.geography, maximumBps: bpsFromPercentInput(limit.maximum) })),
     });
   };
 
   const addBand = () => {
-    const next = CIO_ASSET_CLASSES.find((value) => !form.bands.some((band) => band.assetClass === value));
-    if (next) set("bands", [...form.bands, { assetClass: next, minimum: "0", target: "0", maximum: "100" }]);
+    // Disabled at the row limit, so at least one asset class is still unused.
+    const next = CIO_ASSET_CLASSES.find((value) => !form.bands.some((band) => band.assetClass === value))!;
+    set("bands", [...form.bands, { id: crypto.randomUUID(), assetClass: next, minimum: "0", target: "0", maximum: "100" }]);
   };
   const addGeography = () => {
-    const next = CIO_GEOGRAPHIES.find((value) => !form.geographies.some((limit) => limit.geography === value));
-    if (next) set("geographies", [...form.geographies, { geography: next, maximum: "100" }]);
+    // The geography add button has the same bounded-row invariant.
+    const next = CIO_GEOGRAPHIES.find((value) => !form.geographies.some((limit) => limit.geography === value))!;
+    set("geographies", [...form.geographies, { id: crypto.randomUUID(), geography: next, maximum: "100" }]);
   };
 
   return (
     <Dialog open={open} onClose={onClose} closeDisabled={mutation.isPending} title="Investment policy" description="Choose the boundaries Nest should use when reviewing your portfolio. These settings only flag things to discuss; they never place trades." size="xl" contentClassName="cio-dialog" footer={
       <><Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cancel</Button><Button variant="primary" type="submit" form="cio-policy-form" loading={mutation.isPending}>Save policy</Button></>
     }>
-      {policy.isError ? <QueryError title="Policy could not be loaded" message={policy.error instanceof Error ? policy.error.message : undefined} onRetry={() => void policy.refetch()} /> : policy.isLoading ? <div className="cio-dialog-loading" aria-busy="true">Loading policy…</div> : (
+      <CioQueryContent state={policy} title="Policy could not be loaded" loadingText="Loading policy…" onRetry={() => void policy.refetch()}>
         <form id="cio-policy-form" className="cio-dialog-form" onSubmit={submit} noValidate>
           <fieldset className="cio-form-section"><legend>Cash buffer and concentration limits</legend>
             <p>Start with the cash you want available, then cap how much can sit in one place. Leave an optional field blank when you do not want Nest to check it.</p>
@@ -156,9 +158,9 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: Readonl
             <TriStateField label="More ILP top-ups" hint="Additional contributions to investment-linked insurance policies." value={form.allowsIlp} onChange={(value) => set("allowsIlp", value)} />
           </div></fieldset>
 
-          <fieldset className="cio-form-section"><div className="cio-form-section-heading"><div><legend>Target allocation ranges</legend><p>Add only the asset classes you want checked. Minimum is the lowest comfortable share, target is the aim, and maximum is the upper limit; for example 20%, 30%, and 40%.</p></div><Button variant="outline" size="sm" onClick={addBand} disabled={form.bands.length === CIO_ASSET_CLASSES.length}><Plus size={15} /> Add asset class</Button></div>
+          <fieldset className="cio-form-section"><div className="cio-form-section-heading"><div><legend>Target allocation ranges</legend><p>Add only the asset classes you want checked. Minimum is the lowest comfortable share, target is the aim, and maximum is the upper limit; for example 20%, 30%, and 40%.</p></div><Button variant="outline" size="sm" onClick={addBand} disabled={form.bands.length >= CIO_ASSET_CLASSES.length}><Plus size={15} /> Add asset class</Button></div>
             {form.bands.length ? <div className="cio-policy-rows">{form.bands.map((band, index) => (
-              <div className="cio-policy-row cio-policy-band-row" key={`${band.assetClass}-${index}`}>
+              <div className="cio-policy-row cio-policy-band-row" key={band.id}>
                 <SelectField label="Asset class" value={band.assetClass} onChange={(e) => updateBand(index, { assetClass: e.target.value as CioAssetClass })}>{CIO_ASSET_CLASSES.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>
                 <TextField label="Minimum %" hint="Lowest acceptable" inputMode="decimal" value={band.minimum} onChange={(e) => updateBand(index, { minimum: e.target.value })} required />
                 <TextField label="Target %" hint="Preferred share" inputMode="decimal" value={band.target} onChange={(e) => updateBand(index, { target: e.target.value })} required />
@@ -168,9 +170,9 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: Readonl
             ))}</div> : <p className="cio-form-empty">No target ranges yet. Add an asset class only when you have a range you want Nest to monitor.</p>}
           </fieldset>
 
-          <fieldset className="cio-form-section"><div className="cio-form-section-heading"><div><legend>Geography limits</legend><p>Optionally cap how much of the portfolio can be exposed to one region. For example, 50% means Nest flags anything above 50%.</p></div><Button variant="outline" size="sm" onClick={addGeography} disabled={form.geographies.length === CIO_GEOGRAPHIES.length}><Plus size={15} /> Add region</Button></div>
+          <fieldset className="cio-form-section"><div className="cio-form-section-heading"><div><legend>Geography limits</legend><p>Optionally cap how much of the portfolio can be exposed to one region. For example, 50% means Nest flags anything above 50%.</p></div><Button variant="outline" size="sm" onClick={addGeography} disabled={form.geographies.length >= CIO_GEOGRAPHIES.length}><Plus size={15} /> Add region</Button></div>
             {form.geographies.length ? <div className="cio-policy-rows">{form.geographies.map((limit, index) => (
-              <div className="cio-policy-row cio-policy-geography-row" key={`${limit.geography}-${index}`}>
+              <div className="cio-policy-row cio-policy-geography-row" key={limit.id}>
                 <SelectField label="Geography" value={limit.geography} onChange={(e) => updateGeography(index, { geography: e.target.value as CioGeography })}>{CIO_GEOGRAPHIES.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>
                 <TextField label="Maximum %" hint="Highest acceptable share" inputMode="decimal" value={limit.maximum} onChange={(e) => updateGeography(index, { maximum: e.target.value })} required />
                 <Button variant="ghost" iconOnly aria-label={`Remove ${formatCioLabel(limit.geography)} limit`} onClick={() => set("geographies", form.geographies.filter((_, rowIndex) => rowIndex !== index))}><Trash2 size={17} /></Button>
@@ -183,7 +185,7 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: Readonl
           </fieldset>
           {formError || mutation.isError ? <p className="form-error" role="alert">{formError || mutationFailureMessage(mutation.error)}</p> : null}
         </form>
-      )}
+      </CioQueryContent>
     </Dialog>
   );
 }
@@ -191,15 +193,18 @@ export function CioPolicyDialog({ open, workspaceId, onClose, onSaved }: Readonl
 function TriStateField({ label, hint, value, onChange }: Readonly<{ label: string; hint: string; value: string; onChange: (value: string) => void }>) {
   return <SelectField label={label} hint={hint} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Not decided yet</option><option value="true">Fits our policy</option><option value="false">Outside our policy</option></SelectField>;
 }
-function triState(value: string) { return value === "true" ? true : value === "false" ? false : null; }
+function triState(value: string) {
+  if (value === "true") return true;
+  return value === "false" ? false : null;
+}
 function numberOrNull(value: string) { return value.trim() ? Math.round(Number(value)) : null; }
 function formFromPolicy(policy: CioPolicy): PolicyForm {
   return {
     minimumReserve: moneyInputFromCents(policy.minimumLiquidityReserveCents), minimumMonths: policy.minimumLiquidityMonths == null ? "" : String(policy.minimumLiquidityMonths),
     maximumAccount: percentInputFromBps(policy.maximumAccountConcentrationBps), maximumSecurity: percentInputFromBps(policy.maximumSingleSecurityConcentrationBps), maximumSatellite: percentInputFromBps(policy.maximumSatelliteAllocationBps), staleDays: String(policy.valuationStaleAfterDays),
     allowsOptions: stringFromTriState(policy.allowsOptions), allowsMargin: stringFromTriState(policy.allowsMargin), allowsLeverage: stringFromTriState(policy.allowsLeverage), allowsIlp: stringFromTriState(policy.allowsAdditionalIlpTopUps), confirmed: Boolean(policy.confirmedAt),
-    bands: policy.assetClassBands.map((band) => ({ assetClass: band.assetClass, minimum: percentInputFromBps(band.minimumBps), target: percentInputFromBps(band.targetBps), maximum: percentInputFromBps(band.maximumBps) })),
-    geographies: policy.geographyLimits.map((limit) => ({ geography: limit.geography, maximum: percentInputFromBps(limit.maximumBps) })),
+    bands: policy.assetClassBands.map((band) => ({ id: band.id ?? crypto.randomUUID(), assetClass: band.assetClass, minimum: percentInputFromBps(band.minimumBps), target: percentInputFromBps(band.targetBps), maximum: percentInputFromBps(band.maximumBps) })),
+    geographies: policy.geographyLimits.map((limit) => ({ id: limit.id ?? crypto.randomUUID(), geography: limit.geography, maximum: percentInputFromBps(limit.maximumBps) })),
   };
 }
 function stringFromTriState(value: boolean | null) { return value == null ? "" : String(value); }

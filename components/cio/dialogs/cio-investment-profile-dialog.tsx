@@ -20,20 +20,15 @@ import {
   type CioSnapshot,
   type InvestmentOption,
 } from "@/components/cio/types";
-import { bpsFromPercentInput, formatCioLabel, percentInputFromBps, toDateInput, toIsoDate } from "@/components/cio/cio-format";
+import { formatCioLabel, percentInputFromBps, toDateInput, toIsoDate } from "@/components/cio/cio-format";
 import { apiFetch, mutationFailureMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query-keys";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/form-field";
-import { QueryError } from "@/components/ui/query-state";
-
-type ExposureForm = { dimension: CioExposureDimension; key: string; weight: string };
-type InvestmentForm = {
-  liquidityClass: CioLiquidityClass; portfolioRole: CioPortfolioRole; riskLevel: CioRiskLevel;
-  includeInRetirementProjection: boolean; lockUntil: string; notes: string; exposures: ExposureForm[]; reviewed: boolean;
-};
+import { CioQueryContent } from "@/components/cio/cio-query-content";
+import { calculateExposureTotals, prepareInvestmentForm, type ExposureForm, type InvestmentForm } from "./cio-investment-form";
 
 const LIQUIDITY_HINTS: Record<CioLiquidityClass, string> = {
   IMMEDIATE: "Available as cash now, without selling an investment.",
@@ -74,7 +69,7 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
   const selectedSnapshot = snapshots.find((item) => item.id === selectedId);
   const accountOptions = useQuery({
     queryKey: queryKeys.investments(workspaceId),
-    queryFn: () => apiFetch<InvestmentOption[]>(`/api/investments?workspaceId=${encodeURIComponent(workspaceId ?? "")}`, { cache: "no-store" }),
+    queryFn: () => apiFetch<InvestmentOption[]>(`/api/investments?workspaceId=${encodeURIComponent(workspaceId!)}`, { cache: "no-store" }),
     enabled: open && Boolean(workspaceId),
   });
   const profile = useQuery({
@@ -88,18 +83,18 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
     enabled: open && Boolean(workspaceId && selectedId),
   });
   const mutation = useMutation({
-    mutationFn: async ({ profilePayload, exposurePayload }: { profilePayload: CioInvestmentProfilePayload; exposurePayload: CioExposure[] }) => {
-      const savedProfile = await apiFetch<{ profile: CioInvestmentProfile }>(`/api/cio/investments/${encodeURIComponent(selectedId)}/profile`, {
+    mutationFn: async ({ investmentId, profilePayload, exposurePayload }: { investmentId: string; profilePayload: CioInvestmentProfilePayload; exposurePayload: CioExposure[] }) => {
+      const savedProfile = await apiFetch<{ profile: CioInvestmentProfile }>(`/api/cio/investments/${encodeURIComponent(investmentId)}/profile`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profilePayload),
       });
-      const savedExposures = await apiFetch<{ exposures: CioExposure[] }>(`/api/cio/investments/${encodeURIComponent(selectedId)}/exposures`, {
+      const savedExposures = await apiFetch<{ exposures: CioExposure[] }>(`/api/cio/investments/${encodeURIComponent(investmentId)}/exposures`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exposures: exposurePayload }),
       });
       return { profile: savedProfile.profile, exposures: savedExposures.exposures };
     },
-    onSuccess: async (saved) => {
-      queryClient.setQueryData(queryKeys.cioInvestmentProfile(workspaceId, selectedId), saved.profile);
-      queryClient.setQueryData(queryKeys.cioInvestmentExposures(workspaceId, selectedId), saved.exposures);
+    onSuccess: async (saved, { investmentId }) => {
+      queryClient.setQueryData(queryKeys.cioInvestmentProfile(workspaceId, investmentId), saved.profile);
+      queryClient.setQueryData(queryKeys.cioInvestmentExposures(workspaceId, investmentId), saved.exposures);
       await onSaved();
       onClose();
     },
@@ -122,41 +117,16 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
   };
   const updateExposure = (index: number, patch: Partial<ExposureForm>) => set("exposures", form.exposures.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
   const addExposure = () => set("exposures", [...form.exposures, nextExposure(form.exposures)]);
-  const totals = useMemo(() => form.exposures.reduce<Record<string, number>>((result, row) => {
-    result[row.dimension] = (result[row.dimension] ?? 0) + (bpsFromPercentInput(row.weight) ?? 0);
-    return result;
-  }, {}), [form.exposures]);
+  const totals = useMemo(() => calculateExposureTotals(form.exposures), [form.exposures]);
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    if (form.lockUntil && !isValidDateInput(form.lockUntil)) return setFormError("Choose a valid date for when this investment becomes available.");
-    if (form.exposures.length > 100) return setFormError("Keep the breakdown to 100 rows or fewer.");
-
-    for (const row of form.exposures) {
-      const dimension = formatCioLabel(row.dimension).toLowerCase();
-      const key = row.key.trim().toUpperCase();
-      if (!key) return setFormError(`Choose what the ${dimension} row represents.`);
-      if (row.dimension === "SECURITY" && !/^[A-Z0-9][A-Z0-9._:-]{0,31}$/.test(key)) {
-        return setFormError("Use a short ticker-like security code, such as VWRA or CSPX. Use only letters, numbers, dots, underscores, colons, or hyphens.");
-      }
-      const weightError = validateWeight(row.weight, `${formatCioLabel(row.dimension)}: ${formatCioLabel(key)}`);
-      if (weightError) return setFormError(weightError);
-    }
-
-    const publicExposures = form.exposures.map((row) => ({ dimension: row.dimension, key: row.key.trim().toUpperCase(), weightBps: bpsFromPercentInput(row.weight) ?? 0 }));
-    const identities = new Set<string>();
-    for (const row of publicExposures) {
-      const identity = `${row.dimension}:${row.key}`;
-      if (identities.has(identity)) return setFormError(`${formatCioLabel(row.dimension)} already includes ${formatCioLabel(row.key)}. Combine it into one row or choose a different item.`);
-      identities.add(identity);
-    }
-    for (const [dimension, total] of Object.entries(totals)) {
-      if (total !== 10_000) return setFormError(`${formatCioLabel(dimension)} adds up to ${percentInputFromBps(total)}%. Adjust those rows so that breakdown totals 100%.`);
-    }
-    if (!form.reviewed) return setFormError("Confirm that you have reviewed this account before saving its classification.");
+    const prepared = prepareInvestmentForm(form);
+    if ("error" in prepared) { setFormError(prepared.error); return; }
 
     setFormError("");
     mutation.mutate({
+      investmentId: selectedId,
       profilePayload: {
         liquidityClass: form.liquidityClass, portfolioRole: form.portfolioRole, riskLevel: form.riskLevel,
         includeInRetirementProjection: form.includeInRetirementProjection,
@@ -165,7 +135,7 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
         classificationSource: "USER",
         notes: form.notes.trim() || null,
       },
-      exposurePayload: publicExposures,
+      exposurePayload: prepared.exposures,
     });
   };
   const optionLabel = (id: string) => {
@@ -173,7 +143,7 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
     return account ? account.displayName || `${account.institutionName} · ${account.productName}` : `Investment ${id.slice(0, 8)}`;
   };
   const loading = profile.isLoading || exposures.isLoading;
-  const loadError = profile.error || exposures.error;
+  const loadError = profile.error ?? exposures.error;
   const savedStatus = profile.data?.classificationStatus ?? selectedSnapshot?.classificationStatus ?? "UNCLASSIFIED";
 
   return (
@@ -182,8 +152,8 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
     }>
       {!snapshots.length ? <div className="cio-form-empty"><strong>No investment accounts</strong><p>Add an investment account before describing it for CIO planning.</p></div> : (
         <>
-          <SelectField label="Investment account" hint="Work through one account at a time. Accounts marked “Needs review” have not been confirmed yet." value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setFormError(""); }}>{snapshots.map((snapshot) => <option value={snapshot.id} key={snapshot.id}>{optionLabel(snapshot.id)}{snapshot.classificationStatus !== "USER_CONFIRMED" ? " · Needs review" : ""}</option>)}</SelectField>
-          {loadError ? <QueryError title="Investment details could not be loaded" message={loadError instanceof Error ? loadError.message : undefined} onRetry={() => { void profile.refetch(); void exposures.refetch(); }} /> : loading ? <div className="cio-dialog-loading" aria-busy="true">Loading account details…</div> : (
+          <SelectField label="Investment account" hint="Work through one account at a time. Accounts marked “Needs review” have not been confirmed yet." value={selectedId} disabled={mutation.isPending} onChange={(event) => { setSelectedId(event.target.value); setFormError(""); }}>{snapshots.map((snapshot) => <option value={snapshot.id} key={snapshot.id}>{optionLabel(snapshot.id)}{snapshot.classificationStatus !== "USER_CONFIRMED" ? " · Needs review" : ""}</option>)}</SelectField>
+          <CioQueryContent state={{ isError: profile.isError || exposures.isError, isLoading: loading, error: loadError }} title="Investment details could not be loaded" loadingText="Loading account details…" onRetry={() => { void profile.refetch(); void exposures.refetch(); }}>
             <form id="cio-investment-form" className="cio-dialog-form" onSubmit={submit} noValidate>
               <fieldset className="cio-form-section"><legend>1. Purpose, access, and risk</legend><p>Choose the best description for this account as a whole. “Unknown” is better than guessing when the risk is unclear.</p><div className="form-grid form-grid-2">
                 <SelectField label="How quickly can you use the money?" hint={LIQUIDITY_HINTS[form.liquidityClass]} value={form.liquidityClass} onChange={(e) => set("liquidityClass", e.target.value as CioLiquidityClass)}>{CIO_LIQUIDITY_CLASSES.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>
@@ -197,7 +167,7 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
 
               <fieldset className="cio-form-section"><div className="cio-form-section-heading"><div><legend>2. What the account holds</legend><p>Break the same account down by asset class, geography, or individual security. Each type you add is a separate view and must total 100% on its own.</p></div><Button variant="outline" size="sm" onClick={addExposure} disabled={form.exposures.length >= 100}><Plus size={15} /> Add breakdown row</Button></div>
                 {form.exposures.length ? <div className="cio-exposure-rows">{form.exposures.map((row, index) => (
-                  <div className="cio-exposure-row" key={`${row.dimension}-${index}`}>
+                  <div className="cio-exposure-row" key={row.id}>
                     <SelectField label="Break down by" hint={DIMENSION_HINTS[row.dimension]} value={row.dimension} onChange={(e) => { const dimension = e.target.value as CioExposureDimension; updateExposure(index, { dimension, key: nextExposureKey(dimension, form.exposures) }); }}>{CIO_EXPOSURE_DIMENSIONS.map((value) => <option key={value} value={value}>{formatCioLabel(value)}</option>)}</SelectField>
                     <ExposureKeyField row={row} onChange={(key) => updateExposure(index, { key })} />
                     <TextField label="Share of account (%)" hint="Rows of this type must add to 100%." inputMode="decimal" placeholder="e.g. 60" value={row.weight} onChange={(e) => updateExposure(index, { weight: e.target.value })} required />
@@ -211,7 +181,7 @@ export function CioInvestmentProfileDialog({ open, workspaceId, investments: sna
               </fieldset>
               {formError || mutation.isError ? <p className="form-error" role="alert">{formError || mutationFailureMessage(mutation.error)}</p> : null}
             </form>
-          )}
+          </CioQueryContent>
         </>
       )}
     </Dialog>
@@ -229,31 +199,20 @@ function nextExposureKey(dimension: CioExposureDimension, rows: ExposureForm[]) 
   return options.find((value) => !rows.some((row) => row.dimension === dimension && row.key === value)) ?? options[0];
 }
 function nextExposure(rows: ExposureForm[]): ExposureForm {
+  const id = crypto.randomUUID();
   const assetClass = CIO_ASSET_CLASSES.find((value) => !rows.some((row) => row.dimension === "ASSET_CLASS" && row.key === value));
-  if (assetClass) return { dimension: "ASSET_CLASS", key: assetClass, weight: "100" };
+  if (assetClass) return { id, dimension: "ASSET_CLASS", key: assetClass, weight: "100" };
   const geography = CIO_GEOGRAPHIES.find((value) => !rows.some((row) => row.dimension === "GEOGRAPHY" && row.key === value));
-  if (geography) return { dimension: "GEOGRAPHY", key: geography, weight: "100" };
-  return { dimension: "SECURITY", key: "", weight: "100" };
+  if (geography) return { id, dimension: "GEOGRAPHY", key: geography, weight: "100" };
+  return { id, dimension: "SECURITY", key: "", weight: "100" };
 }
 function emptyForm(snapshot?: CioSnapshot["investments"][number]): InvestmentForm {
   return { liquidityClass: snapshot?.liquidityClass ?? "LIQUID", portfolioRole: snapshot?.portfolioRole ?? "OTHER", riskLevel: "UNKNOWN", includeInRetirementProjection: snapshot?.includeInRetirementProjection ?? false, lockUntil: "", notes: "", exposures: [], reviewed: snapshot?.classificationStatus === "USER_CONFIRMED" };
 }
 function formFromData(snapshot: CioSnapshot["investments"][number] | undefined, profile: CioInvestmentProfile | null, exposures: CioExposure[]): InvestmentForm {
-  if (!profile) return { ...emptyForm(snapshot), exposures: exposures.map((row) => ({ dimension: row.dimension, key: row.key, weight: percentInputFromBps(row.weightBps) })) };
-  return { liquidityClass: profile.liquidityClass, portfolioRole: profile.portfolioRole, riskLevel: profile.riskLevel, includeInRetirementProjection: profile.includeInRetirementProjection, lockUntil: toDateInput(profile.lockUntil), notes: profile.notes ?? "", exposures: exposures.map((row) => ({ dimension: row.dimension, key: row.key, weight: percentInputFromBps(row.weightBps) })), reviewed: profile.classificationStatus === "USER_CONFIRMED" };
-}
-function validateWeight(value: string, label: string) {
-  if (!value.trim()) return `Enter the percentage for ${label}.`;
-  const percentage = Number(value);
-  if (!Number.isFinite(percentage)) return `${label} must use a number for its percentage.`;
-  const weightBps = bpsFromPercentInput(value) ?? 0;
-  if (weightBps <= 0 || percentage > 100) return `${label} must be more than 0% and no more than 100%.`;
-  return null;
-}
-function isValidDateInput(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  const rows = exposures.map((row) => ({ id: row.id ?? crypto.randomUUID(), dimension: row.dimension, key: row.key, weight: percentInputFromBps(row.weightBps) }));
+  if (!profile) return { ...emptyForm(snapshot), exposures: rows };
+  return { liquidityClass: profile.liquidityClass, portfolioRole: profile.portfolioRole, riskLevel: profile.riskLevel, includeInRetirementProjection: profile.includeInRetirementProjection, lockUntil: toDateInput(profile.lockUntil), notes: profile.notes ?? "", exposures: rows, reviewed: profile.classificationStatus === "USER_CONFIRMED" };
 }
 function classificationMessage(status: string) {
   if (status === "SUGGESTED") return "Nest has a suggested description for this account. Check the choices above before confirming it.";

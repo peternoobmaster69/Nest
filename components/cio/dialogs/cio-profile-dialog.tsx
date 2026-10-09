@@ -2,13 +2,10 @@
 
 import { SubmitEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CioPlanningScope, CioProfile, CioProfilePayload } from "@/components/cio/types";
+import type { CioProfile, CioProfilePayload } from "@/components/cio/types";
 import {
   bpsFromPercentInput,
   centsFromMoneyInput,
-  moneyInputFromCents,
-  percentInputFromBps,
-  toDateInput,
   toIsoDate,
 } from "@/components/cio/cio-format";
 import { apiFetch, mutationFailureMessage } from "@/lib/api/client";
@@ -17,51 +14,11 @@ import { CioProfileScopeField } from "@/components/cio/dialogs/cio-profile-scope
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/form-field";
-import { QueryError } from "@/components/ui/query-state";
+import { CioQueryContent } from "@/components/cio/cio-query-content";
+import { localDateInput } from "@/components/cio/cio-date-input";
+import { EMPTY_FORM, MAX_MONEY_INPUT, ageFromBirthDate, formFromProfile, numberOrNull, validateProfileForm, type ProfileForm } from "./cio-profile-form";
 
-type ProfileForm = {
-  planningScope: CioPlanningScope;
-  primaryBirthDate: string;
-  primaryCurrentAge: string;
-  primaryAgeAsOfDate: string;
-  partnerBirthDate: string;
-  targetRetirementAge: string;
-  targetRetirementDate: string;
-  retirementSpending: string;
-  essentialSpending: string;
-  minimumCash: string;
-  inflation: string;
-  bearReturn: string;
-  baseReturn: string;
-  bullReturn: string;
-  withdrawalRate: string;
-  contributionOverride: string;
-  contributionGrowth: string;
-};
-
-type ProfileFormErrors = Partial<Record<keyof ProfileForm, string>>;
-
-const EMPTY_FORM: ProfileForm = {
-  planningScope: "INDIVIDUAL",
-  primaryBirthDate: "",
-  primaryCurrentAge: "",
-  primaryAgeAsOfDate: "",
-  partnerBirthDate: "",
-  targetRetirementAge: "",
-  targetRetirementDate: "",
-  retirementSpending: "",
-  essentialSpending: "",
-  minimumCash: "",
-  inflation: "",
-  bearReturn: "",
-  baseReturn: "",
-  bullReturn: "",
-  withdrawalRate: "",
-  contributionOverride: "",
-  contributionGrowth: "",
-};
-
-const MAX_MONEY_INPUT = 21_474_836.47;
+export { ageFromBirthDate } from "./cio-profile-form";
 
 export function CioProfileDialog({
   open,
@@ -162,11 +119,7 @@ export function CioProfileDialog({
       contentClassName="cio-dialog"
       footer={<><Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cancel</Button><Button variant="primary" type="submit" form="cio-profile-form" loading={mutation.isPending}>Save profile</Button></>}
     >
-      {profile.isError ? (
-        <QueryError title="Profile could not be loaded" message={profile.error instanceof Error ? profile.error.message : undefined} onRetry={() => void profile.refetch()} />
-      ) : profile.isLoading ? (
-        <div className="cio-dialog-loading" aria-busy="true">Loading profile…</div>
-      ) : (
+      <CioQueryContent state={profile} title="Profile could not be loaded" loadingText="Loading profile…" onRetry={() => void profile.refetch()}>
         <form id="cio-profile-form" className="cio-dialog-form" onSubmit={submit}>
           <fieldset className="cio-form-section">
             <legend>Age and retirement timing</legend>
@@ -272,128 +225,7 @@ export function CioProfileDialog({
           {showValidation && Object.keys(formErrors).length > 0 ? <p className="form-error" role="alert">Review the highlighted fields before saving.</p> : null}
           {mutation.isError ? <p className="form-error" role="alert">{mutationFailureMessage(mutation.error)}</p> : null}
         </form>
-      )}
+      </CioQueryContent>
     </Dialog>
   );
 }
-
-export function ageFromBirthDate(birthDate: string, today = localDateInput()) {
-  const birth = validDateInput(birthDate);
-  const current = validDateInput(today);
-  if (!birth || !current || birthDate > today) return null;
-  let age = current.year - birth.year;
-  if (current.month < birth.month || (current.month === birth.month && current.day < birth.day)) age -= 1;
-  return age;
-}
-
-function validateProfileForm(form: ProfileForm, today: string): ProfileFormErrors {
-  const errors: ProfileFormErrors = {};
-  const primaryDateError = dateNotAfter(form.primaryBirthDate, today, "date of birth");
-  const partnerDateError = dateNotAfter(form.partnerBirthDate, today, "partner's date of birth");
-  if (primaryDateError) errors.primaryBirthDate = primaryDateError;
-  if (partnerDateError) errors.partnerBirthDate = partnerDateError;
-
-  if (!form.primaryBirthDate) {
-    const ageError = numberError(form.primaryCurrentAge, "Current age", { min: 0, max: 120, integer: true });
-    if (ageError) errors.primaryCurrentAge = ageError;
-    const ageDateError = dateNotAfter(form.primaryAgeAsOfDate, today, "age date");
-    if (ageDateError) errors.primaryAgeAsOfDate = ageDateError;
-    if (form.primaryCurrentAge && !form.primaryAgeAsOfDate) errors.primaryAgeAsOfDate = "Choose the date when this age was accurate.";
-    if (!form.primaryCurrentAge && form.primaryAgeAsOfDate) errors.primaryCurrentAge = "Enter the age that was accurate on this date.";
-  }
-
-  const retirementAgeError = numberError(form.targetRetirementAge, "Retirement age", { min: 18, max: 120, integer: true });
-  if (retirementAgeError) errors.targetRetirementAge = retirementAgeError;
-  if (form.targetRetirementAge && form.targetRetirementDate) errors.targetRetirementDate = "Choose a retirement age or a retirement date, not both.";
-
-  for (const [field, label] of [
-    ["retirementSpending", "Retirement spending"],
-    ["essentialSpending", "Essential spending"],
-    ["minimumCash", "Minimum bank cash"],
-    ["contributionOverride", "Contribution override"],
-  ] as const) {
-    const error = numberError(form[field], label, { min: 0, max: MAX_MONEY_INPUT });
-    if (error) errors[field] = error;
-  }
-  for (const [field, label, min, max] of [
-    ["inflation", "Inflation rate", -99.99, 1000],
-    ["contributionGrowth", "Contribution growth", -100, 1000],
-    ["bearReturn", "Bear return", -100, 1000],
-    ["baseReturn", "Base return", -100, 1000],
-    ["bullReturn", "Bull return", -100, 1000],
-    ["withdrawalRate", "Withdrawal rate", 0.01, 100],
-  ] as const) {
-    const error = numberError(form[field], label, { min, max });
-    if (error) errors[field] = error;
-  }
-
-  const bear = optionalFiniteNumber(form.bearReturn);
-  const base = optionalFiniteNumber(form.baseReturn);
-  const bull = optionalFiniteNumber(form.bullReturn);
-  if (bear !== null && base !== null && bear > base) errors.bearReturn = "Bear return must be less than or equal to base return.";
-  if (base !== null && bull !== null && base > bull) errors.bullReturn = "Bull return must be greater than or equal to base return.";
-  return errors;
-}
-
-function formFromProfile(profile: CioProfile): ProfileForm {
-  const hasBirthDate = Boolean(profile.primaryBirthDate);
-  return {
-    planningScope: profile.planningScope ?? (profile.partnerBirthDate ? "HOUSEHOLD" : "INDIVIDUAL"),
-    primaryBirthDate: toDateInput(profile.primaryBirthDate),
-    primaryCurrentAge: hasBirthDate ? "" : valueOrBlank(profile.primaryCurrentAge),
-    primaryAgeAsOfDate: hasBirthDate ? "" : toDateInput(profile.primaryAgeAsOfDate),
-    partnerBirthDate: toDateInput(profile.partnerBirthDate),
-    targetRetirementAge: valueOrBlank(profile.targetRetirementAge),
-    targetRetirementDate: toDateInput(profile.targetRetirementDate),
-    retirementSpending: moneyInputFromCents(profile.targetMonthlyRetirementSpendingCents),
-    essentialSpending: moneyInputFromCents(profile.essentialMonthlySpendingCents),
-    minimumCash: moneyInputFromCents(profile.minimumImmediateBankCashCents),
-    inflation: percentInputFromBps(profile.inflationRateBps),
-    bearReturn: percentInputFromBps(profile.bearReturnBps),
-    baseReturn: percentInputFromBps(profile.baseReturnBps),
-    bullReturn: percentInputFromBps(profile.bullReturnBps),
-    withdrawalRate: percentInputFromBps(profile.sustainableWithdrawalRateBps),
-    contributionOverride: moneyInputFromCents(profile.annualExternalContributionOverrideCents),
-    contributionGrowth: percentInputFromBps(profile.contributionGrowthRateBps),
-  };
-}
-
-function validDateInput(value: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  const [, yearValue, monthValue, dayValue] = match;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
-  return { year: Number(yearValue), month: Number(monthValue), day: Number(dayValue) };
-}
-
-function dateNotAfter(value: string, maximum: string, label: string) {
-  if (!value) return null;
-  if (!validDateInput(value)) return `Enter a valid ${label}.`;
-  return value > maximum ? `${label.charAt(0).toUpperCase()}${label.slice(1)} cannot be in the future.` : null;
-}
-
-function numberError(value: string, label: string, options: { min: number; max: number; integer?: boolean }) {
-  if (!value.trim()) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return `Enter ${label.toLowerCase()} as a number.`;
-  if (options.integer && !Number.isInteger(parsed)) return `${label} must be a whole number.`;
-  if (parsed < options.min || parsed > options.max) return `${label} must be between ${options.min} and ${options.max}.`;
-  return null;
-}
-
-function localDateInput(date = new Date()) {
-  const year = String(date.getFullYear()).padStart(4, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function optionalFiniteNumber(value: string) {
-  if (!value.trim()) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function valueOrBlank(value: number | null) { return value == null ? "" : String(value); }
-function numberOrNull(value: string) { return value.trim() ? Number(value) : null; }
