@@ -15,7 +15,11 @@ type Db = Prisma.TransactionClient;
 
 export function stableAgentJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableAgentJson).join(",")}]`;
-  if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => `${JSON.stringify(key)}:${stableAgentJson(child)}`).join(",")}}`;
+  if (value && typeof value === "object") {
+    const properties = Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, child]) => `${JSON.stringify(key)}:${stableAgentJson(child)}`).join(",");
+    return `{${properties}}`;
+  }
   return JSON.stringify(value) ?? "null";
 }
 

@@ -71,7 +71,7 @@ db.$transaction = (callback) => {
 globalThis.prisma = db;
 const { getAiWorkloadClient } = await import("../lib/ai/config.ts");
 const { getAgentConfiguration } = await import("../lib/ai/agent-runtime.ts");
-const { getAgentRegistry, getAgentDetail, saveAgentConfiguration, saveAgentExample, deleteAgentExample } = await import("../lib/ai/agent-store.ts");
+const { getAgentRegistry, getAgentDetail, saveAgentConfiguration, saveAgentExample, deleteAgentExample, stableAgentJson, agentHash, serializeAgentEvaluation } = await import("../lib/ai/agent-store.ts");
 const { upgradeLegacyAgentInstructions } = await import("../lib/ai/agent-prompt-upgrade.ts");
 const { agentDatasetLine, buildAgentDataset, evaluateAgent, runAgentExample } = await import("../lib/ai/agent-training.ts");
 const { startAgentFineTuning, updateAgentFineTuning } = await import("../lib/ai/agent-fine-tuning.ts");
@@ -161,6 +161,119 @@ test("prompt upgrades preserve an administrator edit made after the preview read
     assert.equal(records.aiAgentRevision.length, 2);
     assert.equal(records.aiAgentRevision.at(-1).actorUserId, "editing-admin");
   } finally { db.aiAgentConfig.findMany = original; }
+});
+
+test("prompt upgrades propagate unexpected write failures and roll back their audit revision", async (t) => {
+  const saved = await saveAgentConfiguration("ask-nest", settings("ask-nest", { instructions: LEGACY_AGENT_INSTRUCTIONS["ask-nest"] }), "admin");
+  const original = db.aiAgentConfig.updateMany;
+  t.after(() => { db.aiAgentConfig.updateMany = original; });
+  for (const error of [new Error("Storage unavailable"), Object.assign(new Error("Service unavailable"), { status: 503 }), "connection closed"]) {
+    db.aiAgentConfig.updateMany = () => Promise.reject(error);
+    await assert.rejects(upgradeLegacyAgentInstructions("upgrade-admin", true), (failure) => failure === error);
+    assert.deepEqual(await getAgentConfiguration("ask-nest"), saved);
+    assert.equal(records.aiAgentRevision.length, 1);
+  }
+});
+
+test("agent content hashes ignore object insertion order while preserving array order and values", () => {
+  const first = { z: [1, { b: true, a: null }, undefined], a: "quoted\"text" };
+  const reordered = { a: "quoted\"text", z: [1, { a: null, b: true }, undefined] };
+  assert.equal(stableAgentJson(first), '{"a":"quoted\\"text","z":[1,{"a":null,"b":true},null]}');
+  assert.equal(stableAgentJson(undefined), "null");
+  assert.equal(stableAgentJson(false), "false");
+  assert.equal(agentHash(first), agentHash(reordered));
+  assert.notEqual(agentHash(first), agentHash({ ...reordered, z: [...reordered.z].reverse() }));
+  assert.notEqual(agentHash(first), agentHash({ ...reordered, a: "different" }));
+  assert.match(agentHash(first), /^[a-f\d]{64}$/);
+});
+
+test("evaluation serialization marks only running work at the three-minute deadline as interrupted", (t) => {
+  const now = Date.UTC(2026, 9, 10, 0, 0);
+  t.mock.method(Date, "now", () => now);
+  for (const [status, age, expected] of [["RUNNING", 179999, "RUNNING"], ["RUNNING", 180000, "INTERRUPTED"], ["COMPLETED", 180000, "COMPLETED"]]) {
+    const createdAt = new Date(now - age);
+    assert.deepEqual(serializeAgentEvaluation({
+      id: "evaluation", revision: 4, datasetHash: "snapshot", status, passedCount: 1, totalCount: 2, resultsJson: '[{"passed":true}]', createdAt,
+    }), { id: "evaluation", revision: 4, datasetHash: "snapshot", status: expected, passedCount: 1, totalCount: 2, results: [{ passed: true }], createdAt: createdAt.toISOString() });
+  }
+});
+
+test("configuration writes reject tool limits that cannot cover the requested lookup rounds", async () => {
+  await assert.rejects(saveAgentConfiguration("ask-nest", settings("ask-nest", { maxToolRounds: 5, maxToolCalls: 4 }), "admin"),
+    (error) => error.status === 422 && /allowance/.test(error.message));
+  assert.equal(records.aiAgentConfig.length, 0);
+  assert.equal(records.aiAgentRevision.length, 0);
+});
+
+test("configuration conflicts and unavailable storage do not leave partial revisions", async (t) => {
+  const saved = await saveAgentConfiguration("ask-nest", settings("ask-nest"), "admin");
+  const original = db.aiAgentConfig.updateMany;
+  t.after(() => { db.aiAgentConfig.updateMany = original; });
+  db.aiAgentConfig.updateMany = async () => ({ count: 0 });
+  await assert.rejects(saveAgentConfiguration("ask-nest", settings("ask-nest", { revision: saved.revision }), "admin"),
+    (error) => error.status === 409 && /changed/.test(error.message));
+  for (const code of ["P2034", "P1001"]) {
+    const error = failure(code);
+    db.aiAgentConfig.updateMany = () => Promise.reject(error);
+    await assert.rejects(saveAgentConfiguration("ask-nest", settings("ask-nest", { revision: saved.revision }), "admin"),
+      (caught) => code === "P2034" ? caught.status === 409 : caught === error);
+  }
+  assert.equal(records.aiAgentRevision.length, 1);
+  assert.deepEqual(await getAgentConfiguration("ask-nest"), saved);
+});
+
+test("example updates enforce their agent and revision and can edit an existing full dataset", async (t) => {
+  const saved = await saveAgentExample("ask-nest", exampleInput(), "admin");
+  const original = db.aiAgentExample.count;
+  t.after(() => { db.aiAgentExample.count = original; });
+  db.aiAgentExample.count = async () => 250;
+  await assert.rejects(saveAgentExample("ask-nest", exampleInput({ input: "A new request" }), "admin"),
+    (error) => error.status === 422 && /250/.test(error.message));
+  const changed = await saveAgentExample("ask-nest", exampleInput({ title: "Updated example" }), "editor", { id: saved.id, revision: saved.revision });
+  assert.equal(changed.revision, saved.revision + 1);
+  assert.equal(changed.title, "Updated example");
+  assert.equal(records.aiAgentExample.length, 1);
+  assert.equal(records.aiAgentRevision.at(-1).action, "EXAMPLE_UPDATED");
+  assert.equal(records.aiAgentRevision.at(-1).actorUserId, "editor");
+  const audits = records.aiAgentRevision.length;
+  for (const [id, revision] of [["ask-nest", saved.revision], ["smart-review", changed.revision]]) {
+    await assert.rejects(saveAgentExample(id, exampleInput(), "admin", { id: saved.id, revision }), (error) => error.status === 409);
+  }
+  assert.equal(records.aiAgentRevision.length, audits);
+  assert.equal(records.aiAgentExample[0].title, "Updated example");
+});
+
+test("JSON field expectations reject invalid or empty assertions while scalar and text checks remain usable", async () => {
+  for (const expectedOutput of ["{", "{}", "[]"]) {
+    await assert.rejects(saveAgentExample("ask-nest", exampleInput({ expectedOutput }), "admin"),
+      (error) => error.status === 422 && /non-empty/.test(error.message));
+  }
+  for (const [expectedOutput, matchMode] of [["null", "JSON_SUBSET"], ['"expected"', "JSON_SUBSET"], ["any text", "CONTAINS"]]) {
+    const saved = await saveAgentExample("ask-nest", exampleInput({ expectedOutput, matchMode, input: `Request ${expectedOutput}` }), "admin");
+    assert.equal(saved.expectedOutput, expectedOutput);
+    assert.equal(saved.matchMode, matchMode);
+  }
+  assert.equal(records.aiAgentExample.length, 3);
+  assert.equal(records.aiAgentRevision.length, 3);
+});
+
+test("registry and detail counts keep approved training, held-out evaluations, and drafts separate", async () => {
+  for (const [purpose, status, input] of [
+    ["TRAINING", "APPROVED", "Training example"], ["TRAINING", "DRAFT", "Training draft"],
+    ["EVALUATION", "APPROVED", "Evaluation example"], ["EVALUATION", "DRAFT", "Evaluation draft"],
+  ]) {
+    await saveAgentExample("ask-nest", exampleInput({ purpose, status, input }), "admin");
+  }
+  await saveAgentExample("smart-review", exampleInput({ input: "Another agent example" }), "admin");
+  const registry = await getAgentRegistry();
+  const agent = registry.agents.find(({ configuration }) => configuration.id === "ask-nest");
+  assert.deepEqual([agent.trainingCount, agent.evaluationCount, agent.draftCount], [1, 1, 2]);
+  const detail = await getAgentDetail("ask-nest");
+  assert.deepEqual([detail.trainingCount, detail.evaluationCount, detail.draftCount], [1, 1, 2]);
+  assert.equal(detail.examples.length, 4);
+  assert.ok(detail.examples.every(({ agentId }) => agentId === "ask-nest"));
+  assert.equal(detail.revisions.length, 4);
+  assert.ok(detail.revisions.every(({ action }) => action === "EXAMPLE_CREATED"));
 });
 
 test("mixed conceptual and personal questions retain permitted tools on the first model request", async () => {
