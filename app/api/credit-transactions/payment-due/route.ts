@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -16,7 +17,7 @@ const PaymentDueMonthsQuerySchema = z.object({
 });
 
 export async function GET(request: Request) {
-  try {
+  return runSecureApiRoute(request, { errorMessage: "Failed to load payment due months" }, async () => {
     const { workspaceId } = await requireWorkspaceAccess();
     const { searchParams } = new URL(request.url);
     const parsed = PaymentDueMonthsQuerySchema.safeParse({
@@ -81,19 +82,13 @@ export async function GET(request: Request) {
           paymentDueDate: paymentDueDate.toISOString(),
         })),
     });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to load payment due months", message }, { status: 500 });
-  }
+  });
 }
 
 export async function PATCH(request: Request) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update payment due date" }, async () => {
     const { workspaceId } = await requireWorkspaceAccess(null, "EDITOR");
-    const parsed = UpdatePaymentDueSchema.safeParse(await request.json());
+    const parsed = UpdatePaymentDueSchema.safeParse(await parseJsonBody(request, z.unknown()));
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -127,11 +122,5 @@ export async function PATCH(request: Request) {
     });
 
     return NextResponse.json({ ok: true, updatedCount: result.count });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to update payment due date", message }, { status: 500 });
-  }
+  });
 }

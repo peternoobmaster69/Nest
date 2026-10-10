@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { AskNestAnswer } from "@/lib/ai/ask-nest-types";
 import { clearAskNestHistoryPreservingUsage } from "@/lib/ai/ask-nest-retention";
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { runSecureApiRoute } from "@/lib/api-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ const QuerySchema = z.object({
 });
 
 export async function GET(request: Request) {
-  try {
+  return runSecureApiRoute(request, { noStore: false, errorMessage: "Could not load Ask Nest history." }, async () => {
     const { userId, workspaceId } = await requireWorkspaceAccess();
     const parsed = QuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!parsed.success) {
@@ -58,27 +59,15 @@ export async function GET(request: Request) {
     }).reverse();
     return NextResponse.json({
       turns,
-      nextCursor: hasMore ? page.at(-1)?.id ?? null : null,
+      nextCursor: hasMore ? page[page.length - 1].id : null,
     }, { headers: PRIVATE_HEADERS });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status, headers: PRIVATE_HEADERS });
-    }
-    console.error("Ask Nest history load failed", { name: error instanceof Error ? error.name : "UnknownError" });
-    return NextResponse.json({ error: "Could not load Ask Nest history." }, { status: 500, headers: PRIVATE_HEADERS });
-  }
+  });
 }
 
-export async function DELETE() {
-  try {
+export async function DELETE(request: Request) {
+  return runSecureApiRoute(request, { mutation: true, noStore: false, errorMessage: "Could not clear Ask Nest history." }, async () => {
     const { userId, workspaceId } = await requireWorkspaceAccess();
     await clearAskNestHistoryPreservingUsage({ workspaceId, userId });
     return new NextResponse(null, { status: 204, headers: PRIVATE_HEADERS });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status, headers: PRIVATE_HEADERS });
-    }
-    console.error("Ask Nest history clear failed", { name: error instanceof Error ? error.name : "UnknownError" });
-    return NextResponse.json({ error: "Could not clear Ask Nest history." }, { status: 500, headers: PRIVATE_HEADERS });
-  }
+  });
 }

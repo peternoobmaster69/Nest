@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -18,9 +19,9 @@ const UpdateTransactionSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update transaction" }, async () => {
     const { id } = await params;
-    const body = await request.json();
+    const body = await parseJsonBody(request, z.unknown());
     const parsed = UpdateTransactionSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -39,11 +40,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
-    const updatePayload = parsed.data;
-    const data: Prisma.CreditCardTransactionUncheckedUpdateManyInput = {};
-    if (updatePayload.creditCardId !== undefined) {
+    const { expectedUpdatedAt, transactionDate, paymentDueDate, ...fields } = parsed.data;
+    const data: Prisma.CreditCardTransactionUncheckedUpdateManyInput = {
+      ...fields,
+      isInstallment: false,
+      installmentNo: null,
+      totalInstallments: null,
+    };
+    if (fields.creditCardId !== undefined) {
       const card = await prisma.creditCardAccount.findFirst({
-        where: { id: updatePayload.creditCardId, workspaceId: existing.workspaceId },
+        where: { id: fields.creditCardId, workspaceId: existing.workspaceId },
         select: { id: true },
       });
       if (!card) {
@@ -51,33 +57,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       data.creditCardId = card.id;
     }
-    if (updatePayload.transactionDate) {
-      data.transactionDate = new Date(updatePayload.transactionDate);
+    if (transactionDate !== undefined) {
+      data.transactionDate = new Date(transactionDate);
     }
-    if (updatePayload.paymentDueDate !== undefined) {
-      data.paymentDueDate = updatePayload.paymentDueDate ? new Date(updatePayload.paymentDueDate) : null;
+    if (paymentDueDate !== undefined) {
+      data.paymentDueDate = paymentDueDate === null ? null : new Date(paymentDueDate);
     }
-    if (updatePayload.statementMonth !== undefined) {
-      data.statementMonth = updatePayload.statementMonth;
-    }
-    if (updatePayload.statementYear !== undefined) {
-      data.statementYear = updatePayload.statementYear;
-    }
-    if (updatePayload.amountCents !== undefined) {
-      data.amountCents = updatePayload.amountCents;
-    }
-    if (updatePayload.subject !== undefined) {
-      data.subject = updatePayload.subject;
-    }
-    if (updatePayload.isAllocated !== undefined) {
-      data.isAllocated = updatePayload.isAllocated;
-    }
-    data.isInstallment = false;
-    data.installmentNo = null;
-    data.totalInstallments = null;
 
     const result = await prisma.creditCardTransaction.updateMany({
-      where: { id, updatedAt: new Date(updatePayload.expectedUpdatedAt) },
+      where: { id, updatedAt: new Date(expectedUpdatedAt) },
       data,
     });
     if (result.count !== 1) {
@@ -87,17 +75,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const transaction = await prisma.creditCardTransaction.findUniqueOrThrow({ where: { id }, include: { creditCard: true } });
 
     return NextResponse.json(transaction);
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    console.error("Credit transaction update error:", error);
-    return NextResponse.json({ error: "Failed to update transaction" }, { status: 500 });
-  }
+  });
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to delete transaction" }, async () => {
     const { id } = await params;
     const existing = await prisma.creditCardTransaction.findUnique({
       where: { id },
@@ -109,11 +91,5 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
     await prisma.creditCardTransaction.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    console.error("Credit transaction delete error:", error);
-    return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });
-  }
+  });
 }

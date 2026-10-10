@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -10,9 +11,9 @@ const CreateInvestmentEntrySchema = z.object({
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to create investment entry" }, async () => {
     const { id } = await params;
-    const parsed = CreateInvestmentEntrySchema.safeParse(await request.json());
+    const parsed = CreateInvestmentEntrySchema.safeParse(await parseJsonBody(request, z.unknown()));
     if (!parsed.success) {
       return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
@@ -37,11 +38,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     return NextResponse.json(created, { status: 201 });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to create investment entry", message }, { status: 500 });
-  }
+  });
 }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -14,7 +15,7 @@ const CreateInvestmentAccountSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  try {
+  return runSecureApiRoute(request, { errorMessage: "Failed to fetch investments" }, async () => {
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get("workspaceId");
     if (!workspaceId) {
@@ -38,18 +39,12 @@ export async function GET(request: Request) {
     return NextResponse.json(
       accounts.map((account) => ({ ...account, entries: account.entries.toReversed() })),
     );
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to fetch investments", message }, { status: 500 });
-  }
+  });
 }
 
 export async function POST(request: Request) {
-  try {
-    const parsed = CreateInvestmentAccountSchema.safeParse(await request.json());
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to create investment account" }, async () => {
+    const parsed = CreateInvestmentAccountSchema.safeParse(await parseJsonBody(request, z.unknown()));
     if (!parsed.success) {
       return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
@@ -69,11 +64,5 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(created, { status: 201 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to create investment account", message }, { status: 500 });
-  }
+  });
 }

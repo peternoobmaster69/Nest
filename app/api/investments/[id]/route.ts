@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -13,9 +14,9 @@ const UpdateInvestmentAccountSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to update investment account" }, async () => {
     const { id } = await params;
-    const parsed = UpdateInvestmentAccountSchema.safeParse(await request.json());
+    const parsed = UpdateInvestmentAccountSchema.safeParse(await parseJsonBody(request, z.unknown()));
     if (!parsed.success) {
       return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
     }
@@ -30,6 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
+    const { divestedDate } = parsed.data;
     const updated = await prisma.investmentAccount.update({
       where: { id },
       data: {
@@ -37,23 +39,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         institutionName: parsed.data.institutionName?.trim(),
         productName: parsed.data.productName?.trim(),
         inceptionDate: parsed.data.inceptionDate ? new Date(parsed.data.inceptionDate) : undefined,
-        divestedDate: parsed.data.divestedDate === undefined ? undefined : parsed.data.divestedDate ? new Date(parsed.data.divestedDate) : null,
+        divestedDate: divestedDate ? new Date(divestedDate) : divestedDate,
         isLiquid: parsed.data.isLiquid,
       },
     });
 
     return NextResponse.json(updated);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    return NextResponse.json({ error: "Failed to update investment account", message }, { status: 500 });
-  }
+  });
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to delete investment account" }, async () => {
     const { id } = await params;
     const existing = await prisma.investmentAccount.findUnique({
       where: { id },
@@ -69,11 +65,5 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       where: { id },
     });
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: "Failed to delete investment account", message }, { status: 500 });
-  }
+  });
 }
