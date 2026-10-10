@@ -3,7 +3,6 @@ import { getAutoAccountingNotice } from "@/components/settings/operation-notices
 
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
-import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL } from "@/lib/credit-txn-auto-rules-config";

@@ -37,6 +37,8 @@ type GmailCheckpoint = GmailSyncSummary & {
   pageToken: string | null;
   startHistoryId: string | null;
   highWaterHistoryId: string | null;
+  pendingMessageIds: string[] | null;
+  nextPageToken: string | null;
 };
 
 const DEFAULT_MESSAGES_PER_SLICE = 50;
@@ -56,15 +58,22 @@ function slicesPerInvocation() {
   return boundedInteger(process.env.GMAIL_SYNC_SLICES_PER_INVOCATION, DEFAULT_SLICES_PER_INVOCATION, 10);
 }
 
+function restoreCheckpointPage(parsed: GmailCheckpoint): GmailCheckpoint {
+  return {
+    ...parsed,
+    ignored: Number.isInteger(parsed.ignored) && parsed.ignored >= 0 ? parsed.ignored : 0,
+    pendingMessageIds: Array.isArray(parsed.pendingMessageIds) && parsed.pendingMessageIds.every((id) => typeof id === "string")
+      ? parsed.pendingMessageIds : null,
+    nextPageToken: typeof parsed.nextPageToken === "string" ? parsed.nextPageToken : null,
+  };
+}
+
 function parseCheckpoint(value: string | null, integration: GmailIntegrationRecord): GmailCheckpoint {
   if (value) {
     try {
       const parsed = JSON.parse(value) as GmailCheckpoint;
       if (parsed.version === 1 && (parsed.mode === "query" || parsed.mode === "history")) {
-        return {
-          ...parsed,
-          ignored: Number.isInteger(parsed.ignored) && parsed.ignored >= 0 ? parsed.ignored : 0,
-        };
+        return restoreCheckpointPage(parsed);
       }
     } catch {
       // Start from the integration's durable cursor when an old checkpoint is unreadable.
@@ -76,6 +85,8 @@ function parseCheckpoint(value: string | null, integration: GmailIntegrationReco
     pageToken: null,
     startHistoryId: integration.lastHistoryId ?? null,
     highWaterHistoryId: null,
+    pendingMessageIds: null,
+    nextPageToken: null,
     scannedMessages: 0,
     processed: 0,
     duplicates: 0,
@@ -125,9 +136,56 @@ async function loadIntegrationFromJob(payloadJson: string | null) {
   return integration;
 }
 
-async function processGmailSyncJob(jobId: string, origin?: string) {
-  const claimed = await claimBackgroundJob({ jobId, type: GMAIL_SYNC_JOB_TYPE, leaseMs: 5 * 60_000 });
-  if (!claimed) return null;
+async function loadGmailSyncPage(accessToken: string, integration: GmailIntegrationRecord, checkpoint: GmailCheckpoint, limit: number) {
+  if (checkpoint.mode === "history" && checkpoint.startHistoryId) {
+    try {
+      const page = await listGmailHistoryPage({
+        accessToken,
+        startHistoryId: checkpoint.startHistoryId,
+        pageToken: checkpoint.pageToken,
+        maxResults: limit,
+      });
+      checkpoint.highWaterHistoryId = page.historyId ?? checkpoint.highWaterHistoryId;
+      return page;
+    } catch (error) {
+      if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_HISTORY_EXPIRED") throw error;
+      checkpoint.mode = "query";
+      checkpoint.pageToken = null;
+      checkpoint.startHistoryId = null;
+    }
+  }
+  return listGmailMessagePage({
+    accessToken,
+    q: buildGmailAlertQuery(integration.lastSyncedAt),
+    pageToken: checkpoint.pageToken,
+    maxResults: limit,
+  });
+}
+
+async function processGmailMessage(accessToken: string, messageId: string, workspaceId: string): Promise<"ignored" | "duplicates" | "processed" | "failed"> {
+  try {
+    const metadata = await fetchGmailMessageMetadata(accessToken, messageId);
+    if (!isGmailCreditAlertSubject(metadata.subject)) return "ignored";
+
+    const full = await fetchGmailMessage(accessToken, messageId);
+    const result = await ingestCreditAlert({
+      workspaceId,
+      rawBody: full.body,
+      rawSubject: full.subject,
+      source: "GMAIL",
+      sourceMessageId: messageId,
+    });
+    if ("duplicate" in result && result.duplicate) return "duplicates";
+    if ("parseStatus" in result && result.parseStatus === "PROCESSED") return "processed";
+    if ("parseStatus" in result && result.parseStatus === "DUPLICATE") return "duplicates";
+    return "failed";
+  } catch (error) {
+    if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_MESSAGE_GONE") throw error;
+    return "failed";
+  }
+}
+
+async function processGmailSyncJob(claimed: NonNullable<Awaited<ReturnType<typeof claimBackgroundJob>>>, origin?: string) {
   const { job, leaseToken } = claimed;
 
   try {
@@ -145,77 +203,23 @@ async function processGmailSyncJob(jobId: string, origin?: string) {
       checkpoint.highWaterHistoryId = (await getGmailProfile(accessToken)).historyId;
     }
 
-    let messages: Array<{ id: string }> = [];
-    let nextPageToken: string | null = null;
-    if (checkpoint.mode === "history" && checkpoint.startHistoryId) {
-      try {
-        const page = await listGmailHistoryPage({
-          accessToken,
-          startHistoryId: checkpoint.startHistoryId,
-          pageToken: checkpoint.pageToken,
-          maxResults: messagesPerSlice(),
-        });
-        messages = page.messages;
-        nextPageToken = page.nextPageToken;
-        checkpoint.highWaterHistoryId = page.historyId ?? checkpoint.highWaterHistoryId;
-      } catch (error) {
-        if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_HISTORY_EXPIRED") throw error;
-        checkpoint.mode = "query";
-        checkpoint.pageToken = null;
-        checkpoint.startHistoryId = null;
-        const page = await listGmailMessagePage({
-          accessToken,
-          q: buildGmailAlertQuery(integration.lastSyncedAt),
-          maxResults: messagesPerSlice(),
-        });
-        messages = page.messages;
-        nextPageToken = page.nextPageToken;
-      }
-    } else {
-      const page = await listGmailMessagePage({
-        accessToken,
-        q: buildGmailAlertQuery(integration.lastSyncedAt),
-        pageToken: checkpoint.pageToken,
-        maxResults: messagesPerSlice(),
-      });
-      messages = page.messages;
-      nextPageToken = page.nextPageToken;
+    const limit = messagesPerSlice();
+    if (checkpoint.pendingMessageIds === null) {
+      const page = await loadGmailSyncPage(accessToken, integration, checkpoint, limit);
+      checkpoint.pendingMessageIds = page.messages.map((message) => message.id);
+      checkpoint.nextPageToken = page.nextPageToken;
+      // Persist this page before importing. A retry resumes the same message list,
+      // even when new mail changes the provider's current page contents.
+      await throwIfBackgroundJobCancelled(job.id, leaseToken);
+      await heartbeatBackgroundJob(job.id, leaseToken, { checkpoint });
     }
 
-    for (const message of messages) {
+    for (const messageId of checkpoint.pendingMessageIds.slice(0, limit)) {
       await throwIfBackgroundJobCancelled(job.id, leaseToken);
+      const outcome = await processGmailMessage(accessToken, messageId, integration.workspaceId);
       checkpoint.scannedMessages += 1;
-      let result;
-      try {
-        const metadata = await fetchGmailMessageMetadata(accessToken, message.id);
-        if (!isGmailCreditAlertSubject(metadata.subject)) {
-          checkpoint.ignored += 1;
-          await heartbeatBackgroundJob(job.id, leaseToken, {
-            progress: Math.min(90, 10 + checkpoint.scannedMessages),
-            message: `Reviewed ${checkpoint.scannedMessages} Gmail message${checkpoint.scannedMessages === 1 ? "" : "s"}.`,
-            ...getGmailSyncProgressCounters(checkpoint.scannedMessages, job.total),
-            checkpoint,
-          });
-          continue;
-        }
-
-        const full = await fetchGmailMessage(accessToken, message.id);
-        result = await ingestCreditAlert({
-          workspaceId: integration.workspaceId,
-          rawBody: full.body,
-          rawSubject: full.subject,
-          source: "GMAIL",
-          sourceMessageId: message.id,
-        });
-      } catch (error) {
-        if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_MESSAGE_GONE") throw error;
-        checkpoint.failed += 1;
-        continue;
-      }
-      if ("duplicate" in result && result.duplicate) checkpoint.duplicates += 1;
-      else if ("parseStatus" in result && result.parseStatus === "PROCESSED") checkpoint.processed += 1;
-      else if ("parseStatus" in result && result.parseStatus === "DUPLICATE") checkpoint.duplicates += 1;
-      else checkpoint.failed += 1;
+      checkpoint[outcome] += 1;
+      checkpoint.pendingMessageIds.shift();
 
       await heartbeatBackgroundJob(job.id, leaseToken, {
         progress: Math.min(90, 10 + checkpoint.scannedMessages),
@@ -225,8 +229,12 @@ async function processGmailSyncJob(jobId: string, origin?: string) {
       });
     }
 
-    checkpoint.pageToken = nextPageToken;
-    if (nextPageToken) {
+    if (checkpoint.pendingMessageIds.length === 0) {
+      checkpoint.pendingMessageIds = null;
+      checkpoint.pageToken = checkpoint.nextPageToken;
+      checkpoint.nextPageToken = null;
+    }
+    if (checkpoint.pendingMessageIds || checkpoint.pageToken) {
       await continueBackgroundJob(job.id, leaseToken, {
         checkpoint,
         message: `Gmail page complete; ${checkpoint.scannedMessages} messages processed so far.`,
@@ -236,6 +244,7 @@ async function processGmailSyncJob(jobId: string, origin?: string) {
       return { completed: false, jobId: job.id, summary: checkpoint };
     }
 
+    await throwIfBackgroundJobCancelled(job.id, leaseToken);
     await prisma.gmailIntegration.update({
       where: { id: integration.id },
       data: {
@@ -259,17 +268,10 @@ export async function processGmailSyncQueue(params: { jobId?: string; origin?: s
   const requestedJobId = params.jobId;
 
   while (processedSlices < maximum) {
-    let jobId = requestedJobId;
-    if (!jobId) {
-      const next = await prisma.backgroundJob.findFirst({
-        where: { type: GMAIL_SYNC_JOB_TYPE, status: "PENDING", availableAt: { lte: new Date() } },
-        orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
-        select: { id: true },
-      });
-      if (!next) break;
-      jobId = next.id;
-    }
-    const result = await processGmailSyncJob(jobId, params.origin);
+    // The claim operation also recovers expired leases when no pending work exists.
+    const claimed = await claimBackgroundJob({ jobId: requestedJobId, type: GMAIL_SYNC_JOB_TYPE, leaseMs: 5 * 60_000 });
+    if (!claimed) break;
+    const result = await processGmailSyncJob(claimed, params.origin);
     processedSlices += 1;
     if (requestedJobId && result?.completed) break;
     if (requestedJobId && !result) break;

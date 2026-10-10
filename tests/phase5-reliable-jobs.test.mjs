@@ -53,10 +53,12 @@ test("Gmail sync is bounded, resumable, cursor-based, and never launched after a
   assert.match(provider, /listGmailHistoryPage|getGmailProfile|maxResults/);
   assert.match(provider, /GMAIL_RECONNECT_REQUIRED/);
   assert.match(provider, /fetchGmailMessageMetadata[\s\S]*?format: "metadata"[\s\S]*?metadataHeaders/);
-  assert.match(runner, /fetchGmailMessageMetadata[\s\S]*?isGmailCreditAlertSubject[\s\S]*?checkpoint\.ignored \+= 1[\s\S]*?continue/);
+  assert.match(runner, /const metadata = await fetchGmailMessageMetadata[\s\S]*?if \(!isGmailCreditAlertSubject\(metadata\.subject\)\) return "ignored"/);
+  assert.match(runner, /checkpoint\[outcome\] \+= 1/);
   assert.ok(
-    runner.indexOf("fetchGmailMessageMetadata(accessToken, message.id)") <
-      runner.indexOf("fetchGmailMessage(accessToken, message.id)"),
+    runner.indexOf("fetchGmailMessageMetadata(accessToken, messageId)") >= 0 &&
+    runner.indexOf("fetchGmailMessageMetadata(accessToken, messageId)") <
+      runner.indexOf("fetchGmailMessage(accessToken, messageId)"),
     "Gmail subject metadata must be checked before a message body is fetched",
   );
   assert.match(route, /await processGmailSyncQueue[\s\S]*?maxSlices: 10/);
