@@ -27,15 +27,17 @@ export class GmailProviderError extends Error {
   }
 }
 
+function gmailReconnectRequired(status?: number) {
+  return new GmailProviderError(
+    "GMAIL_RECONNECT_REQUIRED",
+    "Gmail authorization expired. Reconnect Gmail in Settings.",
+    false,
+    status,
+  );
+}
+
 function gmailProviderFailure(operation: string, status: number) {
-  if (status === 401 || status === 403) {
-    return new GmailProviderError(
-      "GMAIL_RECONNECT_REQUIRED",
-      "Gmail authorization expired. Reconnect Gmail in Settings.",
-      false,
-      status,
-    );
-  }
+  if (status === 401 || status === 403) return gmailReconnectRequired(status);
   if (status === 404 && operation === "history") {
     return new GmailProviderError("GMAIL_HISTORY_EXPIRED", "Gmail history expired; a bounded rescan is required.", false, status);
   }
@@ -133,20 +135,31 @@ export async function exchangeCodeForTokens(params: {
   }>;
 }
 
+async function isRevokedGmailGrant(response: Response) {
+  if (response.status !== 400) return false;
+  try {
+    const data = await response.json() as { error?: unknown } | null;
+    return data?.error === "invalid_grant";
+  } catch {
+    return false;
+  }
+}
+
 async function refreshAccessToken(refreshToken: string, origin?: string) {
   const redirectUri = getGmailRedirectUri(origin);
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: getGoogleClientId(),
+    client_secret: getGoogleClientSecret(),
+    redirect_uri: redirectUri,
+    grant_type: "refresh_token",
+  });
   let res: Response;
   try {
     res = await fetch(GOOGLE_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        refresh_token: refreshToken,
-        client_id: getGoogleClientId(),
-        client_secret: getGoogleClientSecret(),
-        redirect_uri: redirectUri,
-        grant_type: "refresh_token",
-      }),
+      body,
     });
   } catch {
     throw new GmailProviderError(
@@ -156,6 +169,7 @@ async function refreshAccessToken(refreshToken: string, origin?: string) {
     );
   }
   if (!res.ok) {
+    if (await isRevokedGmailGrant(res)) throw gmailReconnectRequired(res.status);
     throw gmailProviderFailure("token-refresh", res.status);
   }
   return res.json() as Promise<{
@@ -238,7 +252,7 @@ export async function ensureActiveGmailAccessToken(integrationId: string, origin
   }
 
   if (!integration.refreshToken) {
-    throw new Error("No Gmail refresh token. Reconnect Google in Settings.");
+    throw gmailReconnectRequired();
   }
 
   const refreshToken = openGmailCredential({
