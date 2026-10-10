@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createTransactionsPageHarness, deferred, transactionFixture, transactionResponse } from "./transactions-page-harness.mjs";
+import { createTransactionsPageHarness, deferred, transactionFixture } from "./transactions-page-harness.mjs";
 
 const harness = await createTransactionsPageHarness();
 const { ui, fixtures, requests, invalidations, writes, setUrl, show, loaded } = harness;

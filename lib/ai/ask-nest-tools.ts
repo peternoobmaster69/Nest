@@ -252,6 +252,24 @@ const comparisonPeriodProperties = {
 const nullableString = { type: ["string", "null"] } as const;
 const ALL_CARD_STATEMENTS_HREF = "/credit-transactions?cardId=all&month=all";
 
+function periodComparisonTool({ name, description, accountDescription }: { name: string; description: string; accountDescription: string }): FunctionTool {
+  return {
+    type: "function",
+    name,
+    description,
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        ...comparisonPeriodProperties,
+        account_name: { ...nullableString, description: accountDescription },
+      },
+      required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name"],
+    },
+  };
+}
+
 const ASK_NEST_TOOLS: FunctionTool[] = [
   {
     type: "function",
@@ -460,36 +478,16 @@ const ASK_NEST_TOOLS: FunctionTool[] = [
       required: ["start_date", "end_date", "query", "destination_hints"],
     },
   },
-  {
-    type: "function",
+  periodComparisonTool({
     name: "explain_cash_flow_change",
     description: "Explain why net cash flow changed between two explicit periods. Nest calculates income, spending, net change, and the largest recorded merchant or sub-account drivers. Use this for why-is-cash-flow-higher-or-lower questions.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        ...comparisonPeriodProperties,
-        account_name: { ...nullableString, description: "Optional account or bank name, including common abbreviations, otherwise null." },
-      },
-      required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name"],
-    },
-  },
-  {
-    type: "function",
+    accountDescription: "Optional account or bank name, including common abbreviations, otherwise null.",
+  }),
+  periodComparisonTool({
     name: "compare_income",
     description: "Compare recorded credit inflows between two explicit periods and return deterministic changes and top income sources. Use for salary, earnings, income, or inflow comparisons.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        ...comparisonPeriodProperties,
-        account_name: { ...nullableString, description: "Optional account or bank name, otherwise null." },
-      },
-      required: ["period_a_start", "period_a_end", "period_b_start", "period_b_end", "account_name"],
-    },
-  },
+    accountDescription: "Optional account or bank name, otherwise null.",
+  }),
   {
     type: "function",
     name: "get_top_spending_drivers",

@@ -193,6 +193,81 @@ test("budget setup is separate from a monthly plan and supports cancelling both 
   assert.ok(requests.every((request) => request.method === "GET"));
 });
 
+for (const status of ["DRAFT", "CONFIRMED"]) {
+  test(`budget source cards preserve owners and ${status === "DRAFT" ? "editing" : "read-only monthly sources"}`, async () => {
+    const owner = { id: "owner", name: "Household member", email: "member@example.test" };
+    const source = { id: "monthly-source", planId: "plan", title: "Monthly salary", amountCents: 123456, ownerId: "owner", owner };
+    fixtures.set("/api/budgets/plan", {
+      setup: { items: [], sources: [{ id: "template-source", title: "Salary template", amountCents: 98765, ownerId: "owner" }] },
+      monthlyPlan: { id: "plan", year: 2026, month: 10, status, confirmedAt: status === "CONFIRMED" ? "2026-10-01T00:00:00Z" : null, sources: [source], items: [] },
+      members: [{ user: owner }], subAccounts: [],
+    });
+    const view = show(BudgetPlanPage, "budgets");
+    const title = await view.findByText("Monthly salary");
+    const card = within(title.closest(".bp-compact-card"));
+    assert.ok(card.getByText("Household member"));
+    assert.ok(card.getByText("$1,234.56"));
+    if (status === "DRAFT") {
+      fireEvent.click(card.getByRole("button", { name: "Edit Monthly salary" }));
+      const dialog = await view.findByRole("dialog", { name: "Edit Monthly Source" });
+      assert.equal(within(dialog).getByLabelText("Title").value, "Monthly salary");
+      assert.equal(within(dialog).getByLabelText("Amount").value, "1234.56");
+      assert.equal(within(dialog).getByLabelText("Owner").value, "owner");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    } else {
+      assert.ok(!card.queryByRole("button"));
+      assert.ok(card.getByLabelText("Read-only source"));
+    }
+    fireEvent.click(view.getByRole("button", { name: "Budget Setup", exact: true }));
+    const template = within((await view.findByText("Salary template")).closest(".bp-compact-card"));
+    assert.ok(template.getByText("Household member"));
+    assert.ok(template.getByText("$987.65"));
+    fireEvent.click(template.getByRole("button", { name: "Edit Salary template" }));
+    const editor = await view.findByRole("dialog", { name: "Edit Setup Source" });
+    assert.equal(within(editor).getByLabelText("Title").value, "Salary template");
+    fireEvent.click(within(editor).getByRole("button", { name: "Cancel" }));
+    assert.ok(requests.every((request) => request.method === "GET"));
+  });
+}
+
+test("earned rewards refresh the open history after creating and updating miles", async () => {
+  const flyer = { id: "flyer", programName: "Holiday miles", airlineName: "Example air", accountNumber: "AB123", currentMiles: 1000, targetMiles: null, expiryWarning: 90, mileNeverExpire: false, validityPeriodYears: 3, notes: null, isActive: true, expirySummary: [] };
+  const rewards = { creditCards: [], frequentFlyers: [flyer], hotelRewards: [], conversions: [], cardsWithoutRewards: [] };
+  const pageInfo = { hasMore: false, nextCursor: null, limit: 100 };
+  const entry = { id: "earn", date: "2026-10-09T00:00:00.000Z", miles: 1500, balanceMiles: 1500, title: "Flight credit", expiryDate: "2029-10-09T00:00:00.000Z", firstRedeemedDate: null };
+  let entries = [];
+  fixtures.set("/api/rewards", rewards);
+  fixtures.set("/api/rewards/frequent-flyer/history", () => Response.json({ milePrograms: { items: entries, pageInfo }, redemptions: { items: [], pageInfo }, totals: { earned: 1500, available: 1500, redeemed: 0 } }));
+  fixtures.set("POST /api/rewards/frequent-flyer/history", () => { entries = [entry]; return Response.json({ id: "earn" }, { status: 201 }); });
+  fixtures.set("PATCH /api/rewards/frequent-flyer/history", ({ body }) => { entries = [{ ...entry, ...body }]; return Response.json({ id: "earn" }); });
+  const view = show(RewardsPage, "rewards", { ...rewardProps, initialFrequentFlyers: [flyer] });
+  fireEvent.click(view.getByRole("button", { name: "Frequent flyer", exact: true }));
+  fireEvent.click(await view.findByRole("button", { name: "History", exact: true }));
+  await view.findByText("No earn transactions yet.");
+  fireEvent.click(view.getByTitle("Add Earn Transaction"));
+  const dialog = await view.findByRole("dialog", { name: "Add miles earned" });
+  fireEvent.change(within(dialog).getByLabelText("Date"), { target: { value: "2026-10-09" } });
+  assert.equal(within(dialog).getByLabelText("Expiry Date").value, "2029-10-31");
+  fireEvent.change(within(dialog).getByLabelText("Expiry Date"), { target: { value: "2029-10-09" } });
+  fireEvent.change(within(dialog).getByLabelText("Miles Earned"), { target: { value: "1500" } });
+  fireEvent.change(within(dialog).getByLabelText("Title (optional)"), { target: { value: "Flight credit" } });
+  fireEvent.submit(dialog.querySelector("form"));
+  await waitFor(() => assert.ok(!view.queryByRole("dialog")));
+  const historyReads = () => requests.filter(({ url, method }) => method === "GET" && url.pathname === "/api/rewards/frequent-flyer/history");
+  await waitFor(() => assert.equal(historyReads().length, 2));
+  const row = within((await view.findByText(/Flight credit •/)).closest(".card-sm"));
+  fireEvent.click(row.getByRole("button", { name: "Edit", exact: true }));
+  fireEvent.change(row.getByDisplayValue("1500"), { target: { value: "2000" } });
+  fireEvent.change(row.getByDisplayValue("Flight credit"), { target: { value: "Updated flight credit" } });
+  fireEvent.click(row.getByRole("button", { name: "Save", exact: true }));
+  await waitFor(() => assert.equal(historyReads().length, 3));
+  await view.findByText(/Updated flight credit •/);
+  const writes = requests.filter(({ method }) => method !== "GET");
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes[0].body, { type: "earn", frequentFlyerId: "flyer", date: "2026-10-09T00:00:00.000Z", miles: 1500, title: "Flight credit", expiryDate: "2029-10-09T00:00:00.000Z" });
+  assert.deepEqual(writes[1].body, { type: "earn", frequentFlyerId: "flyer", id: "earn", date: "2026-10-09T00:00:00.000Z", miles: 2000, title: "Updated flight credit", expiryDate: "2029-10-09T00:00:00.000Z" });
+});
+
 test("bank account creation preserves the entered balance on failure and converts dollars to cents on retry", async () => {
   fixtures.set("POST /api/accounts", () => Response.json({ error: "Bank temporarily unavailable" }, { status: 503 }));
   const view = show(SettingsPage, "settings", { section: "workspaces" });

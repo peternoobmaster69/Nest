@@ -24,6 +24,19 @@ import { useSearchParams } from "next/navigation";
 import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 import { MutationErrorSummary } from "@/components/ui/mutation-error-summary";
 import { calculateExpiryDateInputValue, formatNumber, hotelPointValueCents, isExpiredAtToday, todayDateInputValue, toDateInputValue } from "@/components/rewards/format";
+import { saveEarnTransaction, type EarnTransactionInput } from "@/components/rewards/earn-history-client";
+
+type FrequentFlyerFields = {
+  programName: string;
+  airlineName: string;
+  accountNumber?: string;
+  currentMiles: number;
+  targetMiles?: number;
+  expiryWarning?: number;
+  mileNeverExpire: boolean;
+  validityPeriodYears: number;
+  notes?: string;
+};
 
 type CreditCardReward = {
   id: string;
@@ -342,17 +355,7 @@ export function RewardsPage({
   });
 
   const createFrequentFlyer = useMutation({
-    mutationFn: (payload: {
-      programName: string;
-      airlineName: string;
-      accountNumber?: string;
-      currentMiles: number;
-      targetMiles?: number;
-      expiryWarning?: number;
-      mileNeverExpire: boolean;
-      validityPeriodYears: number;
-      notes?: string;
-    }) =>
+    mutationFn: (payload: FrequentFlyerFields) =>
       apiFetch("/api/rewards/frequent-flyer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -365,18 +368,7 @@ export function RewardsPage({
   });
 
   const updateFrequentFlyer = useMutation({
-    mutationFn: (payload: {
-      id: string;
-      programName: string;
-      airlineName: string;
-      accountNumber?: string;
-      currentMiles: number;
-      targetMiles?: number;
-      expiryWarning?: number;
-      mileNeverExpire: boolean;
-      validityPeriodYears: number;
-      notes?: string;
-    }) =>
+    mutationFn: (payload: FrequentFlyerFields & { id: string }) =>
       apiFetch("/api/rewards/frequent-flyer", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -490,36 +482,13 @@ export function RewardsPage({
     queryClient.invalidateQueries({ queryKey: queryKeys.key(["rewards"]) });
     if (openHistoryFFId) {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.key(["rewards", routeWorkspaceId, "frequent-flyer-history", openHistoryFFId]),
+        queryKey: queryKeys.rewardHistory(routeWorkspaceId, openHistoryFFId),
       });
     }
   };
 
   const createEarnTransaction = useMutation({
-    mutationFn: async (payload: {
-      frequentFlyerId: string;
-      date: string;
-      miles: number;
-      title?: string;
-      expiryDate?: string;
-    }) => {
-      const res = await workspaceFetch("/api/rewards/frequent-flyer/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "earn",
-          frequentFlyerId: payload.frequentFlyerId,
-          date: new Date(`${payload.date}T00:00:00.000Z`).toISOString(),
-          miles: payload.miles,
-          title: payload.title,
-          expiryDate: payload.expiryDate ? new Date(`${payload.expiryDate}T00:00:00.000Z`).toISOString() : null,
-        }),
-      });
-      if (!res.ok) {
-        const errorPayload = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(errorPayload?.error || "Failed to add earn transaction");
-      }
-    },
+    mutationFn: (payload: EarnTransactionInput) => saveEarnTransaction(payload, "POST"),
     onSuccess: () => {
       setEarnMiles("");
       setEarnTitle("");
@@ -530,32 +499,7 @@ export function RewardsPage({
   });
 
   const updateEarnTransaction = useMutation({
-    mutationFn: async (payload: {
-      frequentFlyerId: string;
-      id: string;
-      date: string;
-      miles: number;
-      title?: string;
-      expiryDate?: string;
-    }) => {
-      const res = await workspaceFetch("/api/rewards/frequent-flyer/history", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "earn",
-          frequentFlyerId: payload.frequentFlyerId,
-          id: payload.id,
-          date: new Date(`${payload.date}T00:00:00.000Z`).toISOString(),
-          miles: payload.miles,
-          title: payload.title,
-          expiryDate: payload.expiryDate ? new Date(`${payload.expiryDate}T00:00:00.000Z`).toISOString() : null,
-        }),
-      });
-      if (!res.ok) {
-        const errorPayload = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(errorPayload?.error || "Failed to update earn transaction");
-      }
-    },
+    mutationFn: (payload: EarnTransactionInput & { id: string }) => saveEarnTransaction(payload, "PATCH"),
     onSuccess: () => {
       setEditingEarnId(null);
       refreshRewardsAndHistory();

@@ -6,6 +6,7 @@ import { DataValue, MobileDataCard } from "@/components/ui/data-view";
 import { formatMoney } from "@/lib/currency";
 import { formatLocalDateTime } from "@/lib/presentation";
 import { openFailedCreditAlertBody } from "@/lib/credit-alert-diagnostics";
+import { CreditAlertsTableHead } from "@/components/credit-alerts-table-head";
 
 function formatDateTime(value: Date | null) {
   if (!value) return "—";
@@ -66,20 +67,7 @@ export default async function CreditAlertsRoute() {
         <div className="cct-table-wrapper desktop-data-table">
           <table className="cct-table">
             <caption className="sr-only">Most recent staged credit alerts and parsing outcomes</caption>
-            <thead>
-              <tr>
-                <th scope="col">Created</th>
-                <th scope="col">Status</th>
-                <th scope="col">Source</th>
-                <th scope="col">Subject</th>
-                <th scope="col">Bank</th>
-                <th scope="col">Card</th>
-                <th scope="col">Merchant</th>
-                <th scope="col">Amount</th>
-                <th scope="col">Txn Date</th>
-                <th scope="col">Failure</th>
-              </tr>
-            </thead>
+            <CreditAlertsTableHead />
             <tbody>
               {staged.map((row) => (
                 <tr key={row.id}>

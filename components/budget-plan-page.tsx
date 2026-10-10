@@ -191,6 +191,26 @@ function ErrorMessage({ error }: Readonly<{ error: Error | null | undefined }>) 
   return <div className="st-error">{error.message}</div>;
 }
 
+function BudgetSourceCard({ title, ownerLabel, amountLabel, children }: Readonly<{ title: string; ownerLabel: string; amountLabel: string; children: ReactNode }>) {
+  return (
+    <div className="st-card bp-compact-card">
+      <div className="bp-compact-row">
+        <div className="bp-compact-left">
+          <IconTile icon={WalletCards} tone="source" />
+          <div className="bp-compact-info">
+            <span className="bp-compact-title">{title}</span>
+            <span className="bp-compact-meta"><Users size={11} /> {ownerLabel}</span>
+          </div>
+        </div>
+        <div className="bp-compact-right">
+          <span className="bp-compact-amount">{amountLabel}</span>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BudgetPlanPage() {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
@@ -861,27 +881,13 @@ export function BudgetPlanPage() {
                   {monthlySources.map((source) => {
                     const owner = source.owner ?? memberById.get(source.ownerId);
                     return (
-                      <div key={source.id} className="st-card bp-compact-card">
-                        <div className="bp-compact-row">
-                          <div className="bp-compact-left">
-                            <IconTile icon={WalletCards} tone="source" />
-                            <div className="bp-compact-info">
-                              <span className="bp-compact-title">{source.title}</span>
-                              <span className="bp-compact-meta"><Users size={11} /> {personLabel(owner)}</span>
-                            </div>
-                          </div>
-                          <div className="bp-compact-right">
-                            <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
-                            {isDraft ? (
-                              <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlySource(source)} title="Edit source" aria-label={`Edit ${source.title}`}>
-                                <Pencil size={13} />
-                              </Button>
-                            ) : (
-                              <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only source" />
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <BudgetSourceCard key={source.id} title={source.title} ownerLabel={personLabel(owner)} amountLabel={formatCents(source.amountCents)}>
+                        {isDraft ? (
+                          <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlySource(source)} title="Edit source" aria-label={`Edit ${source.title}`}>
+                            <Pencil size={13} />
+                          </Button>
+                        ) : <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only source" />}
+                      </BudgetSourceCard>
                     );
                   })}
                   {monthlySources.length === 0 && (
@@ -1005,23 +1011,11 @@ export function BudgetPlanPage() {
                 {!planQuery.isLoading && setupSources.map((source) => {
                   const owner = source.owner ?? memberById.get(source.ownerId);
                   return (
-                    <div key={source.id} className="st-card bp-compact-card">
-                      <div className="bp-compact-row">
-                        <div className="bp-compact-left">
-                          <IconTile icon={WalletCards} tone="source" />
-                          <div className="bp-compact-info">
-                            <span className="bp-compact-title">{source.title}</span>
-                            <span className="bp-compact-meta"><Users size={11} /> {personLabel(owner)}</span>
-                          </div>
-                        </div>
-                        <div className="bp-compact-right">
-                          <span className="bp-compact-amount">{formatCents(source.amountCents)}</span>
-                          <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupSource(source)} title="Edit setup source" aria-label={`Edit ${source.title}`}>
-                            <Pencil size={13} />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                    <BudgetSourceCard key={source.id} title={source.title} ownerLabel={personLabel(owner)} amountLabel={formatCents(source.amountCents)}>
+                      <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openSetupSource(source)} title="Edit setup source" aria-label={`Edit ${source.title}`}>
+                        <Pencil size={13} />
+                      </Button>
+                    </BudgetSourceCard>
                   );
                 })}
                 {!planQuery.isLoading && setupSources.length === 0 && (

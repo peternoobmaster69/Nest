@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import { CreditAlertsTableHead } from "@/components/credit-alerts-table-head";
 
 /*
 Structural inventory: Credit alert staging table
@@ -25,20 +26,7 @@ export function CreditAlertsSkeleton() {
       <div className="cct-table-wrapper">
         <table className="cct-table">
           <caption className="sr-only">Loading recent staged credit alerts</caption>
-          <thead>
-            <tr>
-              <th scope="col">Created</th>
-              <th scope="col">Status</th>
-              <th scope="col">Source</th>
-              <th scope="col">Subject</th>
-              <th scope="col">Bank</th>
-              <th scope="col">Card</th>
-              <th scope="col">Merchant</th>
-              <th scope="col">Amount</th>
-              <th scope="col">Txn Date</th>
-              <th scope="col">Failure</th>
-            </tr>
-          </thead>
+          <CreditAlertsTableHead />
           <tbody>
             {Array.from({ length: 8 }).map((_, index) => (
               <tr key={index}>
