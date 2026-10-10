@@ -662,9 +662,10 @@ test("settings uses the shared typography and layout contract", async () => {
 });
 
 test("settings groups related controls into focused tabs", async () => {
-  const [settings, gmail, privacyControls, notices, styles] = await Promise.all([
+  const [settings, gmail, automation, privacyControls, notices, styles] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
     readFile(path.join(root, "components/settings/gmail-settings-card.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings/auto-accounting-settings.tsx"), "utf8"),
     readFile(path.join(root, "components/settings-privacy-controls.tsx"), "utf8"),
     readFile(path.join(root, "components/settings/operation-notices.ts"), "utf8"),
     readAppStyles(root),
@@ -676,16 +677,18 @@ test("settings groups related controls into focused tabs", async () => {
   assert.match(settings, /section === "automation"/);
   assert.match(gmail, /Gmail Card Alerts/);
   assert.match(settings, /section === "automation" && context\.data\?\.role === "OWNER" \? <GmailSettingsCard/);
-  assert.match(settings, /section === "automation"[\s\S]*?Credit Card Auto Accounting/);
+  assert.match(settings, /section === "automation"[\s\S]*?<AutoAccountingSettings/);
+  assert.match(automation, /Credit Card Auto Accounting/);
   const automationLayout = settings.slice(
     settings.indexOf('{section === "automation"'),
     settings.indexOf('{section === "data" ? ('),
   );
   assert.ok(automationLayout.indexOf("<GmailSettingsCard") >= 0);
-  assert.ok(automationLayout.indexOf("<GmailSettingsCard") < automationLayout.indexOf("Credit Card Auto Accounting"));
-  assert.ok(automationLayout.indexOf("Run Now") < automationLayout.indexOf("notice={autoRuleNotice}"));
-  assert.ok(automationLayout.indexOf("notice={autoRuleNotice}") < automationLayout.indexOf("autoRules.isLoading"));
-  assert.match(settings, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
+  assert.ok(automationLayout.indexOf("<GmailSettingsCard") < automationLayout.indexOf("<AutoAccountingSettings"));
+  const accountingLayout = automation.slice(automation.indexOf("export function AutoAccountingSettings"));
+  assert.ok(accountingLayout.indexOf("Run Now") < accountingLayout.indexOf("notice={autoRuleNotice}"));
+  assert.ok(accountingLayout.indexOf("notice={autoRuleNotice}") < accountingLayout.indexOf("<AutoRulesContent"));
+  assert.match(automation, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
   assert.match(notices, /No transactions auto-accounted[\s\S]*?No unaccounted transactions matched your enabled rules/);
   assert.match(styles, /\.settings-auto-notice\s*\{[^}]*margin-bottom:\s*18px/s);
   assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display/);
@@ -917,8 +920,8 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.doesNotMatch(`${transactions}\n${creditTransactions}`, /behavior:\s*"smooth"/);
   assert.doesNotMatch(layout, /<SpeedInsights\s*\/>/);
   assert.match(providers, /PrivacyConsentProvider/);
-  assert.match(settings, /credit-txn-auto-rules-config/);
-  assert.doesNotMatch(settings, /from "@\/lib\/credit-txn-auto-rules"/);
+  const autoRules = await readFile(path.join(root, "hooks/use-auto-rule-settings.ts"), "utf8");
+  assert.doesNotMatch(`${settings}\n${autoRules}`, /from "@\/lib\/credit-txn-auto-rules"/);
 });
 
 test("core mobile workflows use the Phase 2 interaction contract", async () => {

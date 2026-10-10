@@ -1,42 +1,35 @@
 "use client";
-import { getAutoAccountingNotice } from "@/components/settings/operation-notices";
 
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
 
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL } from "@/lib/credit-txn-auto-rules-config";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { normalizeCurrency, SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { useMoneyFormat } from "@/lib/use-money-format";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
 import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
-import { SubmitEvent, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
-  ArrowRight,
   Copy,
-  Play,
   Plus,
   RotateCcw,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui-skeleton";
-import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
+import { SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import type { SettingsTab } from "@/lib/settings-tabs";
-import {
-  ActionableAuthenticationMessage,
-  isRecentAuthenticationRequired,
-} from "@/components/reauthentication-message";
+import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
-import { SettingsOperationNotice } from "@/components/settings/operation-notice";
+import { AutoAccountingSettings } from "@/components/settings/auto-accounting-settings";
+import { useAutoRuleSettings } from "@/hooks/use-auto-rule-settings";
 import { useGmailSettings } from "@/hooks/use-gmail-settings";
 import { GmailSettingsCard } from "@/components/settings/gmail-settings-card";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
-import type { AutoRule } from "@/components/settings/auto-rule-editor-dialog";
 import { SettingsPrivacyControls } from "@/components/settings-privacy-controls";
 import { MutationErrorSummary } from "@/components/ui/mutation-error-summary";
 import { useConfirmDialog } from "@/components/confirm-dialog";
@@ -49,11 +42,6 @@ const DataImportSection = dynamic(
 const SettingsAppAccess = dynamic(
   () => import("@/components/settings-app-access").then((module) => module.SettingsAppAccess),
   { ssr: false, loading: () => <div className="settings-lazy-placeholder" aria-busy="true">Loading app access…</div> },
-);
-
-const AutoRuleEditorDialog = dynamic(
-  () => import("@/components/settings/auto-rule-editor-dialog").then((module) => module.AutoRuleEditorDialog),
-  { ssr: false },
 );
 
 type Context = {
@@ -76,64 +64,6 @@ type Budget = {
   receivableReservedCents?: number;
 };
 
-function getRuleFilters(rule: AutoRule) {
-  return rule.filters.map((filter) => filter.trim()).filter(Boolean);
-}
-
-function sanitizeAutoRule(rule: AutoRule): AutoRule {
-  if (rule.action === "DEDUCT_SAME_WORKSPACE") {
-    return {
-      id: rule.id,
-      name: rule.name.trim(),
-      enabled: rule.enabled,
-      action: rule.action,
-      filters: getRuleFilters(rule),
-      sourceBudgetId: rule.sourceBudgetId,
-      destinationBudgetId: rule.destinationBudgetId,
-    };
-  }
-  return {
-    ...rule,
-    name: rule.name.trim(),
-    filters: getRuleFilters(rule),
-  };
-}
-
-function getAutoRuleValidationMessage(rules: AutoRule[]) {
-  for (const [index, rule] of rules.entries()) {
-    const label = rule.name.trim() || `Rule ${index + 1}`;
-    if (!rule.name.trim()) return `Rule ${index + 1} needs a name.`;
-    if (getRuleFilters(rule).length === 0) return `Rule "${label}" needs at least one subject keyword.`;
-
-    if (rule.action === "DEDUCT_SAME_WORKSPACE") {
-      if (!rule.sourceBudgetId) return `Rule "${label}" needs a source sub account.`;
-      if (!rule.destinationBudgetId) return `Rule "${label}" needs a destination sub account.`;
-      if (rule.sourceBudgetId === rule.destinationBudgetId) return `Rule "${label}" needs different source and destination sub accounts.`;
-      continue;
-    }
-
-    if (!rule.sourceWorkspaceId) return `Rule "${label}" needs a source workspace.`;
-    if (!rule.sourceAccountId) return `Rule "${label}" needs a source bank account.`;
-    if (!rule.sourceBudgetId) return `Rule "${label}" needs a source sub account.`;
-  }
-  return null;
-}
-
-function createEmptyAutoRule(destination: { sourceBudgetId?: string; destinationBudgetId?: string } = {}): AutoRule {
-  const id = typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `rule-${Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16).padStart(8, "0")).join("")}`;
-  return {
-    id,
-    name: "New rule",
-    enabled: true,
-    action: "DEDUCT_SAME_WORKSPACE",
-    filters: [],
-    sourceBudgetId: destination.sourceBudgetId ?? "",
-    destinationBudgetId: destination.destinationBudgetId ?? "",
-  };
-}
-
 export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
   const routeWorkspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
@@ -144,12 +74,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
   const [receivableAccountMessage, setReceivableAccountMessage] = useState("");
   const [publicNetWorthMessage, setPublicNetWorthMessage] = useState("");
   const [optimisticPublicNetWorthEnabled, setOptimisticPublicNetWorthEnabled] = useState<boolean | null>(null);
-  const [autoRuleMessage, setAutoRuleMessage] = useState("");
-  const [ruleDrafts, setRuleDrafts] = useState<AutoRule[]>([]);
-  const [ruleDraftWorkspaceId, setRuleDraftWorkspaceId] = useState<string | null>(null);
-  const [ruleKeywordInputs, setRuleKeywordInputs] = useState<Record<string, string>>({});
-  const [editingAutoRuleId, setEditingAutoRuleId] = useState<string | null>(null);
-  const [editingAutoRuleDraft, setEditingAutoRuleDraft] = useState<AutoRule | null>(null);
 
   // Add modal state
   const [name, setName] = useState("");
@@ -204,75 +128,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
     enabled: Boolean(workspaceId),
   });
 
-  const autoRules = useQuery({
-    queryKey: queryKeys.key(["credit-txn-auto-rules", workspaceId]),
-    queryFn: () => fetchJson<{ workspaceId: string; rules: AutoRule[] }>(`/api/credit-transactions/auto-rules?workspaceId=${workspaceId}`),
-    enabled: Boolean(workspaceId),
-  });
-
-  useEffect(() => {
-    if (!autoRules.data) return;
-    if (ruleDraftWorkspaceId === workspaceId) return;
-    setRuleDrafts(autoRules.data.rules);
-    setRuleDraftWorkspaceId(workspaceId);
-  }, [autoRules.data, ruleDraftWorkspaceId, workspaceId]);
-
   const workspaces = context.data?.workspaces ?? [];
-  const sourceWorkspaceIds = useMemo(
-    () => Array.from(new Set(
-      ruleDrafts
-        .filter((rule): rule is Extract<AutoRule, { action: "RECEIVABLE_OTHER_WORKSPACE" }> => rule.action === "RECEIVABLE_OTHER_WORKSPACE")
-        .map((rule) => rule.sourceWorkspaceId)
-        .filter(Boolean),
-    )),
-    [ruleDrafts],
-  );
-
-  const crossWorkspaceData = useQueries({
-    queries: sourceWorkspaceIds.flatMap((targetWorkspaceId) => ([
-      bankAccountsQueryOptions(targetWorkspaceId),
-      {
-        queryKey: queryKeys.key(["rule-budgets", targetWorkspaceId]),
-        queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${targetWorkspaceId}`),
-        enabled: Boolean(targetWorkspaceId),
-      },
-    ])),
-  });
-
-  const crossWorkspaceAccountsById = useMemo(() => {
-    const map = new Map<string, BankAccount[]>();
-    sourceWorkspaceIds.forEach((targetWorkspaceId, index) => {
-      const result = crossWorkspaceData[index * 2];
-      map.set(targetWorkspaceId, (result?.data as BankAccount[] | undefined) ?? []);
-    });
-    return map;
-  }, [crossWorkspaceData, sourceWorkspaceIds]);
-
-  const crossWorkspaceBudgetsById = useMemo(() => {
-    const map = new Map<string, Budget[]>();
-    sourceWorkspaceIds.forEach((targetWorkspaceId, index) => {
-      const result = crossWorkspaceData[index * 2 + 1];
-      map.set(targetWorkspaceId, (result?.data as Budget[] | undefined) ?? []);
-    });
-    return map;
-  }, [crossWorkspaceData, sourceWorkspaceIds]);
-
-  const hasAutoRuleChanges = useMemo(
-    () => JSON.stringify(ruleDrafts) !== JSON.stringify(autoRules.data?.rules ?? []),
-    [ruleDrafts, autoRules.data?.rules],
-  );
-
-  const defaultSameWorkspaceDestination = useMemo(() => {
-    const activeBudgets = (budgets.data ?? []).filter((budget) => budget.isActive);
-    const sourceBudgetId =
-      activeBudgets.find((budget) => budget.id !== defaultReceivableBudgetId)?.id ?? activeBudgets[0]?.id ?? "";
-    const preferredDestinationBudgetId =
-      defaultReceivableBudgetId && defaultReceivableBudgetId !== sourceBudgetId && activeBudgets.some((budget) => budget.id === defaultReceivableBudgetId)
-        ? defaultReceivableBudgetId
-        : activeBudgets.find((budget) => budget.id !== sourceBudgetId)?.id ?? "";
-    return { sourceBudgetId, destinationBudgetId: preferredDestinationBudgetId };
-  }, [budgets.data, defaultReceivableBudgetId]);
-
+  const autoRuleSettings = useAutoRuleSettings({ workspaceId, defaultReceivableBudgetId, accounts: accounts.data, budgets: budgets.data, workspaces });
   const updateCurrency = useMutation({
     mutationFn: (nextCurrency: string) =>
       fetchJson<{ workspaceId: string; baseCurrency: string }>("/api/context", {
@@ -400,58 +257,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
     }
   };
 
-  const saveAutoRules = useMutation({
-    mutationFn: (payload: { rules: AutoRule[]; closeEditor?: boolean; message?: string }) =>
-      fetchJson<{ workspaceId: string; rules: AutoRule[] }>("/api/credit-transactions/auto-rules", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          rules: payload.rules.map(sanitizeAutoRule),
-        }),
-      }),
-    onSuccess: (data, payload) => {
-      setRuleDrafts(data.rules);
-      setRuleDraftWorkspaceId(data.workspaceId);
-      if (payload.closeEditor) {
-        setEditingAutoRuleId(null);
-        setEditingAutoRuleDraft(null);
-      }
-      setAutoRuleMessage(
-        payload.message ||
-          `Rules saved. Auto-accounting runs through ${CREDIT_TXN_AUTO_ACCOUNT_SCHEDULE_LABEL}.`,
-      );
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-txn-auto-rules", workspaceId]) });
-    },
-    onError: (error) => {
-      setAutoRuleMessage(error instanceof Error ? error.message : "Failed to save auto-accounting rules.");
-    },
-  });
-
-  const runAutoRules = useMutation({
-    mutationFn: () =>
-      fetchJson<{ ok: boolean; scanned: number; matched: number; accounted: number; skipped: number }>("/api/credit-transactions/auto-rules/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId }),
-      }),
-    onSuccess: (data) => {
-      setAutoRuleMessage(
-        `Auto-accounted ${data.accounted} transaction${data.accounted === 1 ? "" : "s"} from ${data.matched} matched rule hits.`,
-      );
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-transactions"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["receivables"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["receivables-summary"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
-    },
-    onError: (error) => {
-      setAutoRuleMessage(error instanceof Error ? error.message : "Failed to run auto-accounting.");
-    },
-  });
-
   const createAccount = useMutation({
     mutationFn: () =>
       fetchJson<{ workspaceId: string }>("/api/accounts", {
@@ -562,162 +367,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
     });
   };
 
-  const updateDraftRule = (id: string, updater: (rule: AutoRule) => AutoRule) => {
-    setRuleDrafts((current) => current.map((rule) => (rule.id === id ? updater(rule) : rule)));
-  };
-
-  const openRuleEditor = (rule: AutoRule) => {
-    setEditingAutoRuleId(rule.id);
-    setEditingAutoRuleDraft({ ...rule, filters: [...rule.filters] });
-    setAutoRuleMessage("");
-  };
-
-  const closeRuleEditor = () => {
-    setEditingAutoRuleId(null);
-    setEditingAutoRuleDraft(null);
-  };
-
-  const updateEditingRule = (updater: (rule: AutoRule) => AutoRule) => {
-    setEditingAutoRuleDraft((current) => (current ? updater(current) : current));
-  };
-
-  const persistRules = (rules: AutoRule[], options?: { closeEditor?: boolean; message?: string }) => {
-    if (!workspaceId || saveAutoRules.isPending) return;
-    const validationMessage = getAutoRuleValidationMessage(rules);
-    if (validationMessage) {
-      setAutoRuleMessage(validationMessage);
-      return;
-    }
-    saveAutoRules.mutate({
-      rules: rules.map(sanitizeAutoRule),
-      closeEditor: options?.closeEditor,
-      message: options?.message,
-    });
-  };
-
-  const saveEditingRule = () => {
-    if (!editingAutoRuleDraft) return;
-    const sanitized = sanitizeAutoRule(editingAutoRuleDraft);
-    const existingIndex = ruleDrafts.findIndex((rule) => rule.id === sanitized.id);
-    const nextRules =
-      existingIndex >= 0
-        ? ruleDrafts.map((rule) => (rule.id === sanitized.id ? sanitized : rule))
-        : [...ruleDrafts, sanitized];
-    persistRules(nextRules, {
-      closeEditor: true,
-      message: `Rule "${sanitized.name}" saved.`,
-    });
-  };
-
-  const setRuleFilters = (id: string, filters: string[]) => {
-    const nextFilters = filters.map((filter) => filter.trim()).filter(Boolean);
-    if (editingAutoRuleDraft?.id === id) {
-      updateEditingRule((current) => ({ ...current, filters: nextFilters }));
-      return;
-    }
-    updateDraftRule(id, (current) => ({ ...current, filters: nextFilters }));
-  };
-
-  const addRuleFilter = (id: string) => {
-    const keyword = (ruleKeywordInputs[id] ?? "").trim();
-    if (!keyword) return;
-    const rule = editingAutoRuleDraft?.id === id ? editingAutoRuleDraft : ruleDrafts.find((item) => item.id === id);
-    if (!rule) return;
-    setRuleFilters(id, [...rule.filters, keyword]);
-    setRuleKeywordInputs((current) => ({ ...current, [id]: "" }));
-  };
-
-  const removeRuleFilter = (id: string, filterIndex: number) => {
-    const rule = editingAutoRuleDraft?.id === id ? editingAutoRuleDraft : ruleDrafts.find((item) => item.id === id);
-    if (!rule) return;
-    setRuleFilters(id, rule.filters.filter((_, index) => index !== filterIndex));
-  };
-
-  const moveRule = (id: string, direction: -1 | 1) => {
-    const index = ruleDrafts.findIndex((rule) => rule.id === id);
-    if (index < 0) return;
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= ruleDrafts.length) return;
-    const next = [...ruleDrafts];
-    const [item] = next.splice(index, 1);
-    next.splice(nextIndex, 0, item);
-    setRuleDrafts(next);
-    persistRules(next, { message: "Rule order saved." });
-  };
-
-  const removeRule = (id: string) => {
-    const nextRules = ruleDrafts.filter((rule) => rule.id !== id);
-    if (editingAutoRuleId === id) closeRuleEditor();
-    setRuleDrafts(nextRules);
-    setRuleKeywordInputs((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-    if (ruleDrafts.some((rule) => rule.id === id)) {
-      persistRules(nextRules, { closeEditor: true, message: "Rule deleted." });
-    }
-  };
-
-  const addRule = () => {
-    const nextRule = createEmptyAutoRule(defaultSameWorkspaceDestination);
-    openRuleEditor(nextRule);
-    setAutoRuleMessage("New rule added. Add at least one subject keyword before saving.");
-  };
-
-  const toggleRuleEnabled = (id: string, enabled: boolean) => {
-    const nextRules = ruleDrafts.map((rule) => (rule.id === id ? { ...rule, enabled } : rule));
-    setRuleDrafts(nextRules);
-    persistRules(nextRules, { message: enabled ? "Rule enabled." : "Rule paused." });
-  };
-
-  const getWorkspaceName = (id: string) => workspaces.find((workspace) => workspace.id === id)?.name || "Workspace";
-
-  const getAccountName = (id: string, sourceWorkspaceId?: string) => {
-    if (sourceWorkspaceId) {
-      return crossWorkspaceAccountsById.get(sourceWorkspaceId)?.find((account) => account.id === id)?.name || "Bank account";
-    }
-    return accounts.data?.find((account) => account.id === id)?.name || "Bank account";
-  };
-
-  const getBudgetName = (id: string, sourceWorkspaceId?: string) => {
-    if (sourceWorkspaceId) {
-      return crossWorkspaceBudgetsById.get(sourceWorkspaceId)?.find((budget) => budget.id === id)?.name || "Sub account";
-    }
-    return budgets.data?.find((budget) => budget.id === id)?.name || "Sub account";
-  };
-
-  const getRuleActionLabel = (rule: AutoRule) =>
-    rule.action === "DEDUCT_SAME_WORKSPACE"
-      ? "Transfer same workspace"
-      : "Create receivable";
-
-  const getRuleTargetLabel = (rule: AutoRule) => {
-    if (rule.action === "DEDUCT_SAME_WORKSPACE") {
-      return `${getBudgetName(rule.sourceBudgetId)} -> ${getBudgetName(rule.destinationBudgetId)}`;
-    }
-    return `${getWorkspaceName(rule.sourceWorkspaceId)} · ${getAccountName(rule.sourceAccountId, rule.sourceWorkspaceId)} · ${getBudgetName(rule.sourceBudgetId, rule.sourceWorkspaceId)}`;
-  };
-
-  const editingAutoRule = editingAutoRuleDraft;
-  const editingAutoRuleIndex = editingAutoRule
-    ? ruleDrafts.findIndex((rule) => rule.id === editingAutoRule.id)
-    : -1;
-  const editingAutoRuleDisplayIndex =
-    editingAutoRuleIndex >= 0 ? editingAutoRuleIndex + 1 : ruleDrafts.length + 1;
-  const editingSameWorkspaceBudgets = editingAutoRule?.action === "DEDUCT_SAME_WORKSPACE"
-    ? (budgets.data ?? []).filter((budget) => budget.isActive)
-    : [];
-  const editingSourceAccounts = editingAutoRule?.action === "RECEIVABLE_OTHER_WORKSPACE"
-    ? (crossWorkspaceAccountsById.get(editingAutoRule.sourceWorkspaceId) ?? []).filter((account) => account.isActive)
-    : [];
-  const editingSourceBudgets = editingAutoRule?.action === "RECEIVABLE_OTHER_WORKSPACE"
-    ? (crossWorkspaceBudgetsById.get(editingAutoRule.sourceWorkspaceId) ?? []).filter(
-        (budget) => budget.isActive && budget.accountId === editingAutoRule.sourceAccountId,
-      )
-    : [];
-  const autoRuleRequiresReauthentication = isRecentAuthenticationRequired(autoRuleMessage);
-  const autoRuleNotice = getAutoAccountingNotice(autoRuleMessage);
   const publicShareSettings = context.data?.role === "OWNER" ? (
     <div className="card settings-card-block">
       <div className="settings-row settings-row-toggle">
@@ -876,140 +525,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
         </>
       ) : null}
 
-      {section === "automation" ? (
-        <>
-          <div className="card settings-card-block">
-        <div className="settings-auto-header">
-          <div className="settings-auto-copy">
-            <div className="settings-section-title">Credit Card Auto Accounting</div>
-            <div className="settings-section-copy settings-auto-description">
-              Each rule checks if its keyword appears anywhere in the transaction subject (not case-sensitive). Rules are checked in order, and the first one that matches is used.
-              Matched transactions are automatically accounted once a day.
-            </div>
-          </div>
-          <div className="settings-auto-actions">
-            <Button
-              className="btn btn-ghost btn-xs"
-              type="button"
-              onClick={() => {
-                setRuleDrafts(autoRules.data?.rules ?? []);
-                closeRuleEditor();
-                setRuleKeywordInputs({});
-              }}
-              disabled={saveAutoRules.isPending || runAutoRules.isPending || !hasAutoRuleChanges}
-            >
-              <RotateCcw size={14} aria-hidden="true" />
-              Reset
-            </Button>
-            <Button className="btn btn-ghost btn-xs" type="button" onClick={() => runAutoRules.mutate()} disabled={!workspaceId || runAutoRules.isPending}>
-              <Play size={14} aria-hidden="true" />
-              {runAutoRules.isPending ? "Running..." : "Run Now"}
-            </Button>
-          </div>
-        </div>
-
-        <SettingsOperationNotice
-          notice={autoRuleNotice}
-          className="settings-auto-notice"
-          requiresReauthentication={autoRuleRequiresReauthentication}
-        />
-
-        {autoRules.isLoading ? (
-          <SettingsAutoRulesSkeleton />
-        ) : autoRules.isError ? (
-          <EmptyState
-            icon="⚠️"
-            title="Failed to load auto-accounting rules"
-            description="Refresh the page and try again."
-          />
-        ) : (
-          <div className="auto-rules-shell">
-            <div className="auto-rules-stack">
-              {ruleDrafts.map((rule, index) => (
-                <div key={rule.id} className={`auto-rule-card ${rule.enabled ? "" : "is-disabled"}`}>
-                  <Button className="auto-rule-summary" type="button" onClick={() => openRuleEditor(rule)}>
-                    <span className="auto-rule-number">{index + 1}</span>
-                    <span className="auto-rule-main">
-                      <span className="auto-rule-title-row">
-                        <span className="auto-rule-title">{rule.name || `Rule ${index + 1}`}</span>
-                        {!rule.enabled ? <span className="auto-rule-muted-pill">Paused</span> : null}
-                      </span>
-                      <span className="auto-rule-flow" aria-label="Rule summary">
-                        <span className="auto-rule-chip auto-rule-chip-filter">
-                          {rule.filters[0] || "No keyword"}
-                        </span>
-                        {rule.filters.length > 1 ? (
-                          <span className="auto-rule-more">+{rule.filters.length - 1}</span>
-                        ) : null}
-                        <ArrowRight size={16} aria-hidden="true" />
-                        <span className="auto-rule-chip auto-rule-chip-action">{getRuleActionLabel(rule)}</span>
-                        <span className="auto-rule-separator">·</span>
-                        <span className="auto-rule-chip auto-rule-chip-target">{getRuleTargetLabel(rule)}</span>
-                      </span>
-                    </span>
-                    <span className="auto-rule-summary-actions" onClick={(event) => event.stopPropagation()}>
-                      <label className="auto-rule-switch" aria-label={`${rule.name} enabled`}>
-                        <Input
-                          type="checkbox"
-                          checked={rule.enabled}
-                          onChange={(event) => toggleRuleEnabled(rule.id, event.target.checked)}
-                        />
-                        <span />
-                      </label>
-                    </span>
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            <div className="auto-rule-footer">
-              <Button className="btn btn-ghost btn-xs" type="button" onClick={addRule}>
-                <Plus size={14} aria-hidden="true" />
-                Add Rule
-              </Button>
-            </div>
-          </div>
-        )}
-
-      </div>
-
-      {editingAutoRule && (
-        <AutoRuleEditorDialog
-          rule={editingAutoRule}
-          displayIndex={editingAutoRuleDisplayIndex}
-          ruleIndex={editingAutoRuleIndex}
-          ruleCount={ruleDrafts.length}
-          workspaceId={workspaceId}
-          baseCurrency={baseCurrency}
-          workspaces={workspaces}
-          sameWorkspaceBudgets={editingSameWorkspaceBudgets}
-          sourceAccounts={editingSourceAccounts}
-          sourceBudgets={editingSourceBudgets}
-          defaultDestination={defaultSameWorkspaceDestination}
-          keywordInput={ruleKeywordInputs[editingAutoRule.id] ?? ""}
-          actionLabel={getRuleActionLabel(editingAutoRule)}
-          targetLabel={getRuleTargetLabel(editingAutoRule)}
-          isSaving={saveAutoRules.isPending}
-          onUpdate={updateEditingRule}
-          onKeywordInputChange={(value) =>
-            setRuleKeywordInputs((current) => ({ ...current, [editingAutoRule.id]: value }))
-          }
-          onAddFilter={() => addRuleFilter(editingAutoRule.id)}
-          onRemoveFilter={(index) => removeRuleFilter(editingAutoRule.id, index)}
-          onMove={(direction) => moveRule(editingAutoRule.id, direction)}
-          onDelete={() => removeRule(editingAutoRule.id)}
-          onClose={closeRuleEditor}
-          onSave={saveEditingRule}
-          getDefaultSourceBudgetId={(sourceWorkspaceId, accountId) =>
-            (crossWorkspaceBudgetsById.get(sourceWorkspaceId) ?? []).find(
-              (budget) => budget.isActive && budget.accountId === accountId,
-            )?.id ?? ""
-          }
-        />
-      )}
-
-        </>
-      ) : null}
+      {section === "automation" ? <AutoAccountingSettings controller={autoRuleSettings} baseCurrency={baseCurrency} /> : null}
 
       {section === "data" ? (
         <>

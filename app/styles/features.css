@@ -13589,6 +13589,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .auto-rule-card {
+  position: relative;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   background: var(--bg-elevated);
@@ -13722,11 +13723,33 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .auto-rule-summary-actions {
+  position: relative;
+  z-index: 2;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 12px;
   color: var(--text-tertiary);
+}
+
+.auto-rule-open-button {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.auto-rule-open-button:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
+}
+
+label.auto-rule-section-label {
+  display: block;
 }
 
 .auto-rule-switch {

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
+import { SettingsOperationNotice, type SettingsOperationNoticeData } from "./operation-notice";
 
 export type AutoRule =
   | {
@@ -50,6 +51,8 @@ type AutoRuleEditorDialogProps = {
   actionLabel: string;
   targetLabel: string;
   isSaving: boolean;
+  notice?: SettingsOperationNoticeData | null;
+  requiresReauthentication?: boolean;
   onUpdate: (updater: (rule: AutoRule) => AutoRule) => void;
   onKeywordInputChange: (value: string) => void;
   onAddFilter: () => void;
@@ -77,6 +80,8 @@ export function AutoRuleEditorDialog({
   actionLabel,
   targetLabel,
   isSaving,
+  notice = null,
+  requiresReauthentication = false,
   onUpdate,
   onKeywordInputChange,
   onAddFilter,
@@ -89,7 +94,7 @@ export function AutoRuleEditorDialog({
 }: Readonly<AutoRuleEditorDialogProps>) {
   const { format: formatMoney } = useMoneyFormat(baseCurrency);
   return (
-    <Dialog open onClose={onClose} title="Edit auto-accounting rule" surface="custom" overlayClassName="auto-rule-modal-overlay">
+    <Dialog open onClose={onClose} closeDisabled={isSaving} title="Edit auto-accounting rule" surface="custom" overlayClassName="auto-rule-modal-overlay">
       <dialog open className="auto-rule-modal" aria-modal="true" aria-labelledby="auto-rule-modal-title">
         <div className="auto-rule-modal-header">
           <div className="auto-rule-modal-title-wrap">
@@ -99,10 +104,11 @@ export function AutoRuleEditorDialog({
               <p>{rule.name || `Rule ${displayIndex}`}</p>
             </div>
           </div>
-          <ModalCloseButton onClick={onClose} label="Close Edit Auto Accounting Rule" />
+          <ModalCloseButton onClick={onClose} label="Close Edit Auto Accounting Rule" disabled={isSaving} />
         </div>
 
         <div className="auto-rule-modal-body">
+          <SettingsOperationNotice notice={notice} requiresReauthentication={requiresReauthentication} className="settings-auto-notice" />
           <div className="auto-rule-editor-hero">
             <div className="auto-rule-hero-step">
               <span>Subject</span>
@@ -122,12 +128,17 @@ export function AutoRuleEditorDialog({
 
           <div className="auto-rule-editor-grid">
             <section className="auto-rule-edit-section">
-              <div className="auto-rule-section-label">Rule Name</div>
+              <label className="auto-rule-section-label" htmlFor="auto-rule-name">Rule Name</label>
               <Input
+                id="auto-rule-name"
                 className="input"
                 type="text"
                 value={rule.name}
-                onChange={(event) => onUpdate((current) => ({ ...current, name: event.target.value }))}
+                disabled={isSaving}
+                onChange={(event) => {
+                  const name = event.target.value;
+                  onUpdate((current) => ({ ...current, name }));
+                }}
               />
             </section>
 
@@ -139,7 +150,11 @@ export function AutoRuleEditorDialog({
                   <Input id="auto-rule-enabled"
                     type="checkbox"
                     checked={rule.enabled}
-                    onChange={(event) => onUpdate((current) => ({ ...current, enabled: event.target.checked }))}
+                    disabled={isSaving}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      onUpdate((current) => ({ ...current, enabled }));
+                    }}
                   />
                   <span />
                 </span>
@@ -147,7 +162,7 @@ export function AutoRuleEditorDialog({
             </section>
 
             <section className="auto-rule-edit-section auto-rule-span">
-              <div className="auto-rule-section-label">Action</div>
+              <label className="auto-rule-section-label" htmlFor="auto-rule-action">Action</label>
               <div className="auto-rule-action-row">
                 <span className="auto-rule-action-cue">
                   <ArrowRight size={17} aria-hidden="true" />
@@ -155,11 +170,14 @@ export function AutoRuleEditorDialog({
                   <ArrowRight size={17} aria-hidden="true" />
                 </span>
                 <Select
+                  id="auto-rule-action"
                   className="input"
                   value={rule.action}
-                  onChange={(event) =>
+                  disabled={isSaving}
+                  onChange={(event) => {
+                    const action = event.target.value;
                     onUpdate((current) =>
-                      event.target.value === "DEDUCT_SAME_WORKSPACE"
+                      action === "DEDUCT_SAME_WORKSPACE"
                         ? {
                             id: current.id,
                             name: current.name,
@@ -179,8 +197,8 @@ export function AutoRuleEditorDialog({
                             sourceAccountId: "",
                             sourceBudgetId: "",
                           },
-                    )
-                  }
+                    );
+                  }}
                 >
                   <option value="DEDUCT_SAME_WORKSPACE">Transfer between same-workspace sub accounts</option>
                   <option value="RECEIVABLE_OTHER_WORKSPACE">Create receivable from another workspace</option>
@@ -195,7 +213,7 @@ export function AutoRuleEditorDialog({
                   {rule.filters.map((filter, index) => (
                     <span key={`${filter}-${index}`} className="auto-rule-keyword">
                       {filter}
-                      <Button type="button" onClick={() => onRemoveFilter(index)} aria-label={`Remove ${filter}`}>
+                      <Button type="button" onClick={() => onRemoveFilter(index)} aria-label={`Remove ${filter}`} disabled={isSaving}>
                         <X size={14} aria-hidden="true" />
                       </Button>
                     </span>
@@ -206,6 +224,8 @@ export function AutoRuleEditorDialog({
                     className="input"
                     type="text"
                     value={keywordInput}
+                    disabled={isSaving}
+                    aria-label="Subject keyword"
                     onChange={(event) => onKeywordInputChange(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter") return;
@@ -214,7 +234,7 @@ export function AutoRuleEditorDialog({
                     }}
                     placeholder="Add keyword..."
                   />
-                  <Button className="btn btn-ghost" type="button" onClick={onAddFilter}>
+                  <Button className="btn btn-ghost" type="button" onClick={onAddFilter} disabled={isSaving}>
                     <Plus size={15} aria-hidden="true" />
                     Add
                   </Button>
@@ -232,11 +252,13 @@ export function AutoRuleEditorDialog({
                     <Select
                       className="input"
                       value={rule.sourceBudgetId}
-                      onChange={(event) =>
+                      disabled={isSaving}
+                      onChange={(event) => {
+                        const sourceBudgetId = event.target.value;
                         onUpdate((current) => current.action === "DEDUCT_SAME_WORKSPACE"
-                          ? { ...current, sourceBudgetId: event.target.value }
-                          : current)
-                      }
+                          ? { ...current, sourceBudgetId }
+                          : current);
+                      }}
                     >
                       <option value="">Select source sub account</option>
                       {sameWorkspaceBudgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.name}</option>)}
@@ -247,11 +269,13 @@ export function AutoRuleEditorDialog({
                     <Select
                       className="input"
                       value={rule.destinationBudgetId}
-                      onChange={(event) =>
+                      disabled={isSaving}
+                      onChange={(event) => {
+                        const destinationBudgetId = event.target.value;
                         onUpdate((current) => current.action === "DEDUCT_SAME_WORKSPACE"
-                          ? { ...current, destinationBudgetId: event.target.value }
-                          : current)
-                      }
+                          ? { ...current, destinationBudgetId }
+                          : current);
+                      }}
                     >
                       <option value="">Select sub account</option>
                       {sameWorkspaceBudgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.name}</option>)}
@@ -268,11 +292,13 @@ export function AutoRuleEditorDialog({
                     <Select
                       className="input"
                       value={rule.sourceWorkspaceId}
-                      onChange={(event) =>
+                      disabled={isSaving}
+                      onChange={(event) => {
+                        const sourceWorkspaceId = event.target.value;
                         onUpdate((current) => current.action === "RECEIVABLE_OTHER_WORKSPACE"
-                          ? { ...current, sourceWorkspaceId: event.target.value, sourceAccountId: "", sourceBudgetId: "" }
-                          : current)
-                      }
+                          ? { ...current, sourceWorkspaceId, sourceAccountId: "", sourceBudgetId: "" }
+                          : current);
+                      }}
                     >
                       <option value="">Select workspace</option>
                       {workspaces.filter((workspace) => workspace.id !== workspaceId).map((workspace) => (
@@ -285,6 +311,7 @@ export function AutoRuleEditorDialog({
                     <Select
                       className="input"
                       value={rule.sourceAccountId}
+                      disabled={isSaving}
                       onChange={(event) => {
                         const accountId = event.target.value;
                         onUpdate((current) => current.action === "RECEIVABLE_OTHER_WORKSPACE"
@@ -305,11 +332,13 @@ export function AutoRuleEditorDialog({
                     <Select
                       className="input"
                       value={rule.sourceBudgetId}
-                      onChange={(event) =>
+                      disabled={isSaving}
+                      onChange={(event) => {
+                        const sourceBudgetId = event.target.value;
                         onUpdate((current) => current.action === "RECEIVABLE_OTHER_WORKSPACE"
-                          ? { ...current, sourceBudgetId: event.target.value }
-                          : current)
-                      }
+                          ? { ...current, sourceBudgetId }
+                          : current);
+                      }}
                     >
                       <option value="">Select sub account</option>
                       {sourceBudgets.map((budget) => (
@@ -343,7 +372,7 @@ export function AutoRuleEditorDialog({
             </Button>
           </div>
           <div className="auto-rule-modal-actions">
-            <Button className="btn btn-ghost" type="button" onClick={onClose}>Cancel</Button>
+            <Button className="btn btn-ghost" type="button" onClick={onClose} disabled={isSaving}>Cancel</Button>
             <Button className="btn btn-primary" type="button" onClick={onSave} disabled={!workspaceId || isSaving}>
               <Save size={15} aria-hidden="true" />
               {isSaving ? "Saving..." : "Save Rule"}
