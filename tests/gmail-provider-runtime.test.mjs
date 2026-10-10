@@ -38,7 +38,7 @@ beforeEach((t) => {
   respond = () => json({ access_token: "new-access", expires_in: 3600 });
   t.mock.method(globalThis, "fetch", async (url, options = {}) => {
     calls.push({ name: "fetch", url: String(url), options });
-    return respond(String(url), options);
+    return respond();
   });
 });
 afterEach(() => {
