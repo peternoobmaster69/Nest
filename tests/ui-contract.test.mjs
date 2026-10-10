@@ -538,9 +538,10 @@ test("tablet and desktop card rails use stable explicit navigation", async () =>
 });
 
 test("phone layouts use the native-style mobile application shell", async () => {
-  const [shell, sidebar] = await Promise.all([
+  const [shell, sidebar, navigation] = await Promise.all([
     readFile(path.join(root, "components/app-shell.tsx"), "utf8"),
     readFile(path.join(root, "components/app-sidebar.tsx"), "utf8"),
+    readFile(path.join(root, "hooks/use-shell-navigation.ts"), "utf8"),
   ]);
   const styles = await readAppStyles(root);
   const layout = await readFile(path.join(root, "app/layout.tsx"), "utf8");
@@ -587,7 +588,8 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(styles, /\.mobile-more-account-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 60px/s);
   assert.match(styles, /\.mobile-more-theme-toggle\s*\{[^}]*position:\s*relative[^}]*width:\s*44px[^}]*height:\s*44px/s);
   assert.match(styles, /\.mobile-more-theme-toggle > svg\s*\{[^}]*top:\s*50%[^}]*left:\s*50%[^}]*transform:\s*translate\(-50%, -50%\)/s);
-  assert.match(shell, /document\.documentElement\.dataset\.mobileMoreOpen/);
+  assert.match(shell, /useMobileMoreFocus\(mobileMoreOpen, mobileMoreRef, mobileMoreButtonRef, setMobileMoreOpen\)/);
+  assert.match(navigation, /document\.documentElement\.dataset\.mobileMoreOpen/);
   assert.match(styles, /\.mobile-bottom-nav,[\s\S]*?\.mobile-more-menu\s*\{[\s\S]*?display:\s*none/);
   assert.match(styles, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.topbar \.hamburger\s*\{[^}]*display:\s*none\s*!important[\s\S]*?\.mobile-bottom-nav\s*\{[^}]*position:\s*fixed[^}]*display:\s*flex/s);
   assert.match(styles, /\.topbar \.notification-badge\s*\{[^}]*top:\s*4px[^}]*right:\s*4px/s);
@@ -619,14 +621,16 @@ test("profile details live on a dedicated authenticated page", async () => {
 });
 
 test("long application pages expose an accessible scroll-to-top control", async () => {
-  const [shell, styles] = await Promise.all([
+  const [shell, navigation, styles] = await Promise.all([
     readFile(path.join(root, "components/app-shell.tsx"), "utf8"),
+    readFile(path.join(root, "hooks/use-shell-navigation.ts"), "utf8"),
     readAppStyles(root),
   ]);
 
-  assert.match(shell, /scrollContainer\.scrollHeight > scrollContainer\.clientHeight \* 1\.5/);
-  assert.match(shell, /scrollContainer\.scrollTop > revealOffset/);
-  assert.match(shell, /bodyScrollRef\.current\?\.scrollTo\(\{ top: 0, behavior: getMotionSafeScrollBehavior\(\) \}\)/);
+  assert.match(shell, /useShellScroll\(bodyScrollRef, mainRef, currentPath\)/);
+  assert.match(navigation, /scrollContainer\.scrollHeight > scrollContainer\.clientHeight \* 1\.5/);
+  assert.match(navigation, /scrollContainer\.scrollTop > revealOffset/);
+  assert.match(navigation, /bodyRef\.current\?\.scrollTo\(\{ top: 0, behavior: getMotionSafeScrollBehavior\(\) \}\)/);
   assert.match(shell, /aria-label="Scroll to top"/);
   assert.match(shell, /tabIndex=\{showScrollToTop \? 0 : -1\}/);
   assert.match(styles, /\.scroll-to-top-button\s*\{[^}]*position:\s*fixed[^}]*width:\s*44px[^}]*height:\s*44px/s);

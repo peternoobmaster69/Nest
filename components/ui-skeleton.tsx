@@ -16,12 +16,18 @@ const SkeletonBlock = React.memo(function SkeletonBlock({ className = "", style 
   return <div className={`skeleton-block ${className}`} style={style} />;
 });
 
-// Text line skeleton
-const SkeletonText = React.memo(function SkeletonText({ lines = 1, className = "" }: { lines?: number; className?: string }) {
+const TEXT_PLACEHOLDERS = [
+  { id: "primary", width: "100%" },
+  { id: "secondary", width: "70%" },
+];
+const RECENT_TRANSACTION_PLACEHOLDERS = ["latest", "previous", "earlier"];
+
+// The dashboard uses a full text line followed by a shorter detail line.
+const SkeletonText = React.memo(function SkeletonText() {
   return (
-    <div className={`skeleton-text-group ${className}`}>
-      {Array.from({ length: lines }).map((_, i) => (
-        <div key={i} className="skeleton-text" style={{ width: i === lines - 1 && lines > 1 ? "70%" : "100%" }} />
+    <div className="skeleton-text-group">
+      {TEXT_PLACEHOLDERS.map((line) => (
+        <div key={line.id} className="skeleton-text" style={{ width: line.width }} />
       ))}
     </div>
   );
@@ -33,7 +39,7 @@ const SkeletonTransactionRow = React.memo(function SkeletonTransactionRow({ clas
     <SkeletonPulse className={`skeleton-tx-row ${className}`}>
       <SkeletonBlock className="skeleton-tx-icon" />
       <div className="skeleton-tx-details">
-        <SkeletonText lines={2} />
+        <SkeletonText />
       </div>
       <SkeletonBlock className="skeleton-tx-amount" />
     </SkeletonPulse>
@@ -41,11 +47,11 @@ const SkeletonTransactionRow = React.memo(function SkeletonTransactionRow({ clas
 });
 
 // List of skeleton rows
-const SkeletonList = React.memo(function SkeletonList({ count = 5 }: { count?: number }) {
+const SkeletonList = React.memo(function SkeletonList() {
   return (
     <div className="skeleton-list">
-      {Array.from({ length: count }).map((_, i) => (
-        <SkeletonTransactionRow key={i} />
+      {RECENT_TRANSACTION_PLACEHOLDERS.map((id) => (
+        <SkeletonTransactionRow key={id} />
       ))}
     </div>
   );
@@ -91,7 +97,7 @@ const DashboardSkeleton = React.memo(function DashboardSkeleton() {
 
       {/* Hero Card */}
       <SkeletonPulse className="skeleton-hero-card">
-        <SkeletonText lines={2} />
+        <SkeletonText />
         <SkeletonBlock className="skeleton-hero-amount" />
       </SkeletonPulse>
 
@@ -108,7 +114,7 @@ const DashboardSkeleton = React.memo(function DashboardSkeleton() {
         </div>
         <div className="card" style={{ padding: "18px 20px" }}>
           <SkeletonBlock className="skeleton-card-header" style={{ height: "18px", width: "120px", marginBottom: "14px" }} />
-          <SkeletonList count={3} />
+          <SkeletonList />
         </div>
       </div>
     </div>

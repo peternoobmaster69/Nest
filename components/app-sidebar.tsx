@@ -4,9 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { closeOnBackdropClick } from "@/lib/modal-dismiss";
 import { useTheme } from "./theme-provider";
 import { useConfirmDialog } from "./confirm-dialog";
 import { SidebarSkeleton } from "./ui-skeleton";
@@ -31,6 +30,7 @@ import {
 import { invalidateWorkspaceQueries, queryKeys, removeWorkspaceQueries } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { getInitials } from "@/lib/user-display";
+import { useSidebarMenus } from "@/hooks/use-shell-navigation";
 
 type Workspace = {
   id: string;
@@ -151,36 +151,9 @@ export function AppSidebar({
     enabled: profileMenuOpen,
   });
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onClick = (event: MouseEvent) => {
-      if (!sidebarRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [isOpen, setIsOpen]);
-
-  useEffect(() => {
-    if (!profileMenuOpen) return;
-    const focusFrame = window.requestAnimationFrame(() => {
-      profileMenuRef.current?.querySelector<HTMLElement>(".sb-user-menu a[href],.sb-user-menu button:not([disabled])")?.focus();
-    });
-    const onClick = (event: MouseEvent) => {
-      if (!profileMenuRef.current?.contains(event.target as Node)) {
-        setProfileMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener("mousedown", onClick);
-    };
-  }, [profileMenuOpen]);
+  useSidebarMenus({ open: isOpen, setOpen: setIsOpen, sidebarRef, profileMenuOpen, setProfileMenuOpen, profileMenuRef });
 
   const handleNavClick = () => {
-    if (typeof window === "undefined") return;
     if (window.matchMedia("(max-width: 1280px)").matches) {
       setIsOpen(false);
       window.sessionStorage.setItem("nest:ui:sidebarOpen", "0");
@@ -201,9 +174,8 @@ export function AppSidebar({
     await signOut({ callbackUrl: "/" });
   };
 
-  const switchWorkspace = async (workspaceId: string) => {
-    if (workspaceId === resolvedContext?.workspaceId) return;
-    const nextWorkspace = workspacesQuery.data?.find((workspace) => workspace.id === workspaceId) ?? null;
+  const switchWorkspace = async (nextWorkspace: Workspace) => {
+    const workspaceId = nextWorkspace.id;
     setSwitchingWorkspaceId(workspaceId);
     setIsTransitioning(true);
     setProfileMenuOpen(false);
@@ -223,7 +195,7 @@ export function AppSidebar({
           ? {
               ...existing,
               workspaceId,
-              workspaceName: nextWorkspace?.name ?? existing.workspaceName,
+              workspaceName: nextWorkspace.name,
             }
           : existing,
       );
@@ -244,81 +216,66 @@ export function AppSidebar({
     }
   };
 
-  return (
-    <>
-      {isOpen && <div className="sidebar-overlay" onMouseDown={(event) => closeOnBackdropClick(event, () => setIsOpen(false))} />}
-      <aside ref={sidebarRef} className={`sidebar${isOpen ? " open" : ""}`} aria-label="Primary navigation">
-        <div className="sb-logo-row">
-          <Link href={workspaceHref("/")} className="sb-logo" onClick={handleNavClick}>
-            <Image src="/icon.svg" alt="" width={30} height={30} className="brand-logo-sm" />
-            <span>Nest</span>
-          </Link>
-          <Button
-            className="sidebar-close"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsOpen(false);
-            }}
-            aria-label="Close sidebar"
-          >
-            ✕
-          </Button>
-        </div>
+  function navigationClass(path: string, includeChildren = false) {
+    const active = currentPath === path || (includeChildren && currentPath.startsWith(`${path}/`));
+    return `sb-item${active ? " on" : ""}`;
+  }
 
-        {isContextLoading ? (
-          <SidebarSkeleton />
-        ) : (
-          <>
+  function currentPage(path: string) {
+    return currentPath === path ? "page" as const : undefined;
+  }
+
+  function renderNavigation() {
+    return (
       <div className="sb-scroll">
         <div className="sb-sec">Overview</div>
-        <Link className={`sb-item${currentPath === "/" ? " on" : ""}`} href={workspaceHref("/")} onClick={handleNavClick} aria-current={currentPath === "/" ? "page" : undefined}>
+        <Link className={navigationClass("/")} href={workspaceHref("/")} onClick={handleNavClick} aria-current={currentPage("/")}>
           <Home className="sb-ic" size={18} aria-hidden="true" />Dashboard
         </Link>
-        {sidebarMoneyPages.cio !== false ? <Link className={`sb-item${currentPath === "/cio" ? " on" : ""}`} href={workspaceHref("/cio")} onClick={handleNavClick} aria-current={currentPath === "/cio" ? "page" : undefined}><Compass className="sb-ic" size={18} aria-hidden="true" />Nest CIO</Link> : null}
+        {sidebarMoneyPages.cio !== false ? <Link className={navigationClass("/cio")} href={workspaceHref("/cio")} onClick={handleNavClick} aria-current={currentPage("/cio")}><Compass className="sb-ic" size={18} aria-hidden="true" />Nest CIO</Link> : null}
 
         <div className="sb-sec">Money</div>
         {sidebarMoneyPages.transactions !== false && (
-          <Link className={`sb-item${currentPath === "/transactions" ? " on" : ""}`} href={workspaceHref("/transactions")} onClick={handleNavClick} aria-current={currentPath === "/transactions" ? "page" : undefined}>
+          <Link className={navigationClass("/transactions")} href={workspaceHref("/transactions")} onClick={handleNavClick} aria-current={currentPage("/transactions")}>
             <ReceiptText className="sb-ic" size={18} aria-hidden="true" />Transactions
           </Link>
         )}
         {showCreditCards && (
-          <Link className={`sb-item${currentPath === "/credit-cards" ? " on" : ""}`} href={workspaceHref("/credit-cards")} onClick={handleNavClick} aria-current={currentPath === "/credit-cards" ? "page" : undefined}>
+          <Link className={navigationClass("/credit-cards")} href={workspaceHref("/credit-cards")} onClick={handleNavClick} aria-current={currentPage("/credit-cards")}>
             <CreditCard className="sb-ic" size={18} aria-hidden="true" />Credit Cards
           </Link>
         )}
         {showCreditTransactions && (
-          <Link className={`sb-item${currentPath === "/credit-transactions" ? " on" : ""}`} href={workspaceHref("/credit-transactions")} onClick={handleNavClick} aria-current={currentPath === "/credit-transactions" ? "page" : undefined}>
+          <Link className={navigationClass("/credit-transactions")} href={workspaceHref("/credit-transactions")} onClick={handleNavClick} aria-current={currentPage("/credit-transactions")}>
             <ListChecks className="sb-ic" size={18} aria-hidden="true" />Card Transactions
           </Link>
         )}
         {sidebarMoneyPages.receivables !== false && (
-          <Link className={`sb-item${currentPath === "/receivables" ? " on" : ""}`} href={workspaceHref("/receivables")} onClick={handleNavClick}>
+          <Link className={navigationClass("/receivables")} href={workspaceHref("/receivables")} onClick={handleNavClick}>
             <Undo2 className="sb-ic" size={18} aria-hidden="true" />Receivables
             {resolvedReceivablesCount ? <span className="sb-badge">{resolvedReceivablesCount}</span> : null}
           </Link>
         )}
         {sidebarMoneyPages.rewards !== false && (
-          <Link className={`sb-item${currentPath === "/rewards" ? " on" : ""}`} href={workspaceHref("/rewards")} onClick={handleNavClick}>
+          <Link className={navigationClass("/rewards")} href={workspaceHref("/rewards")} onClick={handleNavClick}>
             <Gift className="sb-ic" size={18} aria-hidden="true" />Rewards
           </Link>
         )}
         {sidebarMoneyPages.investments !== false && (
-          <Link className={`sb-item${currentPath === "/investments" ? " on" : ""}`} href={workspaceHref("/investments")} onClick={handleNavClick}>
+          <Link className={navigationClass("/investments")} href={workspaceHref("/investments")} onClick={handleNavClick}>
             <ChartNoAxesCombined className="sb-ic" size={18} aria-hidden="true" />Investments
           </Link>
         )}
-        {sidebarMoneyPages.budget !== false ? <Link className={`sb-item${currentPath === "/budgets/plan" ? " on" : ""}`} href={workspaceHref("/budgets/plan")} onClick={handleNavClick}>
+        {sidebarMoneyPages.budget !== false ? <Link className={navigationClass("/budgets/plan")} href={workspaceHref("/budgets/plan")} onClick={handleNavClick}>
           <ChartPie className="sb-ic" size={18} aria-hidden="true" />Budget Plan
         </Link> : null}
 
         <div className="sb-sec">Workspace</div>
-        <Link className={`sb-item${currentPath === "/settings" ? " on" : ""}`} href={workspaceHref("/settings")} onClick={handleNavClick}>
+        <Link className={navigationClass("/settings")} href={workspaceHref("/settings")} onClick={handleNavClick}>
           <Settings className="sb-ic" size={18} aria-hidden="true" />Settings
         </Link>
         {resolvedContext?.isAdmin ? (
-          <Link className={`sb-item${currentPath === "/admin" || currentPath.startsWith("/admin/") ? " on" : ""}`} href={workspaceHref("/admin")} onClick={handleNavClick}>
+          <Link className={navigationClass("/admin", true)} href={workspaceHref("/admin")} onClick={handleNavClick}>
             <ShieldCheck className="sb-ic" size={18} aria-hidden="true" />Admin
           </Link>
         ) : null}
@@ -328,7 +285,11 @@ export function AppSidebar({
           <LogOut className="sb-ic" size={18} aria-hidden="true" />Log Out
         </Button>
       </div>
+    );
+  }
 
+  function renderAccount() {
+    return (
       <div className="sb-bot">
         <div className="sb-user-wrap" ref={profileMenuRef}>
           <Button
@@ -373,34 +334,11 @@ export function AppSidebar({
                   toggleTheme();
                 }}
               >
-                {theme === "light" ? <><Moon size={16} aria-hidden="true" /> Dark mode</> : <><Sun size={16} aria-hidden="true" /> Light mode</>}
+                {theme === "light" ? <><Moon size={16} aria-hidden="true" />{" "}Dark mode</> : <><Sun size={16} aria-hidden="true" />{" "}Light mode</>}
               </Button>
               <div className="sb-user-menu-divider" />
               <div className="sb-user-menu-section">Switch Workspace</div>
-              {workspacesQuery.isLoading ? (
-                <div className="sb-user-menu-item sb-user-menu-loading">
-                  <span className="sb-workspace-spinner" />
-                  Loading...
-                </div>
-              ) : (
-                workspacesQuery.data?.map((ws) => {
-                  const isCurrent = ws.id === resolvedContext?.workspaceId;
-                  const isSwitching = switchingWorkspaceId === ws.id;
-                  return (
-                    <Button
-                      key={ws.id}
-                      className={`sb-user-menu-item sb-user-menu-workspace${isCurrent ? " active" : ""}${isSwitching ? " switching" : ""}`}
-                      onClick={() => switchWorkspace(ws.id)}
-                      disabled={isCurrent || isSwitching}
-                    >
-                      <span className="sb-workspace-icon">
-                        {isSwitching ? <span className="sb-workspace-spinner" /> : isCurrent ? "✓" : "○"}
-                      </span>
-                      <span className="sb-workspace-name">{ws.name}</span>
-                    </Button>
-                  );
-                })
-              )}
+              {renderWorkspaceOptions()}
               <div className="sb-user-menu-divider" />
               <Button className="sb-user-menu-item" onClick={() => void confirmLogout()}>
                 Log Out
@@ -409,6 +347,69 @@ export function AppSidebar({
           )}
         </div>
       </div>
+    );
+  }
+
+  function renderWorkspaceOptions() {
+    if (workspacesQuery.isLoading) return (
+      <div className="sb-user-menu-item sb-user-menu-loading">
+        <span className="sb-workspace-spinner" />
+        Loading...
+      </div>
+    );
+    if (workspacesQuery.isError) return <div className="sb-user-menu-item">Workspaces could not be loaded.</div>;
+    return workspacesQuery.data?.map((ws) => {
+      const isCurrent = ws.id === resolvedContext?.workspaceId;
+      const isSwitching = switchingWorkspaceId === ws.id;
+      return (
+        <Button
+          key={ws.id}
+          className={`sb-user-menu-item sb-user-menu-workspace${isCurrent ? " active" : ""}${isSwitching ? " switching" : ""}`}
+          onClick={() => switchWorkspace(ws)}
+          disabled={isCurrent || isSwitching}
+        >
+          <span className="sb-workspace-icon">
+            {workspaceMark(isSwitching, isCurrent)}
+          </span>
+          <span className="sb-workspace-name">{ws.name}</span>
+        </Button>
+      );
+    });
+  }
+
+  function workspaceMark(isSwitching: boolean, isCurrent: boolean) {
+    if (isSwitching) return <span className="sb-workspace-spinner" />;
+    return isCurrent ? "✓" : "○";
+  }
+
+  return (
+    <>
+      {isOpen && <div className="sidebar-overlay" aria-hidden="true" />}
+      <aside ref={sidebarRef} className={`sidebar${isOpen ? " open" : ""}`} aria-label="Primary navigation">
+        <div className="sb-logo-row">
+          <Link href={workspaceHref("/")} className="sb-logo" onClick={handleNavClick}>
+            <Image src="/icon.svg" alt="" width={30} height={30} className="brand-logo-sm" />
+            <span>Nest</span>
+          </Link>
+          <Button
+            className="sidebar-close"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsOpen(false);
+            }}
+            aria-label="Close sidebar"
+          >
+            ✕
+          </Button>
+        </div>
+
+        {isContextLoading ? (
+          <SidebarSkeleton />
+        ) : (
+          <>
+            {renderNavigation()}
+            {renderAccount()}
           </>
         )}
 

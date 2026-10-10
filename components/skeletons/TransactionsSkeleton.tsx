@@ -1,6 +1,17 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BankSelectorSkeleton } from "@/components/skeletons/BankSelectorSkeleton";
 
+const MONTH_PLACEHOLDERS = [
+  { id: "current", labelWidth: 96, rowCount: 4 },
+  { id: "previous", labelWidth: 118, rowCount: 3 },
+];
+const ROW_PLACEHOLDERS = [
+  { id: "latest", titleWidth: "54%", labelWidth: 72, dateWidth: 86 },
+  { id: "previous", titleWidth: "72%", labelWidth: 86, dateWidth: 112 },
+  { id: "earlier", titleWidth: "54%", labelWidth: 72, dateWidth: 86 },
+  { id: "oldest", titleWidth: "72%", labelWidth: 86, dateWidth: 112 },
+];
+
 export function TransactionsInitialSkeleton() {
   return (
     <>
@@ -119,11 +130,11 @@ export function TransactionsStatsSkeleton() {
 export function TransactionsListSkeleton() {
   return (
     <>
-      {Array.from({ length: 2 }).map((_, groupIndex) => (
-        <div className="tx-month-group" key={groupIndex}>
+      {MONTH_PLACEHOLDERS.map((month) => (
+        <div className="tx-month-group" key={month.id}>
           <div className="tx-month-header">
             <span className="tx-month-label">
-              <Skeleton width={groupIndex === 0 ? 96 : 118} height={12} borderRadius="4px" />
+              <Skeleton width={month.labelWidth} height={12} borderRadius="4px" />
             </span>
             <div className="tx-month-summary">
               <Skeleton width={78} height={18} borderRadius="4px" />
@@ -131,14 +142,14 @@ export function TransactionsListSkeleton() {
             </div>
           </div>
           <div className="tx-month-list">
-            {Array.from({ length: groupIndex === 0 ? 4 : 3 }).map((_, rowIndex) => (
-              <div className="crud-row tx-recent-row" key={rowIndex}>
+            {ROW_PLACEHOLDERS.slice(0, month.rowCount).map((row) => (
+              <div className="crud-row tx-recent-row" key={row.id}>
                 <Skeleton width={32} height={32} borderRadius="8px" />
                 <div className="tx-recent-main">
-                  <Skeleton width={rowIndex % 2 ? "72%" : "54%"} height={17} borderRadius="4px" />
-                  <Skeleton width={rowIndex % 2 ? 86 : 72} height={18} borderRadius="4px" />
+                  <Skeleton width={row.titleWidth} height={17} borderRadius="4px" />
+                  <Skeleton width={row.labelWidth} height={18} borderRadius="4px" />
                   <span className="tx-recent-date">
-                    <Skeleton width={rowIndex % 2 ? 112 : 86} height={13} borderRadius="4px" />
+                    <Skeleton width={row.dateWidth} height={13} borderRadius="4px" />
                   </span>
                 </div>
               </div>

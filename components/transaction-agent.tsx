@@ -191,50 +191,103 @@ type CardProps = {
   onAskInstead: (session: AgentSession) => void;
 };
 
+function sessionMessages(session: AgentSession): TransactionAgentView["messages"] {
+  if (session.view?.messages.length) return session.view.messages;
+  return session.text ? [{ role: "user", content: session.text }] : [];
+}
+
+function TransactionAgentMessages({ session }: Readonly<{ session: AgentSession }>) {
+  const occurrences = new Map<string, number>();
+  return sessionMessages(session).map((item) => {
+    const identity = JSON.stringify([item.role, item.content]);
+    const occurrence = occurrences.get(identity) ?? 0;
+    occurrences.set(identity, occurrence + 1);
+    const key = `${identity}:${occurrence}`;
+    return item.role === "user"
+      ? <div key={key} className="ask-nest-question">{item.content}</div>
+      : <p key={key} className="transaction-agent-reply">{item.content}</p>;
+  });
+}
+
+const DRAFT_STATUS_LABELS: Record<TransactionAgentView["status"], string> = {
+  CLARIFY: "Transaction draft · nothing saved yet",
+  REVIEW: "Transaction draft · nothing saved yet",
+  SAVED: "Saved",
+  CANCELLED: "Draft cancelled",
+  EXPIRED: "Draft expired",
+};
+
+type SendRequest = (request: TransactionAgentRequest) => void;
+
+function TransactionAgentPicker({ draft, active, locked, filter, onFilter, onSend }: Readonly<{
+  draft: TransactionAgentView | null;
+  active: boolean;
+  locked: boolean;
+  filter: string;
+  onFilter: (value: string) => void;
+  onSend: SendRequest;
+}>) {
+  if (!active || !draft || !draft.choices.length) return null;
+  const choices = draft.choices;
+  const reference = { draftId: draft.draftId, revision: draft.revision };
+  const suggestionsOnly = draft.pending === "budget" && choices.every((choice) => choice.kind === "budget" && choice.suggested);
+  return <div className="transaction-agent-picker">
+      {choices.length > 6 ? <label>Find a sub-account or transaction<Input className="transaction-agent-filter" type="search" value={filter} onChange={(e) => onFilter(e.target.value)} /></label> : null}
+      <div className="transaction-agent-choices" aria-label="Choose a sub-account or transaction">
+        {choices.map((choice, index) => ({ choice, index })).filter(({ choice }) => `${choice.label} ${choice.detail}`.toLowerCase().includes(filter.toLowerCase())).map(({ choice, index }) => <Button key={`${choice.kind}-${choice.id}`} disabled={locked} onClick={() => onSend({ action: "select", ...reference, selection: { kind: choice.kind, id: choice.id } })}>
+          <strong>{index + 1}. {choice.label}{choice.suggested ? <span className="transaction-agent-badge">Suggested</span> : null}</strong><small>{choice.detail}</small>
+        </Button>)}
+      </div>
+      {suggestionsOnly ? <Button variant="ghost" size="sm" disabled={locked} onClick={() => onSend({ action: "edit", ...reference, field: "budget" })}>None of these. Show all sub-accounts</Button> : null}
+    </div>;
+}
+
+function TransactionAgentActions({ session, agent, latest, locked, workspaceId, onNavigate, onAskInstead }: Readonly<
+  Pick<CardProps, "session" | "agent" | "latest" | "workspaceId" | "onNavigate" | "onAskInstead"> & { locked: boolean }
+>) {
+  const draft = session.view;
+  const active = isActiveDraft(session);
+  const savedHref = draft?.savedTransactionId ? `/transactions?transactionId=${encodeURIComponent(draft.savedTransactionId)}` : null;
+  const nextRequest = draft?.status === "SAVED" ? draft.nextRequest : null;
+  return <div className="transaction-agent-actions">
+      {latest && nextRequest ? <Button variant="secondary" size="sm" disabled={locked} onClick={() => agent.start(nextRequest)}>Continue with: {nextRequest}</Button> : null}
+      {savedHref ? <Link className="transaction-agent-link" onClick={onNavigate} href={workspaceId ? buildWorkspacePath(workspaceId, savedHref) : savedHref}>View saved transaction</Link> : null}
+      {latest && active && session.routed && !draft?.review ? <Button variant="ghost" size="sm" disabled={locked} onClick={() => onAskInstead(session)}>
+        <MessageCircleQuestion size={14} aria-hidden="true" /> This was a question
+      </Button> : null}
+    </div>;
+}
+
+function TransactionAgentError({ session, agent }: Readonly<Pick<CardProps, "session" | "agent">>) {
+  if (!session.error) return null;
+  const draft = session.view;
+  return <div className="ask-nest-history-error" role="alert">{session.error}
+      {draft ? <Button variant="ghost" size="sm" disabled={agent.busy} onClick={() => void agent.reload(session.key, draft.draftId)}>Reload draft</Button>
+        : <Button variant="ghost" size="sm" disabled={agent.busy} onClick={() => { void agent.discard(session); agent.start(session.text, session.routed); }}>Try again</Button>}
+    </div>;
+}
+
 export function TransactionAgentCard({ session, agent, latest, typing, workspaceId, onNavigate, onAskInstead }: Readonly<CardProps>) {
   const [filter, setFilter] = useState("");
   const draft = session.view;
   const active = isActiveDraft(session);
   const locked = agent.busy || session.needsReload;
-  const messages = draft?.messages.length ? draft.messages : session.text ? [{ role: "user" as const, content: session.text }] : [];
   const send = (request: TransactionAgentRequest) => { setFilter(""); void agent.run(session.key, request); };
   const reference = draft ? { draftId: draft.draftId, revision: draft.revision } : null;
-  const choices = active && latest && draft && reference ? draft.choices : [];
-  const suggestionsOnly = Boolean(draft?.pending === "budget" && choices.length && choices.every((c) => c.kind === "budget" && c.suggested));
-  const savedHref = draft?.savedTransactionId ? `/transactions?transactionId=${encodeURIComponent(draft.savedTransactionId)}` : null;
 
   return <article className={`ask-nest-turn transaction-agent-turn${active ? " is-active" : ""}`} aria-busy={locked && latest}>
-    {messages.map((item, index) => item.role === "user"
-      ? <div key={index} className="ask-nest-question">{item.content}</div>
-      : <p key={index} className="transaction-agent-reply">{item.content}</p>)}
+    <TransactionAgentMessages session={session} />
     {draft ? <span className={`transaction-agent-status is-${draft.status.toLowerCase()}`}>
       <ReceiptText size={13} aria-hidden="true" />
-      {draft.status === "SAVED" ? "Saved" : draft.status === "CANCELLED" ? "Draft cancelled" : draft.status === "EXPIRED" ? "Draft expired" : "Transaction draft · nothing saved yet"}
+      {DRAFT_STATUS_LABELS[draft.status]}
     </span> : null}
     {draft?.status === "EXPIRED" ? <output className="transaction-agent-hint">{draft.message}</output> : null}
-    {choices.length && reference ? <div className="transaction-agent-picker">
-      {choices.length > 6 ? <label>Find a sub-account or transaction<Input className="transaction-agent-filter" type="search" value={filter} onChange={(e) => setFilter(e.target.value)} /></label> : null}
-      <div className="transaction-agent-choices" aria-label="Choose a sub-account or transaction">
-        {choices.map((choice, index) => ({ choice, index })).filter(({ choice }) => `${choice.label} ${choice.detail}`.toLowerCase().includes(filter.toLowerCase())).map(({ choice, index }) => <Button key={`${choice.kind}-${choice.id}`} disabled={locked} onClick={() => send({ action: "select", ...reference, selection: { kind: choice.kind, id: choice.id } })}>
-          <strong>{index + 1}. {choice.label}{choice.suggested ? <span className="transaction-agent-badge">Suggested</span> : null}</strong><small>{choice.detail}</small>
-        </Button>)}
-      </div>
-      {suggestionsOnly ? <Button variant="ghost" size="sm" disabled={locked} onClick={() => send({ action: "edit", ...reference, field: "budget" })}>None of these. Show all sub-accounts</Button> : null}
-    </div> : null}
+    <TransactionAgentPicker draft={draft} active={active && latest} locked={locked} filter={filter} onFilter={setFilter} onSend={send} />
     {draft?.review && reference ? <TransactionAgentReview key={`${draft.draftId}-${draft.revision}`} draft={draft} locked={locked || !latest} typing={typing}
       onEdit={(field, value) => send({ action: "edit", ...reference, field, value })}
       onConfirm={() => send({ action: "confirm", ...reference })} /> : null}
-    <div className="transaction-agent-actions">
-      {latest && draft?.status === "SAVED" && draft.nextRequest ? <Button variant="secondary" size="sm" disabled={locked} onClick={() => agent.start(draft.nextRequest!)}>Continue with: {draft.nextRequest}</Button> : null}
-      {savedHref ? <Link className="transaction-agent-link" onClick={onNavigate} href={workspaceId ? buildWorkspacePath(workspaceId, savedHref) : savedHref}>View saved transaction</Link> : null}
-      {latest && active && session.routed && !draft?.review ? <Button variant="ghost" size="sm" disabled={locked} onClick={() => onAskInstead(session)}>
-        <MessageCircleQuestion size={14} aria-hidden="true" /> This was a question
-      </Button> : null}
-    </div>
-    {session.error ? <div className="ask-nest-history-error" role="alert">{session.error}
-      {draft ? <Button variant="ghost" size="sm" disabled={agent.busy} onClick={() => void agent.reload(session.key, draft.draftId)}>Reload draft</Button>
-        : <Button variant="ghost" size="sm" disabled={agent.busy} onClick={() => { void agent.discard(session); agent.start(session.text, session.routed); }}>Try again</Button>}
-    </div> : null}
+    <TransactionAgentActions session={session} agent={agent} latest={latest} locked={locked} workspaceId={workspaceId} onNavigate={onNavigate} onAskInstead={onAskInstead} />
+    <TransactionAgentError session={session} agent={agent} />
     {agent.busy && latest ? <output className="ask-nest-thinking"><LoaderCircle size={17} className="ask-nest-spinner" aria-hidden="true" /> {draft ? "Updating the draft…" : "Preparing a draft…"}</output> : null}
   </article>;
 }

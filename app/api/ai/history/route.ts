@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     }).reverse();
     return NextResponse.json({
       turns,
-      nextCursor: hasMore ? page[page.length - 1].id : null,
+      nextCursor: hasMore ? page.at(-1)!.id : null,
     }, { headers: PRIVATE_HEADERS });
   });
 }
