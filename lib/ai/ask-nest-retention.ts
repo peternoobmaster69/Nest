@@ -104,8 +104,6 @@ function summarizeTurns(turns: RetentionTurn[]) {
 }
 
 async function archiveAskNestTurns(tx: Prisma.TransactionClient, turns: RetentionTurn[]) {
-  if (!turns.length) return { processed: 0, summaries: 0 };
-
   const summaries = summarizeTurns(turns);
   for (const summary of summaries) {
     await tx.askNestUsageDaily.upsert({
@@ -203,11 +201,11 @@ export async function runAskNestRetention(options: { now?: Date; batchSize?: num
       return { ...archived, hasMore: turns.length === batchSize };
     });
 
+    hasMore = result.hasMore;
     if (!result.processed) break;
     batches += 1;
     processedTurns += result.processed;
     summarizedDays += result.summaries;
-    hasMore = result.hasMore;
     if (!result.hasMore) break;
   }
 

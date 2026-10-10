@@ -79,7 +79,8 @@ async function runBoundedPolicy(action: (batchSize: number) => Promise<number>, 
       break;
     }
     batches += 1;
-    hasMore = count === batchSize;
+    // A policy may combine batches from more than one table.
+    hasMore = count >= batchSize;
     if (!hasMore) break;
   }
 
