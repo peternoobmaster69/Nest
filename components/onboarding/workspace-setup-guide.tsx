@@ -1,6 +1,6 @@
 "use client";
 
-import { SubmitEvent, useEffect, useMemo, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, CreditCard, Landmark, Layers3, Sparkles } from "lucide-react";
 
@@ -24,6 +24,30 @@ type SetupAccount = { id: string; name: string; kind: string };
 
 const SETUP_VERSION = "v1";
 
+const STEP_COPY = {
+  welcome: { title: "Welcome to Nest", description: "Build your money map in three short steps." },
+  bank: { title: "Add your bank account", description: "Start with the cash you actually have." },
+  subaccount: { title: "Create a sub-account", description: "Set aside bank money for a purpose." },
+  card: { title: "Add a credit card (optional)", description: "Track statement spending and payment dates, or do this later." },
+};
+
+function SetupFooter({ step, pending, formId, onPause, onStart, onComplete }: Readonly<{
+  step: WorkspaceSetupStep;
+  pending: boolean;
+  formId: string;
+  onPause: () => void;
+  onStart: () => void;
+  onComplete: () => void;
+}>) {
+  if (step === "welcome") {
+    return <><Button className="btn btn-ghost" onClick={onPause}>Not now</Button><Button className="btn btn-primary" onClick={onStart}>Start setup</Button></>;
+  }
+  if (step === "card") {
+    return <><Button className="btn btn-ghost" onClick={onComplete} disabled={pending}>Skip for now</Button><Button className="btn btn-primary" type="submit" form={formId} disabled={pending}>{pending ? "Adding…" : "Add card"}</Button></>;
+  }
+  return <><Button className="btn btn-ghost" onClick={onPause} disabled={pending}>Not now</Button><Button className="btn btn-primary" type="submit" form={formId} disabled={pending}>{pending ? "Saving…" : "Continue"}</Button></>;
+}
+
 export function WorkspaceSetupGuide({
   workspaceId,
   baseCurrency,
@@ -36,6 +60,13 @@ export function WorkspaceSetupGuide({
   progress: WorkspaceSetupProgress;
 }>) {
   const queryClient = useQueryClient();
+  const saving = useRef(false);
+  const releaseSave = () => { saving.current = false; };
+  const submitOnce = (mutation: { mutate: () => void }) => {
+    if (saving.current) return;
+    saving.current = true;
+    mutation.mutate();
+  };
   const preferenceKey = `nest:workspace-setup:${SETUP_VERSION}:${workspaceId}`;
   const snoozeKey = `${preferenceKey}:snoozed`;
   const [preference, setPreference] = useState<WorkspaceSetupPreference>("loading");
@@ -105,6 +136,7 @@ export function WorkspaceSetupGuide({
   };
 
   const createBank = useMutation({
+    onSettled: releaseSave,
     mutationFn: () => apiFetch<{
       account: { id: string; name: string; bankName: string | null };
     }>("/api/accounts", {
@@ -129,6 +161,7 @@ export function WorkspaceSetupGuide({
   });
 
   const createSubAccount = useMutation({
+    onSettled: releaseSave,
     mutationFn: () => apiFetch("/api/budgets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -159,6 +192,7 @@ export function WorkspaceSetupGuide({
   };
 
   const createCard = useMutation({
+    onSettled: releaseSave,
     mutationFn: () => apiFetch("/api/credit-cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -205,7 +239,7 @@ export function WorkspaceSetupGuide({
     const amount = Number(startingBalance || "0");
     if (!Number.isFinite(amount) || amount < 0) return setValidationError("Enter a valid starting balance.");
     setValidationError("");
-    createBank.mutate();
+    submitOnce(createBank);
   };
 
   const submitSubAccount = (event: SubmitEvent) => {
@@ -215,7 +249,7 @@ export function WorkspaceSetupGuide({
     if (!effectiveSubAccountBankId) return setValidationError("Select a bank account.");
     if (!Number.isFinite(target) || target < 0) return setValidationError("Enter a valid monthly limit.");
     setValidationError("");
-    createSubAccount.mutate();
+    submitOnce(createSubAccount);
   };
 
   const submitCard = (event: SubmitEvent) => {
@@ -224,25 +258,20 @@ export function WorkspaceSetupGuide({
     const due = Number(paymentDueDay);
     if (!cardName.trim()) return setValidationError("Give the card a name.");
     if (!/^\d{4}$/.test(last4)) return setValidationError("Enter exactly the last 4 digits.");
-    if (statement < 1 || statement > 31 || due < 1 || due > 31) return setValidationError("Statement and due days must be between 1 and 31.");
+    if (!Number.isInteger(statement) || !Number.isInteger(due) || statement < 1 || statement > 31 || due < 1 || due > 31) {
+      return setValidationError("Statement and due days must be between 1 and 31.");
+    }
     setValidationError("");
-    createCard.mutate();
+    submitOnce(createCard);
   };
 
-  const activeMutation = step === "bank" ? createBank : step === "subaccount" ? createSubAccount : createCard;
+  const activeMutation = { welcome: createCard, bank: createBank, subaccount: createSubAccount, card: createCard, complete: createCard }[step];
   const errorMessage = validationError || (activeMutation.error instanceof Error ? activeMutation.error.message : "");
   const pending = createBank.isPending || createSubAccount.isPending || createCard.isPending;
-  const title = step === "welcome" ? "Welcome to Nest" : step === "bank" ? "Add your bank account" : step === "subaccount" ? "Create a sub-account" : "Add a credit card (optional)";
-  const description = step === "welcome" ? "Build your money map in three short steps." : step === "bank" ? "Start with the cash you actually have." : step === "subaccount" ? "Set aside bank money for a purpose." : "Track statement spending and payment dates, or do this later.";
+  const { title, description } = STEP_COPY[step === "complete" ? "card" : step];
   const formId = `workspace-setup-${step}-form`;
 
-  const footer = step === "welcome" ? (
-    <><Button className="btn btn-ghost" onClick={pauseSetup}>Not now</Button><Button className="btn btn-primary" onClick={startSetup}>Start setup</Button></>
-  ) : step === "card" ? (
-    <><Button className="btn btn-ghost" onClick={completeSetup} disabled={pending}>Skip for now</Button><Button className="btn btn-primary" type="submit" form={formId} disabled={pending}>{pending ? "Adding…" : "Add card"}</Button></>
-  ) : (
-    <><Button className="btn btn-ghost" onClick={pauseSetup} disabled={pending}>Not now</Button><Button className="btn btn-primary" type="submit" form={formId} disabled={pending}>{pending ? "Saving…" : "Continue"}</Button></>
-  );
+  const footer = <SetupFooter step={step} pending={pending} formId={formId} onPause={pauseSetup} onStart={startSetup} onComplete={completeSetup} />;
 
   if (!shouldOfferSetup && !open) return null;
 
@@ -269,9 +298,9 @@ export function WorkspaceSetupGuide({
         {step === "bank" ? (
           <form id={formId} className="setup-guide-form" onSubmit={submitBank}>
             <div className="setup-guide-form-grid">
-              <label className="form-group"><span className="label">Bank</span><Select className="input" value={bankName} onChange={(event) => setBankName(event.target.value)} autoFocus>{SINGAPORE_BANKS.map((bank) => <option key={bank.code} value={bank.name}>{bank.name}</option>)}</Select></label>
-              <label className="form-group"><span className="label">Account name</span><Input className="input" value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder="e.g. Everyday savings" /></label>
-              <label className="form-group setup-guide-span"><span className="label">Current balance ({baseCurrency})</span><NumericCalculatorInput min="0" step="0.01" value={startingBalance} onValueChange={setStartingBalance} placeholder="0.00" /></label>
+              <label className="form-group"><span className="label">Bank</span><Select disabled={pending} className="input" value={bankName} onChange={(event) => setBankName(event.target.value)} autoFocus>{SINGAPORE_BANKS.map((bank) => <option key={bank.code} value={bank.name}>{bank.name}</option>)}</Select></label>
+              <label className="form-group"><span className="label">Account name</span><Input disabled={pending} className="input" value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder="e.g. Everyday savings" /></label>
+              <label className="form-group setup-guide-span"><span className="label">Current balance ({baseCurrency})</span><NumericCalculatorInput disabled={pending} min="0" step="0.01" value={startingBalance} onValueChange={setStartingBalance} placeholder="0.00" /></label>
             </div>
             <p className="setup-guide-tip">Use today’s available balance. You can reconcile it later.</p>
           </form>
@@ -280,9 +309,9 @@ export function WorkspaceSetupGuide({
         {step === "subaccount" ? (
           <form id={formId} className="setup-guide-form" onSubmit={submitSubAccount}>
             <div className="setup-guide-form-grid">
-              <label className="form-group setup-guide-span"><span className="label">Bank account</span><Select className="input" value={effectiveSubAccountBankId} onChange={(event) => setSubAccountBankId(event.target.value)} autoFocus>{bankAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</Select></label>
-              <label className="form-group"><span className="label">Sub-account name</span><Input className="input" value={subAccountName} onChange={(event) => setSubAccountName(event.target.value)} placeholder="e.g. Everyday spending" required /></label>
-              <label className="form-group"><span className="label">Monthly limit (optional)</span><NumericCalculatorInput min="0" step="0.01" value={monthlyTarget} onValueChange={setMonthlyTarget} placeholder="0.00" /></label>
+              <label className="form-group setup-guide-span"><span className="label">Bank account</span><Select disabled={pending} className="input" value={effectiveSubAccountBankId} onChange={(event) => setSubAccountBankId(event.target.value)} autoFocus>{bankAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</Select></label>
+              <label className="form-group"><span className="label">Sub-account name</span><Input disabled={pending} className="input" value={subAccountName} onChange={(event) => setSubAccountName(event.target.value)} placeholder="e.g. Everyday spending" required /></label>
+              <label className="form-group"><span className="label">Monthly limit (optional)</span><NumericCalculatorInput disabled={pending} min="0" step="0.01" value={monthlyTarget} onValueChange={setMonthlyTarget} placeholder="0.00" /></label>
             </div>
             <p className="setup-guide-tip">A sub-account gives existing bank money a purpose; it does not create another bank account.</p>
           </form>
@@ -291,11 +320,11 @@ export function WorkspaceSetupGuide({
         {step === "card" ? (
           <form id={formId} className="setup-guide-form" onSubmit={submitCard}>
             <div className="setup-guide-form-grid">
-              <label className="form-group"><span className="label">Card name</span><Input className="input" value={cardName} onChange={(event) => setCardName(event.target.value)} placeholder="e.g. DBS Altitude" autoFocus required /></label>
-              <label className="form-group"><span className="label">Bank</span><Select className="input" value={cardBankName} onChange={(event) => setCardBankName(event.target.value)}>{SINGAPORE_BANKS.map((bank) => <option key={bank.code} value={bank.name}>{bank.name}</option>)}</Select></label>
-              <label className="form-group setup-guide-span"><span className="label">Last 4 digits</span><Input className="input" value={last4} onChange={(event) => setLast4(event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="off" maxLength={4} placeholder="1234" required /></label>
-              <label className="form-group"><span className="label">Statement day</span><NumericCalculatorInput min="1" max="31" value={statementDay} onValueChange={setStatementDay} allowDecimal={false} required /></label>
-              <label className="form-group"><span className="label">Payment due day</span><NumericCalculatorInput min="1" max="31" value={paymentDueDay} onValueChange={setPaymentDueDay} allowDecimal={false} required /></label>
+              <label className="form-group"><span className="label">Card name</span><Input disabled={pending} className="input" value={cardName} onChange={(event) => setCardName(event.target.value)} placeholder="e.g. DBS Altitude" autoFocus required /></label>
+              <label className="form-group"><span className="label">Bank</span><Select disabled={pending} className="input" value={cardBankName} onChange={(event) => setCardBankName(event.target.value)}>{SINGAPORE_BANKS.map((bank) => <option key={bank.code} value={bank.name}>{bank.name}</option>)}</Select></label>
+              <label className="form-group setup-guide-span"><span className="label">Last 4 digits</span><Input disabled={pending} className="input" value={last4} onChange={(event) => setLast4(event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="off" maxLength={4} placeholder="1234" required /></label>
+              <label className="form-group"><span className="label">Statement day</span><NumericCalculatorInput disabled={pending} min="1" max="31" value={statementDay} onValueChange={setStatementDay} allowDecimal={false} required /></label>
+              <label className="form-group"><span className="label">Payment due day</span><NumericCalculatorInput disabled={pending} min="1" max="31" value={paymentDueDay} onValueChange={setPaymentDueDay} allowDecimal={false} required /></label>
             </div>
             <p className="setup-guide-tip">Nest stores only the last 4 digits—never your full card number or CVV.</p>
           </form>
