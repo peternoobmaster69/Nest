@@ -62,17 +62,15 @@ export async function POST(request: Request) {
       where: { workspaceId, label: "Bank" },
     });
 
-    if (!bankType) {
-      bankType = await prisma.accountType.create({
-        data: {
-          workspaceId,
-          label: "Bank",
-          color: "#147349",
-          sortOrder: 1,
-          isActive: true,
-        },
-      });
-    }
+    bankType ??= await prisma.accountType.create({
+      data: {
+        workspaceId,
+        label: "Bank",
+        color: "#147349",
+        sortOrder: 1,
+        isActive: true,
+      },
+    });
 
     const accountName = parsed.data.name.trim() || `${parsed.data.bankName || "Bank"} Account`;
 

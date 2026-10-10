@@ -38,11 +38,11 @@ function keyForVersion(version: string) {
     throw new Error("INTEGRATION_ENCRYPTION_PREVIOUS_KEYS must be valid JSON.");
   }
   if (!previous || typeof previous !== "object" || Array.isArray(previous)) {
-    throw new Error("INTEGRATION_ENCRYPTION_PREVIOUS_KEYS must be a JSON object.");
+    throw new TypeError("INTEGRATION_ENCRYPTION_PREVIOUS_KEYS must be a JSON object.");
   }
   const encoded = (previous as Record<string, unknown>)[version];
   if (typeof encoded !== "string") {
-    throw new Error(`No integration encryption key is available for ${version}.`);
+    throw new TypeError(`No integration encryption key is available for ${version}.`);
   }
   return decodeKey(encoded, `Integration encryption key ${version}`);
 }

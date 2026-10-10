@@ -57,6 +57,25 @@ function normalizeDirection(direction: string): "DEBIT" | "CREDIT" {
   return direction === "DEBIT" ? "DEBIT" : "CREDIT";
 }
 
+function prepareTransactions(transactions: ImportedTransaction[], result: ImportResult) {
+  const prepared: Array<{
+    tx: ImportedTransaction;
+    direction: "DEBIT" | "CREDIT";
+    date: Date;
+    subject: string;
+  }> = [];
+  for (const tx of transactions) {
+    const date = normalizeDate(tx.Date);
+    if (Number.isNaN(date.getTime())) {
+      result.failed++;
+      result.errors.push(`${tx.Subject}: Invalid date: ${tx.Date}`);
+      continue;
+    }
+    prepared.push({ tx, direction: normalizeDirection(tx.Direction), date, subject: tx.Subject.trim() });
+  }
+  return prepared;
+}
+
 async function getExistingDuplicateKeys(
   workspaceId: string,
   accountId: string,
@@ -95,117 +114,95 @@ async function getExistingDuplicateKeys(
 
 export async function POST(request: Request) {
   return runSecureApiRoute(request, { mutation: true, errorMessage: "Failed to import transactions" }, async () => {
-   try {
-    const parsed = { data: await parseJsonBody(request, BulkImportSchema, 1024 * 1024) };
+    try {
+      const parsed = { data: await parseJsonBody(request, BulkImportSchema, 1024 * 1024) };
 
-    const {
-      workspaceId,
-      accountId,
-      budgetId,
-      kind,
-      transactions,
-      chunkIndex,
-      totalChunks,
-      chunkSize,
-      recalculate,
-    } = parsed.data;
-    const isFinalChunk = chunkIndex === undefined || totalChunks === undefined || chunkIndex === totalChunks - 1;
-    const shouldRecalculate = recalculate && isFinalChunk;
-
-    const { userId } = await requireWorkspaceAccess(workspaceId, "EDITOR");
-    // Validate account belongs to workspace
-    const account = await prisma.financialAccount.findFirst({
-      where: {
-        id: accountId,
-        workspaceId,
-        isActive: true,
-      },
-      select: { id: true },
-    });
-    if (!account) {
-      return NextResponse.json({ error: "Invalid account for workspace." }, { status: 400 });
-    }
-
-    // Validate budget belongs to account/workspace
-    const budget = await prisma.budgetEnvelope.findFirst({
-      where: { id: budgetId, workspaceId, isActive: true },
-      select: { id: true, accountId: true },
-    });
-    if (!budget) {
-      return NextResponse.json({ error: "Invalid budget for workspace." }, { status: 400 });
-    }
-    if (budget.accountId !== accountId) {
-      return NextResponse.json({ error: "Selected budget is linked to a different bank account." }, { status: 400 });
-    }
-
-    const result: ImportResult = {
-      imported: 0,
-      duplicates: 0,
-      duplicateRecords: [],
-      failed: 0,
-      errors: [],
-    };
-
-    // Process exactly the transactions in this request. The client owns chunking.
-    const toImport: Array<{
-      tx: ImportedTransaction;
-      direction: "DEBIT" | "CREDIT";
-      date: Date;
-      subject: string;
-    }> = [];
-
-    for (const tx of transactions) {
-      try {
-        const date = normalizeDate(tx.Date);
-        if (isNaN(date.getTime())) {
-          throw new Error(`Invalid date: ${tx.Date}`);
-        }
-
-        const direction = normalizeDirection(tx.Direction);
-        const subject = tx.Subject.trim();
-
-        toImport.push({ tx, direction, date, subject });
-      } catch (error) {
-        result.failed++;
-        result.errors.push(`${tx.Subject}: ${error instanceof Error ? error.message : "Unknown error"}`);
-      }
-    }
-
-    let rowsToCreate = toImport;
-    if (kind.trim().toUpperCase() !== "MIGRATION") {
-      const existingDuplicateKeys = await getExistingDuplicateKeys(
+      const {
         workspaceId,
         accountId,
         budgetId,
-        toImport.map((item) => ({
-          date: item.date,
-          subject: item.subject,
-          amountCents: item.tx.AmountCents,
-        })),
-      );
-      const seenImportKeys = new Set<string>();
-      rowsToCreate = toImport.filter((item) => {
-        const duplicateKey = getDuplicateKey(item.date, item.subject, item.tx.AmountCents);
-        const existsInDatabase = existingDuplicateKeys.has(duplicateKey);
-        const repeatedInPayload = seenImportKeys.has(duplicateKey);
-        if (existsInDatabase || repeatedInPayload) {
-          result.duplicates++;
-          result.duplicateRecords.push({
-            date: getUtcDayRange(item.date).start.toISOString().slice(0, 10),
+        kind,
+        transactions,
+        chunkIndex,
+        totalChunks,
+        chunkSize,
+        recalculate,
+      } = parsed.data;
+      const isFinalChunk = chunkIndex === undefined || totalChunks === undefined || chunkIndex === totalChunks - 1;
+      const shouldRecalculate = recalculate && isFinalChunk;
+
+      const { userId } = await requireWorkspaceAccess(workspaceId, "EDITOR");
+      // Validate account belongs to workspace
+      const account = await prisma.financialAccount.findFirst({
+        where: {
+          id: accountId,
+          workspaceId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!account) {
+        return NextResponse.json({ error: "Invalid account for workspace." }, { status: 400 });
+      }
+
+      // Validate budget belongs to account/workspace
+      const budget = await prisma.budgetEnvelope.findFirst({
+        where: { id: budgetId, workspaceId, isActive: true },
+        select: { id: true, accountId: true },
+      });
+      if (!budget) {
+        return NextResponse.json({ error: "Invalid budget for workspace." }, { status: 400 });
+      }
+      if (budget.accountId !== accountId) {
+        return NextResponse.json({ error: "Selected budget is linked to a different bank account." }, { status: 400 });
+      }
+
+      const result: ImportResult = {
+        imported: 0,
+        duplicates: 0,
+        duplicateRecords: [],
+        failed: 0,
+        errors: [],
+      };
+
+      // Process exactly the transactions in this request. The client owns chunking.
+      const toImport = prepareTransactions(transactions, result);
+
+      let rowsToCreate = toImport;
+      if (kind.trim().toUpperCase() !== "MIGRATION") {
+        const existingDuplicateKeys = await getExistingDuplicateKeys(
+          workspaceId,
+          accountId,
+          budgetId,
+          toImport.map((item) => ({
+            date: item.date,
             subject: item.subject,
             amountCents: item.tx.AmountCents,
-            direction: item.direction,
-            notes: item.tx.Notes?.trim() || null,
-            reason: existsInDatabase ? "EXISTING_TRANSACTION" : "DUPLICATE_IN_PAYLOAD",
-          });
-          return false;
-        }
-        seenImportKeys.add(duplicateKey);
-        return true;
-      });
-    }
+          })),
+        );
+        const seenImportKeys = new Set<string>();
+        rowsToCreate = toImport.filter((item) => {
+          const duplicateKey = getDuplicateKey(item.date, item.subject, item.tx.AmountCents);
+          const existsInDatabase = existingDuplicateKeys.has(duplicateKey);
+          const repeatedInPayload = seenImportKeys.has(duplicateKey);
+          if (existsInDatabase || repeatedInPayload) {
+            result.duplicates++;
+            result.duplicateRecords.push({
+              date: getUtcDayRange(item.date).start.toISOString().slice(0, 10),
+              subject: item.subject,
+              amountCents: item.tx.AmountCents,
+              direction: item.direction,
+              notes: item.tx.Notes?.trim() || null,
+              reason: existsInDatabase ? "EXISTING_TRANSACTION" : "DUPLICATE_IN_PAYLOAD",
+            });
+            return false;
+          }
+          seenImportKeys.add(duplicateKey);
+          return true;
+        });
+      }
 
-    const data: Prisma.TransactionCreateManyInput[] = rowsToCreate.map((item) => ({
+      const data: Prisma.TransactionCreateManyInput[] = rowsToCreate.map((item) => ({
         workspaceId,
         accountId,
         budgetId,
@@ -220,64 +217,58 @@ export async function POST(request: Request) {
         isFromFamily: false,
       }));
 
-    let balanceRecalculated = false;
-    try {
       const posting = await executePosting({
-          workspaceId,
-          operation: "TRANSACTION_BULK_IMPORT",
-          idempotencyKey: getIdempotencyKey(
-            request,
-            parsed.data.importRunId && chunkIndex !== undefined
-              ? `json-import:${parsed.data.importRunId}:${chunkIndex}`
-              : undefined,
-          ),
-          actorUserId: userId,
-          sourceType: "IMPORT",
-          sourceId: chunkIndex === undefined ? null : String(chunkIndex),
-          request: parsed.data,
-        }, async (db, postingGroupId) => {
-          let count = 0;
-          if (data.length > 0) {
-            const ledgerRows = data.map((row) => ({ ...row, postingGroupId })) as Prisma.TransactionCreateManyInput[];
-            const created = await db.transaction.createMany({ data: ledgerRows });
-            count = created.count;
-          }
-          if (shouldRecalculate) {
-            await recalculateBudgetAvailableCents(db, workspaceId, budgetId);
-          }
-          return { count, recalculated: shouldRecalculate };
-        });
+        workspaceId,
+        operation: "TRANSACTION_BULK_IMPORT",
+        idempotencyKey: getIdempotencyKey(
+          request,
+          parsed.data.importRunId && chunkIndex !== undefined
+            ? `json-import:${parsed.data.importRunId}:${chunkIndex}`
+            : undefined,
+        ),
+        actorUserId: userId,
+        sourceType: "IMPORT",
+        sourceId: chunkIndex === undefined ? null : String(chunkIndex),
+        request: parsed.data,
+      }, async (db, postingGroupId) => {
+        let count = 0;
+        if (data.length > 0) {
+          const ledgerRows = data.map((row) => ({ ...row, postingGroupId })) as Prisma.TransactionCreateManyInput[];
+          const created = await db.transaction.createMany({ data: ledgerRows });
+          count = created.count;
+        }
+        if (shouldRecalculate) {
+          await recalculateBudgetAvailableCents(db, workspaceId, budgetId);
+        }
+        return { count, recalculated: shouldRecalculate };
+      });
       result.imported = posting.result.count;
-      balanceRecalculated = posting.result.recalculated;
       if (posting.replayed) {
         result.duplicates = 0;
         result.duplicateRecords = [];
         result.failed = 0;
         result.errors = [];
       }
+
+      return NextResponse.json({
+        success: true,
+        ...result,
+        total: transactions.length,
+        chunked: chunkIndex !== undefined || chunkSize !== undefined,
+        chunkIndex: chunkIndex ?? 0,
+        totalChunks: totalChunks ?? 1,
+        nextChunkIndex: (chunkIndex ?? 0) + 1,
+        chunkSize: chunkSize ?? transactions.length,
+        processedCount: transactions.length,
+        remainingCount: 0,
+        isComplete: true,
+        recalculated: posting.result.recalculated,
+      }, { status: 201 });
     } catch (error) {
+      if (error instanceof PostingConflictError) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
       throw error;
     }
-
-    return NextResponse.json({
-      success: true,
-      ...result,
-      total: transactions.length,
-      chunked: chunkIndex !== undefined || chunkSize !== undefined,
-      chunkIndex: chunkIndex ?? 0,
-      totalChunks: totalChunks ?? 1,
-      nextChunkIndex: (chunkIndex ?? 0) + 1,
-      chunkSize: chunkSize ?? transactions.length,
-      processedCount: transactions.length,
-      remainingCount: 0,
-      isComplete: true,
-      recalculated: balanceRecalculated,
-    }, { status: 201 });
-  } catch (error) {
-    if (error instanceof PostingConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    throw error;
-   }
   });
 }
