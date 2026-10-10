@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { runSecureApiRoute } from "@/lib/api-security";
+import { requireRecentAuthentication } from "@/lib/workspace-auth";
 
 const EXPORT_PAGE_SIZE = 500;
 
@@ -27,11 +28,10 @@ async function collectExportRows<T extends { id: string }>(
 
 export async function GET(request: Request) {
   return runSecureApiRoute(request, {
-    auth: { recent: true },
     noStore: true,
     errorMessage: "Failed to export account data",
-  }, async ({ auth }) => {
-    const userId = auth!.userId;
+  }, async () => {
+    const userId = await requireRecentAuthentication();
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {

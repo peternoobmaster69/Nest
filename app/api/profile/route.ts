@@ -1,12 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { getDatabaseReadyServerSession } from "@/lib/server-session";
 import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
+import { requireRecentAuthentication, requireSessionUserId } from "@/lib/workspace-auth";
 import { normalizeWorkspaceRole } from "@/lib/workspace-roles";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const UpdateProfileSchema = z.object({
-  name: z.string().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
 });
 
 const DeleteProfileSchema = z.object({
@@ -14,34 +13,30 @@ const DeleteProfileSchema = z.object({
 }).strict();
 
 export async function PATCH(request: Request) {
-  const session = await getDatabaseReadyServerSession();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const parsed = UpdateProfileSchema.safeParse(await request.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: z.flattenError(parsed.error) }, { status: 400 });
-  }
-
-  const user = await prisma.user.update({
-    where: { id: session.user.id },
-    data: { name: parsed.data.name.trim() },
-    select: { id: true, name: true, email: true },
+  return runSecureApiRoute(request, {
+    mutation: true,
+    noStore: true,
+    errorMessage: "Failed to update profile",
+  }, async () => {
+    const userId = await requireSessionUserId();
+    const data = await parseJsonBody(request, UpdateProfileSchema, 1024);
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data,
+      select: { id: true, name: true, email: true },
+    });
+    return Response.json(user);
   });
-
-  return NextResponse.json(user);
 }
 
 export async function DELETE(request: Request) {
   return runSecureApiRoute(request, {
     mutation: true,
-    auth: { recent: true },
     noStore: true,
     errorMessage: "Failed to delete account",
-  }, async ({ auth }) => {
+  }, async () => {
+    const userId = await requireRecentAuthentication();
     await parseJsonBody(request, DeleteProfileSchema, 1024);
-    const userId = auth!.userId;
     const memberships = await prisma.workspaceMember.findMany({
       where: { userId },
       take: 500,
@@ -147,6 +142,7 @@ export async function DELETE(request: Request) {
       await db.postingGroup.updateMany({ where: { actorUserId: userId }, data: { actorUserId: null } });
       await db.backgroundJob.updateMany({ where: { userId }, data: { userId: null } });
       await db.integrationOAuthState.deleteMany({ where: { userId } });
+      await db.transactionAgentDraft.deleteMany({ where: { userId } });
       await db.user.delete({ where: { id: userId } });
     });
 

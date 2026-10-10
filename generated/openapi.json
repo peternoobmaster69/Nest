@@ -7082,8 +7082,8 @@
         },
         "x-source-handler": "app/api/profile/route.ts",
         "x-request-schemas": [
-          "DeleteProfileSchema",
-          "UpdateProfileSchema"
+          "UpdateProfileSchema",
+          "DeleteProfileSchema"
         ],
         "requestBody": {
           "required": true,
@@ -7138,8 +7138,8 @@
         },
         "x-source-handler": "app/api/profile/route.ts",
         "x-request-schemas": [
-          "DeleteProfileSchema",
-          "UpdateProfileSchema"
+          "UpdateProfileSchema",
+          "DeleteProfileSchema"
         ]
       }
     },

@@ -108,7 +108,8 @@ test("account privacy endpoints require recent authentication and avoid credenti
     source("app/api/profile/export/route.ts"),
     source("app/api/profile/route.ts"),
   ]);
-  assert.match(exportRoute, /auth:\s*\{\s*recent:\s*true\s*\}/);
+  assert.match(exportRoute, /await requireRecentAuthentication\(\)/);
+  assert.match(profileRoute.slice(profileRoute.indexOf("export async function DELETE")), /await requireRecentAuthentication\(\)/);
   assert.match(exportRoute, /Content-Disposition/);
   assert.doesNotMatch(exportRoute, /credentialId|publicKey|sessionToken|accessToken|refreshToken/);
   assert.match(profileRoute, /DELETE MY ACCOUNT/);
