@@ -662,8 +662,9 @@ test("settings uses the shared typography and layout contract", async () => {
 });
 
 test("settings groups related controls into focused tabs", async () => {
-  const [settings, privacyControls, notices, styles] = await Promise.all([
+  const [settings, gmail, privacyControls, notices, styles] = await Promise.all([
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings/gmail-settings-card.tsx"), "utf8"),
     readFile(path.join(root, "components/settings-privacy-controls.tsx"), "utf8"),
     readFile(path.join(root, "components/settings/operation-notices.ts"), "utf8"),
     readAppStyles(root),
@@ -673,13 +674,15 @@ test("settings groups related controls into focused tabs", async () => {
   assert.match(settings, /<SettingsAppAccess/);
   assert.doesNotMatch(settings, /Install Nest and manage notifications, secure sign-in, and linked accounts/);
   assert.match(settings, /section === "automation"/);
-  assert.match(settings, /Gmail Card Alerts/);
+  assert.match(gmail, /Gmail Card Alerts/);
+  assert.match(settings, /section === "automation" && context\.data\?\.role === "OWNER" \? <GmailSettingsCard/);
   assert.match(settings, /section === "automation"[\s\S]*?Credit Card Auto Accounting/);
   const automationLayout = settings.slice(
-    settings.indexOf('{section === "automation" ? ('),
+    settings.indexOf('{section === "automation"'),
     settings.indexOf('{section === "data" ? ('),
   );
-  assert.ok(automationLayout.indexOf("Gmail Card Alerts") < automationLayout.indexOf("Credit Card Auto Accounting"));
+  assert.ok(automationLayout.indexOf("<GmailSettingsCard") >= 0);
+  assert.ok(automationLayout.indexOf("<GmailSettingsCard") < automationLayout.indexOf("Credit Card Auto Accounting"));
   assert.ok(automationLayout.indexOf("Run Now") < automationLayout.indexOf("notice={autoRuleNotice}"));
   assert.ok(automationLayout.indexOf("notice={autoRuleNotice}") < automationLayout.indexOf("autoRules.isLoading"));
   assert.match(settings, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
@@ -765,19 +768,21 @@ test("workspace settings flow from selection through configuration and access", 
 });
 
 test("Gmail sync uses one responsive status surface", async () => {
-  const [settings, styles, summary, notice, notices] = await Promise.all([
-    readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+  const [settings, controller, styles, summary, notice, notices] = await Promise.all([
+    readFile(path.join(root, "components/settings/gmail-settings-card.tsx"), "utf8"),
+    readFile(path.join(root, "hooks/use-gmail-settings.ts"), "utf8"),
     readAppStyles(root),
     readFile(path.join(root, "lib/gmail-sync-summary.ts"), "utf8"),
     readFile(path.join(root, "components/settings/operation-notice.tsx"), "utf8"),
     readFile(path.join(root, "components/settings/operation-notices.ts"), "utf8"),
   ]);
 
-  assert.match(settings, /const isGmailSyncActive = Boolean/);
+  assert.match(controller, /const isGmailSyncActive = Boolean/);
   assert.match(settings, /\{isGmailSyncActive && gmailSyncProgress \?/);
   assert.match(settings, /\{!isGmailSyncActive \? \([\s\S]*?<SettingsOperationNotice[\s\S]*?notice=\{gmailNotice\}/);
   assert.doesNotMatch(settings, /gmailMessage \? <div className="settings-message settings-message-spaced"/);
   assert.match(settings, /className="gmail-sync-progress-header"/);
+  assert.match(settings, /<output className="gmail-sync-progress-wrap" aria-label="Gmail inbox sync progress"/);
   assert.match(notice, /className=\{`settings-operation-notice is-\$\{notice\.tone\}/);
   assert.match(styles, /\.gmail-sync-progress-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/s);
   assert.match(styles, /@media \(max-width: 768px\)[\s\S]*?\.settings-operation-notice-copy\s*\{[^}]*display:\s*grid/s);
@@ -793,7 +798,7 @@ test("recent authentication errors provide a return-safe re-authentication actio
     readFile(path.join(root, "components/reauthentication-message.tsx"), "utf8"),
     readFile(path.join(root, "components/settings-app-access.tsx"), "utf8"),
     readFile(path.join(root, "components/collaborators-page.tsx"), "utf8"),
-    readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
+    readFile(path.join(root, "components/settings/gmail-settings-card.tsx"), "utf8"),
     readFile(path.join(root, "app/invitations/[token]/response.tsx"), "utf8"),
     readAppStyles(root),
   ]);

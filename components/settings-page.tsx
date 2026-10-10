@@ -1,5 +1,5 @@
 "use client";
-import { getGmailNotice, getAutoAccountingNotice } from "@/components/settings/operation-notices";
+import { getAutoAccountingNotice } from "@/components/settings/operation-notices";
 
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
@@ -17,7 +17,6 @@ import dynamic from "next/dynamic";
 import {
   ArrowRight,
   Copy,
-  LoaderCircle,
   Play,
   Plus,
   RotateCcw,
@@ -25,7 +24,6 @@ import {
 import { EmptyState } from "@/components/ui-skeleton";
 import { SettingsAutoRulesSkeleton, SettingsBankAccountsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
-import { formatGmailSyncSummary, type GmailSyncSummary } from "@/lib/gmail-sync-summary";
 import type { SettingsTab } from "@/lib/settings-tabs";
 import {
   ActionableAuthenticationMessage,
@@ -36,6 +34,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { SettingsOperationNotice } from "@/components/settings/operation-notice";
+import { useGmailSettings } from "@/hooks/use-gmail-settings";
+import { GmailSettingsCard } from "@/components/settings/gmail-settings-card";
 import { bankAccountsQueryOptions, type BankAccount } from "@/lib/accounts";
 import type { AutoRule } from "@/components/settings/auto-rule-editor-dialog";
 import { SettingsPrivacyControls } from "@/components/settings-privacy-controls";
@@ -69,18 +69,6 @@ type Context = {
   workspaces?: Array<{ id: string; name: string }>;
 };
 
-type GmailStatus = {
-  connected: boolean;
-  requiresReconnect: boolean;
-  integration: {
-    id: string;
-    email: string;
-    scope: string | null;
-    lastSyncedAt: string | null;
-    createdAt: string;
-  } | null;
-};
-
 type Budget = {
   id: string;
   accountId: string;
@@ -88,42 +76,6 @@ type Budget = {
   isActive: boolean;
   receivableReservedCents?: number;
 };
-
-type GmailSyncProgress = {
-  phase: "idle" | "queued" | "reading" | "writing" | "complete" | "error" | "cancelled";
-  progress: number;
-  message: string;
-  total: number;
-  current: number;
-  updatedAt: number;
-  errorCode?: string | null;
-};
-
-type GmailSyncStartResponse = Partial<GmailSyncSummary> & {
-  ok?: boolean;
-  queued?: boolean;
-  jobId?: string;
-  message?: string;
-  errorCode?: string | null;
-};
-
-function hasGmailSyncSummary(data: GmailSyncStartResponse): data is GmailSyncSummary {
-  return (
-    typeof data.scannedMessages === "number" &&
-    typeof data.processed === "number" &&
-    typeof data.duplicates === "number" &&
-    typeof data.failed === "number"
-  );
-}
-
-function formatGmailScope(scope: string | null) {
-  if (!scope) return "Read-only access to card-alert email metadata and content";
-  const scopes = scope.split(/\s+/).filter(Boolean);
-  if (scopes.every((value) => value.endsWith("/gmail.readonly"))) {
-    return "Read-only Gmail messages (Nest cannot send, edit, or delete mail)";
-  }
-  return scopes.map((value) => value.split("/").at(-1)?.replaceAll(".", " ") || value).join(", ");
-}
 
 function getRuleFilters(rule: AutoRule) {
   return rule.filters.map((filter) => filter.trim()).filter(Boolean);
@@ -189,9 +141,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
   const { confirm } = useConfirmDialog();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
-  const [gmailMessage, setGmailMessage] = useState("");
-  const [gmailSyncProgress, setGmailSyncProgress] = useState<GmailSyncProgress | null>(null);
-  const [isGmailSyncPolling, setIsGmailSyncPolling] = useState(false);
   const [currencyMessage, setCurrencyMessage] = useState("");
   const [receivableAccountMessage, setReceivableAccountMessage] = useState("");
   const [publicNetWorthMessage, setPublicNetWorthMessage] = useState("");
@@ -202,20 +151,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
   const [ruleKeywordInputs, setRuleKeywordInputs] = useState<Record<string, string>>({});
   const [editingAutoRuleId, setEditingAutoRuleId] = useState<string | null>(null);
   const [editingAutoRuleDraft, setEditingAutoRuleDraft] = useState<AutoRule | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    const status = url.searchParams.get("gmail");
-    if (!status) return;
-    if (status === "connected") setGmailMessage("Gmail connected successfully.");
-    else if (status === "denied") setGmailMessage("Gmail permission was denied.");
-    else if (status === "forbidden") setGmailMessage("Gmail callback failed authorization.");
-    else if (status === "refresh_required") setGmailMessage("Google did not return a reusable Gmail authorization. Reconnect Gmail and approve access again.");
-    else setGmailMessage("Gmail connection failed.");
-    url.searchParams.delete("gmail");
-    window.history.replaceState({}, "", url.toString());
-  }, []);
 
   // Add modal state
   const [name, setName] = useState("");
@@ -245,6 +180,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
   });
 
   const workspaceId = context.data?.workspaceId ?? null;
+  const gmail = useGmailSettings({ workspaceId, workspaceName: context.data?.workspaceName, role: context.data?.role });
   const baseCurrency = normalizeCurrency(context.data?.baseCurrency);
   const { format: formatMoney } = useMoneyFormat(baseCurrency);
   const defaultReceivableAccountId = context.data?.defaultAccountId ?? null;
@@ -262,12 +198,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
       : "";
 
   const accounts = useQuery(bankAccountsQueryOptions(workspaceId));
-
-  const gmailStatus = useQuery({
-    queryKey: queryKeys.key(["gmail-status", workspaceId]),
-    queryFn: () => fetchJson<GmailStatus>("/api/gmail/status"),
-    enabled: context.data?.role === "OWNER",
-  });
 
   const budgets = useQuery({
     queryKey: queryKeys.key(["budgets", workspaceId]),
@@ -343,148 +273,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
         : activeBudgets.find((budget) => budget.id !== sourceBudgetId)?.id ?? "";
     return { sourceBudgetId, destinationBudgetId: preferredDestinationBudgetId };
   }, [budgets.data, defaultReceivableBudgetId]);
-
-  const connectGmail = useMutation({
-    mutationFn: () =>
-      fetchJson<{ url: string }>("/api/gmail/connect", {
-        method: "POST",
-      }),
-    onSuccess: (data) => {
-      window.location.href = data.url;
-    },
-    onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Failed to start Gmail connect."),
-  });
-
-  const syncGmail = useMutation({
-    mutationFn: () =>
-      fetchJson<GmailSyncStartResponse>("/api/gmail/sync", {
-        method: "POST",
-      }),
-    onMutate: () => {
-      setGmailMessage("Syncing Gmail inbox...");
-      setGmailSyncProgress({
-        phase: "reading",
-        progress: 0,
-        message: "Starting sync...",
-        total: 0,
-        current: 0,
-        updatedAt: Date.now(),
-      });
-    },
-    onSuccess: (data) => {
-      if (!hasGmailSyncSummary(data)) {
-        const message = data.message ?? (data.queued ? "Gmail sync queued." : "Gmail sync is running.");
-        setGmailMessage(message);
-        setGmailSyncProgress((current) => ({
-          phase: data.queued ? "queued" : "reading",
-          progress: current?.progress ?? 0,
-          message,
-          total: current?.total ?? 0,
-          current: current?.current ?? 0,
-          updatedAt: Date.now(),
-          errorCode: data.errorCode ?? null,
-        }));
-        setIsGmailSyncPolling(!data.queued);
-        return;
-      }
-
-      const message = formatGmailSyncSummary(data);
-      setGmailMessage(message);
-      setIsGmailSyncPolling(false);
-      setGmailSyncProgress((current) =>
-        current
-          ? {
-              ...current,
-              phase: "complete",
-              progress: 100,
-              message,
-              total: data.scannedMessages,
-              current: data.scannedMessages,
-            }
-          : current,
-      );
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["gmail-status"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-transactions"]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
-    },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Gmail sync failed.";
-      setGmailMessage(message);
-      setIsGmailSyncPolling(false);
-      setGmailSyncProgress((current) =>
-        current
-          ? {
-              ...current,
-              phase: "error",
-              progress: 100,
-              message,
-            }
-          : null,
-      );
-    },
-  });
-
-  useEffect(() => {
-    if (isGmailSyncPolling) return;
-    if (gmailSyncProgress?.phase !== "complete" && gmailSyncProgress?.phase !== "error") return;
-    const timeout = window.setTimeout(() => setGmailSyncProgress(null), 1200);
-    return () => window.clearTimeout(timeout);
-  }, [gmailSyncProgress?.phase, isGmailSyncPolling]);
-
-  useEffect(() => {
-    if (!isGmailSyncPolling) return;
-    let cancelled = false;
-    setGmailSyncProgress((current) =>
-      current ?? {
-        phase: "reading",
-        progress: 0,
-        message: "Starting sync...",
-        total: 0,
-        current: 0,
-        updatedAt: Date.now(),
-      },
-    );
-
-    const poll = async () => {
-      try {
-        const progress = await fetchJson<GmailSyncProgress>("/api/gmail/sync");
-        if (!cancelled) {
-          setGmailSyncProgress(progress);
-          if (progress.phase === "complete" || progress.phase === "error" || progress.phase === "cancelled" || progress.phase === "queued") {
-            setGmailMessage(progress.message);
-            setIsGmailSyncPolling(false);
-            if (progress.phase === "complete") {
-              queryClient.invalidateQueries({ queryKey: queryKeys.key(["gmail-status"]) });
-              queryClient.invalidateQueries({ queryKey: queryKeys.key(["credit-transactions"]) });
-              queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
-            }
-          }
-        }
-      } catch {}
-    };
-
-    void poll();
-    const interval = window.setInterval(() => {
-      void poll();
-    }, 1000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [isGmailSyncPolling, queryClient]);
-
-  const disconnectGmail = useMutation({
-    mutationFn: () =>
-      fetchJson<{ ok: true }>("/api/gmail/disconnect", {
-        method: "POST",
-      }),
-    onSuccess: () => {
-      setGmailMessage("Gmail disconnected.");
-      queryClient.invalidateQueries({ queryKey: queryKeys.key(["gmail-status"]) });
-    },
-    onError: (error) => setGmailMessage(error instanceof Error ? error.message : "Failed to disconnect Gmail."),
-  });
 
   const updateCurrency = useMutation({
     mutationFn: (nextCurrency: string) =>
@@ -591,23 +379,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
     if (!approved) return;
     setPublicNetWorthMessage("");
     updatePublicNetWorth.mutate("rotate");
-  };
-
-  const confirmDisconnectGmail = async () => {
-    const approved = await confirm({
-      title: "Disconnect Gmail?",
-      message: "Nest will revoke its stored Gmail authorization and stop importing card alerts.",
-      confirmLabel: "Disconnect Gmail",
-      destructive: true,
-      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "OWNER" },
-      details: [
-        { label: "Google account", value: gmailStatus.data?.integration?.email || "Connected account" },
-        { label: "Existing transactions", value: "Kept in Nest" },
-        { label: "Future inbox sync", value: "Stopped" },
-      ],
-      reversal: "You can reconnect Gmail later and grant read-only access again.",
-    });
-    if (approved) disconnectGmail.mutate();
   };
 
   const copyPublicNetWorthUrl = async () => {
@@ -946,16 +717,6 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
         (budget) => budget.isActive && budget.accountId === editingAutoRule.sourceAccountId,
       )
     : [];
-  const isGmailSyncActive = Boolean(
-    gmailSyncProgress && gmailSyncProgress.phase !== "complete" && gmailSyncProgress.phase !== "error",
-  );
-  const gmailRequiresReconnect = Boolean(
-    gmailStatus.data?.requiresReconnect
-      || gmailSyncProgress?.errorCode === "GMAIL_RECONNECT_REQUIRED"
-      || /reconnect gmail/i.test(gmailMessage),
-  );
-  const gmailRequiresReauthentication = isRecentAuthenticationRequired(gmailMessage);
-  const gmailNotice = getGmailNotice(gmailMessage, gmailSyncProgress?.phase);
   const autoRuleRequiresReauthentication = isRecentAuthenticationRequired(autoRuleMessage);
   const autoRuleNotice = getAutoAccountingNotice(autoRuleMessage);
   const publicShareSettings = context.data?.role === "OWNER" ? (
@@ -1026,83 +787,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
         </>
       ) : null}
 
-      {section === "automation" ? (
-        <>
-          {context.data?.role === "OWNER" ? <div className="card settings-card-block gmail-alerts-card">
-        <div className="gmail-alerts-header">
-          <div className="gmail-alerts-copy">
-            <div className="gmail-alerts-title-row">
-              <div className="settings-section-title">Gmail Card Alerts</div>
-              <a
-                href={routeWorkspaceId ? buildWorkspacePath(routeWorkspaceId, "/credit-alerts") : "/credit-alerts"}
-                target="_blank"
-                rel="noreferrer"
-                className="settings-inline-link"
-              >
-                Open Staging Table
-              </a>
-            </div>
-            <div className="settings-section-copy">
-              Authorize once for read-only Gmail access. Nest only scans card transaction alert emails, extracts transaction details,
-              and auto-adds them to Credit Card Transactions for tracking. Nest does not send, delete, or modify your emails.
-            </div>
-          </div>
-          {gmailStatus.data?.connected ? (
-            <div className="gmail-alerts-actions">
-              {gmailRequiresReconnect ? (
-                <Button className="btn btn-primary btn-xs" onClick={() => connectGmail.mutate()} disabled={connectGmail.isPending}>
-                  {connectGmail.isPending ? "Redirecting..." : "Reconnect Gmail"}
-                </Button>
-              ) : (
-                <Button className="btn btn-ghost btn-xs" onClick={() => syncGmail.mutate()} disabled={syncGmail.isPending || isGmailSyncPolling}>
-                  {syncGmail.isPending || isGmailSyncPolling ? "Syncing..." : "Sync Inbox"}
-                </Button>
-              )}
-              <Button className="btn btn-ghost btn-xs" onClick={() => void confirmDisconnectGmail()} disabled={disconnectGmail.isPending}>
-                Disconnect
-              </Button>
-            </div>
-          ) : (
-            <Button className="btn btn-primary btn-xs" onClick={() => connectGmail.mutate()} disabled={connectGmail.isPending}>
-              {connectGmail.isPending ? "Redirecting..." : "Connect Gmail"}
-            </Button>
-          )}
-        </div>
-        {gmailStatus.data?.connected && gmailStatus.data.integration ? (
-          <div className="settings-integration-details">
-            <div className="settings-message">
-              Connected: <strong>{gmailStatus.data.integration.email}</strong>
-              {gmailStatus.data.integration.lastSyncedAt
-                ? ` · Last sync: ${new Date(gmailStatus.data.integration.lastSyncedAt).toLocaleString()}`
-                : " · Never synced"}
-            </div>
-            <div className="settings-muted-message">Data scope: {formatGmailScope(gmailStatus.data.integration.scope)}</div>
-          </div>
-        ) : (
-          <div className="settings-muted-message">Not connected.</div>
-        )}
-        {isGmailSyncActive && gmailSyncProgress ? (
-          <div className="gmail-sync-progress-wrap" role="status" aria-label="Gmail inbox sync progress" aria-live="polite">
-            <div className="gmail-sync-progress-header">
-              <LoaderCircle className="gmail-sync-spinner" size={18} aria-hidden="true" />
-              <div className="gmail-sync-progress-copy">
-                <strong>Syncing Gmail inbox</strong>
-                <span>{gmailSyncProgress.message || "Reading card alerts…"}</span>
-              </div>
-              <span className="gmail-sync-progress-value">{Math.round(gmailSyncProgress.progress)}%</span>
-            </div>
-            <progress className="gmail-sync-progress" value={Math.min(gmailSyncProgress.progress, 100)} max={100} />
-          </div>
-        ) : null}
-        {!isGmailSyncActive ? (
-          <SettingsOperationNotice
-            notice={gmailNotice}
-            requiresReauthentication={gmailRequiresReauthentication}
-          />
-        ) : null}
-          </div> : null}
-        </>
-      ) : null}
+      {section === "automation" && context.data?.role === "OWNER" ? <GmailSettingsCard controller={gmail} routeWorkspaceId={routeWorkspaceId} /> : null}
 
       {section === "workspaces" ? (
         <>

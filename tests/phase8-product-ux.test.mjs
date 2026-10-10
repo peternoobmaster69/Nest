@@ -22,18 +22,21 @@ test("optional telemetry is granular and remains unmounted before consent", asyn
 });
 
 test("Privacy & Security groups sensitive access, storage, export, deletion, and integration controls", async () => {
-  const [tabs, settings, privacy, access] = await Promise.all([
+  const [tabs, settings, gmail, gmailController, privacy, access] = await Promise.all([
     source("components/settings-tabs.tsx"),
     source("components/settings-page.tsx"),
+    source("components/settings/gmail-settings-card.tsx"),
+    source("hooks/use-gmail-settings.ts"),
     source("components/settings-privacy-controls.tsx"),
     source("components/settings-app-access.tsx"),
   ]);
   assert.match(tabs, /Privacy & Security/);
-  for (const label of ["Public share links", "Gmail Card Alerts", "Data scope", "Last sync"]) assert.match(settings, new RegExp(label, "i"));
+  assert.match(settings, /Public share links/);
+  for (const label of ["Gmail Card Alerts", "Data scope", "Last sync"]) assert.match(gmail, new RegExp(label, "i"));
   for (const label of ["Optional telemetry", "Offline storage", "Export my data", "Delete account"]) assert.match(privacy, new RegExp(label, "i"));
   for (const label of ["Notification devices", "Passkeys", "Active sessions"]) assert.match(access, new RegExp(label, "i"));
   assert.match(settings, /Revoke public share links\?/);
-  assert.match(settings, /Disconnect Gmail\?/);
+  assert.match(gmailController, /Disconnect Gmail\?/);
 });
 
 test("money-changing confirmations expose the decision inputs and reversal behavior", async () => {
