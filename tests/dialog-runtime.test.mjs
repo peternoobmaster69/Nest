@@ -87,8 +87,10 @@ test("disabled dismissal holds focus and the latest close callback takes effect 
   fireEvent.keyDown(document, { key: "Tab" });
   assert.equal(document.activeElement, dialog);
   view.rerender(h(Dialog, { open: true, title: "Working", onClose: () => { closed += 10; } }));
-  fireEvent.keyDown(document, { key: "Escape" });
+  fireEvent.mouseDown(dialog.parentElement);
   assert.equal(closed, 10);
+  fireEvent.keyDown(document, { key: "Escape" });
+  assert.equal(closed, 20);
 });
 
 test("nested dialogs retain the viewport lock until the last surface closes", () => {

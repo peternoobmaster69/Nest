@@ -175,9 +175,14 @@ export function Dialog({
       }
     };
 
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.target === overlayRef.current && !closeDisabledRef.current) onCloseRef.current();
+    };
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onMouseDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onMouseDown);
       previousFocus?.focus();
     };
   }, [open, surface, clientReady]);
@@ -197,11 +202,7 @@ export function Dialog({
   return createPortal(
     <div
       ref={overlayRef}
-      role="presentation"
       className={`${surface === "standard" ? "modal-overlay" : ""} ${overlayClassName}`.trim()}
-      onMouseDown={(event) => {
-        if (!closeDisabled && event.target === event.currentTarget) onClose();
-      }}
     >
       {customSurface || <dialog open
         ref={containerRef}

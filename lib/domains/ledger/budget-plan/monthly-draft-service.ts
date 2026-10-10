@@ -94,13 +94,17 @@ export async function startMonthlyPlanFromSetup(
       }
     }
 
-    const draft = existing ?? await db.monthlyBudgetPlan.create({
-      data: { workspaceId, year: input.year, month: input.month },
-    });
+    let draft: { id: string } | null = existing;
+    if (!draft) {
+      draft = await db.monthlyBudgetPlan.create({
+        data: { workspaceId, year: input.year, month: input.month },
+      });
+    }
+    const draftId = draft.id;
     if (templateSources.length) {
       await db.monthlyBudgetPlanSource.createMany({
         data: templateSources.map((source, index) => ({
-          planId: draft.id,
+          planId: draftId,
           templateSourceId: source.id,
           title: source.title,
           ownerId: source.ownerId,
@@ -112,7 +116,7 @@ export async function startMonthlyPlanFromSetup(
     if (templateItems.length) {
       await db.monthlyBudgetPlanItem.createMany({
         data: templateItems.map((item, index) => ({
-          planId: draft.id,
+          planId: draftId,
           templateItemId: item.id,
           title: item.title,
           amountCents: item.amountCents,
@@ -122,7 +126,7 @@ export async function startMonthlyPlanFromSetup(
       });
     }
     return db.monthlyBudgetPlan.findUniqueOrThrow({
-      where: { id: draft.id },
+      where: { id: draftId },
       include: monthlyPlanInclude(),
     });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

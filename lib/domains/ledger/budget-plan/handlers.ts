@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { parseJsonBody, runSecureApiRoute } from "@/lib/api-security";
 import { getIdempotencyKey, PostingConflictError } from "@/lib/domains/ledger";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { enforceDistributedRateLimit, rateLimitResponse } from "@/lib/security-rate-limit";
@@ -52,7 +53,7 @@ function validationError(error: z.ZodError) {
   );
 }
 
-function handleError(error: unknown, fallback: string) {
+function budgetPlanErrorResponse(error: unknown) {
   const limited = rateLimitResponse(error);
   if (limited) return limited;
   if (error instanceof ApiAuthError || error instanceof BudgetPlanRequestError) {
@@ -72,12 +73,23 @@ function handleError(error: unknown, fallback: string) {
       return NextResponse.json({ error: "Budget plan record not found.", code: "NOT_FOUND" }, { status: 404 });
     }
   }
-  console.error(fallback, error);
-  return NextResponse.json({ error: fallback, code: "INTERNAL_ERROR" }, { status: 500 });
+  return null;
+}
+
+function budgetPlanRoute(request: Request, mutation: boolean, errorMessage: string, handler: () => Promise<Response>) {
+  return runSecureApiRoute(request, { mutation, errorMessage }, async () => {
+    try {
+      return await handler();
+    } catch (error) {
+      const response = budgetPlanErrorResponse(error);
+      if (response) return response;
+      throw error;
+    }
+  });
 }
 
 export async function GET(request: Request) {
-  try {
+  return budgetPlanRoute(request, false, "Failed to load budget plan", async () => {
     const { searchParams } = new URL(request.url);
     const { workspaceId } = await requireWorkspaceAccess(searchParams.get("workspaceId"));
     const yearParam = searchParams.get("year");
@@ -92,124 +104,86 @@ export async function GET(request: Request) {
       period = parsed.data;
     }
     return NextResponse.json(await getBudgetPlan(workspaceId, period));
-  } catch (error) {
-    return handleError(error, "Failed to load budget plan");
-  }
+  });
+}
+
+type ActionHandler = (request: Request, body: unknown) => Promise<Response>;
+type WorkspaceAuth = Awaited<ReturnType<typeof requireWorkspaceAccess>>;
+
+function workspaceAction<T extends { workspaceId: string }>(
+  schema: z.ZodType<T>,
+  execute: (workspaceId: string, input: T, auth: WorkspaceAuth, request: Request) => Promise<unknown>,
+  status = 200,
+): ActionHandler {
+  return async (request, body) => {
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) return validationError(parsed.error);
+    const auth = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
+    return NextResponse.json(await execute(auth.workspaceId, parsed.data, auth, request), { status });
+  };
+}
+
+const postActions = new Map<string, ActionHandler>([
+  ["createTemplateItem", workspaceAction(CreateTemplateItemSchema, createTemplateItem, 201)],
+  ["createTemplateSource", workspaceAction(CreateTemplateSourceSchema, createTemplateSource, 201)],
+  ["startBlank", workspaceAction(StartBlankSchema, startBlankMonthlyPlan, 201)],
+  ["startFromSetup", workspaceAction(StartFromSetupSchema, startMonthlyPlanFromSetup, 201)],
+  ["createMonthlyItem", workspaceAction(CreateMonthlyItemSchema, createMonthlyItem, 201)],
+  ["createMonthlySource", workspaceAction(CreateMonthlySourceSchema, createMonthlySource, 201)],
+  ["discardMonthlyDraft", workspaceAction(DiscardMonthlyDraftSchema, async (workspaceId, input) => {
+    await discardMonthlyDraft(workspaceId, input.planId);
+    return { success: true };
+  })],
+  ["confirmMonthly", workspaceAction(ConfirmMonthlySchema, (workspaceId, input, auth, request) => confirmMonthlyBudget({
+    workspaceId,
+    userId: auth.userId,
+    input,
+    idempotencyKey: getIdempotencyKey(request, `monthly-budget-confirm:${input.planId}`),
+  }))],
+]);
+
+const patchActions = new Map<string, ActionHandler>([
+  ["updateTemplateItem", workspaceAction(UpdateTemplateItemSchema, updateTemplateItem)],
+  ["updateTemplateSource", workspaceAction(UpdateTemplateSourceSchema, updateTemplateSource)],
+  ["updateMonthlyItem", workspaceAction(UpdateMonthlyItemSchema, updateMonthlyItem)],
+  ["updateMonthlySource", workspaceAction(UpdateMonthlySourceSchema, updateMonthlySource)],
+]);
+
+const ActionNameSchema = z.object({ action: z.string() });
+
+function mutateBudgetPlan(request: Request, actions: Map<string, ActionHandler>, scope: string, errorMessage: string) {
+  return budgetPlanRoute(request, true, errorMessage, async () => {
+    await enforceDistributedRateLimit(request, {
+      scope,
+      limit: 30,
+      windowMs: 10 * 60_000,
+      blockMs: 10 * 60_000,
+    });
+    const body = await parseJsonBody(request, z.unknown());
+    const action = ActionNameSchema.safeParse(body);
+    const handler = action.success ? actions.get(action.data.action) : undefined;
+    if (handler) return handler(request, body);
+    return NextResponse.json({ error: "Invalid action", code: "INVALID_REQUEST" }, { status: 400 });
+  });
 }
 
 export async function POST(request: Request) {
-  try {
-    await enforceDistributedRateLimit(request, {
-      scope: "budget-plan-post",
-      limit: 30,
-      windowMs: 10 * 60_000,
-      blockMs: 10 * 60_000,
-    });
-    const body = await request.json();
-    const action = typeof body?.action === "string" ? body.action : "";
-
-    if (action === "createTemplateItem") {
-      const parsed = CreateTemplateItemSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await createTemplateItem(workspaceId, parsed.data), { status: 201 });
-    }
-    if (action === "createTemplateSource") {
-      const parsed = CreateTemplateSourceSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await createTemplateSource(workspaceId, parsed.data), { status: 201 });
-    }
-    if (action === "startBlank") {
-      const parsed = StartBlankSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await startBlankMonthlyPlan(workspaceId, parsed.data), { status: 201 });
-    }
-    if (action === "startFromSetup") {
-      const parsed = StartFromSetupSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await startMonthlyPlanFromSetup(workspaceId, parsed.data), { status: 201 });
-    }
-    if (action === "createMonthlyItem") {
-      const parsed = CreateMonthlyItemSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await createMonthlyItem(workspaceId, parsed.data), { status: 201 });
-    }
-    if (action === "createMonthlySource") {
-      const parsed = CreateMonthlySourceSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await createMonthlySource(workspaceId, parsed.data), { status: 201 });
-    }
-    if (action === "discardMonthlyDraft") {
-      const parsed = DiscardMonthlyDraftSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      await discardMonthlyDraft(workspaceId, parsed.data.planId);
-      return NextResponse.json({ success: true });
-    }
-    if (action === "confirmMonthly") {
-      const parsed = ConfirmMonthlySchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { userId, workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await confirmMonthlyBudget({
-        workspaceId,
-        userId,
-        input: parsed.data,
-        idempotencyKey: getIdempotencyKey(request, `monthly-budget-confirm:${parsed.data.planId}`),
-      }));
-    }
-    return NextResponse.json({ error: "Invalid action", code: "INVALID_REQUEST" }, { status: 400 });
-  } catch (error) {
-    return handleError(error, "Failed to process budget plan request");
-  }
+  return mutateBudgetPlan(request, postActions, "budget-plan-post", "Failed to process budget plan request");
 }
 
 export async function PATCH(request: Request) {
-  try {
-    await enforceDistributedRateLimit(request, {
-      scope: "budget-plan-patch",
-      limit: 30,
-      windowMs: 10 * 60_000,
-      blockMs: 10 * 60_000,
-    });
-    const body = await request.json();
-    const action = typeof body?.action === "string" ? body.action : "";
-    if (action === "updateTemplateItem") {
-      const parsed = UpdateTemplateItemSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await updateTemplateItem(workspaceId, parsed.data));
-    }
-    if (action === "updateTemplateSource") {
-      const parsed = UpdateTemplateSourceSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await updateTemplateSource(workspaceId, parsed.data));
-    }
-    if (action === "updateMonthlyItem") {
-      const parsed = UpdateMonthlyItemSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await updateMonthlyItem(workspaceId, parsed.data));
-    }
-    if (action === "updateMonthlySource") {
-      const parsed = UpdateMonthlySourceSchema.safeParse(body);
-      if (!parsed.success) return validationError(parsed.error);
-      const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-      return NextResponse.json(await updateMonthlySource(workspaceId, parsed.data));
-    }
-    return NextResponse.json({ error: "Invalid action", code: "INVALID_REQUEST" }, { status: 400 });
-  } catch (error) {
-    return handleError(error, "Failed to update budget plan");
-  }
+  return mutateBudgetPlan(request, patchActions, "budget-plan-patch", "Failed to update budget plan");
 }
 
+const deleteActions = {
+  templateItem: archiveTemplateItem,
+  templateSource: archiveTemplateSource,
+  monthlyItem: deleteMonthlyItem,
+  monthlySource: deleteMonthlySource,
+};
+
 export async function DELETE(request: Request) {
-  try {
+  return budgetPlanRoute(request, true, "Failed to delete budget plan record", async () => {
     await enforceDistributedRateLimit(request, {
       scope: "budget-plan-delete",
       limit: 30,
@@ -224,12 +198,7 @@ export async function DELETE(request: Request) {
     });
     if (!parsed.success) return validationError(parsed.error);
     const { workspaceId } = await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
-    if (parsed.data.type === "templateItem") await archiveTemplateItem(workspaceId, parsed.data.id);
-    else if (parsed.data.type === "templateSource") await archiveTemplateSource(workspaceId, parsed.data.id);
-    else if (parsed.data.type === "monthlyItem") await deleteMonthlyItem(workspaceId, parsed.data.id);
-    else await deleteMonthlySource(workspaceId, parsed.data.id);
+    await deleteActions[parsed.data.type](workspaceId, parsed.data.id);
     return NextResponse.json({ success: true });
-  } catch (error) {
-    return handleError(error, "Failed to delete budget plan record");
-  }
+  });
 }

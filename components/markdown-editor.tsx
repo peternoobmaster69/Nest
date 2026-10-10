@@ -14,6 +14,25 @@ type NotesInputProps = {
   calculator?: boolean;
 };
 
+function withoutGroupingCommas(input: string) {
+  const parentheses: boolean[] = [];
+  let functionDepth = 0;
+  let result = "";
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === "(") {
+      const functionCall = /[a-z]\s*$/i.test(input.slice(0, index));
+      parentheses.push(functionCall);
+      if (functionCall) functionDepth += 1;
+    }
+    if (char === ")" && parentheses.pop()) functionDepth -= 1;
+    // Commas inside function calls separate arguments. Elsewhere they group digits.
+    if (char === "," && functionDepth === 0) continue;
+    result += char;
+  }
+  return result;
+}
+
 function normalizeCalculatorLine(line: string) {
   let normalized = line.trim();
   const colonIndex = normalized.indexOf(":");
@@ -23,10 +42,9 @@ function normalizeCalculatorLine(line: string) {
 
   normalized = normalized
     .replace(/[$€£¥]/g, "")
-    .replace(/,/g, "")
     .replace(/\s+/g, " ");
 
-  return normalized;
+  return withoutGroupingCommas(normalized);
 }
 
 function isDigit(char: string) {
@@ -69,10 +87,33 @@ function parseCalculatorExpression(input: string): number {
     skipWhitespace();
     const start = index;
     while (index < input.length && /[a-z]/i.test(input[index])) index += 1;
-    if (start === index) {
-      throw new Error("Expected function");
-    }
     return input.slice(start, index).toLowerCase();
+  };
+
+  const parseArguments = (): number[] => {
+    skipWhitespace();
+    if (input[index] === ")") return [];
+    const args = [parseExpression()];
+    while (true) {
+      skipWhitespace();
+      if (input[index] !== ",") break;
+      index += 1;
+      args.push(parseExpression());
+    }
+    return args;
+  };
+
+  const parseFunction = (): number => {
+    const identifier = parseIdentifier();
+    skipWhitespace();
+    if (input[index] !== "(") throw new Error("Expected function call");
+    index += 1;
+    const args = parseArguments();
+    skipWhitespace();
+    if (input[index] !== ")") throw new Error("Expected closing parenthesis");
+    index += 1;
+    if (identifier === "sum") return args.reduce((total, value) => total + value, 0);
+    throw new Error("Unsupported function");
   };
 
   const parsePrimary = (): number => {
@@ -91,34 +132,7 @@ function parseCalculatorExpression(input: string): number {
     }
 
     if (/[a-z]/i.test(char ?? "")) {
-      const identifier = parseIdentifier();
-      skipWhitespace();
-      if (input[index] !== "(") {
-        throw new Error("Expected function call");
-      }
-      index += 1;
-      const args: number[] = [];
-      skipWhitespace();
-      if (input[index] !== ")") {
-        while (true) {
-          args.push(parseExpression());
-          skipWhitespace();
-          if (input[index] === ",") {
-            index += 1;
-            continue;
-          }
-          break;
-        }
-      }
-      if (input[index] !== ")") {
-        throw new Error("Expected closing parenthesis");
-      }
-      index += 1;
-
-      if (identifier === "sum") {
-        return args.reduce((total, value) => total + value, 0);
-      }
-      throw new Error("Unsupported function");
+      return parseFunction();
     }
 
     return parseNumber();
@@ -204,8 +218,7 @@ export function MarkdownEditor({
   );
 
   useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+    const textarea = textareaRef.current!;
 
     textarea.style.height = "auto";
     const styles = window.getComputedStyle(textarea);
