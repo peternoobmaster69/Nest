@@ -197,6 +197,7 @@ export function Dialog({
   return createPortal(
     <div
       ref={overlayRef}
+      role="presentation"
       className={`${surface === "standard" ? "modal-overlay" : ""} ${overlayClassName}`.trim()}
       onMouseDown={(event) => {
         if (!closeDisabled && event.target === event.currentTarget) onClose();

@@ -50,6 +50,14 @@ function parseNumber(normalized: string, startIndex: number, allowDecimal: boole
   return { value, nextIndex: index };
 }
 
+function parseSignedNumber(normalized: string, index: number, allowDecimal: boolean) {
+  const char = normalized[index];
+  const sign = char === "-" || char === "+" ? char : "";
+  const parsed = parseNumber(normalized, sign ? index + 1 : index, allowDecimal);
+  if (!parsed) return null;
+  return { value: sign === "-" ? -parsed.value : parsed.value, nextIndex: parsed.nextIndex };
+}
+
 function parseExpression(raw: string, allowDecimal: boolean): ParsedExpression | null {
   const normalized = raw.replace(/\s+/g, "");
   if (!normalized) return null;
@@ -64,12 +72,10 @@ function parseExpression(raw: string, allowDecimal: boolean): ParsedExpression |
     const char = normalized[index];
 
     if (expectNumber) {
-      const sign = char === "-" || char === "+" ? char : "";
-      const numberStart = sign ? index + 1 : index;
-      const parsed = parseNumber(normalized, numberStart, allowDecimal);
+      const parsed = parseSignedNumber(normalized, index, allowDecimal);
       if (!parsed) return null;
 
-      numbers.push(sign === "-" ? -parsed.value : parsed.value);
+      numbers.push(parsed.value);
       index = parsed.nextIndex;
       expectNumber = false;
       continue;

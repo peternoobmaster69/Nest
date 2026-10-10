@@ -29,11 +29,7 @@ export function deriveStatementCycle(params: {
   const statementClosingDate =
     txnDay <= statementDay
       ? utcDate(txnYear, txnMonthIndex, statementDay)
-      : utcDate(
-          txnMonthIndex === 11 ? txnYear + 1 : txnYear,
-          (txnMonthIndex + 1) % 12,
-          statementDay,
-        );
+      : utcDate(txnYear, txnMonthIndex + 1, statementDay);
 
   const dueBaseDate =
     paymentDueDay > statementDay

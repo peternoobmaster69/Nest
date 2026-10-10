@@ -74,8 +74,17 @@ const LENSES = [
   },
 ] as const;
 
-const RECONCILE_WORDS = "A discrepancy is a useful signal—not a mystery.".split(" ");
-const CTA_WORDS = "One home for the money you have, owe, expect, and invest.".split(" ");
+function headingWords(text: string) {
+  const occurrences = new Map<string, number>();
+  return text.split(" ").map((word) => {
+    const occurrence = (occurrences.get(word) ?? 0) + 1;
+    occurrences.set(word, occurrence);
+    return { word, id: `${word}-${occurrence}` };
+  });
+}
+
+const RECONCILE_WORDS = headingWords("A discrepancy is a useful signal—not a mystery.");
+const CTA_WORDS = headingWords("One home for the money you have, owe, expect, and invest.");
 
 const RHYTHM = [
   { title: "Plan the month", body: "Balance income sources against budget items, then fund the linked sub-accounts." },
@@ -256,8 +265,8 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
                     <strong>{lens.figure}</strong>
                     <span className="lp-lens-caption">{lens.caption}</span>
                     <div className="lp-lens-bars">
-                      {lens.bars.map((bar, barIndex) => (
-                        <span key={barIndex} style={{ ["--w" as string]: `${bar}%` }} />
+                      {lens.bars.map((bar) => (
+                        <span key={bar} style={{ ["--w" as string]: `${bar}%` }} />
                       ))}
                     </div>
                   </div>
@@ -271,8 +280,8 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
           <div className="lp-reconcile-inner">
             <span className="lp-eyebrow">One balance, many jobs</span>
             <h2 id="reconcile-title" className="lp-words" style={{ ["--n" as string]: RECONCILE_WORDS.length }}>
-              {RECONCILE_WORDS.map((word, index) => (
-                <span key={index} style={{ ["--i" as string]: index }}>{word} </span>
+              {RECONCILE_WORDS.map(({ word, id }, index) => (
+                <span key={id} style={{ ["--i" as string]: index }}>{word} </span>
               ))}
             </h2>
             <p>
@@ -450,8 +459,8 @@ export default async function Home({ searchParams }: Readonly<HomeProps>) {
           <div className="lp-footer-cta-inner">
             <span className="lp-eyebrow">Make every amount explainable</span>
             <h2 id="cta-title" className="lp-words" style={{ ["--n" as string]: CTA_WORDS.length }}>
-              {CTA_WORDS.map((word, index) => (
-                <span key={index} style={{ ["--i" as string]: index }}>{word} </span>
+              {CTA_WORDS.map(({ word, id }, index) => (
+                <span key={id} style={{ ["--i" as string]: index }}>{word} </span>
               ))}
             </h2>
             <p>Start with one bank account and a few meaningful sub-accounts. Nest helps the rest of the picture come into focus.</p>

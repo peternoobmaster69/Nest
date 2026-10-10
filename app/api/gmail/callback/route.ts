@@ -18,6 +18,35 @@ function workspaceSettingsRedirect(origin: string, workspaceId: string, status: 
   return new URL(buildWorkspacePath(workspaceId, `/settings?gmail=${status}`), origin);
 }
 
+async function gmailProfileEmail(accessToken: string) {
+  try {
+    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return "";
+    const profile = (await response.json()) as { emailAddress?: string };
+    return profile.emailAddress ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function reusableRefreshToken(freshToken: string | undefined, existing: { id: string; workspaceId: string; refreshToken: string | null } | null) {
+  if (freshToken) return freshToken;
+  if (!existing?.refreshToken) return undefined;
+  try {
+    return openGmailCredential({
+      integrationId: existing.id,
+      workspaceId: existing.workspaceId,
+      field: "refreshToken",
+      value: existing.refreshToken,
+    });
+  } catch (error) {
+    if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_RECONNECT_REQUIRED") throw error;
+    return undefined;
+  }
+}
+
 export async function GET(request: Request) {
   return runSecureApiRoute(request, { errorMessage: "Failed to complete Gmail connect" }, async () => {
     const url = new URL(request.url);
@@ -57,19 +86,7 @@ export async function GET(request: Request) {
     });
     const expiryDate = new Date(Date.now() + tokens.expires_in * 1000);
 
-    let email = "";
-    try {
-      const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
-        headers: { Authorization: `Bearer ${tokens.access_token}` },
-      });
-      if (profileRes.ok) {
-        const profile = (await profileRes.json()) as { emailAddress?: string };
-        email = profile.emailAddress ?? "";
-      }
-    } catch {
-      // Keep empty email if profile fetch fails.
-    }
-
+    const email = await gmailProfileEmail(tokens.access_token);
     if (!email) {
       return NextResponse.redirect(workspaceSettingsRedirect(origin, auth.workspaceId, "profile_unavailable"));
     }
@@ -79,71 +96,42 @@ export async function GET(request: Request) {
       select: { id: true, workspaceId: true, refreshToken: true },
     });
 
+    const refreshToken = reusableRefreshToken(tokens.refresh_token, existing);
+    if (!refreshToken) {
+      return NextResponse.redirect(workspaceSettingsRedirect(origin, auth.workspaceId, "refresh_required"));
+    }
+    const integrationId = existing?.id ?? randomUUID();
+    const data = {
+      email,
+      accessToken: sealGmailCredential({
+        integrationId,
+        workspaceId: auth.workspaceId,
+        field: "accessToken",
+        value: tokens.access_token,
+      }),
+      refreshToken: sealGmailCredential({
+        integrationId,
+        workspaceId: auth.workspaceId,
+        field: "refreshToken",
+        value: refreshToken,
+      }),
+      tokenType: tokens.token_type,
+      scope: tokens.scope,
+      expiryDate,
+      isActive: true,
+    };
     if (existing) {
-      let refreshToken = tokens.refresh_token;
-      if (!refreshToken && existing.refreshToken) {
-        try {
-          refreshToken = openGmailCredential({
-            integrationId: existing.id,
-            workspaceId: existing.workspaceId,
-            field: "refreshToken",
-            value: existing.refreshToken,
-          });
-        } catch (error) {
-          if (!(error instanceof GmailProviderError) || error.code !== "GMAIL_RECONNECT_REQUIRED") throw error;
-        }
-      }
-      if (!refreshToken) {
-        return NextResponse.redirect(workspaceSettingsRedirect(origin, auth.workspaceId, "refresh_required"));
-      }
       await prisma.gmailIntegration.update({
-        where: { id: existing.id },
-        data: {
-          email,
-          accessToken: sealGmailCredential({
-            integrationId: existing.id,
-            workspaceId: auth.workspaceId,
-            field: "accessToken",
-            value: tokens.access_token,
-          }),
-          refreshToken: sealGmailCredential({
-            integrationId: existing.id,
-            workspaceId: auth.workspaceId,
-            field: "refreshToken",
-            value: refreshToken,
-          }),
-          tokenType: tokens.token_type,
-          scope: tokens.scope,
-          expiryDate,
-          isActive: true,
-        },
+        where: { id: integrationId },
+        data,
       });
     } else {
-      const integrationId = randomUUID();
       await prisma.gmailIntegration.create({
         data: {
+          ...data,
           id: integrationId,
           workspaceId: auth.workspaceId,
           userId: auth.userId,
-          email,
-          accessToken: sealGmailCredential({
-            integrationId,
-            workspaceId: auth.workspaceId,
-            field: "accessToken",
-            value: tokens.access_token,
-          }),
-          refreshToken: tokens.refresh_token
-            ? sealGmailCredential({
-                integrationId,
-                workspaceId: auth.workspaceId,
-                field: "refreshToken",
-                value: tokens.refresh_token,
-              })
-            : null,
-          tokenType: tokens.token_type,
-          scope: tokens.scope,
-          expiryDate,
-          isActive: true,
         },
       });
     }
