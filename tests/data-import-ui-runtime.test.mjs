@@ -77,6 +77,7 @@ test("an import with zero failed rows is displayed as a successful operation", a
   await fill(view);
   ui.fireEvent.click(view.getByRole("button", { name: "Import Transactions" }));
   const notice = await view.findByText("Import complete! Imported 1 transactions. 0 duplicates skipped. 0 failed. Balance recalculated.");
+  assert.equal(notice.tagName, "OUTPUT");
   assert.ok(notice.classList.contains("is-success"));
   assert.ok(!notice.classList.contains("is-danger"));
   assert.equal(view.getByLabelText("JSON Data").value, "");

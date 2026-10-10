@@ -9261,6 +9261,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .settings-import-preview,
 .settings-import-notice {
+  display: block;
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: var(--r-md);

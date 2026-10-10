@@ -264,9 +264,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
 
       {/* Result Message */}
       {!isImporting && notice && (
-        <div className={`settings-import-notice is-${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
+        <output className={`settings-import-notice is-${notice.tone}`} role={notice.tone === "danger" ? "alert" : undefined}>
           {notice.message}
-        </div>
+        </output>
       )}
 
       {/* Error details from import */}
