@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/controls";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/form-field";
 import { useToast } from "@/components/toast-provider";
+import type { AgentSettingsDraft } from "@/lib/ai/agent-draft";
 
-export type AgentSettingsDraft = { settings: AgentSettings; revision: number };
+export type { AgentSettingsDraft } from "@/lib/ai/agent-draft";
 
 export function AgentSettingsEditor({ detail, model, draft, onDraftChange, onSaved, onChanged }: Readonly<{
   detail: AgentDetail; model: string | null; draft?: AgentSettingsDraft;

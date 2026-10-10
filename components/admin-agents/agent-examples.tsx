@@ -26,7 +26,7 @@ export function AgentExamples({ detail, onChanged }: Readonly<{ detail: AgentDet
   const change = <K extends keyof AgentExampleInput>(key: K, value: AgentExampleInput[K]) => setForm((current) => ({ ...current, [key]: value }));
   const save = useMutation({
     mutationFn: () => {
-      const existing = editing && editing !== "new" ? editing : null;
+      const existing = editing === "new" ? null : editing;
       return apiFetch(existing ? `${base}/${existing.id}` : base, { method: existing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, ...(existing ? { revision: existing.revision } : {}) }) });
     },
     onSuccess: async () => { setEditing(null); await onChanged(); toast.success("Example saved."); },
