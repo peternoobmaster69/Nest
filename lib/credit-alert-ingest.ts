@@ -15,120 +15,60 @@ export function normalizeCreditAlertCurrency(value: string | undefined) {
   return normalized && /^[A-Z]{3}$/.test(normalized) ? normalized : null;
 }
 
-export async function ingestCreditAlert(params: {
+type CreditAlertParams = {
   workspaceId: string;
   rawBody: string;
   rawSubject?: string;
   source?: string;
   sourceMessageId?: string;
-}) {
-  const { workspaceId, rawBody, rawSubject, source = "EMAIL", sourceMessageId } = params;
-  const parsedAlert = parseCreditAlert(rawBody, rawSubject);
-  const contentHash = hashKey(rawBody);
-  const sourceMessageKey = hashKey(`${workspaceId}\0${source}\0${sourceMessageId ?? contentHash}`);
-  const transactionKey = parsedAlert.transactionRef
-    ? hashKey(`${workspaceId}\0${parsedAlert.transactionRef}`)
-    : null;
-  const normalizedBank = getSingaporeBankByName(parsedAlert.bankName)?.name ?? parsedAlert.bankName;
-  const normalizedCurrency = normalizeCreditAlertCurrency(parsedAlert.currency);
-  const signedAmountCents =
-    parsedAlert.amountCents === undefined
-      ? undefined
-      : parsedAlert.alertType === "REVERSAL"
-        ? -Math.abs(parsedAlert.amountCents)
-        : parsedAlert.amountCents;
+};
+type ParsedCreditAlert = ReturnType<typeof parseCreditAlert>;
+const stagingSelect = { id: true, parseStatus: true, creditTransactionId: true } as const;
+type StagingRecord = Prisma.CardAlertStagingGetPayload<{ select: typeof stagingSelect }>;
+const cardSelect = { id: true, statementDay: true, paymentDueDay: true } as const;
+type AlertCard = Prisma.CreditCardAccountGetPayload<{ select: typeof cardSelect }>;
 
-  let staging = await prisma.cardAlertStaging.findFirst({
-      where: {
-        workspaceId,
-        OR: [
-          ...(sourceMessageKey ? [{ sourceMessageKey }] : []),
-          ...(parsedAlert.transactionRef ? [{ transactionRef: parsedAlert.transactionRef }] : []),
-        ],
-      },
-      select: { id: true, parseStatus: true, creditTransactionId: true },
-    });
-  if (staging && ["PROCESSED", "DUPLICATE", "FAILED"].includes(staging.parseStatus)) {
-      return {
-        id: staging.id,
-        parseStatus: staging.parseStatus,
-        creditTransactionId: staging.creditTransactionId,
-        duplicate: true,
-      };
+function isTerminalStaging(staging: StagingRecord) {
+  return ["PROCESSED", "DUPLICATE", "FAILED"].includes(staging.parseStatus);
+}
+
+async function findOrCreateStaging(where: Prisma.CardAlertStagingWhereInput, data: () => Prisma.CardAlertStagingUncheckedCreateInput) {
+  const current = await prisma.cardAlertStaging.findFirst({ where, select: stagingSelect });
+  if (current) return { staging: current, duplicate: isTerminalStaging(current) };
+  try {
+    return { staging: await prisma.cardAlertStaging.create({ data: data() }), duplicate: false };
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    const concurrent = await prisma.cardAlertStaging.findFirst({ where, select: stagingSelect });
+    if (!concurrent) throw error;
+    return { staging: concurrent, duplicate: isTerminalStaging(concurrent) };
   }
+}
 
-  const missingFields = [
-    !parsedAlert.cardLast4 ? "card last four digits" : null,
-    !parsedAlert.merchant ? "merchant" : null,
-    parsedAlert.amountCents === undefined ? "amount" : null,
-    !parsedAlert.transactionDate ? "transaction date" : null,
+function missingAlertFields(alert: ParsedCreditAlert) {
+  return [
+    !alert.cardLast4 ? "card last four digits" : null,
+    !alert.merchant ? "merchant" : null,
+    alert.amountCents === undefined ? "amount" : null,
+    !alert.transactionDate ? "transaction date" : null,
   ].filter((field): field is string => Boolean(field));
-  const requiredMissing = missingFields.length > 0;
-  const parseFailureReason = requiredMissing
-    ? `Unable to parse required fields: ${missingFields.join(", ")}.`
-    : null;
-  const storedBody = requiredMissing
-    ? sealFailedCreditAlertBody({ workspaceId, sourceMessageKey, rawBody, contentHash })
-    : `[redacted after parsing; sha256:${contentHash}]`;
+}
 
-  if (!staging) {
-    try {
-      staging = await prisma.cardAlertStaging.create({
-      data: {
-        workspaceId,
-        source,
-        rawSubject: rawSubject ? "[redacted after parsing]" : null,
-        rawBody: storedBody,
-        sourceMessageKey,
-        transactionKey,
-        contentHash,
-        bankName: normalizedBank,
-        transactionRef: parsedAlert.transactionRef,
-        currency: normalizedCurrency,
-        amountCents: signedAmountCents,
-        transactionDate: parsedAlert.transactionDate,
-        merchant: parsedAlert.merchant,
-        cardLast4: parsedAlert.cardLast4,
-        parseStatus: requiredMissing ? "FAILED" : "PARSED",
-        failureReason: parseFailureReason,
-      },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        const duplicateStaging = await prisma.cardAlertStaging.findFirst({
-              where: {
-                workspaceId,
-                OR: [
-                  ...(sourceMessageKey ? [{ sourceMessageKey }] : []),
-                  ...(parsedAlert.transactionRef ? [{ transactionRef: parsedAlert.transactionRef }] : []),
-                ],
-              },
-              select: { id: true, parseStatus: true, creditTransactionId: true },
-            });
+function signedAlertAmount(alert: ParsedCreditAlert) {
+  if (alert.amountCents === undefined) return undefined;
+  return alert.alertType === "REVERSAL" ? -Math.abs(alert.amountCents) : alert.amountCents;
+}
 
-        if (duplicateStaging && ["PROCESSED", "DUPLICATE", "FAILED"].includes(duplicateStaging.parseStatus)) {
-          return { ...duplicateStaging, duplicate: true };
-        }
-        staging = duplicateStaging;
-      }
-      if (!staging) throw error;
-    }
-  }
-
-  if (requiredMissing) {
-    return staging;
-  }
-
-  const processingStartedAt = new Date();
+async function claimAlertStaging(id: string) {
   const claim = await prisma.cardAlertStaging.updateMany({
     where: {
-      id: staging.id,
+      id,
       OR: [
         { parseStatus: { in: ["PENDING", "PARSED"] } },
         { parseStatus: "PROCESSING", processingStartedAt: { lte: new Date(Date.now() - 2 * 60_000) } },
       ],
     },
-    data: { parseStatus: "PROCESSING", processingStartedAt },
+    data: { parseStatus: "PROCESSING", processingStartedAt: new Date() },
   });
   if (claim.count !== 1) {
     const error = new Error("Credit alert staging is already being processed.") as Error & {
@@ -139,95 +79,95 @@ export async function ingestCreditAlert(params: {
     error.safeMessage = "Credit alert staging is busy. The job will retry.";
     throw error;
   }
+}
 
-  const card =
-    (normalizedBank
-      ? await prisma.creditCardAccount.findFirst({
-          where: {
-            workspaceId,
-            isActive: true,
-            last4Digit: parsedAlert.cardLast4!,
-            bankName: normalizedBank,
-          },
-          orderBy: { updatedAt: "desc" },
-          select: { id: true, statementDay: true, paymentDueDay: true },
-        })
-      : null) ??
-    await prisma.creditCardAccount.findFirst({
-      where: {
-        workspaceId,
-        isActive: true,
-        last4Digit: parsedAlert.cardLast4!,
-      },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true, statementDay: true, paymentDueDay: true },
-    });
-
-  if (!card) {
-    return prisma.cardAlertStaging.update({
-      where: { id: staging.id },
-      data: {
-        parseStatus: "FAILED",
-        failureReason: `No active card found for last4 ${parsedAlert.cardLast4}.`,
-        processingStartedAt: null,
-        processedAt: new Date(),
-      },
-    });
-  }
-
-  const existingTx = await prisma.creditCardTransaction.findFirst({
-    where: {
-      workspaceId,
-      creditCardId: card.id,
-      transactionDate: parsedAlert.transactionDate!,
-      amountCents: signedAmountCents!,
-      subject: parsedAlert.merchant!,
-    },
-    select: { id: true },
-  });
-
-  if (existingTx) {
-    return prisma.cardAlertStaging.update({
-      where: { id: staging.id },
-      data: {
-        parseStatus: "DUPLICATE",
-        creditCardId: card.id,
-        creditTransactionId: existingTx.id,
-        processingStartedAt: null,
-        processedAt: new Date(),
-      },
-    });
-  }
-
-  const txDate = parsedAlert.transactionDate!;
-  const cycle = deriveStatementCycle({
-    transactionDate: txDate,
-    statementDay: card.statementDay,
-    paymentDueDay: card.paymentDueDay,
-  });
-  const createdTx = await prisma.creditCardTransaction.create({
-    data: {
-      workspaceId,
-      creditCardId: card.id,
-      transactionDate: txDate,
-      paymentDueDate: cycle.paymentDueDate,
-      statementMonth: cycle.statementMonth,
-      statementYear: cycle.statementYear,
-      amountCents: signedAmountCents!,
-      subject: parsedAlert.merchant!,
-      isInstallment: false,
-    },
-    select: { id: true },
-  });
-
+function finishAlertStaging(id: string, data: Prisma.CardAlertStagingUncheckedUpdateInput) {
   return prisma.cardAlertStaging.update({
-    where: { id: staging.id },
-    data: {
-      parseStatus: "PROCESSED",
-      creditCardId: card.id,
-      creditTransactionId: createdTx.id,
-      processingStartedAt: null,
-      processedAt: new Date(),
-    },
+    where: { id },
+    data: { ...data, processingStartedAt: null, processedAt: new Date() },
   });
+}
+
+async function findAlertCard(workspaceId: string, last4Digit: string, bankName: string | undefined) {
+  const where = { workspaceId, isActive: true, last4Digit };
+  if (bankName) {
+    const card = await prisma.creditCardAccount.findFirst({
+      where: { ...where, bankName }, orderBy: { updatedAt: "desc" }, select: cardSelect,
+    });
+    if (card) return card;
+  }
+  return prisma.creditCardAccount.findFirst({
+    where, orderBy: { updatedAt: "desc" }, select: cardSelect,
+  });
+}
+
+async function recordAlertTransaction(workspaceId: string, stagingId: string, card: AlertCard, alert: ParsedCreditAlert, amountCents: number) {
+  const transactionDate = alert.transactionDate!;
+  const subject = alert.merchant!;
+  const existing = await prisma.creditCardTransaction.findFirst({
+    where: { workspaceId, creditCardId: card.id, transactionDate, amountCents, subject },
+    select: { id: true },
+  });
+  if (existing) {
+    return finishAlertStaging(stagingId, { parseStatus: "DUPLICATE", creditCardId: card.id, creditTransactionId: existing.id });
+  }
+  const cycle = deriveStatementCycle({ transactionDate, statementDay: card.statementDay, paymentDueDay: card.paymentDueDay });
+  const created = await prisma.creditCardTransaction.create({
+    data: {
+      workspaceId, creditCardId: card.id, transactionDate,
+      paymentDueDate: cycle.paymentDueDate, statementMonth: cycle.statementMonth, statementYear: cycle.statementYear,
+      amountCents, subject, isInstallment: false,
+    },
+    select: { id: true },
+  });
+  return finishAlertStaging(stagingId, { parseStatus: "PROCESSED", creditCardId: card.id, creditTransactionId: created.id });
+}
+
+export async function ingestCreditAlert(params: CreditAlertParams) {
+  const { workspaceId, rawBody, rawSubject, source = "EMAIL", sourceMessageId } = params;
+  const alert = parseCreditAlert(rawBody, rawSubject);
+  const contentHash = hashKey(rawBody);
+  const sourceMessageKey = hashKey(`${workspaceId}\0${source}\0${sourceMessageId ?? contentHash}`);
+  const transactionKey = alert.transactionRef ? hashKey(`${workspaceId}\0${alert.transactionRef}`) : null;
+  const bankName = getSingaporeBankByName(alert.bankName)?.name ?? alert.bankName;
+  const amountCents = signedAlertAmount(alert);
+  const missingFields = missingAlertFields(alert);
+  const requiredMissing = missingFields.length > 0;
+  const stagingData = (): Prisma.CardAlertStagingUncheckedCreateInput => ({
+    workspaceId,
+    source,
+    rawSubject: rawSubject ? "[redacted after parsing]" : null,
+    rawBody: requiredMissing
+      ? sealFailedCreditAlertBody({ workspaceId, sourceMessageKey, rawBody, contentHash })
+      : `[redacted after parsing; sha256:${contentHash}]`,
+    sourceMessageKey, transactionKey, contentHash, bankName,
+    transactionRef: alert.transactionRef,
+    currency: normalizeCreditAlertCurrency(alert.currency),
+    amountCents,
+    transactionDate: alert.transactionDate,
+    merchant: alert.merchant,
+    cardLast4: alert.cardLast4,
+    parseStatus: requiredMissing ? "FAILED" : "PARSED",
+    failureReason: requiredMissing ? `Unable to parse required fields: ${missingFields.join(", ")}.` : null,
+  });
+  const { staging, duplicate } = await findOrCreateStaging({
+    workspaceId,
+    OR: [{ sourceMessageKey }, ...(alert.transactionRef ? [{ transactionRef: alert.transactionRef }] : [])],
+  }, stagingData);
+  if (duplicate) return { ...staging, duplicate: true };
+  if (requiredMissing) {
+    if (staging.parseStatus === "FAILED") return staging;
+    await claimAlertStaging(staging.id);
+    const data = stagingData();
+    return finishAlertStaging(staging.id, {
+      parseStatus: "FAILED", rawBody: data.rawBody, rawSubject: data.rawSubject, failureReason: data.failureReason,
+    });
+  }
+
+  await claimAlertStaging(staging.id);
+  const card = await findAlertCard(workspaceId, alert.cardLast4!, bankName);
+  if (!card) {
+    return finishAlertStaging(staging.id, { parseStatus: "FAILED", failureReason: `No active card found for last4 ${alert.cardLast4}.` });
+  }
+  return recordAlertTransaction(workspaceId, staging.id, card, alert, amountCents!);
 }

@@ -11,6 +11,10 @@ import {
   requireDraftPlan,
 } from "@/lib/domains/ledger/budget-plan/support";
 
+function ensureMonthlyDraft(db: Prisma.TransactionClient, existing: { id: string } | null, data: Prisma.MonthlyBudgetPlanUncheckedCreateInput) {
+  return existing ?? db.monthlyBudgetPlan.create({ data });
+}
+
 export async function startBlankMonthlyPlan(
   workspaceId: string,
   input: z.infer<typeof StartBlankSchema>,
@@ -94,12 +98,9 @@ export async function startMonthlyPlanFromSetup(
       }
     }
 
-    let draft: { id: string } | null = existing;
-    if (!draft) {
-      draft = await db.monthlyBudgetPlan.create({
-        data: { workspaceId, year: input.year, month: input.month },
-      });
-    }
+    const draft = await ensureMonthlyDraft(db, existing, {
+      workspaceId, year: input.year, month: input.month,
+    });
     const draftId = draft.id;
     if (templateSources.length) {
       await db.monthlyBudgetPlanSource.createMany({

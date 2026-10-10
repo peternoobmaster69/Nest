@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import { Prisma } from "@prisma/client";
 import { AGENT_IDS, defaultAgentConfiguration, enabledAgentTools } from "../lib/ai/agent-catalog.ts";
 import { AgentSettingsSchema, AgentConfigurationUpdateSchema } from "../lib/ai/agent-contracts.ts";
@@ -69,15 +70,16 @@ db.$transaction = (callback) => {
   return result;
 };
 globalThis.prisma = db;
-const { getAiWorkloadClient } = await import("../lib/ai/config.ts");
+const { AiConfigurationError, getAiWorkloadClient } = await import("../lib/ai/config.ts");
 const { getAgentConfiguration } = await import("../lib/ai/agent-runtime.ts");
 const { getAgentRegistry, getAgentDetail, saveAgentConfiguration, saveAgentExample, deleteAgentExample, stableAgentJson, agentHash, serializeAgentEvaluation } = await import("../lib/ai/agent-store.ts");
 const { upgradeLegacyAgentInstructions } = await import("../lib/ai/agent-prompt-upgrade.ts");
-const { agentDatasetLine, buildAgentDataset, evaluateAgent, runAgentExample } = await import("../lib/ai/agent-training.ts");
+const { agentDatasetLine, agentExamplePrompt, buildAgentDataset, evaluateAgent, loadAgentTrainingSnapshot, runAgentExample } = await import("../lib/ai/agent-training.ts");
 const { startAgentFineTuning, updateAgentFineTuning } = await import("../lib/ai/agent-fine-tuning.ts");
 const { answerAskNest } = await import("../lib/ai/ask-nest.ts");
 const { interpretTransactionMessage } = await import("../lib/ai/transaction-agent-parser.ts");
 const client = getAiWorkloadClient().client;
+const { APIError } = createRequire(import.meta.url)("openai");
 const answer = { answer: "Review recent records before drawing a conclusion.", highlights: [], evidence_ids: [], follow_up_questions: [], memory_candidates: [] };
 const intent = { ...EMPTY_TRANSACTION_INTENT, operation: "CREATE", amount: "10", direction: "DEBIT", subject: "Bus fare", accountQuery: "Transit" };
 const settings = (id, overrides = {}) => ({ ...AgentSettingsSchema.strip().parse(defaultAgentConfiguration(id)), revision: 0, ...overrides });
@@ -484,4 +486,298 @@ test("new provider states keep the single-active-training-job limit", async () =
   await assert.rejects(startAgentFineTuning("transaction-assistant", { ...input, requestId: randomUUID() }, "admin"), /still active/);
   assert.equal(jobCalls.length, 1);
   assert.equal(uploads.length, 1);
+});
+
+test("fine-tuning uploads only complete held-out responses and preserves provider idempotency and retry limits", async t => {
+  const input = await seedTraining();
+  await saveAgentExample("transaction-assistant", exampleInput({ input: "Evaluate a complete bus transaction", purpose: "EVALUATION", expectedOutput: JSON.stringify(intent) }), "admin");
+  await saveAgentExample("transaction-assistant", exampleInput({ input: "Evaluate a partial phrase", purpose: "EVALUATION", matchMode: "CONTAINS", expectedOutput: "bus fare" }), "admin");
+  input.revision = (await getAgentConfiguration("transaction-assistant")).revision;
+  const originalUpload = client.files.create;
+  t.mock.method(client.files, "create", async (body, options) => {
+    assert.equal(body.purpose, "fine-tune");
+    assert.deepEqual(options, { maxRetries: 0 });
+    return originalUpload(body, options);
+  });
+  t.mock.method(client.fineTuning.jobs, "create", async (body, options) => {
+    assert.equal(body.training_file, "file-1");
+    assert.equal(body.validation_file, "file-2");
+    assert.equal(body.method.supervised.hyperparameters.n_epochs, "auto");
+    assert.deepEqual(options, { maxRetries: 0, timeout: 60000, headers: { "Idempotency-Key": input.requestId } });
+    return { id: "validated-job", status: "queued", fine_tuned_model: null };
+  });
+  const result = await startAgentFineTuning("transaction-assistant", input, "admin");
+  assert.equal(result.trainingCount, 10);
+  assert.equal(result.validationCount, 1);
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[1].trim().split("\n").length, 1);
+  assert.equal(records.aiAgentFineTuneJob[0].validationFileId, "file-2");
+});
+
+for (const [status, expected] of [[400, "FAILED"], [429, "FAILED"], [408, "UNKNOWN"], [500, "UNKNOWN"], [undefined, "UNKNOWN"], [302, "UNKNOWN"]]) {
+  test(`fine-tuning distinguishes rejected submissions from uncertain provider outcomes (${status ?? "connection error"})`, async t => {
+    const input = await seedTraining();
+    t.mock.method(client.fineTuning.jobs, "create", async () => { throw new APIError(status, {}, "private provider detail", undefined); });
+    const result = await startAgentFineTuning("transaction-assistant", input, "admin");
+    assert.equal(result.status, expected);
+    assert.doesNotMatch(result.error, /private provider detail/);
+    assert.match(result.error, expected === "UNKNOWN" ? /Refresh to reconcile/ : /could not accept/);
+  });
+}
+
+test("a failed dataset upload never marks a provider submission as uncertain", async t => {
+  const input = await seedTraining();
+  t.mock.method(client.files, "create", async () => { throw new Error("Private upload diagnostic"); });
+  const result = await startAgentFineTuning("transaction-assistant", input, "admin");
+  assert.equal(result.status, "FAILED");
+  assert.equal(result.providerJobId, null);
+  assert.deepEqual(jobCalls, []);
+});
+
+test("a training request ID cannot be reused for another agent or altered parameters", async () => {
+  const input = await seedTraining();
+  await startAgentFineTuning("transaction-assistant", input, "admin");
+  await assert.rejects(startAgentFineTuning("ask-nest", input, "admin"), error => error.status === 409);
+  await assert.rejects(startAgentFineTuning("transaction-assistant", { ...input, epochs: 5 }, "admin"), error => error.status === 409);
+  assert.equal(jobCalls.length, 1);
+});
+
+function fineTuneRow(input, overrides = {}) {
+  return {
+    id: input.requestId, agentId: "transaction-assistant", requestHash: agentHash({ id: "transaction-assistant", ...input, actorUserId: "admin" }),
+    datasetHash: "snapshot", providerHash: agentHash(client.baseURL), revision: input.revision,
+    baseModel: input.baseModel, trainingType: input.trainingType, trainingCount: 10, validationCount: 0,
+    status: "QUEUED", providerJobId: "ftjob-test", trainingFileId: "file-1", fineTunedModel: null, error: null,
+    createdAt: new Date(), updatedAt: new Date(), ...overrides,
+  };
+}
+
+for (const code of ["P2002", "P2034"]) {
+  test(`a concurrent ${code} reservation replays the winning job without another provider request`, async t => {
+    const input = await seedTraining();
+    t.mock.method(db, "$transaction", async (_callback, options) => {
+      assert.equal(options.isolationLevel, "Serializable");
+      records.aiAgentFineTuneJob.push(fineTuneRow(input));
+      throw failure(code);
+    });
+    const result = await startAgentFineTuning("transaction-assistant", input, "admin");
+    assert.equal(result.id, input.requestId);
+    assert.equal(result.status, "QUEUED");
+    assert.deepEqual(uploads, []);
+    assert.deepEqual(jobCalls, []);
+  });
+}
+
+for (const winner of [null, { agentId: "ask-nest" }, { requestHash: "different-request" }]) {
+  test(`a conflicting reservation never adopts another training request (${JSON.stringify(winner)})`, async t => {
+    const input = await seedTraining();
+    t.mock.method(db, "$transaction", async () => {
+      if (winner) records.aiAgentFineTuneJob.push(fineTuneRow(input, winner));
+      throw failure("P2002");
+    });
+    await assert.rejects(startAgentFineTuning("transaction-assistant", input, "admin"), error => error.status === 409 && /concurrently/.test(error.message));
+    assert.deepEqual(jobCalls, []);
+  });
+}
+
+test("unexpected reservation failures propagate without uploading a dataset", async t => {
+  const input = await seedTraining();
+  const error = failure("P2010");
+  t.mock.method(db, "$transaction", async () => { throw error; });
+  await assert.rejects(startAgentFineTuning("transaction-assistant", input, "admin"), value => value === error);
+  assert.deepEqual(uploads, []);
+});
+
+function storedFineTune(overrides = {}) {
+  const row = fineTuneRow({ requestId: randomUUID(), revision: 1, baseModel: "base-model", trainingType: "Standard" }, overrides);
+  records.aiAgentFineTuneJob.push(row);
+  return row;
+}
+
+test("training status lookups remain scoped to the requested agent", async () => {
+  await assert.rejects(updateAgentFineTuning("transaction-assistant", "missing", "refresh"), error => error.status === 404);
+  const row = storedFineTune();
+  await assert.rejects(updateAgentFineTuning("ask-nest", row.id, "cancel"), error => error.status === 404);
+});
+
+for (const status of ["SUCCEEDED", "FAILED", "CANCELLED"]) {
+  test(`terminal ${status} jobs do not contact the provider again`, async t => {
+    const row = storedFineTune({ status, providerHash: "old-resource" });
+    t.mock.method(client.fineTuning.jobs, "retrieve", async () => { throw new Error("Must not retrieve"); });
+    t.mock.method(client.fineTuning.jobs, "cancel", async () => { throw new Error("Must not cancel"); });
+    assert.equal((await updateAgentFineTuning("transaction-assistant", row.id, "refresh")).status, status);
+    assert.equal((await updateAgentFineTuning("transaction-assistant", row.id, "cancel")).status, status);
+  });
+}
+
+test("training jobs cannot be managed through a different Azure resource", async () => {
+  const row = storedFineTune({ providerHash: "different-resource" });
+  await assert.rejects(updateAgentFineTuning("transaction-assistant", row.id, "refresh"), error => error.status === 409 && /different Azure resource/.test(error.message));
+});
+
+test("new submissions have a two-minute grace period before reconciliation", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 10, 12) });
+  const row = storedFineTune({ status: "SUBMITTING", providerJobId: null });
+  await assert.rejects(updateAgentFineTuning("transaction-assistant", row.id, "refresh"), error => error.status === 409 && /still being submitted/.test(error.message));
+  t.mock.timers.tick(120000);
+  const result = await updateAgentFineTuning("transaction-assistant", row.id, "refresh");
+  assert.equal(result.providerJobId, "ftjob-test");
+  assert.equal(result.status, "SUCCEEDED");
+});
+
+for (const trainingFileId of [null, "unknown-file"]) {
+  test(`unconfirmed training remains UNKNOWN until a matching provider job is found (${trainingFileId})`, async t => {
+    const row = storedFineTune({ status: "UNKNOWN", providerJobId: null, trainingFileId });
+    const lookups = [];
+    t.mock.method(client.fineTuning.jobs, "list", async options => {
+      lookups.push(options);
+      return { data: [{ id: "unrelated", training_file: "another-training-file" }] };
+    });
+    const result = await updateAgentFineTuning("transaction-assistant", row.id, "refresh");
+    assert.equal(result.status, "UNKNOWN");
+    assert.equal(result.providerJobId, null);
+    assert.match(result.error, /Check this submission in Azure/);
+    assert.deepEqual(lookups, trainingFileId ? [{ limit: 100 }] : []);
+  });
+}
+
+test("cancellation disables retries and preserves safe failure diagnostics", async t => {
+  const row = storedFineTune();
+  t.mock.method(client.fineTuning.jobs, "cancel", async (id, options) => {
+    assert.equal(id, "ftjob-test");
+    assert.deepEqual(options, { maxRetries: 0 });
+    return { id, status: "failed", fine_tuned_model: null, error: { message: "Private Azure diagnostic" } };
+  });
+  const result = await updateAgentFineTuning("transaction-assistant", row.id, "cancel");
+  assert.equal(result.status, "FAILED");
+  assert.equal(result.error, "Azure reported a training failure. Review the job's diagnostics in Azure.");
+});
+
+test("provider status responses may omit an error object or have an empty error message", async t => {
+  const row = storedFineTune();
+  for (const error of [undefined, { message: "" }]) {
+    const provider = t.mock.method(client.fineTuning.jobs, "retrieve", async id => ({ id, status: "running", fine_tuned_model: null, error }));
+    assert.equal((await updateAgentFineTuning("transaction-assistant", row.id, "refresh")).error, null);
+    provider.mock.restore();
+  }
+});
+
+for (const [currency, expected] of [["USD", "USD"], ["usd", "SGD"], ["USDX", "SGD"], [42, "SGD"], [undefined, "SGD"]]) {
+  test(`training prompts accept only canonical currencies (${currency})`, () => {
+    const prompt = agentExamplePrompt(defaultAgentConfiguration("transaction-assistant"), example({ contextJson: JSON.stringify({ currency }) }));
+    assert.ok(prompt.instructions.includes(`Workspace currency: ${expected}.`));
+  });
+}
+
+for (const toolResults of [null, [], "invalid", { get_financial_snapshot: { balance: 100 } }]) {
+  test(`evaluation context accepts only a record of named tool fixtures (${JSON.stringify(toolResults)})`, () => {
+    const prompt = agentExamplePrompt(defaultAgentConfiguration("ask-nest"), example({ contextJson: JSON.stringify({ toolResults }) }));
+    assert.deepEqual(prompt.toolResults, toolResults && typeof toolResults === "object" && !Array.isArray(toolResults) ? toolResults : {});
+  });
+}
+
+for (const purpose of ["TRAINING", "EVALUATION"]) {
+  test(`empty ${purpose} exports cannot produce a misleading empty dataset`, () => {
+    assert.throws(() => buildAgentDataset(defaultAgentConfiguration("ask-nest"), [example({ status: "DRAFT" })], purpose), error => error.status === 422 && error.message.includes(purpose.toLowerCase()));
+  });
+}
+
+test("training snapshots reject stale revisions and changes during a snapshot read", async t => {
+  assert.deepEqual((await loadAgentTrainingSnapshot("ask-nest")).examples, []);
+  await assert.rejects(loadAgentTrainingSnapshot("ask-nest", 1), error => error.status === 409 && /agent changed/.test(error.message));
+  await saveAgentConfiguration("ask-nest", settings("ask-nest"), "admin");
+  const originalFind = db.aiAgentExample.findMany;
+  t.mock.method(db.aiAgentExample, "findMany", async options => {
+    const rows = await originalFind(options);
+    records.aiAgentConfig[0].revision += 1;
+    return rows;
+  });
+  await assert.rejects(loadAgentTrainingSnapshot("ask-nest", 1), error => error.status === 409 && /training data changed/.test(error.message));
+});
+
+for (const error of [new AiConfigurationError("Private configuration details"), new Error("Private provider details"), "Disconnected"]) {
+  test(`evaluation failures return a bounded explanation without provider diagnostics (${typeof error === "string" ? error : error.name})`, async t => {
+    t.mock.method(client.responses, "create", async () => { throw error; });
+    const result = await runAgentExample(defaultAgentConfiguration("ask-nest"), example(), [], "admin");
+    assert.equal(result.passed, false);
+    assert.equal(result.actualOutput, "");
+    assert.deepEqual(result.toolsUsed, []);
+    assert.equal(result.explanation, error instanceof AiConfigurationError ? "The AI provider is not configured." : "The provider did not complete a valid response within the evaluation limits.");
+  });
+}
+
+test("incomplete provider responses and unsuccessful output checks cannot pass an evaluation", async t => {
+  const provider = t.mock.method(client.responses, "create", async () => ({ status: "incomplete", output: [], output_text: JSON.stringify(answer) }));
+  assert.equal((await runAgentExample(defaultAgentConfiguration("ask-nest"), example(), [], "admin")).passed, false);
+  provider.mock.restore();
+  const result = await runAgentExample(defaultAgentConfiguration("ask-nest"), example({ expectedOutput: "This phrase was not returned", matchMode: "CONTAINS" }), [], "admin");
+  assert.equal(result.passed, false);
+  assert.equal(result.explanation, "The response did not satisfy the expected-output check.");
+  assert.equal(JSON.parse(result.actualOutput).answer, answer.answer);
+});
+
+test("evaluation tool budgets prevent excess lookups before any tool output is appended", async t => {
+  t.mock.method(client.responses, "create", async body => {
+    providerCalls.push(clone(body));
+    return { status: "completed", output: [1, 2].map(id => ({ type: "function_call", name: "get_financial_snapshot", arguments: "{}", call_id: `call-${id}` })) };
+  });
+  const result = await runAgentExample({ ...defaultAgentConfiguration("ask-nest"), maxToolCalls: 1, maxToolRounds: 1 }, example(), [], "admin");
+  assert.equal(result.passed, false);
+  assert.deepEqual(result.toolsUsed, []);
+  assert.equal(providerCalls.length, 1);
+});
+
+test("a provider requesting a lookup after the final allowed round cannot trigger another request", async t => {
+  t.mock.method(client.responses, "create", async body => {
+    providerCalls.push(clone(body));
+    return { status: "completed", output: [{ type: "function_call", name: "get_financial_snapshot", arguments: "{}", call_id: "call" }] };
+  });
+  const result = await runAgentExample({ ...defaultAgentConfiguration("ask-nest"), maxToolRounds: 0, maxToolCalls: 1 }, example(), [], "admin");
+  assert.equal(result.passed, false);
+  assert.equal(providerCalls.length, 1);
+  assert.equal(providerCalls[0].tool_choice, "none");
+});
+
+test("missing evaluation fixtures are explicit and the next provider request cannot exceed the call allowance", async t => {
+  t.mock.method(client.responses, "create", async body => {
+    providerCalls.push(clone(body));
+    return providerCalls.length === 1
+      ? { status: "completed", output: [{ type: "function_call", name: "get_financial_snapshot", arguments: "{}", call_id: "call" }] }
+      : { status: "completed", output: [], output_text: JSON.stringify(answer) };
+  });
+  const result = await runAgentExample({ ...defaultAgentConfiguration("ask-nest"), maxToolRounds: 2, maxToolCalls: 1 }, example(), [], "admin");
+  assert.equal(result.passed, true);
+  assert.equal(providerCalls[1].tool_choice, "none");
+  const output = providerCalls[1].input.find(item => item.type === "function_call_output");
+  assert.deepEqual(JSON.parse(output.output), { ok: false, error: "No sample data was supplied for this tool." });
+});
+
+test("an evaluation request cannot reuse another agent's or another input's result", async () => {
+  const row = await saveAgentExample("ask-nest", exampleInput({ purpose: "EVALUATION" }), "admin");
+  const input = { requestId: randomUUID(), revision: 1, exampleIds: [row.id] };
+  await evaluateAgent("ask-nest", input, "admin");
+  await assert.rejects(evaluateAgent("smart-review", input, "admin"), error => error.status === 409);
+  await assert.rejects(evaluateAgent("ask-nest", input, "another-admin"), error => error.status === 409);
+  assert.equal(providerCalls.length, 1);
+});
+
+test("a concurrent evaluation reuses the saved request instead of running the provider twice", async t => {
+  const exampleRow = await saveAgentExample("ask-nest", exampleInput({ purpose: "EVALUATION" }), "admin");
+  const input = { requestId: randomUUID(), revision: 1, exampleIds: [exampleRow.id] };
+  t.mock.method(db.aiAgentEvaluation, "create", async ({ data }) => {
+    records.aiAgentEvaluation.push({ ...data, createdAt: new Date(), passedCount: 0 });
+    throw failure("P2002");
+  });
+  const result = await evaluateAgent("ask-nest", input, "admin");
+  assert.equal(result.id, input.requestId);
+  assert.equal(result.status, "RUNNING");
+  assert.deepEqual(providerCalls, []);
+});
+
+test("an evaluation storage failure is not retried as a uniqueness collision", async t => {
+  const row = await saveAgentExample("ask-nest", exampleInput({ purpose: "EVALUATION" }), "admin");
+  const error = failure("P2010");
+  t.mock.method(db.aiAgentEvaluation, "create", async () => { throw error; });
+  await assert.rejects(evaluateAgent("ask-nest", { requestId: randomUUID(), revision: 1, exampleIds: [row.id] }, "admin"), value => value === error);
+  assert.deepEqual(providerCalls, []);
 });

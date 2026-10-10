@@ -11,15 +11,11 @@ import { agentDatasetLine, buildAgentDataset, loadAgentTrainingSnapshot } from "
 
 const TERMINAL_STATUSES = ["SUCCEEDED", "FAILED", "CANCELLED"];
 
-export async function startAgentFineTuning(id: AgentId, input: z.infer<typeof AgentFineTuneRequestSchema>, actorUserId: string) {
-  const requestHash = agentHash({ id, ...input, actorUserId });
-  const previous = await prisma.aiAgentFineTuneJob.findUnique({ where: { id: input.requestId } });
-  if (previous) {
-    if (previous.agentId !== id || previous.requestHash !== requestHash) throw new ApiRequestError(409, "This request ID belongs to another training job.");
-    return serializeAgentFineTuneJob(previous);
-  }
-  const { client } = getAiWorkloadClient();
-  const snapshot = await loadAgentTrainingSnapshot(id, input.revision);
+type FineTuneInput = z.infer<typeof AgentFineTuneRequestSchema>;
+type TrainingSnapshot = Awaited<ReturnType<typeof loadAgentTrainingSnapshot>>;
+type FineTuneClient = ReturnType<typeof getAiWorkloadClient>["client"];
+
+function prepareFineTuneDatasets(snapshot: TrainingSnapshot) {
   const training = snapshot.examples.filter((example) => example.purpose === "TRAINING");
   if (training.length < 10) throw new ApiRequestError(422, "Approve at least 10 distinct training examples before starting fine-tuning.");
   const trainingJsonl = buildAgentDataset(snapshot.configuration, training, "TRAINING");
@@ -29,13 +25,27 @@ export async function startAgentFineTuning(id: AgentId, input: z.infer<typeof Ag
     try { agentDatasetLine(snapshot.configuration, example); return true; } catch { return false; }
   });
   const validationJsonl = validation.length ? buildAgentDataset(snapshot.configuration, validation, "EVALUATION") : null;
+  return { trainingJsonl, validationJsonl, trainingCount: training.length, validationCount: validation.length };
+}
+
+type FineTuneDatasets = ReturnType<typeof prepareFineTuneDatasets>;
+
+async function reserveFineTuningJob(
+  id: AgentId,
+  input: FineTuneInput,
+  actorUserId: string,
+  requestHash: string,
+  datasetHash: string,
+  providerHash: string,
+  datasets: FineTuneDatasets,
+) {
   try {
     await prisma.$transaction(async (db) => {
       const active = await db.aiAgentFineTuneJob.findFirst({ where: { agentId: id, status: { notIn: TERMINAL_STATUSES } } });
       if (active) throw new ApiRequestError(409, "An existing training job is still active or needs a status refresh.");
       await db.aiAgentFineTuneJob.create({ data: { id: input.requestId, agentId: id, revision: input.revision, requestHash,
-        datasetHash: snapshot.datasetHash, providerHash: agentHash(client.baseURL), baseModel: input.baseModel, trainingType: input.trainingType,
-        status: "SUBMITTING", trainingCount: training.length, validationCount: validation.length, actorUserId } });
+        datasetHash, providerHash, baseModel: input.baseModel, trainingType: input.trainingType,
+        status: "SUBMITTING", trainingCount: datasets.trainingCount, validationCount: datasets.validationCount, actorUserId } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code)) {
@@ -45,13 +55,17 @@ export async function startAgentFineTuning(id: AgentId, input: z.infer<typeof Ag
     }
     throw error;
   }
+  return null;
+}
+
+async function submitFineTuningJob(id: AgentId, input: FineTuneInput, client: FineTuneClient, datasets: FineTuneDatasets) {
   let submissionStarted = false;
   try {
-    const trainingFile = await client.files.create({ file: await toFile(Buffer.from(trainingJsonl), `${id}-training.jsonl`, { type: "application/jsonl" }), purpose: "fine-tune" }, { maxRetries: 0 });
+    const trainingFile = await client.files.create({ file: await toFile(Buffer.from(datasets.trainingJsonl), `${id}-training.jsonl`, { type: "application/jsonl" }), purpose: "fine-tune" }, { maxRetries: 0 });
     await prisma.aiAgentFineTuneJob.update({ where: { id: input.requestId }, data: { trainingFileId: trainingFile.id } });
     let validationFileId: string | undefined;
-    if (validationJsonl) {
-      const file = await client.files.create({ file: await toFile(Buffer.from(validationJsonl), `${id}-validation.jsonl`, { type: "application/jsonl" }), purpose: "fine-tune" }, { maxRetries: 0 });
+    if (datasets.validationJsonl) {
+      const file = await client.files.create({ file: await toFile(Buffer.from(datasets.validationJsonl), `${id}-validation.jsonl`, { type: "application/jsonl" }), purpose: "fine-tune" }, { maxRetries: 0 });
       validationFileId = file.id;
       await prisma.aiAgentFineTuneJob.update({ where: { id: input.requestId }, data: { validationFileId } });
     }
@@ -71,6 +85,21 @@ export async function startAgentFineTuning(id: AgentId, input: z.infer<typeof Ag
       : "Azure could not accept this training job. Check the resource's fine-tuning access, supported base model, training type, and quota.";
     return serializeAgentFineTuneJob(await prisma.aiAgentFineTuneJob.update({ where: { id: input.requestId }, data: { status: uncertain ? "UNKNOWN" : "FAILED", error: message } }));
   }
+}
+
+export async function startAgentFineTuning(id: AgentId, input: FineTuneInput, actorUserId: string) {
+  const requestHash = agentHash({ id, ...input, actorUserId });
+  const previous = await prisma.aiAgentFineTuneJob.findUnique({ where: { id: input.requestId } });
+  if (previous) {
+    if (previous.agentId !== id || previous.requestHash !== requestHash) throw new ApiRequestError(409, "This request ID belongs to another training job.");
+    return serializeAgentFineTuneJob(previous);
+  }
+  const { client } = getAiWorkloadClient();
+  const snapshot = await loadAgentTrainingSnapshot(id, input.revision);
+  const datasets = prepareFineTuneDatasets(snapshot);
+  const concurrent = await reserveFineTuningJob(id, input, actorUserId, requestHash, snapshot.datasetHash, agentHash(client.baseURL), datasets);
+  if (concurrent) return concurrent;
+  return submitFineTuningJob(id, input, client, datasets);
 }
 
 export async function updateAgentFineTuning(id: AgentId, jobId: string, action: "refresh" | "cancel") {

@@ -81,6 +81,33 @@ export async function loadAgentTrainingSnapshot(id: AgentId, expectedRevision?: 
   return { configuration, examples, datasetHash: agentHash(examples.map(({ id: exampleId, revision, input, expectedOutput, contextJson, purpose }) => ({ id: exampleId, revision, input, expectedOutput, contextJson, purpose }))) };
 }
 
+function scoreEvaluationResponse(example: AgentExample, prompt: ReturnType<typeof agentExamplePrompt>, outputText: string, toolsUsed: string[], started: number): AgentEvaluationResult {
+  const actualOutput = JSON.stringify(prompt.parse(JSON.parse(outputText)), null, 2);
+  const passed = scoreAgentOutput(actualOutput, example);
+  return { exampleId: example.id, title: example.title, passed, actualOutput, expectedOutput: example.expectedOutput,
+    explanation: passed ? "The expected-output check passed." : "The response did not satisfy the expected-output check.", toolsUsed, durationMs: Date.now() - started };
+}
+
+function appendEvaluationToolResults(
+  output: ResponseInputItem[],
+  calls: ResponseFunctionToolCall[],
+  tools: { name: string }[],
+  toolResults: Record<string, unknown>,
+  input: ResponseInputItem[],
+  toolsUsed: string[],
+  maxToolCalls: number,
+) {
+  if (toolsUsed.length + calls.length > maxToolCalls) throw new Error("Lookup allowance exceeded");
+  input.push(...output);
+  for (const call of calls) {
+    if (!tools.some((tool) => tool.name === call.name)) throw new Error("Disabled tool requested");
+    toolsUsed.push(call.name);
+    // Evaluations replay supplied fixtures; they never execute production tools or read workspace records.
+    const result = Object.hasOwn(toolResults, call.name) ? toolResults[call.name] : { ok: false, error: "No sample data was supplied for this tool." };
+    input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result) });
+  }
+}
+
 export async function runAgentExample(configuration: AgentConfiguration, example: AgentExample, training: AgentExample[], actorUserId: string, signal?: AbortSignal): Promise<AgentEvaluationResult> {
   const started = Date.now();
   const toolsUsed: string[] = [];
@@ -103,20 +130,9 @@ export async function runAgentExample(configuration: AgentConfiguration, example
       if (response.status !== "completed") throw new Error("Incomplete response");
       const calls = response.output.filter((item): item is ResponseFunctionToolCall => item.type === "function_call");
       if (!calls.length) {
-        const actualOutput = JSON.stringify(prompt.parse(JSON.parse(response.output_text)), null, 2);
-        const passed = scoreAgentOutput(actualOutput, example);
-        return { exampleId: example.id, title: example.title, passed, actualOutput, expectedOutput: example.expectedOutput,
-          explanation: passed ? "The expected-output check passed." : "The response did not satisfy the expected-output check.", toolsUsed, durationMs: Date.now() - started };
+        return scoreEvaluationResponse(example, prompt, response.output_text, toolsUsed, started);
       }
-      if (toolsUsed.length + calls.length > configuration.maxToolCalls) throw new Error("Lookup allowance exceeded");
-      input.push(...response.output as ResponseInputItem[]);
-      for (const call of calls) {
-        if (!tools.some((tool) => tool.name === call.name)) throw new Error("Disabled tool requested");
-        toolsUsed.push(call.name);
-        // Evaluations only replay supplied fixtures. They never execute production tools or read workspace records.
-        const output = Object.hasOwn(prompt.toolResults, call.name) ? prompt.toolResults[call.name] : { ok: false, error: "No sample data was supplied for this tool." };
-        input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(output) });
-      }
+      appendEvaluationToolResults(response.output as ResponseInputItem[], calls, tools, prompt.toolResults, input, toolsUsed, configuration.maxToolCalls);
     }
     throw new Error("Lookup rounds exceeded");
   } catch (error) {
