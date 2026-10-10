@@ -59,20 +59,22 @@ test("UI styles are layered, token guarded, and materially smaller globally", as
 });
 
 test("priority route controllers have focused feature extractions and lazy heavy UI", async () => {
-  const [transactions, rewards, dashboard, creditTransactions, settings] = await Promise.all([
+  const [transactions, rewards, dashboard, creditTransactions, settings, autoAccounting] = await Promise.all([
     source("components/transactions-page.tsx"),
     source("components/rewards-page.tsx"),
     source("components/dashboard-shell.tsx"),
     source("components/credit-transactions-page.tsx"),
     source("components/settings-page.tsx"),
+    source("components/settings/auto-accounting-settings.tsx"),
   ]);
   assert.match(transactions, /TransactionMonthList/);
   assert.match(rewards, /RewardsOverview/);
   assert.match(dashboard, /dynamic\([\s\S]*?cash-flow-chart/);
   assert.match(creditTransactions, /CreditTransactionSummaryView/);
   assert.match(settings, /dynamic\([\s\S]*?data-import-section/);
-  assert.match(settings, /dynamic\([\s\S]*?auto-rule-editor-dialog/);
-  assert.match(settings, /SettingsOperationNotice/);
+  assert.match(settings, /AutoAccountingSettings/);
+  assert.match(autoAccounting, /dynamic\([\s\S]*?auto-rule-editor-dialog/);
+  assert.match(autoAccounting, /SettingsOperationNotice/);
 });
 
 test("bank-account management and data shape have one canonical UI contract", async () => {

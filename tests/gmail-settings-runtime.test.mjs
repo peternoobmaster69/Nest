@@ -297,6 +297,23 @@ test("transient status failures retry without submitting another sync", async ()
   assert.equal(syncRequests().filter(({ method }) => method === "POST").length, 1);
 });
 
+test("terminal status stops the timer immediately and ignores status ticks that were already queued", async (t) => {
+  const pending = deferred();
+  t.after(() => ui.act(async () => pending.resolve(progress("idle"))));
+  responses.set("GET /api/gmail/sync", () => pending.promise);
+  const view = show();
+  await sync(view);
+  await ui.waitFor(() => assert.equal(intervals.size, 1));
+  const queuedTick = [...intervals.values()][0];
+  await ui.act(async () => pending.resolve(progress("idle", { message: "" })));
+  await view.findByText("No Gmail sync is running");
+  assert.equal(intervals.size, 0);
+  const previousRequests = statusRequests().length;
+  await ui.act(async () => queuedTick());
+  assert.equal(statusRequests().length, previousRequests);
+  assert.equal(invalidations.length, 0);
+});
+
 for (const [failure, expected] of [
   [new Error("Please reconnect Gmail."), "Please reconnect Gmail"],
   ["offline", "Gmail sync failed"],

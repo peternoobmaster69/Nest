@@ -162,13 +162,15 @@ export function useGmailSettings({ workspaceId, workspaceName, role }: {
     let polling = false;
 
     const poll = async () => {
-      if (polling) return;
+      if (polling || cancelled) return;
       polling = true;
       try {
         const progress = await fetchJson<GmailSyncProgress>("/api/gmail/sync");
         if (!cancelled) {
           setGmailSyncProgress(progress);
           if (isTerminalSyncPhase(progress.phase)) {
+            cancelled = true;
+            window.clearInterval(interval);
             setGmailMessage(progress.message || "No Gmail sync is running.");
             setIsGmailSyncPolling(false);
             if (progress.phase === "complete") {
