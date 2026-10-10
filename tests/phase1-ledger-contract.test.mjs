@@ -144,7 +144,7 @@ test("money-changing clients send idempotency keys", async () => {
     "components/dashboard-shell.tsx",
     "components/credit-transactions-page.tsx",
     "components/receivables-page.tsx",
-    "components/data-import-section.tsx",
+    "hooks/use-data-import.ts",
     "components/budget-plan-page.tsx",
   ];
 

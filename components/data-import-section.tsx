@@ -2,368 +2,86 @@
 
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
-
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Upload, AlertCircle, CheckCircle, XCircle, Calculator } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 import { useMoneyFormat } from "@/lib/use-money-format";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/controls";
 import { bankAccountsQueryOptions } from "@/lib/accounts";
-import {
-  ImportedTransactionSchema,
-  MAX_IMPORT_ROWS_PER_CHUNK,
-} from "@/lib/domains/integrations/import-contracts";
+import { useDataImport } from "@/hooks/use-data-import";
+import type { ImportPreview } from "@/lib/domains/integrations/import-preview";
 
 interface DataImportSectionProps {
   workspaceId: string | null;
   baseCurrency: string;
 }
 
-type Context = {
-  workspaces?: Array<{ id: string; name: string }>;
-};
+type Context = { workspaces?: Array<{ id: string; name: string }> };
+type Budget = { id: string; accountId: string; name: string; isActive: boolean };
 
-type Budget = {
-  id: string;
-  accountId: string;
-  name: string;
-  isActive: boolean;
-};
-
-type DuplicateRecord = {
-  date: string;
-  subject: string;
-  amountCents: number;
-  direction: "DEBIT" | "CREDIT";
-  notes: string | null;
-  reason: "EXISTING_TRANSACTION" | "DUPLICATE_IN_PAYLOAD";
-};
-
-type ChunkResult = {
-  success: boolean;
-  imported: number;
-  duplicates: number;
-  duplicateRecords: DuplicateRecord[];
-  failed: number;
-  total: number;
-  errors: string[];
-  chunked: boolean;
-  chunkIndex: number;
-  processedCount: number;
-  remainingCount: number;
-  isComplete: boolean;
-  recalculated?: boolean;
-};
-
-interface ImportPreview {
-  valid: number;
-  invalid: number;
-  totalAmountCents: number;
-  errors: string[];
-  transactions: unknown[];
+function ImportPreviewPanel({ preview, formatMoney, baseCurrency }: Readonly<{
+  preview: ImportPreview;
+  formatMoney: (cents: number) => string;
+  baseCurrency: string;
+}>) {
+  let tone = "";
+  let Icon = XCircle;
+  let title = "No valid transactions found";
+  if (preview.invalid > 0) {
+    tone = "is-warning";
+    Icon = AlertCircle;
+    title = `Valid: ${preview.valid}, Invalid: ${preview.invalid}`;
+  } else if (preview.valid > 0) {
+    tone = "is-success";
+    Icon = CheckCircle;
+    title = `Valid: ${preview.valid} transactions (${formatMoney(preview.totalAmountCents)} ${baseCurrency})`;
+  }
+  return (
+    <div className={`settings-import-preview ${tone}`}>
+      <div className="settings-import-preview-title"><Icon size={14} />{title}</div>
+      {preview.errors.slice(0, 3).map((error) => (
+        <div key={error} className="settings-import-preview-error">• {error}</div>
+      ))}
+      {preview.errors.length > 3 && (
+        <div className="settings-import-preview-error">...and {preview.errors.length - 3} more</div>
+      )}
+    </div>
+  );
 }
-
-type RecalculateResult = {
-  recalculated: number;
-  budgets: Array<{
-    id: string;
-    name: string;
-    previousCents: number;
-    newCents: number;
-    difference: number;
-  }>;
-};
-
-const CHUNK_SIZE = MAX_IMPORT_ROWS_PER_CHUNK;
 
 export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataImportSectionProps>) {
   const routeWorkspaceId = useWorkspaceId();
-  const queryClient = useQueryClient();
-  const importRunRef = useRef<{ fingerprint: string; id: string } | null>(null);
-  const [jsonInput, setJsonInput] = useState("");
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
-  const [selectedBudgetId, setSelectedBudgetId] = useState<string>("");
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedBudgetId, setSelectedBudgetId] = useState("");
   const [kind, setKind] = useState("Migration");
-  const [message, setMessage] = useState("");
-  const [preview, setPreview] = useState<ImportPreview | null>(null);
-
-  // Progress state
-  const [isImporting, setIsImporting] = useState(false);
-  const [progress, setProgress] = useState({
-    current: 0,
-    total: 0,
-    imported: 0,
-    duplicates: 0,
-    duplicateRecords: [] as DuplicateRecord[],
-    failed: 0,
-    errors: [] as string[],
-  });
-
-  // Recalculate state
-  const [isRecalculating, setIsRecalculating] = useState(false);
-  const [recalcResult, setRecalcResult] = useState<RecalculateResult | null>(null);
-
+  const activeWorkspaceId = selectedWorkspaceId || workspaceId || "";
+  const {
+    jsonInput, preview, notice, isImporting, isRecalculating, progress, recalcResult, canImport, canRecalculate,
+    handleJsonChange, handleImport, handleRecalculate, clearRecalculation,
+  } = useDataImport({ workspaceId: activeWorkspaceId, accountId: selectedAccountId, budgetId: selectedBudgetId, kind });
+  const busy = isImporting || isRecalculating;
   const context = useQuery({
     queryKey: queryKeys.key(["app-context", routeWorkspaceId]),
     queryFn: () => fetchJson<Context>("/api/context"),
   });
-
-  const activeWorkspaceId = selectedWorkspaceId || workspaceId || "";
-
   const accounts = useQuery(bankAccountsQueryOptions(activeWorkspaceId));
-
   const budgets = useQuery({
     queryKey: queryKeys.key(["budgets", activeWorkspaceId]),
     queryFn: () => fetchJson<Budget[]>(`/api/budgets?workspaceId=${activeWorkspaceId}`),
     enabled: Boolean(activeWorkspaceId),
   });
-
   const workspaces = context.data?.workspaces ?? [];
-
-  // Filter active accounts and budgets
-  const activeAccounts = useMemo(() => (accounts.data ?? []).filter((a) => a.isActive), [accounts.data]);
+  const activeAccounts = useMemo(() => (accounts.data ?? []).filter((account) => account.isActive), [accounts.data]);
   const activeBudgets = useMemo(
-    () => (budgets.data ?? []).filter((b) => b.isActive && b.accountId === selectedAccountId),
+    () => (budgets.data ?? []).filter((budget) => budget.isActive && budget.accountId === selectedAccountId),
     [budgets.data, selectedAccountId],
   );
-
-  // Parse and validate JSON
-  const validateJson = (input: string): ImportPreview | null => {
-    if (!input.trim()) return null;
-
-    try {
-      const data = JSON.parse(input);
-      const transactions = data.Transactions || data.transactions || (Array.isArray(data) ? data : [data]);
-
-      if (!Array.isArray(transactions)) {
-        return { valid: 0, invalid: 0, totalAmountCents: 0, errors: ["Expected Transactions to be an array"], transactions: [] };
-      }
-
-      let valid = 0;
-      let invalid = 0;
-      let totalAmountCents = 0;
-      const errors: string[] = [];
-      const validTransactions: unknown[] = [];
-
-      transactions.forEach((tx: unknown, index: number) => {
-        const parsed = ImportedTransactionSchema.safeParse(tx);
-        if (!parsed.success) {
-          invalid++;
-          const details = parsed.error.issues
-            .map((issue) => `${issue.path.join(".") || "transaction"}: ${issue.message}`)
-            .join(", ");
-          errors.push(`Item ${index + 1}: ${details}`);
-        } else {
-          valid++;
-          totalAmountCents += parsed.data.AmountCents;
-          validTransactions.push(parsed.data);
-        }
-      });
-
-      return { valid, invalid, totalAmountCents, errors, transactions: validTransactions };
-    } catch (e) {
-      return { valid: 0, invalid: 0, totalAmountCents: 0, errors: ["Invalid JSON: " + (e instanceof Error ? e.message : String(e))], transactions: [] };
-    }
-  };
-
-  // Update preview when JSON changes
-  const handleJsonChange = (value: string) => {
-    importRunRef.current = null;
-    setJsonInput(value);
-    setPreview(validateJson(value));
-    setMessage("");
-    setRecalcResult(null);
-    setProgress((current) => ({ ...current, duplicates: 0, duplicateRecords: [], errors: [] }));
-  };
-
-  const importChunk = useCallback(async (
-    transactions: unknown[],
-    chunkIndex: number,
-    chunkSize: number,
-    totalChunks: number,
-    importRunId: string,
-  ): Promise<ChunkResult> => {
-    return fetchJson<ChunkResult>("/api/transactions/bulk-import", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": `json-import:${importRunId}:${chunkIndex}`,
-      },
-      body: JSON.stringify({
-        workspaceId: activeWorkspaceId,
-        accountId: selectedAccountId,
-        budgetId: selectedBudgetId,
-        kind,
-        transactions,
-        chunkIndex,
-        chunkSize,
-        totalChunks,
-        importRunId,
-        recalculate: true,
-      }),
-    });
-  }, [activeWorkspaceId, selectedAccountId, selectedBudgetId, kind]);
-
-  const invalidateFinancialQueries = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions"]) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts"]) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets"]) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]) });
-  }, [queryClient]);
-
-  const recalculateBudget = useCallback(
-    (budgetId: string) =>
-      fetchJson<RecalculateResult & { success: boolean }>("/api/budgets/recalculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
-          budgetId,
-        }),
-      }),
-    [activeWorkspaceId],
-  );
-
-  const handleImport = async () => {
-    if (!activeWorkspaceId || !selectedAccountId || !selectedBudgetId) {
-      setMessage("Please select Workspace, Bank Account, and Sub Account");
-      return;
-    }
-    if (!preview || preview.valid === 0) {
-      setMessage("No valid transactions to import");
-      return;
-    }
-
-    setIsImporting(true);
-    setMessage("");
-    setRecalcResult(null);
-    setProgress({
-      current: 0,
-      total: preview.transactions.length,
-      imported: 0,
-      duplicates: 0,
-      duplicateRecords: [],
-      failed: 0,
-      errors: [],
-    });
-
-    try {
-      const totalTransactions = preview.transactions.length;
-      const totalChunks = Math.ceil(totalTransactions / CHUNK_SIZE);
-      const fingerprint = JSON.stringify({
-        workspaceId: activeWorkspaceId,
-        accountId: selectedAccountId,
-        budgetId: selectedBudgetId,
-        kind,
-        transactions: preview.transactions,
-      });
-      if (importRunRef.current?.fingerprint !== fingerprint) {
-        importRunRef.current = { fingerprint, id: crypto.randomUUID() };
-      }
-      const importRunId = importRunRef.current.id;
-      let totalImported = 0;
-      let totalDuplicates = 0;
-      const allDuplicateRecords: DuplicateRecord[] = [];
-      let totalFailed = 0;
-      const allErrors: string[] = [];
-      let balanceRecalculated = false;
-
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-        const startIndex = chunkIndex * CHUNK_SIZE;
-        const endIndex = Math.min(startIndex + CHUNK_SIZE, totalTransactions);
-        const chunkTransactions = preview.transactions.slice(startIndex, endIndex);
-
-        setProgress((prev) => ({
-          ...prev,
-          current: startIndex,
-        }));
-
-        const result = await importChunk(
-          chunkTransactions,
-          chunkIndex,
-          CHUNK_SIZE,
-          totalChunks,
-          importRunId,
-        );
-
-        totalImported += result.imported;
-        totalDuplicates += result.duplicates;
-        allDuplicateRecords.push(...result.duplicateRecords);
-        totalFailed += result.failed;
-        allErrors.push(...result.errors);
-        balanceRecalculated = balanceRecalculated || result.recalculated === true;
-
-        setProgress({
-          current: endIndex,
-          total: totalTransactions,
-          imported: totalImported,
-          duplicates: totalDuplicates,
-          duplicateRecords: allDuplicateRecords,
-          failed: totalFailed,
-          errors: allErrors.slice(0, 5), // Keep only first 5 errors
-        });
-      }
-
-      const recalculationMessage = balanceRecalculated ? " Balance recalculated." : "";
-
-      setMessage(`Import complete! Imported ${totalImported} transactions. ${totalDuplicates} duplicates skipped. ${totalFailed} failed.${recalculationMessage}`);
-      setJsonInput("");
-      setPreview(null);
-      importRunRef.current = null;
-      invalidateFinancialQueries();
-    } catch (error) {
-      setMessage(`Import failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   const { mask } = useMoneyFormat();
   const formatMoney = (cents: number) => mask((cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-
-  // Determine if import button should be enabled
-  const canImport =
-    activeWorkspaceId &&
-    selectedAccountId &&
-    selectedBudgetId &&
-    preview &&
-    preview.valid > 0 &&
-    !isImporting &&
-    !isRecalculating;
-
-  // Determine if recalculate button should be enabled
-  const canRecalculate = activeWorkspaceId && selectedBudgetId && !isImporting && !isRecalculating;
-
-  // Calculate progress percentage
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-
-  // Recalculate function
-  const handleRecalculate = async () => {
-    if (!activeWorkspaceId || !selectedBudgetId) {
-      setMessage("Please select Workspace and Sub Account");
-      return;
-    }
-
-    setIsRecalculating(true);
-    setMessage("");
-    setRecalcResult(null);
-
-    try {
-      const result = await recalculateBudget(selectedBudgetId);
-
-      setRecalcResult(result);
-      setMessage(`Budget recalculated! ${result.budgets.length} budget(s) updated.`);
-
-      invalidateFinancialQueries();
-    } catch (error) {
-      setMessage(`Recalculation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
-      setIsRecalculating(false);
-    }
-  };
 
   return (
     <div className="card settings-card-block settings-import-card">
@@ -371,7 +89,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
         <div>
           <div className="settings-section-title">Bulk Transaction Import</div>
           <div className="settings-section-copy">
-            Import multiple transactions from JSON. Duplicates are detected by Date + Subject + Amount.
+            Import multiple transactions from JSON. Migration preserves every row; other kinds skip duplicates.
           </div>
         </div>
       </div>
@@ -384,14 +102,14 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
             <label htmlFor="data-import-section-selected-workspace-id-workspace-id">Workspace</label>
             <Select id="data-import-section-selected-workspace-id-workspace-id"
               className="input"
-              value={selectedWorkspaceId || workspaceId || ""}
+              value={activeWorkspaceId}
               onChange={(e) => {
                 setSelectedWorkspaceId(e.target.value);
                 setSelectedAccountId("");
                 setSelectedBudgetId("");
-                setRecalcResult(null);
+                clearRecalculation();
               }}
-              disabled={!!workspaceId && workspaces.length === 1}
+              disabled={busy}
             >
               <option value="">Select workspace</option>
               {workspaces.map((w) => (
@@ -418,9 +136,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
             onChange={(e) => {
               setSelectedAccountId(e.target.value);
               setSelectedBudgetId("");
-              setRecalcResult(null);
+              clearRecalculation();
             }}
-            disabled={!activeWorkspaceId || accounts.isLoading || isImporting || isRecalculating}
+            disabled={!activeWorkspaceId || accounts.isLoading || busy}
           >
             <option value="">Select bank account</option>
             {activeAccounts.map((account) => (
@@ -439,9 +157,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
             value={selectedBudgetId}
             onChange={(e) => {
               setSelectedBudgetId(e.target.value);
-              setRecalcResult(null);
+              clearRecalculation();
             }}
-            disabled={!selectedAccountId || budgets.isLoading || isImporting || isRecalculating}
+            disabled={!selectedAccountId || budgets.isLoading || busy}
           >
             <option value="">Select sub account</option>
             {activeBudgets.map((budget) => (
@@ -461,7 +179,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
         {/* Kind */}
         <div className="settings-field">
           <label htmlFor="data-import-section-kind">Transaction Kind</label>
-          <Select id="data-import-section-kind" className="input" value={kind} onChange={(e) => setKind(e.target.value)} disabled={isImporting}>
+          <Select id="data-import-section-kind" className="input" value={kind} onChange={(e) => setKind(e.target.value)} disabled={busy}>
             <option value="Migration">Migration</option>
             <option value="Adjustment">Adjustment</option>
             <option value="EXPENSE">Expense</option>
@@ -492,40 +210,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
 }`}
           value={jsonInput}
           onChange={(e) => handleJsonChange(e.target.value)}
-          disabled={isImporting}
+          disabled={busy}
         />
-        {preview && (
-          <div className={`settings-import-preview ${preview.valid > 0 && preview.invalid === 0 ? "is-success" : preview.invalid > 0 ? "is-warning" : ""}`}>
-            <div className="settings-import-preview-title">
-              {preview.valid > 0 && preview.invalid === 0 ? (
-                <>
-                  <CheckCircle size={14} />
-                  Valid: {preview.valid} transactions ({formatMoney(preview.totalAmountCents)} {baseCurrency})
-                </>
-              ) : preview.invalid > 0 ? (
-                <>
-                  <AlertCircle size={14} />
-                  Valid: {preview.valid}, Invalid: {preview.invalid}
-                </>
-              ) : (
-                <>
-                  <XCircle size={14} />
-                  No valid transactions found
-                </>
-              )}
-            </div>
-            {preview.errors.slice(0, 3).map((err, i) => (
-              <div key={i} className="settings-import-preview-error">
-                • {err}
-              </div>
-            ))}
-            {preview.errors.length > 3 && (
-              <div className="settings-import-preview-error">
-                ...and {preview.errors.length - 3} more
-              </div>
-            )}
-          </div>
-        )}
+        {preview && <ImportPreviewPanel preview={preview} formatMoney={formatMoney} baseCurrency={baseCurrency} />}
       </div>
 
       {/* Import and Recalculate Buttons */}
@@ -543,7 +230,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
           <Calculator size={16} aria-hidden="true" />
           {isRecalculating ? "Calculating..." : "Recalculate"}
         </Button>
-        {jsonInput && !isImporting && (
+        {jsonInput && !busy && (
           <Button className="btn btn-ghost" onClick={() => handleJsonChange("")}>
             Clear
           </Button>
@@ -551,7 +238,7 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
       </div>
 
       {/* Progress Bar */}
-      {isImporting && progress.total > 0 && (
+      {isImporting && (
         <div className="settings-import-progress">
           <div className="settings-import-progress-head">
             <span>
@@ -576,9 +263,9 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
       )}
 
       {/* Result Message */}
-      {!isImporting && message && (
-        <div className={`settings-import-notice ${message.includes("failed") ? "is-danger" : message.includes("complete") ? "is-success" : ""}`}>
-          {message}
+      {!isImporting && notice && (
+        <div className={`settings-import-notice is-${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
+          {notice.message}
         </div>
       )}
 
@@ -586,8 +273,8 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
       {!isImporting && progress.errors.length > 0 && (
         <div className="settings-import-notice is-danger">
           <strong>Errors:</strong>
-          {progress.errors.map((err, i) => (
-            <div key={i}>• {err}</div>
+          {progress.errors.map((error) => (
+            <div key={error.id}>• {error.message}</div>
           ))}
           {progress.errors.length < progress.failed && (
             <div>...and {progress.failed - progress.errors.length} more</div>
@@ -600,10 +287,10 @@ export function DataImportSection({ workspaceId, baseCurrency }: Readonly<DataIm
         <details className="settings-import-duplicates" open>
           <summary>Skipped duplicates ({progress.duplicateRecords.length})</summary>
           <div className="settings-import-duplicate-list">
-            {progress.duplicateRecords.map((record, index) => (
+            {progress.duplicateRecords.map((record) => (
               <div
                 className="settings-import-duplicate-item"
-                key={`${record.date}-${record.subject}-${record.amountCents}-${index}`}
+                key={record.id}
               >
                 <div>
                   <strong>{record.subject}</strong>

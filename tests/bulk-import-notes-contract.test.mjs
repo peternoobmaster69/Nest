@@ -88,7 +88,7 @@ test("migration imports preserve repeated rows while other import kinds still de
 
 test("bulk transaction import uses the server row limit for each client chunk", async () => {
   const contracts = await source("lib/domains/integrations/import-contracts.ts");
-  const component = await source("components/data-import-section.tsx");
+  const component = await source("hooks/use-data-import.ts");
 
   assert.match(contracts, /export const MAX_IMPORT_ROWS_PER_CHUNK = 250/);
   assert.match(component, /MAX_IMPORT_ROWS_PER_CHUNK,/);
@@ -97,7 +97,7 @@ test("bulk transaction import uses the server row limit for each client chunk", 
 });
 
 test("the import preview uses the same transaction schema as the server", async () => {
-  const component = await source("components/data-import-section.tsx");
+  const component = await source("lib/domains/integrations/import-preview.ts");
 
   assert.match(component, /ImportedTransactionSchema\.safeParse\(tx\)/);
   assert.match(component, /parsed\.error\.issues/);
@@ -113,7 +113,7 @@ test("bulk transaction imports require access without request-rate limiting", as
 
 test("the final import chunk recalculates the balance inside the posting transaction", async () => {
   const route = await source("app/api/transactions/bulk-import/route.ts");
-  const component = await source("components/data-import-section.tsx");
+  const component = await source("hooks/use-data-import.ts");
 
   assert.match(route, /recalculateBudgetAvailableCents\(db, workspaceId, budgetId\)/);
   assert.match(route, /chunkIndex === totalChunks - 1/);
