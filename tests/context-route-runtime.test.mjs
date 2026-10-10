@@ -11,6 +11,7 @@ let fixtures;
 let cookieWorkspaceId;
 let sessionError;
 let accessError;
+let serverSession;
 
 class ApiAuthError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -53,7 +54,7 @@ mock.module("../lib/workspace-auth.ts", { namedExports: {
   requireWorkspaceRole: requireAccess,
 } });
 mock.module("../lib/server-session.ts", { namedExports: {
-  getDatabaseReadyServerSession: async () => ({ user: { id: "owner", email: "owner@example.test" } }),
+  getDatabaseReadyServerSession: async () => serverSession,
 } });
 mock.module("../lib/observability/logger.ts", { namedExports: { logEvent: (...args) => events.push(args) } });
 const { GET, PATCH } = require("../app/api/context/route.ts");
@@ -91,6 +92,7 @@ beforeEach(() => {
   cookieWorkspaceId = null;
   sessionError = null;
   accessError = null;
+  serverSession = { user: { id: "owner", email: "owner@example.test" } };
   fixtures = new Map([
     ["user.findUnique", { id: "owner", activeWorkspaceId: "workspace-one" }],
     ["workspaceMember.findMany", [membership(), membership("workspace-two")]],
@@ -287,4 +289,99 @@ test("failed context updates return a traceable generic error", async () => {
   assert.equal(response.status, 500);
   verifyHeaders(response);
   assert.doesNotMatch(await response.text(), /private update/);
+});
+
+test("context chooses the first membership when the user has no saved workspace", async () => {
+  fixtures.set("user.findUnique", { id: "owner", activeWorkspaceId: null });
+  const response = await GET(request());
+  assert.equal((await response.json()).workspaceId, "workspace-one");
+  assert.deepEqual(calls.find(({ operation }) => operation === "workspace.findUnique").options.where, { id: "workspace-one" });
+});
+
+test("sessions without identity details remain unauthorized without exposing context", async () => {
+  for (const session of [null, {}, { user: {} }]) {
+    serverSession = session;
+    sessionError = new ApiAuthError(401, "Unauthorized");
+    const response = await GET(request());
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: "Unauthorized" });
+    verifyHeaders(response);
+  }
+  assert.equal(calls.length, 0);
+});
+
+for (const [isShared, members, pending, collaborative] of [
+  [false, 2, 4, false],
+  [true, 1, 0, false],
+  [true, 1, 1, true],
+]) {
+  test(`collaboration requires sharing and another member or invite (${isShared}, ${members}, ${pending})`, async () => {
+    fixtures.set("workspace.findUnique", workspace("workspace-one", { isShared, _count: { members } }));
+    fixtures.set("workspaceInvite.count", pending);
+    const body = await (await GET(request())).json();
+    assert.equal(body.isCollaborative, collaborative);
+    assert.equal(body.memberCount, members);
+    assert.equal(body.pendingInviteCount, pending);
+  });
+}
+
+test("empty and workspace-only updates acknowledge the selection without changing defaults", async () => {
+  for (const [payload, workspaceId] of [[{}, null], [{ workspaceId: "workspace-one" }, "workspace-one"], [{ baseCurrency: "USD" }, null]]) {
+    const response = await PATCH(request("PATCH", payload));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      workspaceId, baseCurrency: null, defaultAccountId: null, defaultBudgetId: null, activeWorkspaceId: null,
+    });
+    assert.equal(response.headers.get("set-cookie"), null);
+  }
+  assert.equal(calls.length, 0);
+  assert.equal(accessChecks.length, 0);
+});
+
+test("subaccount-only updates validate the existing bank and distinguish null from an omitted default", async () => {
+  fixtures.set("budgetEnvelope.findFirst", { id: "travel", accountId: "bank-one" });
+  let response = await PATCH(request("PATCH", { workspaceId: "workspace-one", receivableDefaultBudgetId: "travel" }));
+  assert.equal(response.status, 200);
+  let body = await response.json();
+  assert.equal(body.defaultAccountId, "bank-one");
+  assert.equal(body.defaultBudgetId, "travel");
+
+  response = await PATCH(request("PATCH", { workspaceId: "workspace-one", receivableDefaultBudgetId: null }));
+  body = await response.json();
+  assert.equal(body.defaultAccountId, "bank-one");
+  assert.equal(body.defaultBudgetId, null);
+  assert.ok(!calls.some(({ operation }) => operation === "financialAccount.findFirst"));
+});
+
+test("a subaccount cannot be selected when its default bank is cleared", async () => {
+  const response = await PATCH(request("PATCH", {
+    workspaceId: "workspace-one", receivableDefaultAccountId: null, receivableDefaultBudgetId: "travel",
+  }));
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "Default receivable subaccount must belong to the selected default account." });
+  assert.ok(!calls.some(({ operation }) => operation === "workspace.update"));
+});
+
+test("a combined switch and defaults edit authorizes both operations before setting the tab cookie", async () => {
+  const response = await PATCH(request("PATCH", {
+    activeWorkspaceId: "workspace-two", workspaceId: "workspace-one", baseCurrency: "EUR",
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(accessChecks, [
+    { workspaceId: "workspace-two", minimumRole: undefined },
+    { workspaceId: "workspace-one", minimumRole: "OWNER" },
+  ]);
+  const body = await response.json();
+  assert.equal(body.workspaceId, "workspace-one");
+  assert.equal(body.baseCurrency, "EUR");
+  assert.equal(body.activeWorkspaceId, "workspace-two");
+  assert.match(response.headers.get("set-cookie"), /nest-active-workspace=workspace-two/);
+
+  fixtures.set("workspace.findUnique", null);
+  const failed = await PATCH(request("PATCH", {
+    activeWorkspaceId: "workspace-two", workspaceId: "workspace-one", baseCurrency: "EUR",
+  }));
+  assert.equal(failed.status, 404);
+  assert.deepEqual(await failed.json(), { error: "Workspace not found." });
+  assert.equal(failed.headers.get("set-cookie"), null);
 });
