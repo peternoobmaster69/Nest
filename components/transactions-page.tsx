@@ -1,5 +1,5 @@
 "use client";
-import { getAmountToneClass, formatTransactionDate, groupTransactionsByMonth, getBudgetIcon, getContextualGroupDefaults } from "@/lib/transaction-presentation";
+import { getAmountToneClass, groupTransactionsByMonth, getBudgetIcon, getContextualGroupDefaults } from "@/lib/transaction-presentation";
 import { resolveTransactionUrlFilters, transactionMonthSummaryUrl } from "@/lib/transaction-view-filters";
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
@@ -31,6 +31,8 @@ import { TransactionBankReconciliation } from "@/components/transactions/transac
 import { TransactionBankBalanceDialog } from "@/components/transactions/transaction-bank-balance-dialog";
 import { parseNonNegativeCents } from "@/lib/amount-input";
 import { TransactionGroupPanel } from "@/components/transactions/transaction-group-panel";
+import { TransactionGroupCreateDialog } from "@/components/transactions/transaction-group-create-dialog";
+import { TransactionGroupEditDialog } from "@/components/transactions/transaction-group-edit-dialog";
 import type { TransactionGroup } from "@/components/transactions/transaction-group-types";
 import { TransactionBudgetGrid } from "@/components/transactions/transaction-budget-grid";
 import { TransactionBudgetDialog } from "@/components/transactions/transaction-budget-dialog";
@@ -44,12 +46,6 @@ import {
 } from "@/lib/transaction-date-filters";
 
 const ALL_BANKS_FILTER = "ALL";
-const GROUP_ICON_OPTIONS = [
-  "📌", "🧳", "🛠️", "🎁", "🏥", "🚗", "🎓", "💼", "🎯", "✈️",
-  "🏠", "🍽️", "🛒", "🎉", "💍", "👶", "🐾", "🎮", "📱", "💻",
-  "🧾s", "🏖️", "⛺", "🎵", "📚", "🏋️", "🚌", "🚆", "💡", "🩺",
-] as const;
-
 type AppContext = {
   workspaceId: string | null;
   workspaceName?: string | null;
@@ -82,13 +78,6 @@ type Transaction = {
   kind: string;
   hasCorrectionHistory?: boolean;
   date: string;
-};
-type GroupTransactionOption = Pick<Transaction, "id" | "subject" | "date" | "amountCents" | "direction" | "groupId" | "group">;
-type TransactionGroupDetail = {
-  group: Pick<TransactionGroup, "id" | "budgetId" | "name" | "icon">;
-  memberIds: string[];
-  transactions: GroupTransactionOption[];
-  candidateLimit: number;
 };
 type TransactionsPageResponse = {
   transactions: Transaction[];
@@ -179,16 +168,7 @@ export function TransactionsPage() {
   const [isGroupingMode, setIsGroupingMode] = useState(false);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
-  const [groupDestinationId, setGroupDestinationId] = useState<string>("NEW");
-  const [groupName, setGroupName] = useState("");
-  const [groupIcon, setGroupIcon] = useState("📌");
   const [editingGroup, setEditingGroup] = useState<TransactionGroup | null>(null);
-  const [editingGroupName, setEditingGroupName] = useState("");
-  const [editingGroupIcon, setEditingGroupIcon] = useState("📌");
-  const [editingGroupSearch, setEditingGroupSearch] = useState("");
-  const [debouncedEditingGroupSearch, setDebouncedEditingGroupSearch] = useState("");
-  const [editingGroupMembershipChanges, setEditingGroupMembershipChanges] = useState<Record<string, boolean>>({});
-
   // Budget (sub-account) management modals
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
@@ -247,17 +227,6 @@ export function TransactionsPage() {
     staleTime: 0,
   });
 
-  const editingGroupDetail = useQuery({
-    queryKey: queryKeys.key(["transaction-group-detail", editingGroup?.id, debouncedEditingGroupSearch]),
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (debouncedEditingGroupSearch) params.set("search", debouncedEditingGroupSearch);
-      return fetchJson<TransactionGroupDetail>(`/api/transaction-groups/${editingGroup?.id}?${params.toString()}`);
-    },
-    enabled: Boolean(editingGroup?.id),
-    staleTime: 0,
-  });
-
   const bankAccounts = useQuery(bankAccountsQueryOptions(workspaceId));
   const bankAccountOptions = useMemo(() => bankAccounts.data ?? [], [bankAccounts.data]);
   const effectiveSelectedBankId = bankAccountOptions.length === 1 ? bankAccountOptions[0].id : selectedBankId;
@@ -304,14 +273,6 @@ export function TransactionsPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [searchQuery]);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setDebouncedEditingGroupSearch(editingGroupSearch.trim());
-    }, 250);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [editingGroupSearch]);
 
   const handleQuickSelect = (type: TransactionQuickPeriod) => {
     setActiveQuickSelect(type);
@@ -470,6 +431,8 @@ export function TransactionsPage() {
   useEffect(() => {
     setActiveGroupFilterId(requestedGroupIdRef.current || "ALL");
     requestedGroupIdRef.current = null;
+    setIsGroupModalOpen(false);
+    setEditingGroup(null);
     setIsGroupingMode(false);
     setSelectedTransactionIds([]);
   }, [activeBudgetFilterId]);
@@ -478,7 +441,6 @@ export function TransactionsPage() {
     if (activeGroupFilterId === "ALL" || transactionGroups.isLoading) return;
     if (!(transactionGroups.data ?? []).some((group) => group.id === activeGroupFilterId)) {
       setActiveGroupFilterId("ALL");
-      return;
     }
   }, [activeGroupFilterId, transactionGroups.data, transactionGroups.isLoading]);
 
@@ -609,89 +571,6 @@ export function TransactionsPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["budgets", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["bank-accounts", workspaceId]), refetchType: "active" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.key(["dashboard-summary"]), refetchType: "active" });
-    },
-  });
-
-  const saveTransactionGroup = useMutation({
-    mutationFn: async (payload: {
-      destinationId: string;
-      name: string;
-      icon: string;
-      transactionIds: string[];
-    }) => {
-      if (payload.destinationId === "NEW") {
-        return fetchJson("/api/transaction-groups", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            workspaceId,
-            budgetId: activeBudgetFilterId,
-            name: payload.name,
-            icon: payload.icon,
-            transactionIds: payload.transactionIds,
-          }),
-        });
-      }
-      return fetchJson(`/api/transaction-groups/${payload.destinationId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addTransactionIds: payload.transactionIds }),
-      });
-    },
-    onSuccess: () => {
-      setIsGroupModalOpen(false);
-      setIsGroupingMode(false);
-      setSelectedTransactionIds([]);
-      setGroupDestinationId("NEW");
-      setGroupName("");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["transaction-groups", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions", workspaceId]), refetchType: "active" });
-    },
-  });
-
-  const updateTransactionGroup = useMutation({
-    mutationFn: ({
-      id,
-      name,
-      icon,
-      addTransactionIds,
-      removeTransactionIds,
-    }: {
-      id: string;
-      name: string;
-      icon: string;
-      addTransactionIds: string[];
-      removeTransactionIds: string[];
-    }) =>
-      fetchJson(`/api/transaction-groups/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, icon, addTransactionIds, removeTransactionIds }),
-      }),
-    onSuccess: () => {
-      setEditingGroup(null);
-      setEditingGroupName("");
-      setEditingGroupIcon("📌");
-      setEditingGroupSearch("");
-      setDebouncedEditingGroupSearch("");
-      setEditingGroupMembershipChanges({});
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["transaction-groups", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions", workspaceId]), refetchType: "active" });
-    },
-  });
-
-  const deleteTransactionGroup = useMutation({
-    mutationFn: (id: string) => fetchJson(`/api/transaction-groups/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      setEditingGroup(null);
-      setEditingGroupName("");
-      setEditingGroupIcon("📌");
-      setEditingGroupSearch("");
-      setDebouncedEditingGroupSearch("");
-      setEditingGroupMembershipChanges({});
-      setActiveGroupFilterId("ALL");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["transaction-groups", workspaceId]), refetchType: "active" });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.key(["transactions", workspaceId]), refetchType: "active" });
     },
   });
 
@@ -1322,61 +1201,6 @@ export function TransactionsPage() {
   const editBudgetError = updateBudget.error ?? deleteBudget.error;
 
   const activeBudget = budgets.data?.find((budget) => budget.id === activeBudgetFilterId);
-  const editingGroupOriginalMemberIds = new Set(editingGroupDetail.data?.memberIds ?? []);
-  const editingGroupSelectedCount = (() => {
-    let count = editingGroupOriginalMemberIds.size;
-    for (const [transactionId, selected] of Object.entries(editingGroupMembershipChanges)) {
-      const wasSelected = editingGroupOriginalMemberIds.has(transactionId);
-      if (selected && !wasSelected) count += 1;
-      if (!selected && wasSelected) count -= 1;
-    }
-    return count;
-  })();
-
-  const openEditingGroupModal = (group: TransactionGroup) => {
-    updateTransactionGroup.reset();
-    deleteTransactionGroup.reset();
-    setEditingGroup(group);
-    setEditingGroupName(group.name);
-    setEditingGroupIcon(group.icon || "📌");
-    setEditingGroupSearch("");
-    setDebouncedEditingGroupSearch("");
-    setEditingGroupMembershipChanges({});
-  };
-
-  const closeEditingGroupModal = () => {
-    setEditingGroup(null);
-    setEditingGroupName("");
-    setEditingGroupIcon("📌");
-    setEditingGroupSearch("");
-    setDebouncedEditingGroupSearch("");
-    setEditingGroupMembershipChanges({});
-  };
-
-  const toggleEditingGroupTransaction = (transactionId: string) => {
-    const isSelected = editingGroupMembershipChanges[transactionId] ?? editingGroupOriginalMemberIds.has(transactionId);
-    setEditingGroupMembershipChanges((current) => ({ ...current, [transactionId]: !isSelected }));
-  };
-
-  const submitEditingGroup = (event: SubmitEvent) => {
-    event.preventDefault();
-    if (!editingGroup || !editingGroupName.trim()) return;
-    const addTransactionIds: string[] = [];
-    const removeTransactionIds: string[] = [];
-    for (const [transactionId, selected] of Object.entries(editingGroupMembershipChanges)) {
-      const wasSelected = editingGroupOriginalMemberIds.has(transactionId);
-      if (selected && !wasSelected) addTransactionIds.push(transactionId);
-      if (!selected && wasSelected) removeTransactionIds.push(transactionId);
-    }
-    updateTransactionGroup.mutate({
-      id: editingGroup.id,
-      name: editingGroupName.trim(),
-      icon: editingGroupIcon,
-      addTransactionIds,
-      removeTransactionIds,
-    });
-  };
-
   const toggleTransactionSelection = (transactionId: string) => {
     setSelectedTransactionIds((current) =>
       current.includes(transactionId)
@@ -1386,35 +1210,7 @@ export function TransactionsPage() {
   };
 
   const openGroupingModal = () => {
-    if (!selectedTransactionIds.length) return;
-    saveTransactionGroup.reset();
-    const selectedTransactions = transactionList.filter((transaction) => selectedTransactionIds.includes(transaction.id));
-    const defaults = getContextualGroupDefaults(activeBudget, selectedTransactions);
-    setGroupDestinationId("NEW");
-    setGroupName(defaults.suggestedName);
-    setGroupIcon(defaults.icon);
-    setIsGroupModalOpen(true);
-  };
-
-  const submitGrouping = (event: SubmitEvent) => {
-    event.preventDefault();
-    if (!selectedTransactionIds.length) return;
-    if (groupDestinationId === "NEW" && !groupName.trim()) return;
-    saveTransactionGroup.mutate({
-      destinationId: groupDestinationId,
-      name: groupName.trim(),
-      icon: groupIcon,
-      transactionIds: selectedTransactionIds,
-    });
-  };
-
-  const confirmDeleteGroup = async () => {
-    if (!editingGroup) return;
-    if (!(await confirmDestructiveAction(`Delete “${editingGroup.name}”? Its transactions will remain in the sub-account.`, "Delete transaction group?", {
-      workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
-      reversal: "The group cannot be restored automatically; its transactions are not deleted.",
-    }))) return;
-    deleteTransactionGroup.mutate(editingGroup.id);
+    if (selectedTransactionIds.length) setIsGroupModalOpen(true);
   };
 
   return (
@@ -1500,7 +1296,7 @@ export function TransactionsPage() {
           formatAmount={formatCents}
           onSelect={selectTransactionGroupFromPicker}
           onToggle={toggleTransactionGroupFilter}
-          onEdit={openEditingGroupModal}
+          onEdit={setEditingGroup}
           onGroup={() => {
             setIsGroupingMode(true);
             setSelectedTransactionIds([]);
@@ -1767,159 +1563,34 @@ export function TransactionsPage() {
         </div>
       </section>
 
-      {isGroupModalOpen && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={() => setIsGroupModalOpen(false)} title="Create transaction group" surface="custom" overlayClassName="profile-modal-overlay">
-          <dialog open className="profile-modal tx-group-modal">
-            <div className="profile-modal-head">
-              <h3>Group {selectedTransactionIds.length} transactions</h3>
-              <ModalCloseButton onClick={() => setIsGroupModalOpen(false)} label="Close Group Transactions" />
-            </div>
-            <form className="modal-form-shell" onSubmit={submitGrouping}>
-              <div className="profile-modal-body">
-                <p className="tx-group-modal-intro">
-                  What do these {activeBudget?.name ?? "sub-account"} transactions belong to?
-                </p>
-                {(transactionGroups.data ?? []).length ? (
-                  <label className="tx-group-field">
-                    Group
-                    <Select className="input" value={groupDestinationId} onChange={(event) => setGroupDestinationId(event.target.value)}>
-                      <option value="NEW">Create a new group</option>
-                      {(transactionGroups.data ?? []).map((group) => (
-                        <option key={group.id} value={group.id}>{group.icon || "📌"} {group.name}</option>
-                      ))}
-                    </Select>
-                  </label>
-                ) : null}
-                {groupDestinationId === "NEW" ? (
-                  <div className="tx-group-name-row">
-                    <label className="tx-group-field tx-group-icon-field">
-                      Icon
-                      <Select className="input" value={groupIcon} onChange={(event) => setGroupIcon(event.target.value)}>
-                        {[groupIcon, ...GROUP_ICON_OPTIONS].filter((icon, index, icons) => icons.indexOf(icon) === index).map((icon) => (
-                          <option key={icon} value={icon}>{icon}</option>
-                        ))}
-                      </Select>
-                    </label>
-                    <label className="tx-group-field">
-                      Name
-                      <Input
-                        className="input"
-                        value={groupName}
-                        onChange={(event) => setGroupName(event.target.value)}
-                        placeholder={getContextualGroupDefaults(activeBudget, transactionList.filter((transaction) => selectedTransactionIds.includes(transaction.id))).placeholder}
-                        maxLength={80}
-                        autoFocus
-                        required
-                      />
-                    </label>
-                  </div>
-                ) : (
-                  <p className="tx-group-modal-hint">Selected transactions will be moved here if they already belong to another group.</p>
-                )}
-                {saveTransactionGroup.isError ? <div className="form-error">{saveTransactionGroup.error.message}</div> : null}
-              </div>
-              <div className="txn-modal-actions">
-                <Button type="button" className="btn btn-ghost" onClick={() => setIsGroupModalOpen(false)}>Cancel</Button>
-                <Button type="submit" className="btn btn-primary" disabled={saveTransactionGroup.isPending || (groupDestinationId === "NEW" && !groupName.trim())}>
-                  {saveTransactionGroup.isPending ? "Saving…" : groupDestinationId === "NEW" ? "Create group" : "Add to group"}
-                </Button>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>,
-        document.body,
-      )}
+      {isGroupModalOpen && workspaceId && activeBudgetFilterId !== "ALL" ? (
+        <TransactionGroupCreateDialog
+          workspaceId={workspaceId}
+          budgetId={activeBudgetFilterId}
+          budgetName={activeBudget?.name ?? "sub-account"}
+          transactionIds={selectedTransactionIds}
+          groups={transactionGroups.data ?? []}
+          defaults={getContextualGroupDefaults(activeBudget, transactionList.filter((transaction) => selectedTransactionIds.includes(transaction.id)))}
+          onClose={() => setIsGroupModalOpen(false)}
+          onSaved={() => {
+            setIsGroupModalOpen(false);
+            setIsGroupingMode(false);
+            setSelectedTransactionIds([]);
+          }}
+        />
+      ) : null}
 
-      {editingGroup && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={closeEditingGroupModal} title="Edit transaction group" surface="custom" overlayClassName="profile-modal-overlay">
-          <dialog open className="profile-modal tx-group-modal">
-            <div className="profile-modal-head">
-              <h3>Edit group</h3>
-              <ModalCloseButton onClick={closeEditingGroupModal} label="Close Edit Group" />
-            </div>
-            <form onSubmit={submitEditingGroup} className="modal-form-shell tx-group-edit-form">
-              <div className="profile-modal-body">
-                <div className="tx-group-name-row">
-                  <label className="tx-group-field tx-group-icon-field">
-                    Icon
-                    <Select className="input" value={editingGroupIcon} onChange={(event) => setEditingGroupIcon(event.target.value)} aria-label="Group icon">
-                      {[editingGroupIcon, ...GROUP_ICON_OPTIONS].filter((icon, index, icons) => icons.indexOf(icon) === index).map((icon) => (
-                        <option key={icon} value={icon}>{icon}</option>
-                      ))}
-                    </Select>
-                  </label>
-                  <label className="tx-group-field">
-                    Name
-                    <Input className="input" value={editingGroupName} onChange={(event) => setEditingGroupName(event.target.value)} maxLength={80} autoFocus required />
-                  </label>
-                </div>
-                <div className="tx-group-members-head">
-                  <div>
-                    <strong>Transactions</strong>
-                    <span>{editingGroupSelectedCount} selected</span>
-                  </div>
-                  <Input
-                    className="input tx-group-members-search"
-                    type="search"
-                    value={editingGroupSearch}
-                    onChange={(event) => setEditingGroupSearch(event.target.value)}
-                    placeholder="Search this sub-account…"
-                    aria-label="Search transactions in this sub-account"
-                  />
-                </div>
-                <p className="tx-group-modal-hint">Select or clear transactions to change what belongs in this group. Selecting one from another group will move it here.</p>
-                <div className="tx-group-members-list" aria-label="Transactions available for this group">
-                  {editingGroupDetail.isLoading ? (
-                    <div className="tx-group-members-state"><LoadingDots /> Loading transactions</div>
-                  ) : editingGroupDetail.isError ? (
-                    <div className="tx-group-members-state form-error">{editingGroupDetail.error.message}</div>
-                  ) : (editingGroupDetail.data?.transactions ?? []).length ? (
-                    (editingGroupDetail.data?.transactions ?? []).map((transaction) => {
-                      const isSelected = editingGroupMembershipChanges[transaction.id] ?? editingGroupOriginalMemberIds.has(transaction.id);
-                      const signedAmount = transaction.direction === "CREDIT" ? transaction.amountCents : -transaction.amountCents;
-                      return (
-                        <label key={transaction.id} className={`tx-group-member-row${isSelected ? " is-selected" : ""}`}>
-                          <Input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleEditingGroupTransaction(transaction.id)}
-                          />
-                          <span className="tx-group-member-copy">
-                            <strong>{transaction.subject}</strong>
-                            <small>
-                              {formatTransactionDate(transaction.date)}
-                              {transaction.group && transaction.group.id !== editingGroup.id ? (
-                                <span className="tx-group-member-current">{transaction.group.icon || "📌"} {transaction.group.name}</span>
-                              ) : null}
-                            </small>
-                          </span>
-                          <span className={`tx-group-member-amount ${getAmountToneClass(signedAmount)}`}>
-                            {transaction.direction === "CREDIT" ? "+" : "−"}{formatCents(transaction.amountCents)}
-                          </span>
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <div className="tx-group-members-state">No matching transactions.</div>
-                  )}
-                </div>
-                {updateTransactionGroup.isError ? <div className="form-error">{updateTransactionGroup.error.message}</div> : null}
-                {deleteTransactionGroup.isError ? <div className="form-error">{deleteTransactionGroup.error.message}</div> : null}
-              </div>
-              <div className="txn-modal-actions tx-group-edit-actions">
-                <Button type="button" className="btn btn-danger modal-action-destructive" onClick={confirmDeleteGroup} disabled={deleteTransactionGroup.isPending}>Delete group</Button>
-                <div className="modal-action-group">
-                  <Button type="button" className="btn btn-ghost" onClick={closeEditingGroupModal}>Cancel</Button>
-                  <Button type="submit" className="btn btn-primary" disabled={updateTransactionGroup.isPending || !editingGroupName.trim()}>
-                    {updateTransactionGroup.isPending ? "Saving…" : "Save"}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>,
-        document.body,
-      )}
+      {editingGroup && workspaceId ? (
+        <TransactionGroupEditDialog
+          key={editingGroup.id}
+          group={editingGroup}
+          workspaceId={workspaceId}
+          workspace={{ name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" }}
+          formatAmount={formatCents}
+          onClose={() => setEditingGroup(null)}
+          onDeleted={() => { setEditingGroup(null); setActiveGroupFilterId("ALL"); }}
+        />
+      ) : null}
 
       {isCreateModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={() => setIsCreateModalOpen(false)} title="Add transaction" surface="custom" overlayClassName="profile-modal-overlay">
