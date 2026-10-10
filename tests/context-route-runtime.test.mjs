@@ -298,6 +298,16 @@ test("context chooses the first membership when the user has no saved workspace"
   assert.deepEqual(calls.find(({ operation }) => operation === "workspace.findUnique").options.where, { id: "workspace-one" });
 });
 
+test("setup counts follow the selected membership without combining another workspace's progress", async () => {
+  const other = membership("workspace-two");
+  other.workspace._count = { budgetEnvelopes: 0, creditCards: 7 };
+  fixtures.set("workspaceMember.findMany", [membership(), other]);
+  const response = await GET(request("GET", undefined, { "x-workspace-id": "workspace-two" }));
+  const body = await response.json();
+  assert.equal(body.workspaceId, "workspace-two");
+  assert.deepEqual(body.setupProgress, { bankAccountCount: 1, subAccountCount: 0, creditCardCount: 7 });
+});
+
 test("sessions without identity details remain unauthorized without exposing context", async () => {
   for (const session of [null, {}, { user: {} }]) {
     serverSession = session;

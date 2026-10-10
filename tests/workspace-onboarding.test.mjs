@@ -43,8 +43,9 @@ test("workspace context exposes one setup snapshot without a separate onboarding
   const context = await source("app/api/context/route.ts");
   assert.match(context, /setupProgress:\s*\{[\s\S]*?bankAccountCount:[\s\S]*?subAccountCount:[\s\S]*?creditCardCount:/);
   assert.match(context, /workspace\.financials\.filter\(\(account\) => account\.kind === "BANK"\)/);
-  assert.match(context, /selectedMembership\?\.workspace\._count\.budgetEnvelopes/);
-  assert.match(context, /selectedMembership\?\.workspace\._count\.creditCards/);
+  assert.match(context, /if \(!selectedMembership\)\s*\{\s*return NextResponse\.json\(emptyContextResponse/);
+  assert.match(context, /selectedMembership\.workspace\._count\.budgetEnvelopes/);
+  assert.match(context, /selectedMembership\.workspace\._count\.creditCards/);
 });
 
 test("the shared shell offers onboarding only to workspace editors and lazy-loads the workflow", async () => {
