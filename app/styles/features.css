@@ -6557,6 +6557,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .tx-group-card {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: auto max-content 22px;
   grid-template-rows: auto auto;
@@ -6573,6 +6574,10 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   cursor: pointer;
   flex: 0 0 auto;
   text-align: left;
+}
+
+.tx-group-card > span {
+  pointer-events: none;
 }
 
 .tx-group-card.is-active {
@@ -6630,6 +6635,7 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 
 .tx-group-card-edit {
   position: static;
+  z-index: var(--z-raised);
   grid-column: 3;
   grid-row: 1 / 3;
   align-self: center;
@@ -12557,7 +12563,8 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   overflow: hidden;
 }
 
-.tx-account-card-select {
+.tx-account-card-select,
+.tx-group-card-select {
   position: absolute;
   inset: 0;
   z-index: var(--z-base);
@@ -12568,7 +12575,8 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
   cursor: pointer;
 }
 
-.tx-account-card-select:focus-visible {
+.tx-account-card-select:focus-visible,
+.tx-group-card-select:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: calc(-1 * var(--focus-ring-offset));
 }

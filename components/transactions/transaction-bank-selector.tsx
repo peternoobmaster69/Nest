@@ -34,16 +34,16 @@ export function TransactionBankSelector({ accounts, selected, balanceCents, open
     const outside = (event: MouseEvent) => {
       if (!pickerRef.current!.contains(event.target as Node)) onOpenChange(false);
     };
-    const escape = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       onOpenChange(false);
       triggerRef.current!.focus();
     };
     document.addEventListener("mousedown", outside);
-    document.addEventListener("keydown", escape);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", outside);
-      document.removeEventListener("keydown", escape);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [pickerVisible, onOpenChange]);
 
@@ -59,10 +59,10 @@ export function TransactionBankSelector({ accounts, selected, balanceCents, open
           {canChoose ? <Button ref={triggerRef} type="button" className="bm-edit-btn tx-bank-action-btn" onClick={() => onOpenChange(!open)} aria-label="Choose bank" title="Choose bank" aria-expanded={pickerVisible} aria-controls="transaction-bank-options">▾</Button> : null}
           {selected ? <Button type="button" className="bm-edit-btn tx-bank-action-btn" onClick={() => onEdit(selected)} disabled={busy} aria-label={`Edit ${selected.name} balance`} title="Edit balance">✎</Button> : null}
           {pickerVisible ? (
-            <div id="transaction-bank-options" className="bank-selector-menu" role="group" aria-label="Bank options">
+            <fieldset id="transaction-bank-options" className="bank-selector-menu" aria-label="Bank options" style={{ margin: 0, minWidth: 0 }}>
               <Button type="button" className={`bank-selector-option${selected ? "" : " is-active"}`} aria-pressed={!selected} onClick={() => choose("")}>All banks</Button>
               {accounts.map((bank) => <Button key={bank.id} type="button" className={`bank-selector-option${selected?.id === bank.id ? " is-active" : ""}`} aria-pressed={selected?.id === bank.id} onClick={() => choose(bank.id)}>{bank.name}</Button>)}
-            </div>
+            </fieldset>
           ) : null}
         </div>
       </div>

@@ -1,5 +1,5 @@
 "use client";
-import { getAmountToneClass, formatTransactionDate, formatTransactionGroupDateRange, normalizeTransactionGroupSearchValue, groupTransactionsByMonth, getBudgetIcon, getContextualGroupDefaults } from "@/lib/transaction-presentation";
+import { getAmountToneClass, formatTransactionDate, groupTransactionsByMonth, getBudgetIcon, getContextualGroupDefaults } from "@/lib/transaction-presentation";
 import { resolveTransactionUrlFilters, transactionMonthSummaryUrl } from "@/lib/transaction-view-filters";
 import { apiFetch as fetchJson } from "@/lib/api/client";
 import { useWorkspaceId } from "@/components/workspace-provider";
@@ -9,7 +9,7 @@ import { useMoneyFormat } from "@/lib/use-money-format";
 import { getBrowserCookie, setBrowserCookie } from "@/lib/browser-cookies";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { SubmitEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SubmitEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { useSessionState } from "@/lib/use-session-state";
@@ -17,7 +17,7 @@ import { getMotionSafeScrollBehavior } from "@/lib/motion";
 import { EmptyState, LoadingDots } from "@/components/ui-skeleton";
 import { TransactionsInitialSkeleton, TransactionsListSkeleton, TransactionsReceivablesListSkeleton, TransactionsStatsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { confirmDestructiveAction, confirmMoneyChange } from "@/lib/confirm-destructive";
-import { ArrowLeftRight, Check, Layers3, Pencil, Plus, Search, X } from "lucide-react";
+import { ArrowLeftRight, Layers3, Plus, X } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ import { TransactionBankSelector } from "@/components/transactions/transaction-b
 import { TransactionBankReconciliation } from "@/components/transactions/transaction-bank-reconciliation";
 import { TransactionBankBalanceDialog } from "@/components/transactions/transaction-bank-balance-dialog";
 import { parseNonNegativeCents } from "@/lib/amount-input";
+import { TransactionGroupPanel } from "@/components/transactions/transaction-group-panel";
+import type { TransactionGroup } from "@/components/transactions/transaction-group-types";
 import { TransactionBudgetGrid } from "@/components/transactions/transaction-budget-grid";
 import { TransactionBudgetDialog } from "@/components/transactions/transaction-budget-dialog";
 import type { TransactionLineageResponse } from "@/components/transactions/transaction-lineage-panel";
@@ -80,18 +82,6 @@ type Transaction = {
   kind: string;
   hasCorrectionHistory?: boolean;
   date: string;
-};
-type TransactionGroup = {
-  id: string;
-  budgetId: string;
-  name: string;
-  icon?: string | null;
-  transactionCount: number;
-  incomeCents: number;
-  expenseCents: number;
-  netCents: number;
-  firstTransactionDate?: string | null;
-  lastTransactionDate?: string | null;
 };
 type GroupTransactionOption = Pick<Transaction, "id" | "subject" | "date" | "amountCents" | "direction" | "groupId" | "group">;
 type TransactionGroupDetail = {
@@ -181,15 +171,10 @@ export function TransactionsPage() {
   const [receivableInfoBudgetId, setReceivableInfoBudgetId] = useState<string | null>(null);
   const recentTransactionsRef = useRef<HTMLElement | null>(null);
   const subAccountsRef = useRef<HTMLElement | null>(null);
-  const transactionGroupPickerRef = useRef<HTMLDivElement | null>(null);
-  const transactionGroupPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const transactionGroupCardsRef = useRef<HTMLDivElement | null>(null);
   const focusedTransactionIdRef = useRef<string | null>(null);
   const loadMoreTransactionsRef = useRef<HTMLDivElement | null>(null);
   const requestedGroupIdRef = useRef<string | null>(null);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
-  const [isTransactionGroupPickerOpen, setIsTransactionGroupPickerOpen] = useState(false);
-  const [transactionGroupPickerQuery, setTransactionGroupPickerQuery] = useState("");
   const [selectedMonthFilter, setSelectedMonthFilter] = useSessionState<string>("nest:view:transactions:month", "ALL"); // Format: "YYYY-MM" or "ALL"
   const [isGroupingMode, setIsGroupingMode] = useState(false);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
@@ -363,37 +348,15 @@ export function TransactionsPage() {
     setDateFilter({});
   };
 
-  const scrollTransactionGroupIntoView = useCallback((groupId: string) => {
-    window.requestAnimationFrame(() => {
-      const cards = transactionGroupCardsRef.current;
-      if (!cards) return;
-
-      const groupCard = Array.from(cards.querySelectorAll<HTMLElement>("[data-group-id]")).find(
-        (card) => card.dataset.groupId === groupId,
-      );
-      if (!groupCard) return;
-
-      const cardsRect = cards.getBoundingClientRect();
-      const cardRect = groupCard.getBoundingClientRect();
-      const centeredLeft =
-        cards.scrollLeft + cardRect.left - cardsRect.left - Math.max(0, (cards.clientWidth - cardRect.width) / 2);
-      cards.scrollTo({ left: Math.max(0, centeredLeft), behavior: getMotionSafeScrollBehavior() });
-    });
-  }, []);
-
   const toggleTransactionGroupFilter = (groupId: string) => {
     const nextGroupId = activeGroupFilterId === groupId ? "ALL" : groupId;
     setActiveGroupFilterId(nextGroupId);
     clearDateFilter();
-    if (nextGroupId !== "ALL") scrollTransactionGroupIntoView(nextGroupId);
   };
 
   const selectTransactionGroupFromPicker = (groupId: string) => {
     setActiveGroupFilterId(groupId);
     clearDateFilter();
-    setIsTransactionGroupPickerOpen(false);
-    setTransactionGroupPickerQuery("");
-    if (groupId !== "ALL") scrollTransactionGroupIntoView(groupId);
   };
 
   const customMonthsFilter = activeQuickSelect === "custom" ? selectedCustomMonths.join(",") : "";
@@ -509,8 +472,6 @@ export function TransactionsPage() {
     requestedGroupIdRef.current = null;
     setIsGroupingMode(false);
     setSelectedTransactionIds([]);
-    setIsTransactionGroupPickerOpen(false);
-    setTransactionGroupPickerQuery("");
   }, [activeBudgetFilterId]);
 
   useEffect(() => {
@@ -519,8 +480,7 @@ export function TransactionsPage() {
       setActiveGroupFilterId("ALL");
       return;
     }
-    scrollTransactionGroupIntoView(activeGroupFilterId);
-  }, [activeGroupFilterId, transactionGroups.data, transactionGroups.isLoading, scrollTransactionGroupIntoView]);
+  }, [activeGroupFilterId, transactionGroups.data, transactionGroups.isLoading]);
 
   useEffect(() => {
     if (urlFilterHydrated) return;
@@ -570,30 +530,6 @@ export function TransactionsPage() {
       row?.focus({ preventScroll: true });
     });
   }, [targetTransactionId, transactionList, transactions.isLoading, urlFilterHydrated]);
-
-  useEffect(() => {
-    if (!isTransactionGroupPickerOpen) return;
-
-    const closePicker = () => {
-      setIsTransactionGroupPickerOpen(false);
-      setTransactionGroupPickerQuery("");
-    };
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!transactionGroupPickerRef.current?.contains(event.target as Node)) closePicker();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      closePicker();
-      transactionGroupPickerTriggerRef.current?.focus();
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isTransactionGroupPickerOpen]);
 
   const createTx = useMutation({
     mutationFn: (payload: {
@@ -1386,16 +1322,6 @@ export function TransactionsPage() {
   const editBudgetError = updateBudget.error ?? deleteBudget.error;
 
   const activeBudget = budgets.data?.find((budget) => budget.id === activeBudgetFilterId);
-  const visibleTransactionGroups = transactionGroups.data ?? [];
-  const hasTransactionGroups = visibleTransactionGroups.length > 0;
-  const normalizedTransactionGroupPickerQuery = normalizeTransactionGroupSearchValue(transactionGroupPickerQuery);
-  const filteredTransactionGroupPickerGroups = normalizedTransactionGroupPickerQuery
-    ? visibleTransactionGroups.filter((group) => {
-        const dateRange = formatTransactionGroupDateRange(group.firstTransactionDate, group.lastTransactionDate);
-        const searchableValue = normalizeTransactionGroupSearchValue(`${group.name} ${dateRange}`);
-        return searchableValue.includes(normalizedTransactionGroupPickerQuery);
-      })
-    : visibleTransactionGroups;
   const editingGroupOriginalMemberIds = new Set(editingGroupDetail.data?.memberIds ?? []);
   const editingGroupSelectedCount = (() => {
     let count = editingGroupOriginalMemberIds.size;
@@ -1563,172 +1489,25 @@ export function TransactionsPage() {
       </section>
 
       {activeBudgetFilterId !== "ALL" ? (
-        <section
-          className={`card tx-group-panel${transactionGroups.isLoading ? " is-loading" : hasTransactionGroups ? " has-groups" : " is-empty"}`}
-          aria-label={`Groups in ${activeBudget?.name ?? "sub-account"}`}
-        >
-          <div className="tx-group-panel-head">
-            <div className="tx-group-panel-heading" ref={transactionGroupPickerRef}>
-              {hasTransactionGroups ? (
-                <Button
-                  ref={transactionGroupPickerTriggerRef}
-                  type="button"
-                  className={`tx-group-panel-symbol tx-group-picker-trigger${isTransactionGroupPickerOpen ? " is-open" : ""}`}
-                  aria-label={`Browse ${visibleTransactionGroups.length} transaction ${visibleTransactionGroups.length === 1 ? "group" : "groups"}`}
-                  aria-expanded={isTransactionGroupPickerOpen}
-                  aria-haspopup="dialog"
-                  aria-controls="transaction-group-picker"
-                  title="Browse and search groups"
-                  onClick={() => {
-                    setTransactionGroupPickerQuery("");
-                    setIsTransactionGroupPickerOpen((isOpen) => !isOpen);
-                  }}
-                >
-                  <Layers3 size={15} aria-hidden="true" />
-                  <span className="tx-group-count" aria-hidden="true">
-                    ×{visibleTransactionGroups.length}
-                  </span>
-                </Button>
-              ) : (
-                <span className="tx-group-panel-symbol" aria-hidden="true">
-                  <Layers3 size={15} />
-                </span>
-              )}
-              {hasTransactionGroups && isTransactionGroupPickerOpen ? (
-                <dialog open
-                  id="transaction-group-picker"
-                  className="tx-group-picker-popover"
-                  aria-label="Find a transaction group"
-                >
-                  <label className="tx-group-picker-search">
-                    <Search size={15} aria-hidden="true" />
-                    <Input
-                      type="search"
-                      value={transactionGroupPickerQuery}
-                      aria-label="Search transaction groups"
-                      placeholder="Search groups…"
-                      autoFocus
-                      onChange={(event) => setTransactionGroupPickerQuery(event.target.value)}
-                    />
-                  </label>
-                  <div className="tx-group-picker-options">
-                    {!normalizedTransactionGroupPickerQuery ? (
-                      <Button
-                        type="button"
-                        className={`tx-group-picker-option${activeGroupFilterId === "ALL" ? " is-active" : ""}`}
-                        aria-pressed={activeGroupFilterId === "ALL"}
-                        onClick={() => selectTransactionGroupFromPicker("ALL")}
-                      >
-                        <span className="tx-group-picker-option-icon" aria-hidden="true">
-                          <Layers3 size={15} />
-                        </span>
-                        <span className="tx-group-picker-option-copy">
-                          <strong>All groups</strong>
-                          <small>{visibleTransactionGroups.length} {visibleTransactionGroups.length === 1 ? "group" : "groups"}</small>
-                        </span>
-                        {activeGroupFilterId === "ALL" ? <Check size={15} aria-hidden="true" /> : null}
-                      </Button>
-                    ) : null}
-                    {filteredTransactionGroupPickerGroups.map((group) => {
-                      const isActive = activeGroupFilterId === group.id;
-                      const transactionDateRange = formatTransactionGroupDateRange(
-                        group.firstTransactionDate,
-                        group.lastTransactionDate,
-                      );
-                      return (
-                        <Button
-                          key={group.id}
-                          type="button"
-                          className={`tx-group-picker-option${isActive ? " is-active" : ""}`}
-                          aria-pressed={isActive}
-                          onClick={() => selectTransactionGroupFromPicker(group.id)}
-                        >
-                          <span className="tx-group-picker-option-icon" aria-hidden="true">{group.icon || "📌"}</span>
-                          <span className="tx-group-picker-option-copy">
-                            <strong>{group.name}</strong>
-                            <small className="tx-group-picker-option-amount">
-                              {formatCents(group.expenseCents - group.incomeCents)}
-                            </small>
-                            <small className="tx-group-picker-option-range" title={transactionDateRange}>
-                              {transactionDateRange}
-                            </small>
-                          </span>
-                          {isActive ? <Check size={15} aria-hidden="true" /> : null}
-                        </Button>
-                      );
-                    })}
-                    {filteredTransactionGroupPickerGroups.length === 0 ? (
-                      <p className="tx-group-picker-empty">No groups match “{transactionGroupPickerQuery.trim()}”.</p>
-                    ) : null}
-                  </div>
-                </dialog>
-              ) : null}
-              {!hasTransactionGroups && !transactionGroups.isLoading ? (
-                <p>No groups yet. Create one to organise related transactions.</p>
-              ) : !hasTransactionGroups ? (
-                <p><LoadingDots /> Loading groups</p>
-              ) : null}
-            </div>
-            {hasTransactionGroups ? (
-              <div className="tx-group-cards" ref={transactionGroupCardsRef}>
-                {visibleTransactionGroups.map((group) => {
-                  const isActive = activeGroupFilterId === group.id;
-                  return (
-                    <div
-                      key={group.id}
-                      data-group-id={group.id}
-                      className={`tx-group-card${isActive ? " is-active" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      aria-pressed={isActive}
-                      aria-label={isActive ? `Clear ${group.name} filter and show all transactions` : `Show ${group.name} transactions`}
-                      title={isActive ? "Select again to show all transactions" : `Show ${group.name} transactions`}
-                      onClick={() => toggleTransactionGroupFilter(group.id)}
-                      onKeyDown={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          toggleTransactionGroupFilter(group.id);
-                        }
-                      }}
-                    >
-                      <span className="tx-group-card-icon" aria-hidden="true">{group.icon || "📌"}</span>
-                      <span className="tx-group-card-copy">
-                        <strong>{group.name}</strong>
-                      </span>
-                      <span className="tx-group-card-total">
-                        <strong>{formatCents(group.expenseCents - group.incomeCents)}</strong>
-                      </span>
-                      <Button
-                        type="button"
-                        className="tx-group-card-edit"
-                        aria-label={`Edit ${group.name}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openEditingGroupModal(group);
-                        }}
-                      >
-                        <Pencil size={12} aria-hidden="true" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-            <Button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setIsGroupingMode(true);
-                setSelectedTransactionIds([]);
-                recentTransactionsRef.current?.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
-              }}
-              disabled={!filteredTransactions.length}
-            >
-              Group
-            </Button>
-          </div>
-        </section>
+        <TransactionGroupPanel
+          key={activeBudgetFilterId}
+          budgetName={activeBudget?.name ?? "sub-account"}
+          groups={transactionGroups.data ?? []}
+          activeId={activeGroupFilterId}
+          loading={transactionGroups.isLoading}
+          error={transactionGroups.error}
+          canGroup={filteredTransactions.length > 0}
+          formatAmount={formatCents}
+          onSelect={selectTransactionGroupFromPicker}
+          onToggle={toggleTransactionGroupFilter}
+          onEdit={openEditingGroupModal}
+          onGroup={() => {
+            setIsGroupingMode(true);
+            setSelectedTransactionIds([]);
+            recentTransactionsRef.current?.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
+          }}
+          onRetry={() => { void transactionGroups.refetch(); }}
+        />
       ) : null}
 
       {/* Month/Year Filter Bar */}

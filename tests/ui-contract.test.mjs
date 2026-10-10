@@ -810,16 +810,19 @@ test("recent authentication errors provide a return-safe re-authentication actio
 });
 
 test("transaction groups use compact two-row cards and a searchable picker", async () => {
-  const transactions = await readFile(path.join(root, "components/transactions-page.tsx"), "utf8");
+  const transactions = (await Promise.all([
+    "components/transactions/transaction-group-panel.tsx",
+    "components/transactions/transaction-group-picker.tsx",
+  ].map((file) => readFile(path.join(root, file), "utf8")))).join("\n");
   const styles = await readAppStyles(root);
 
   assert.match(transactions, /className="tx-group-card-copy"[\s\S]*?<strong>\{group\.name\}<\/strong>/);
   assert.doesNotMatch(transactions, /\{group\.transactionCount\}/);
-  assert.match(transactions, /className="tx-group-count"[\s\S]*?×\{visibleTransactionGroups\.length\}/);
+  assert.match(transactions, /className="tx-group-count"[\s\S]*?×\{groups\.length\}/);
   assert.match(transactions, /className="tx-group-picker-popover"[\s\S]*?placeholder="Search groups…"/);
-  assert.match(transactions, /className="tx-group-cards" ref=\{transactionGroupCardsRef\}/);
+  assert.match(transactions, /className="tx-group-cards" ref=\{cardsRef\}/);
   assert.match(transactions, /data-group-id=\{group\.id\}/);
-  assert.match(transactions, /onClick=\{\(\) => selectTransactionGroupFromPicker\(group\.id\)\}/);
+  assert.match(transactions, /onClick=\{\(\) => onSelect\(group\.id\)\}/);
   assert.match(transactions, /formatTransactionGroupDateRange\([\s\S]*?group\.firstTransactionDate,[\s\S]*?group\.lastTransactionDate/);
   assert.match(transactions, /const searchableValue = normalizeTransactionGroupSearchValue\(`\$\{group\.name\} \$\{dateRange\}`\)/);
   assert.match(transactions, /className="tx-group-picker-option-range" title=\{transactionDateRange\}/);
