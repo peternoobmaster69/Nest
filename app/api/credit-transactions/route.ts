@@ -151,7 +151,7 @@ export async function GET(request: Request) {
       page,
       limit,
       hasMore,
-      nextCursor: hasMore ? pageItems[pageItems.length - 1].id : null,
+      nextCursor: hasMore ? pageItems.at(-1)!.id : null,
       summary: {
         totalAmountCents: summary._sum.amountCents ?? 0,
         unaccountedAmountCents: unaccountedSummary._sum.amountCents ?? 0,

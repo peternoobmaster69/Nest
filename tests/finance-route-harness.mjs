@@ -52,6 +52,11 @@ export const prisma = new Proxy({}, {
 mock.module("../lib/prisma.ts", { namedExports: { prisma } });
 mock.module("../lib/workspace-auth.ts", { namedExports: {
   ApiAuthError,
+  async requireSessionUserId() {
+    calls.push({ name: "session", args: [] });
+    if (state.sessionError) throw state.sessionError;
+    return "editor";
+  },
   async requireWorkspaceAccess(workspaceId, minimumRole) {
     accessChecks.push({ workspaceId, minimumRole });
     const error = state.accessError ?? state.workspaceErrors.get(workspaceId);
@@ -107,7 +112,7 @@ beforeEach((t) => {
   unexpected.length = 0;
   responses = new Map();
   Object.assign(state, {
-    accessError: null, workspaceErrors: new Map(), activeCookie: null,
+    accessError: null, sessionError: null, workspaceErrors: new Map(), activeCookie: null,
     postingError: null, replayedPosting: null, inPosting: false, inTransaction: false,
   });
   const previous = process.env.NEXTAUTH_URL;

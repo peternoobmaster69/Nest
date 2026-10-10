@@ -166,7 +166,7 @@ async function listTransactionPage(where: Prisma.TransactionWhereInput, page: nu
     page,
     limit,
     hasMore,
-    nextCursor: hasMore ? pageItems[pageItems.length - 1].id : null,
+    nextCursor: hasMore ? pageItems.at(-1)!.id : null,
     summary: {
       incomeCents,
       expenseCents,

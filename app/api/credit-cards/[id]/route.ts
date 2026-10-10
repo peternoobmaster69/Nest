@@ -78,29 +78,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
-    const data: {
-      cardName?: string;
-      bankName?: string | null;
-      themeKey?: string | null;
-      statementDay?: number;
-      paymentDueDay?: number;
-      expiryMonth?: number | null;
-      expiryYear?: number | null;
-      notes?: string | null;
-      isActive?: boolean;
-      last4Digit?: string;
-    } = {};
-
-    if (parsed.data.cardName !== undefined) data.cardName = parsed.data.cardName.trim();
-    if (parsed.data.bankName !== undefined) data.bankName = parsed.data.bankName ? parsed.data.bankName.trim() : null;
-    if (parsed.data.themeKey !== undefined) data.themeKey = parsed.data.themeKey ? parsed.data.themeKey.trim() : null;
-    if (parsed.data.statementDay !== undefined) data.statementDay = parsed.data.statementDay;
-    if (parsed.data.paymentDueDay !== undefined) data.paymentDueDay = parsed.data.paymentDueDay;
-    if (parsed.data.expiryMonth !== undefined) data.expiryMonth = parsed.data.expiryMonth;
-    if (parsed.data.expiryYear !== undefined) data.expiryYear = parsed.data.expiryYear;
-    if (parsed.data.notes !== undefined) data.notes = parsed.data.notes ? parsed.data.notes.trim() : null;
-    if (parsed.data.isActive !== undefined) data.isActive = parsed.data.isActive;
-    if (parsed.data.last4Digit !== undefined) data.last4Digit = parsed.data.last4Digit;
+    const data = { ...parsed.data };
+    if (data.cardName !== undefined) data.cardName = data.cardName.trim();
+    if (data.bankName !== undefined) data.bankName = data.bankName ? data.bankName.trim() : null;
+    if (data.themeKey !== undefined) data.themeKey = data.themeKey ? data.themeKey.trim() : null;
+    if (data.notes !== undefined) data.notes = data.notes ? data.notes.trim() : null;
 
     const updated = await prisma.creditCardAccount.update({
       where: { id },
