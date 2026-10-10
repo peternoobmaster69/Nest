@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { ApiRequestError } from "@/lib/api-security";
+import { resolveReceivableSourceWorkspace } from "@/lib/receivable-source";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -130,36 +132,10 @@ export async function POST(request: Request) {
 
     await requireWorkspaceAccess(parsed.data.workspaceId, "EDITOR");
 
-    let sourceWorkspaceId: string | null = null;
-    if (parsed.data.accountId) {
-      const account = await prisma.financialAccount.findUnique({
-        where: { id: parsed.data.accountId },
-        select: { id: true, workspaceId: true, kind: true, isActive: true },
-      });
-      if (account?.kind !== "BANK" || !account.isActive) {
-        return NextResponse.json({ error: "Selected deduction account is invalid." }, { status: 400 });
-      }
-      await requireWorkspaceAccess(account.workspaceId, "EDITOR");
-      sourceWorkspaceId = account.workspaceId;
-    }
-
-    if (parsed.data.budgetId) {
-      if (!parsed.data.accountId || !sourceWorkspaceId) {
-        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
-      }
-      const budget = await prisma.budgetEnvelope.findFirst({
-        where: {
-          id: parsed.data.budgetId,
-          workspaceId: sourceWorkspaceId,
-          accountId: parsed.data.accountId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      if (!budget) {
-        return NextResponse.json({ error: "Selected deduction subaccount is invalid." }, { status: 400 });
-      }
-    }
+    const sourceWorkspaceId = await resolveReceivableSourceWorkspace({
+      accountId: parsed.data.accountId || null,
+      budgetId: parsed.data.budgetId || undefined,
+    });
 
     const receivableDate = parsed.data.receivableDate ?? parsed.data.date;
     if (!receivableDate) {
@@ -187,7 +163,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
+    if (error instanceof ApiAuthError || error instanceof ApiRequestError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     const message = error instanceof Error ? error.message : "Unknown error";

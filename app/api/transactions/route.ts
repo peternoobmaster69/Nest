@@ -42,6 +42,138 @@ function getMonthDateRange(monthKey: string) {
   return { start, end };
 }
 
+const transactionSelect = {
+  id: true,
+  workspaceId: true,
+  accountId: true,
+  budgetId: true,
+  groupId: true,
+  kind: true,
+  direction: true,
+  date: true,
+  amountCents: true,
+  subject: true,
+  details: true,
+  notes: true,
+  isSynced: true,
+  isFromFamily: true,
+  externalRef: true,
+  createdAt: true,
+  updatedAt: true,
+  group: { select: { id: true, name: true, icon: true } },
+  postingGroup: { select: { operation: true } },
+} as const;
+type ListedTransaction = Prisma.TransactionGetPayload<{ select: typeof transactionSelect }>;
+const serializeTransaction = ({ postingGroup, ...transaction }: ListedTransaction) => ({
+  ...transaction,
+  date: transaction.date.toISOString(),
+  createdAt: transaction.createdAt.toISOString(),
+  updatedAt: transaction.updatedAt.toISOString(),
+  hasCorrectionHistory: postingGroup?.operation === "TRANSACTION_CORRECTION",
+});
+
+type TransactionMonthRange = NonNullable<ReturnType<typeof getMonthDateRange>>;
+
+type TransactionListScope = {
+  workspaceId: string;
+  transactionId: string;
+  accountId: string | null;
+  budgetId: string | null;
+  groupId: string | null;
+  search: string;
+  monthRange: TransactionMonthRange | null;
+  selectedMonthRanges: TransactionMonthRange[];
+  fromDate: string | null;
+  toDate: string | null;
+};
+
+function getTransactionDateFilter({ monthRange, selectedMonthRanges, fromDate, toDate }: TransactionListScope) {
+  if ((fromDate || toDate) && !selectedMonthRanges.length) {
+    const date: { gte?: Date; lte?: Date } = {};
+    if (fromDate) date.gte = new Date(fromDate);
+    if (toDate) {
+      const to = new Date(toDate);
+      to.setHours(23, 59, 59, 999);
+      date.lte = to;
+    }
+    return date;
+  }
+  return monthRange ? { gte: monthRange.start, lt: monthRange.end } : null;
+}
+
+function getTransactionListWhere(scope: TransactionListScope) {
+  const { workspaceId, transactionId, accountId, budgetId, groupId, search, selectedMonthRanges } = scope;
+  const date = getTransactionDateFilter(scope);
+  const andFilters: Prisma.TransactionWhereInput[] = [];
+  if (selectedMonthRanges.length) {
+    andFilters.push({
+      OR: selectedMonthRanges.map((range) => ({ date: { gte: range.start, lt: range.end } })),
+    });
+  }
+  if (search) {
+    andFilters.push({
+      OR: [
+        { subject: { contains: search } },
+        { details: { contains: search } },
+        { notes: { contains: search } },
+      ],
+    });
+  }
+  const where: Prisma.TransactionWhereInput = {
+    workspaceId,
+    voidedAt: null,
+    kind: { not: "REVERSAL" },
+    ...(transactionId ? { id: transactionId } : {}),
+    ...(accountId ? { accountId } : {}),
+    ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
+    ...(groupId ? { groupId } : {}),
+    ...(date ? { date } : {}),
+    ...(andFilters.length ? { AND: andFilters } : {}),
+  };
+  return where;
+}
+
+async function listTransactionPage(where: Prisma.TransactionWhereInput, page: number, limit: number, cursor: string | null) {
+  const txs = await prisma.transaction.findMany({
+    where,
+    ...(cursor
+      ? {
+          cursor: { id: cursor },
+          skip: 1,
+        }
+      : { skip: (page - 1) * limit }),
+    take: limit + 1,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: transactionSelect,
+  });
+  const hasMore = txs.length > limit;
+  const pageItems = hasMore ? txs.slice(0, limit) : txs;
+  const [total, summary] = await Promise.all([
+    prisma.transaction.count({ where }),
+    prisma.transaction.groupBy({
+      by: ["direction"],
+      where,
+      _sum: { amountCents: true },
+    }),
+  ]);
+
+  const incomeCents = summary.find((s) => s.direction === "CREDIT")?._sum.amountCents ?? 0;
+  const expenseCents = summary.find((s) => s.direction === "DEBIT")?._sum.amountCents ?? 0;
+
+  return {
+    transactions: pageItems.map(serializeTransaction),
+    total,
+    page,
+    limit,
+    hasMore,
+    nextCursor: hasMore ? pageItems[pageItems.length - 1].id : null,
+    summary: {
+      incomeCents,
+      expenseCents,
+    },
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -102,120 +234,20 @@ export async function GET(request: Request) {
       MAX_TRANSACTION_PAGE_LIMIT,
     );
     const page = Math.max(Number.parseInt(pageParam || "1", 10) || 1, 1);
-    const andFilters: Prisma.TransactionWhereInput[] = [];
-    if (selectedMonthRanges.length) {
-      andFilters.push({
-        OR: selectedMonthRanges.map((range) => ({ date: { gte: range.start, lt: range.end } })),
-      });
-    }
-    if (search) {
-      andFilters.push({
-        OR: [
-          { subject: { contains: search } },
-          { details: { contains: search } },
-          { notes: { contains: search } },
-        ],
-      });
-    }
-    const where: Prisma.TransactionWhereInput = {
-      workspaceId,
-      voidedAt: null,
-      kind: { not: "REVERSAL" },
-      ...(transactionId ? { id: transactionId } : {}),
-      ...(accountId ? { accountId } : {}),
-      ...(budgetId && budgetId !== "ALL" ? { budgetId } : {}),
-      ...(groupId ? { groupId } : {}),
-      ...(monthRange ? { date: { gte: monthRange.start, lt: monthRange.end } } : {}),
-      ...(andFilters.length ? { AND: andFilters } : {}),
-    };
-
-    if ((fromDate || toDate) && !selectedMonthRanges.length) {
-      where.date = {};
-      if (fromDate) {
-        (where.date as Record<string, Date>).gte = new Date(fromDate);
-      }
-      if (toDate) {
-        const to = new Date(toDate);
-        to.setHours(23, 59, 59, 999);
-        (where.date as Record<string, Date>).lte = to;
-      }
-    }
-    const select = {
-      id: true,
-      workspaceId: true,
-      accountId: true,
-      budgetId: true,
-      groupId: true,
-      kind: true,
-      direction: true,
-      date: true,
-      amountCents: true,
-      subject: true,
-      details: true,
-      notes: true,
-      isSynced: true,
-      isFromFamily: true,
-      externalRef: true,
-      createdAt: true,
-      updatedAt: true,
-      group: { select: { id: true, name: true, icon: true } },
-      postingGroup: { select: { operation: true } },
-    } as const;
-    type ListedTransaction = Prisma.TransactionGetPayload<{ select: typeof select }>;
-    const serializeTransaction = ({ postingGroup, ...transaction }: ListedTransaction) => ({
-      ...transaction,
-      date: transaction.date.toISOString(),
-      createdAt: transaction.createdAt.toISOString(),
-      updatedAt: transaction.updatedAt.toISOString(),
-      hasCorrectionHistory: postingGroup?.operation === "TRANSACTION_CORRECTION",
+    const where = getTransactionListWhere({
+      workspaceId, transactionId, accountId, budgetId, groupId, search,
+      monthRange, selectedMonthRanges, fromDate, toDate,
     });
 
     if (wantsPaginatedResponse) {
-      const txs = await prisma.transaction.findMany({
-        where,
-        ...(cursor
-          ? {
-              cursor: { id: cursor },
-              skip: 1,
-            }
-          : { skip: (page - 1) * limit }),
-        take: limit + 1,
-        orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-        select,
-      });
-      const hasMore = txs.length > limit;
-      const pageItems = hasMore ? txs.slice(0, limit) : txs;
-      const [total, summary] = await Promise.all([
-        prisma.transaction.count({ where }),
-        prisma.transaction.groupBy({
-          by: ["direction"],
-          where,
-          _sum: { amountCents: true },
-        }),
-      ]);
-
-      const incomeCents = summary.find((s) => s.direction === "CREDIT")?._sum.amountCents ?? 0;
-      const expenseCents = summary.find((s) => s.direction === "DEBIT")?._sum.amountCents ?? 0;
-
-      return NextResponse.json({
-        transactions: pageItems.map(serializeTransaction),
-        total,
-        page,
-        limit,
-        hasMore,
-        nextCursor: hasMore ? pageItems.at(-1)?.id ?? null : null,
-        summary: {
-          incomeCents,
-          expenseCents,
-        },
-      });
+      return NextResponse.json(await listTransactionPage(where, page, limit, cursor));
     }
 
     const txs = await prisma.transaction.findMany({
       where,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: MAX_TRANSACTION_PAGE_LIMIT,
-      select,
+      select: transactionSelect,
     });
 
     return NextResponse.json(
@@ -254,9 +286,9 @@ export async function POST(request: Request) {
     }
 
     const normalizedDirection =
-      budgetOperation === "ADD" ? "CREDIT" : budgetOperation === "DEDUCT" ? "DEBIT" : txPayload.direction;
+      budgetOperation === "ADD" ? "CREDIT" : "DEBIT";
     const normalizedKind =
-      budgetOperation === "ADD" ? "ADJUSTMENT" : budgetOperation === "DEDUCT" ? "EXPENSE" : txPayload.kind;
+      budgetOperation === "ADD" ? "ADJUSTMENT" : "EXPENSE";
 
     const posting = await executePosting({
       workspaceId: txPayload.workspaceId,

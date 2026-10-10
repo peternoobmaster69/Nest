@@ -37,6 +37,7 @@ export async function GET(request: Request) {
       status: { in: OPEN_RECEIVABLE_STATUSES },
     };
     const legacyWhere: Prisma.ReceivableWhereInput = {
+      workspaceId,
       budgetId,
       sourceBudgetId: null,
       status: { in: OPEN_RECEIVABLE_STATUSES },

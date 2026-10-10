@@ -1,4 +1,4 @@
-import { parseCreditTxnAutoRules, CreditTxnAutoRulesSchema, stringifyCreditTxnAutoRules } from "@/lib/credit-txn-auto-rules";
+import { parseCreditTxnAutoRules, CreditTxnAutoRulesSchema, stringifyCreditTxnAutoRules, type CreditTxnAutoRule } from "@/lib/credit-txn-auto-rules";
 import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
@@ -18,68 +18,78 @@ function formatRuleSchemaError(error: z.ZodError) {
     .join(" ");
 }
 
-async function validateRuleTargets(workspaceId: string, rules: z.infer<typeof CreditTxnAutoRulesSchema>) {
-  for (const rule of rules) {
-    if (rule.action === "DEDUCT_SAME_WORKSPACE") {
-      if (rule.sourceBudgetId === rule.destinationBudgetId) {
-        throw new Error(`Rule "${rule.name}" needs different source and destination sub accounts.`);
-      }
+async function validateSameWorkspaceRule(
+  workspaceId: string,
+  rule: Extract<CreditTxnAutoRule, { action: "DEDUCT_SAME_WORKSPACE" }>,
+) {
+  if (rule.sourceBudgetId === rule.destinationBudgetId) {
+    throw new Error(`Rule "${rule.name}" needs different source and destination sub accounts.`);
+  }
 
-      const sameWorkspaceBudgets = await prisma.budgetEnvelope.findMany({
-        take: 500,
-        where: {
-          id: { in: [rule.sourceBudgetId, rule.destinationBudgetId] },
-          workspaceId,
+  const sameWorkspaceBudgets = await prisma.budgetEnvelope.findMany({
+    take: 500,
+    where: {
+      id: { in: [rule.sourceBudgetId, rule.destinationBudgetId] },
+      workspaceId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      account: {
+        select: {
+          kind: true,
           isActive: true,
         },
-        select: {
-          id: true,
-          account: {
-            select: {
-              kind: true,
-              isActive: true,
-            },
-          },
-        },
-      });
-
-      const sourceBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.sourceBudgetId);
-      const destinationBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.destinationBudgetId);
-      if (sourceBudget?.account.kind !== "BANK" || !sourceBudget.account.isActive) {
-        throw new Error(`Rule "${rule.name}" has an invalid source sub account.`);
-      }
-      if (destinationBudget?.account.kind !== "BANK" || !destinationBudget.account.isActive) {
-        throw new Error(`Rule "${rule.name}" has an invalid destination sub account.`);
-      }
-      continue;
-    }
-
-    await requireWorkspaceAccess(rule.sourceWorkspaceId);
-
-    const sourceAccount = await prisma.financialAccount.findFirst({
-      where: {
-        id: rule.sourceAccountId,
-        workspaceId: rule.sourceWorkspaceId,
-        kind: "BANK",
-        isActive: true,
       },
-      select: { id: true },
-    });
-    if (!sourceAccount) {
-      throw new Error(`Rule "${rule.name}" has an invalid source bank account.`);
-    }
+    },
+  });
 
-    const sourceBudget = await prisma.budgetEnvelope.findFirst({
-      where: {
-        id: rule.sourceBudgetId,
-        workspaceId: rule.sourceWorkspaceId,
-        accountId: sourceAccount.id,
-        isActive: true,
-      },
-      select: { id: true },
-    });
-    if (!sourceBudget) {
-      throw new Error(`Rule "${rule.name}" has an invalid source sub account.`);
+  const sourceBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.sourceBudgetId);
+  const destinationBudget = sameWorkspaceBudgets.find((budget) => budget.id === rule.destinationBudgetId);
+  if (sourceBudget?.account.kind !== "BANK" || !sourceBudget.account.isActive) {
+    throw new Error(`Rule "${rule.name}" has an invalid source sub account.`);
+  }
+  if (destinationBudget?.account.kind !== "BANK" || !destinationBudget.account.isActive) {
+    throw new Error(`Rule "${rule.name}" has an invalid destination sub account.`);
+  }
+}
+
+async function validateCrossWorkspaceRule(rule: Extract<CreditTxnAutoRule, { action: "RECEIVABLE_OTHER_WORKSPACE" }>) {
+  await requireWorkspaceAccess(rule.sourceWorkspaceId);
+
+  const sourceAccount = await prisma.financialAccount.findFirst({
+    where: {
+      id: rule.sourceAccountId,
+      workspaceId: rule.sourceWorkspaceId,
+      kind: "BANK",
+      isActive: true,
+    },
+    select: { id: true },
+  });
+  if (!sourceAccount) {
+    throw new Error(`Rule "${rule.name}" has an invalid source bank account.`);
+  }
+
+  const sourceBudget = await prisma.budgetEnvelope.findFirst({
+    where: {
+      id: rule.sourceBudgetId,
+      workspaceId: rule.sourceWorkspaceId,
+      accountId: sourceAccount.id,
+      isActive: true,
+    },
+    select: { id: true },
+  });
+  if (!sourceBudget) {
+    throw new Error(`Rule "${rule.name}" has an invalid source sub account.`);
+  }
+}
+
+async function validateRuleTargets(workspaceId: string, rules: CreditTxnAutoRule[]) {
+  for (const rule of rules) {
+    if (rule.action === "DEDUCT_SAME_WORKSPACE") {
+      await validateSameWorkspaceRule(workspaceId, rule);
+    } else {
+      await validateCrossWorkspaceRule(rule);
     }
   }
 }

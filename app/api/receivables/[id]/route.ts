@@ -1,9 +1,10 @@
-import { ApiRequestError, runSecureApiRoute } from "@/lib/api-security";
+import { runSecureApiRoute } from "@/lib/api-security";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { staleWriteResponse } from "@/lib/concurrency";
+import { resolveReceivableSourceWorkspace } from "@/lib/receivable-source";
 
 const UpdateReceivableSchema = z.object({
   expectedUpdatedAt: z.iso.datetime(),
@@ -20,34 +21,6 @@ const UpdateReceivableSchema = z.object({
   budgetId: z.string().nullable().optional(),
 });
 
-async function resolveSourceWorkspace(data: z.infer<typeof UpdateReceivableSchema>) {
-  let sourceWorkspaceId: string | null | undefined;
-  if (data.accountId != null) {
-    const account = await prisma.financialAccount.findUnique({
-      where: { id: data.accountId },
-      select: { id: true, workspaceId: true, kind: true, isActive: true },
-    });
-    if (account?.kind !== "BANK" || !account.isActive) {
-      throw new ApiRequestError(400, "Selected deduction account is invalid.");
-    }
-    await requireWorkspaceAccess(account.workspaceId, "EDITOR");
-    sourceWorkspaceId = account.workspaceId;
-  } else if (data.accountId === null) {
-    sourceWorkspaceId = null;
-  }
-
-  if (data.budgetId != null) {
-    if (data.accountId == null || !sourceWorkspaceId) {
-      throw new ApiRequestError(400, "Selected deduction subaccount is invalid.");
-    }
-    const budget = await prisma.budgetEnvelope.findFirst({
-      where: { id: data.budgetId, workspaceId: sourceWorkspaceId, accountId: data.accountId, isActive: true },
-      select: { id: true },
-    });
-    if (!budget) throw new ApiRequestError(400, "Selected deduction subaccount is invalid.");
-  }
-  return sourceWorkspaceId;
-}
 
 function localReference(value: string | null | undefined, sourceWorkspaceId: string | null | undefined, workspaceId: string) {
   if (value === undefined) return undefined;
@@ -76,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     await requireWorkspaceAccess(existing.workspaceId, "EDITOR");
 
-    const sourceWorkspaceId = await resolveSourceWorkspace(parsed.data);
+    const sourceWorkspaceId = await resolveReceivableSourceWorkspace(parsed.data);
 
     const result = await prisma.receivable.updateMany({
       where: { id, updatedAt: new Date(parsed.data.expectedUpdatedAt) },

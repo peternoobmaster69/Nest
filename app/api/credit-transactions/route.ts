@@ -18,6 +18,12 @@ const CreateTransactionSchema = z.object({
 const DEFAULT_PAGE_LIMIT = 250;
 const MAX_PAGE_LIMIT = 500;
 
+function isStatementPeriodValid(year: string | null, month: string | null) {
+  const validYear = !year || (/^\d{4}$/.test(year) && Number(year) >= 2020 && Number(year) <= 2100);
+  const validMonth = !month || (/^\d{1,2}$/.test(month) && Number(month) >= 1 && Number(month) <= 12);
+  return validYear && validMonth;
+}
+
 export async function GET(request: Request) {
   try {
     const { workspaceId } = await requireWorkspaceAccess();
@@ -34,10 +40,7 @@ export async function GET(request: Request) {
         { status: 400 },
       );
     }
-    if (
-      (year && (!/^\d{4}$/.test(year) || Number(year) < 2020 || Number(year) > 2100)) ||
-      (month && (!/^\d{1,2}$/.test(month) || Number(month) < 1 || Number(month) > 12))
-    ) {
+    if (!isStatementPeriodValid(year, month)) {
       return NextResponse.json(
         { error: "Invalid statement period", code: "INVALID_REQUEST" },
         { status: 400 },
@@ -148,7 +151,7 @@ export async function GET(request: Request) {
       page,
       limit,
       hasMore,
-      nextCursor: hasMore ? pageItems.at(-1)?.id ?? null : null,
+      nextCursor: hasMore ? pageItems[pageItems.length - 1].id : null,
       summary: {
         totalAmountCents: summary._sum.amountCents ?? 0,
         unaccountedAmountCents: unaccountedSummary._sum.amountCents ?? 0,
