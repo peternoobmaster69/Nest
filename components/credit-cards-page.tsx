@@ -5,10 +5,9 @@ import { useWorkspaceId } from "@/components/workspace-provider";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SINGAPORE_BANKS, getBankLogoUrl, getSingaporeBankByName } from "@/lib/singapore-banks";
+import { SINGAPORE_BANKS } from "@/lib/singapore-banks";
 import { NumericCalculatorInput } from "@/components/numeric-calculator-input";
-import { SubmitEvent, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import { SubmitEvent, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui-skeleton";
 import { CreditCardsSkeleton } from "@/components/skeletons/CreditCardsSkeleton";
 import { confirmDestructiveAction } from "@/lib/confirm-destructive";
@@ -16,20 +15,18 @@ import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useSessionState } from "@/lib/use-session-state";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  BellRing,
-  CalendarDays,
   ChevronDown,
   ChevronUp,
-  Nfc,
-  Pencil,
   Plus,
-  RotateCcw,
 } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { CardThemePicker } from "@/components/credit-cards/card-theme-picker";
+import { CARD_THEMES, getCardGradient, type CreditCard } from "@/components/credit-cards/card-appearance";
+import { WalletCard } from "@/components/credit-cards/wallet-card";
+import { CardPreview } from "@/components/credit-cards/card-preview";
 
 type AppContext = {
   workspaceId: string | null;
@@ -37,72 +34,9 @@ type AppContext = {
   role?: "OWNER" | "EDITOR" | "VIEWER";
 };
 
-type CreditCard = {
-  id: string;
-  cardName: string;
-  bankName: string | null;
-  themeKey?: string | null;
-  last4Digit: string;
-  maskedNumber: string;
-  expiryMonth: number | null;
-  expiryYear: number | null;
-  statementDay: number;
-  paymentDueDay: number;
-  notes: string | null;
-};
-
-type CardTheme = {
-  key: string;
-  label: string;
-  background: string;
-};
-
-// Rich, low-glare issuer materials inspired by native wallet cards.
-const BANK_GRADIENTS: Record<string, string> = {
-  "DBS Bank": "radial-gradient(circle at 82% 5%, rgba(255,255,255,.24), transparent 34%), linear-gradient(145deg, #d91e3b 0%, #9c0f2a 54%, #520b1b 100%)",
-  "OCBC Bank": "radial-gradient(circle at 12% 0%, rgba(255,255,255,.22), transparent 33%), linear-gradient(145deg, #ec2438 0%, #af1025 58%, #650718 100%)",
-  "United Overseas Bank": "radial-gradient(circle at 80% 0%, rgba(111,203,255,.35), transparent 36%), linear-gradient(145deg, #075ea8 0%, #123c84 58%, #0a1d52 100%)",
-  "Citibank Singapore": "radial-gradient(circle at 86% 4%, rgba(93,190,255,.32), transparent 35%), linear-gradient(145deg, #1174c3 0%, #174a94 56%, #10255b 100%)",
-  "HSBC": "radial-gradient(circle at 8% 5%, rgba(255,255,255,.2), transparent 32%), linear-gradient(145deg, #d81f36 0%, #9f1125 55%, #4b0a15 100%)",
-  "Standard Chartered": "radial-gradient(circle at 83% 6%, rgba(96,255,220,.25), transparent 34%), linear-gradient(145deg, #098c82 0%, #08706d 48%, #073d50 100%)",
-  "Maybank": "radial-gradient(circle at 82% 0%, rgba(255,226,111,.3), transparent 34%), linear-gradient(145deg, #b87900 0%, #7b4d00 54%, #332307 100%)",
-  "Bank of China": "radial-gradient(circle at 82% 0%, rgba(255,255,255,.2), transparent 34%), linear-gradient(145deg, #bd1830 0%, #850e24 55%, #460815 100%)",
-  "ICBC": "radial-gradient(circle at 80% 0%, rgba(255,255,255,.2), transparent 34%), linear-gradient(145deg, #d32237 0%, #981226 55%, #520815 100%)",
-  "American Express": "radial-gradient(circle at 84% 3%, rgba(116,222,255,.32), transparent 36%), linear-gradient(145deg, #1389a9 0%, #0a607f 52%, #073653 100%)",
-  "CIMB Bank": "radial-gradient(circle at 82% 0%, rgba(255,255,255,.2), transparent 34%), linear-gradient(145deg, #d22235 0%, #941125 56%, #4f0715 100%)",
-};
-
-const DEFAULT_GRADIENT = "radial-gradient(circle at 82% 3%, rgba(167,139,250,.38), transparent 35%), linear-gradient(145deg, #4f46a8 0%, #343277 52%, #1f214e 100%)";
-
-const CARD_THEMES: CardTheme[] = [
-  { key: "bank-default", label: "Bank Auto", background: "" },
-  { key: "emerald-wave", label: "Emerald Wave", background: "radial-gradient(circle at 82% 3%, rgba(110,231,183,.3), transparent 36%), linear-gradient(145deg, #0d7b68 0%, #126159 50%, #123c43 100%)" },
-  { key: "sunset-arc", label: "Sunset Arc", background: "radial-gradient(circle at 14% 8%, rgba(255,230,188,.35), transparent 34%), linear-gradient(145deg, #d85262 0%, #b74650 44%, #7e3548 100%)" },
-  { key: "ocean-stripe", label: "Ocean Stripe", background: "repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 7px, transparent 7px 18px), linear-gradient(145deg, #1769ba 0%, #164b8c 55%, #122b5f 100%)" },
-  { key: "midnight-grid", label: "Midnight Grid", background: "linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(145deg, #202939 0%, #111827 58%, #080c14 100%)" },
-  { key: "violet-glow", label: "Violet Glow", background: "radial-gradient(circle at 78% 4%, rgba(216,180,254,.38), transparent 35%), linear-gradient(145deg, #7650b6 0%, #563787 52%, #342451 100%)" },
-  { key: "carbon-metal", label: "Carbon Metal", background: "repeating-linear-gradient(125deg, rgba(255,255,255,.055) 0 2px, transparent 2px 8px), linear-gradient(145deg, #3a414b 0%, #242a32 50%, #101318 100%)" },
-];
-
-function getCardGradient(bankName: string | null, themeKey?: string | null): string {
-  if (themeKey?.startsWith("custom:")) {
-    return themeKey.replace("custom:", "");
-  }
-  if (themeKey && themeKey !== "bank-default") {
-    return CARD_THEMES.find((theme) => theme.key === themeKey)?.background || DEFAULT_GRADIENT;
-  }
-  if (!bankName) return DEFAULT_GRADIENT;
-  return BANK_GRADIENTS[bankName] || DEFAULT_GRADIENT;
-}
-
-function getBankInitials(bankName: string | null): string {
-  if (!bankName) return "CC";
-  return bankName
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function getSaveLabel(editing: boolean, creating: boolean, updating: boolean) {
+  if (editing) return updating ? "Saving..." : "Save Changes";
+  return creating ? "Adding..." : "Add Card";
 }
 
 export function CreditCardsPage() {
@@ -110,10 +44,11 @@ export function CreditCardsPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const saving = useRef(false);
+  const releaseSave = () => { saving.current = false; };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [flippedCardId, setFlippedCardId] = useState<string | null>(null);
-  const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
 
   // Form state
   const [cardName, setCardName] = useState("");
@@ -146,12 +81,12 @@ export function CreditCardsPage() {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("add");
     const query = nextParams.toString();
-    const destination = `/credit-cards${query ? `?${query}` : ""}`;
+    const destination = query ? `/credit-cards?${query}` : "/credit-cards";
     router.replace(routeWorkspaceId ? buildWorkspacePath(routeWorkspaceId, destination) : destination, { scroll: false });
   }, [routeWorkspaceId, router, searchParams]);
   const [isStackExpanded, setIsStackExpanded] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
-  const [selectedCardId, setSelectedCardId] = useSessionState<string | null>("nest:view:credit-cards:selected", null);
+  const [preferredCardId, setSelectedCardId] = useSessionState<string | null>("nest:view:credit-cards:selected", null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -190,27 +125,19 @@ export function CreditCardsPage() {
     return list;
   }, [cards.data]);
 
-  // Keep wallet selection valid as cards load, change, or are removed.
-  useEffect(() => {
-    if (sortedCards.length === 0) {
-      if (selectedCardId) setSelectedCardId(null);
-      return;
-    }
-    if (!selectedCardId || !sortedCards.some((card) => card.id === selectedCardId)) {
-      setSelectedCardId(sortedCards[0].id);
-    }
-  }, [sortedCards, selectedCardId]);
+  const selectedCardId = sortedCards.find((card) => card.id === preferredCardId)?.id ?? sortedCards[0]?.id ?? null;
+  const useWalletView = isMobileView && sortedCards.length > 1 && !isStackExpanded;
 
   const displayedCards = useMemo(() => {
     if (!isMobileView || isStackExpanded || sortedCards.length <= 1 || !selectedCardId) {
       return sortedCards;
     }
-    const selectedCard = sortedCards.find((card) => card.id === selectedCardId);
-    if (!selectedCard) return sortedCards;
+    const selectedCard = sortedCards.find((card) => card.id === selectedCardId)!;
     return [selectedCard, ...sortedCards.filter((card) => card.id !== selectedCardId)];
   }, [isMobileView, isStackExpanded, selectedCardId, sortedCards]);
 
   const createCard = useMutation({
+    onSettled: releaseSave,
     mutationFn: () =>
       fetchJson("/api/credit-cards", {
         method: "POST",
@@ -235,6 +162,7 @@ export function CreditCardsPage() {
   });
 
   const updateCard = useMutation({
+    onSettled: releaseSave,
     mutationFn: (id: string) =>
       fetchJson(`/api/credit-cards/${id}`, {
         method: "PATCH",
@@ -243,7 +171,7 @@ export function CreditCardsPage() {
           cardName,
           bankName,
           last4Digit: cardLast4,
-          themeKey: themeKey || null,
+          themeKey,
           expiryMonth: expiryMonth ? Number(expiryMonth) : null,
           expiryYear: expiryYear ? Number(expiryYear) : null,
           statementDay: Number(statementDay),
@@ -258,9 +186,19 @@ export function CreditCardsPage() {
   });
 
   const deleteCard = useMutation({
+    onSettled: releaseSave,
     mutationFn: (id: string) => fetchJson(`/api/credit-cards/${id}`, { method: "DELETE" }),
     onSuccess: invalidateCreditCardDependencies,
   });
+  const pending = createCard.isPending || updateCard.isPending || deleteCard.isPending;
+  const mutationError = createCard.error ?? updateCard.error ?? deleteCard.error;
+  const formTitle = editingCardId ? "Edit Credit Card" : "Add Credit Card";
+
+  const resetMutationErrors = () => {
+    createCard.reset();
+    updateCard.reset();
+    deleteCard.reset();
+  };
 
   const resetForm = () => {
     setCardName("");
@@ -276,12 +214,14 @@ export function CreditCardsPage() {
   };
 
   const openModal = () => {
+    resetMutationErrors();
     setEditingCardId(null);
     resetForm();
     setIsModalOpen(true);
   };
 
   const openEditModal = (card: CreditCard) => {
+    resetMutationErrors();
     setEditingCardId(card.id);
     setCardName(card.cardName);
     setBankName(card.bankName || SINGAPORE_BANKS[0].name);
@@ -304,7 +244,8 @@ export function CreditCardsPage() {
 
   const onSubmit = (event: SubmitEvent) => {
     event.preventDefault();
-    if (!workspaceId || !cardName.trim()) return;
+    if (!workspaceId || !cardName.trim() || saving.current) return;
+    saving.current = true;
     if (editingCardId) {
       updateCard.mutate(editingCardId);
       return;
@@ -329,6 +270,8 @@ export function CreditCardsPage() {
       workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
       reversal: "This cannot be undone. Transactions already posted to the ledger remain in financial history.",
     }))) return;
+    if (saving.current) return;
+    saving.current = true;
     deleteCard.mutate(cardId, {
       onSuccess: () => {
         closeModal();
@@ -348,7 +291,7 @@ export function CreditCardsPage() {
             ) : null}
           </div>
         </div>
-        <Button className="btn btn-primary cc-add-btn mobile-primary-create" onClick={openModal} aria-label="Add card" title="Add card">
+        <Button className="btn btn-primary cc-add-btn mobile-primary-create" onClick={openModal} aria-label="Add card" title="Add card" disabled={pending}>
           <Plus size={18} aria-hidden="true" />
           <span className="mobile-primary-create-label">Add Card</span>
         </Button>
@@ -368,154 +311,19 @@ export function CreditCardsPage() {
           </div>
         )}
 
-        {!cards.isLoading && !cards.isError && displayedCards.map((card, index) => {
-          const isFlipped = flippedCardId === card.id;
-          const gradient = getCardGradient(card.bankName, card.themeKey);
-          const bankInitials = getBankInitials(card.bankName);
-          const collapsedCardNumber = card.last4Digit ? `•••• ${card.last4Digit}` : card.maskedNumber;
-
-          // Wallet collapse logic: only selected card is expanded
-          const useWalletView = isMobileView && sortedCards.length > 1 && !isStackExpanded;
-          const isSelected = selectedCardId === card.id;
-          const isCollapsed = useWalletView && !isSelected;
-
-          return (
-            <div
-              key={card.id}
-              onClick={() => handleCardTap(card.id, isCollapsed)}
-              onKeyDown={(event) => {
-                if (event.target !== event.currentTarget) return;
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  handleCardTap(card.id, isCollapsed);
-                }
-              }}
-              className={`cc-card-wrapper ${isFlipped ? "flipped" : ""}${useWalletView ? " cc-wallet-view" : ""}${isCollapsed ? " cc-card-collapsed" : ""}${isSelected ? " cc-card-selected" : ""}`}
-              style={{ zIndex: isSelected ? 100 : displayedCards.length - index }}
-              role="button"
-              tabIndex={0}
-              aria-expanded={isFlipped}
-              aria-label={`${isCollapsed ? "Select" : isFlipped ? "Hide details for" : "Show details for"} ${card.cardName}, ending in ${card.last4Digit}`}
-            >
-              <div className="cc-card-front" style={{ background: gradient }}>
-                <span className="cc-card-glow" aria-hidden="true" />
-                <div className="cc-card-header">
-                  <div className="cc-bank-identity">
-                    <div className="cc-bank-logo">
-                      {(() => {
-                        const bank = getSingaporeBankByName(card.bankName);
-                        const logo = getBankLogoUrl(bank);
-                        return logo && !failedLogos[card.id] ? (
-                          <Image
-                            src={logo}
-                            alt={bank?.name || "Bank"}
-                            width={88}
-                            height={32}
-                            sizes="(max-width: 480px) 72px, 88px"
-                            className="cc-bank-img"
-                            loading="lazy"
-                            onError={() => setFailedLogos((prev) => ({ ...prev, [card.id]: true }))}
-                          />
-                        ) : (
-                          <span className="cc-bank-fallback">{bankInitials}</span>
-                        );
-                      })()}
-                    </div>
-                    {isCollapsed ? (
-                      <span className="cc-collapsed-card-name">{card.cardName}</span>
-                    ) : (
-                      <span className="cc-bank-name">{card.bankName || "Credit card"}</span>
-                    )}
-                  </div>
-                  <span className="cc-contactless" aria-hidden="true"><Nfc size={25} strokeWidth={1.8} /></span>
-                </div>
-
-                <div className="cc-card-chip" aria-hidden="true"><span /><span /><span /></div>
-                <div className="cc-card-number">{isCollapsed ? collapsedCardNumber : card.maskedNumber}</div>
-
-                <div className="cc-card-footer">
-                  <div className="cc-card-name-block">
-                    <span className="cc-card-meta-label">Card</span>
-                    <div className="cc-card-name">{card.cardName}</div>
-                  </div>
-                  <div className="cc-card-expiry-block">
-                    <span className="cc-card-meta-label">Valid thru</span>
-                    <div className="cc-card-expiry">
-                      {card.expiryMonth && card.expiryYear
-                        ? `${String(card.expiryMonth).padStart(2, "0")}/${String(card.expiryYear).slice(-2)}`
-                        : "••/••"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="cc-card-back">
-                <span className="cc-back-watermark" aria-hidden="true">{bankInitials}</span>
-                <div className="cc-back-header">
-                  <div className="cc-back-title-block">
-                    <span className="cc-back-kicker">{card.bankName || "Credit card"}</span>
-                    <span className="cc-back-card-name">{card.cardName}</span>
-                  </div>
-                  <Button
-                    className="cc-edit-card-btn"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openEditModal(card);
-                    }}
-                    aria-label={`Edit ${card.cardName}`}
-                    title="Edit card"
-                  >
-                    <Pencil size={15} aria-hidden="true" />
-                  </Button>
-                </div>
-
-                <div className="cc-back-magnetic-stripe" aria-hidden="true"><span /></div>
-
-                <div className="cc-back-number-band">
-                  <span className="cc-back-number-group">
-                    <span className="cc-back-band-label">Card number</span>
-                    <span className="cc-back-number mono">{card.maskedNumber}</span>
-                  </span>
-                  <span className="cc-back-expiry-group">
-                    <span className="cc-back-band-label">Expires</span>
-                    <span className="cc-back-expiry mono">
-                      {card.expiryMonth && card.expiryYear
-                        ? `${String(card.expiryMonth).padStart(2, "0")}/${String(card.expiryYear).slice(-2)}`
-                        : "••/••"}
-                    </span>
-                  </span>
-                </div>
-
-                <div className="cc-details">
-                  <div className="cc-detail-column cc-detail-column-left">
-                    <span className="cc-detail-icon" aria-hidden="true"><CalendarDays size={16} /></span>
-                    <span className="cc-detail-copy">
-                      <span className="cc-detail-label">Statement</span>
-                      <span className="cc-detail-value">Day {card.statementDay}</span>
-                    </span>
-                  </div>
-                  <div className="cc-detail-column">
-                    <span className="cc-detail-icon" aria-hidden="true"><BellRing size={16} /></span>
-                    <span className="cc-detail-copy">
-                      <span className="cc-detail-label">Payment due</span>
-                      <span className="cc-detail-value">Day {card.paymentDueDay}</span>
-                    </span>
-                  </div>
-                  {card.notes && (
-                    <div className="cc-detail-row cc-detail-row-wide">
-                      <span className="cc-detail-label">Notes</span>
-                      <span className="cc-detail-value cc-detail-note">{card.notes}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="cc-back-hint" aria-hidden="true">
-                  <RotateCcw size={12} /> Tap to return
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {!cards.isLoading && !cards.isError && displayedCards.map((card, index) => (
+          <WalletCard
+            key={card.id}
+            card={card}
+            isFlipped={flippedCardId === card.id && (!useWalletView || selectedCardId === card.id)}
+            useWalletView={useWalletView}
+            isCollapsed={useWalletView && selectedCardId !== card.id}
+            isSelected={selectedCardId === card.id}
+            zIndex={selectedCardId === card.id ? 100 : displayedCards.length - index}
+            onToggle={() => handleCardTap(card.id, useWalletView && selectedCardId !== card.id)}
+            onEdit={() => openEditModal(card)}
+          />
+        ))}
 
         {/* Show All / Collapse Button - Mobile Only */}
         {!cards.isLoading && !cards.isError && isMobileView && sortedCards.length > 1 && (
@@ -548,42 +356,22 @@ export function CreditCardsPage() {
 
       {/* Add Card Modal */}
       {isModalOpen && (
-        <Dialog open onClose={closeModal} title="Credit card" surface="custom" overlayClassName="cc-modal-overlay">
+        <Dialog open onClose={closeModal} title="Credit card" surface="custom" overlayClassName="cc-modal-overlay" closeDisabled={pending}>
           <dialog open className="cc-modal">
             <div className="cc-modal-header">
-              <h3>{editingCardId ? "Edit Credit Card" : "Add Credit Card"}</h3>
-              <ModalCloseButton onClick={closeModal} label={`Close ${editingCardId ? "Edit Credit Card" : "Add Credit Card"}`} />
+              <h3>{formTitle}</h3>
+              <ModalCloseButton onClick={closeModal} label={`Close ${formTitle}`} disabled={pending} />
             </div>
 
             <form className="cc-modal-form" onSubmit={onSubmit}>
               <div className="cc-modal-scroll">
                 {/* Card Preview */}
-              <div
-                className="cc-preview"
-                style={{ background: getCardGradient(bankName, themeKey) }}
-              >
-                <div className="cc-preview-header">
-                  <span className="cc-preview-bank">{getBankInitials(bankName)}</span>
-                  <Nfc size={22} strokeWidth={1.8} aria-hidden="true" />
-                </div>
-                <div className="cc-preview-chip" aria-hidden="true"><span /><span /><span /></div>
-                <div className="cc-preview-number">
-                  {cardLast4 ? `•••• •••• •••• ${cardLast4}` : "•••• •••• •••• ••••"}
-                </div>
-                <div className="cc-preview-footer">
-                  <span>{cardName || "Card Name"}</span>
-                  <span>
-                    {expiryMonth && expiryYear
-                      ? `${expiryMonth}/${expiryYear.slice(-2)}`
-                      : "••/••"}
-                  </span>
-                </div>
-              </div>
+              <CardPreview bankName={bankName} themeKey={themeKey} last4={cardLast4} cardName={cardName} expiryMonth={expiryMonth} expiryYear={expiryYear} />
 
               <div className="cc-form-grid">
                 <div className="form-group">
                   <label htmlFor="credit-cards-card-name" className="label">Card Name</label>
-                  <Input id="credit-cards-card-name"
+                  <Input disabled={pending} id="credit-cards-card-name"
                     className="input"
                     placeholder="e.g., DBS Altitude"
                     value={cardName}
@@ -594,7 +382,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label htmlFor="credit-cards-bank-name" className="label">Bank</label>
-                  <Select id="credit-cards-bank-name" className="input" value={bankName} onChange={(e) => setBankName(e.target.value)}>
+                  <Select disabled={pending} id="credit-cards-bank-name" className="input" value={bankName} onChange={(e) => setBankName(e.target.value)}>
                     {SINGAPORE_BANKS.map((bank) => (
                       <option key={bank.code} value={bank.name}>
                         {bank.name}
@@ -605,7 +393,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group cc-span-2">
                   <label htmlFor="credit-cards-card-last4" className="label">Last 4 digits</label>
-                  <Input id="credit-cards-card-last4"
+                  <Input disabled={pending} id="credit-cards-card-last4"
                     className="input"
                     placeholder="3456"
                     value={cardLast4}
@@ -622,6 +410,7 @@ export function CreditCardsPage() {
                 </div>
 
                 <CardThemePicker
+                  disabled={pending}
                   themes={CARD_THEMES}
                   themeKey={themeKey}
                   plainColor={plainColor}
@@ -635,7 +424,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label htmlFor="credit-cards-expiry-month" className="label">Expiry Month</label>
-                  <NumericCalculatorInput id="credit-cards-expiry-month"
+                  <NumericCalculatorInput disabled={pending} id="credit-cards-expiry-month"
                     min="1"
                     max="12"
                     placeholder="MM"
@@ -647,7 +436,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label htmlFor="credit-cards-expiry-year" className="label">Expiry Year</label>
-                  <NumericCalculatorInput id="credit-cards-expiry-year"
+                  <NumericCalculatorInput disabled={pending} id="credit-cards-expiry-year"
                     min="2024"
                     max="2100"
                     placeholder="YYYY"
@@ -659,7 +448,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label htmlFor="credit-cards-statement-day" className="label">Statement Day</label>
-                  <NumericCalculatorInput id="credit-cards-statement-day"
+                  <NumericCalculatorInput disabled={pending} id="credit-cards-statement-day"
                     min="1"
                     max="31"
                     value={statementDay}
@@ -671,7 +460,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group">
                   <label htmlFor="credit-cards-payment-due-day" className="label">Payment Due Day</label>
-                  <NumericCalculatorInput id="credit-cards-payment-due-day"
+                  <NumericCalculatorInput disabled={pending} id="credit-cards-payment-due-day"
                     min="1"
                     max="31"
                     value={paymentDueDay}
@@ -683,7 +472,7 @@ export function CreditCardsPage() {
 
                 <div className="form-group cc-span-2">
                   <label htmlFor="credit-cards-notes" className="label">Notes (optional)</label>
-                  <Input id="credit-cards-notes"
+                  <Input disabled={pending} id="credit-cards-notes"
                     className="input"
                     placeholder="Additional notes..."
                     value={notes}
@@ -693,28 +482,27 @@ export function CreditCardsPage() {
               </div>
 
               </div>
+              {mutationError ? <div className="form-error-summary" role="alert">{mutationError.message}</div> : null}
               <div className="cc-modal-actions">
                 {editingCardId ? (
                   <Button
                     type="button"
                     className="btn btn-ghost cc-delete modal-action-destructive"
-                    disabled={deleteCard.isPending}
+                    disabled={pending}
                     onClick={() => confirmDeleteCard(editingCardId)}
                   >
                     {deleteCard.isPending ? "Deleting..." : "Delete Card"}
                   </Button>
                 ) : null}
-                <Button type="button" className="btn btn-ghost" onClick={closeModal}>
+                <Button type="button" className="btn btn-ghost" onClick={closeModal} disabled={pending}>
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={createCard.isPending || updateCard.isPending}
+                  disabled={pending}
                 >
-                  {editingCardId
-                    ? (updateCard.isPending ? "Saving..." : "Save Changes")
-                    : (createCard.isPending ? "Adding..." : "Add Card")}
+                  {getSaveLabel(Boolean(editingCardId), createCard.isPending, updateCard.isPending)}
                 </Button>
               </div>
             </form>

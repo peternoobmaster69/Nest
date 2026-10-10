@@ -5,13 +5,14 @@ import { Input } from "@/components/ui/controls";
 
 type CardTheme = { key: string; label: string; background: string };
 
-export function CardThemePicker({ themes, themeKey, plainColor, bankGradient, onThemeChange, onColorChange }: Readonly<{
+export function CardThemePicker({ themes, themeKey, plainColor, bankGradient, onThemeChange, onColorChange, disabled }: Readonly<{
   themes: readonly CardTheme[];
   themeKey: string;
   plainColor: string;
   bankGradient: string;
   onThemeChange: (themeKey: string) => void;
   onColorChange: (color: string) => void;
+  disabled?: boolean;
 }>) {
   return (
     <fieldset className="form-group cc-span-2 cc-theme-fieldset">
@@ -25,6 +26,7 @@ export function CardThemePicker({ themes, themeKey, plainColor, bankGradient, on
             title="Plain color"
             aria-label="Use plain color"
             aria-pressed={themeKey.startsWith("custom:")}
+            disabled={disabled}
           >
             <span className="cc-theme-swatch" style={{ background: plainColor }} />
             <span className="cc-theme-label">Plain Color</span>
@@ -34,6 +36,7 @@ export function CardThemePicker({ themes, themeKey, plainColor, bankGradient, on
             aria-label="Plain card color"
             value={plainColor}
             className="cc-theme-color"
+            disabled={disabled}
             onChange={(event) => onColorChange(event.target.value)}
           />
         </div>
@@ -46,6 +49,7 @@ export function CardThemePicker({ themes, themeKey, plainColor, bankGradient, on
             title={theme.label}
             aria-label={`Use ${theme.label}`}
             aria-pressed={themeKey === theme.key}
+            disabled={disabled}
           >
             <span className="cc-theme-swatch" style={{ background: theme.key === "bank-default" ? bankGradient : theme.background }} />
             <span className="cc-theme-label">{theme.label}</span>
