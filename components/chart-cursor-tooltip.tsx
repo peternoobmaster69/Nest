@@ -77,9 +77,10 @@ export function ChartCursorTooltip({
   className?: string;
   children: ReactNode;
 }>) {
+  const customClass = className ? " " + className : "";
   return (
     <div
-      className={`chart-cursor-tooltip ${position.side}${className ? ` ${className}` : ""}`}
+      className={`chart-cursor-tooltip ${position.side}${customClass}`}
       style={{ left: `${position.x}px`, top: `${position.y}px` }}
       aria-live="polite"
     >

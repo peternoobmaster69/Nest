@@ -42,6 +42,24 @@ export function getGmailNotice(message: string, phase?: GmailSyncProgress["phase
   return { ...splitNotice(normalized, " Last synced at "), tone: gmailNoticeTone(normalized, phase) };
 }
 
+function autoAccountingRunNotice(accounted: number, matched: number): SettingsOperationNoticeData {
+  if (accounted === 0) {
+    const matchedHits = matched === 1 ? "hit was" : "hits were";
+    return {
+      title: "No transactions auto-accounted",
+      detail: matched === 0
+        ? "No unaccounted transactions matched your enabled rules."
+        : `${matched} matched rule ${matchedHits} found, but no transactions were accounted.`,
+      tone: matched === 0 ? "info" : "warning",
+    };
+  }
+  return {
+    title: `Auto-accounted ${accounted} transaction${accounted === 1 ? "" : "s"}`,
+    detail: `${matched} matched rule ${matched === 1 ? "hit" : "hits"}.`,
+    tone: "success",
+  };
+}
+
 export function getAutoAccountingNotice(message: string): SettingsOperationNoticeData | null {
   const normalized = message.trim();
   if (!normalized) return null;
@@ -56,23 +74,7 @@ export function getAutoAccountingNotice(message: string): SettingsOperationNotic
 
   const runResult = /^Auto-accounted (\d+) transactions? from (\d+) matched rule hits?\.$/i.exec(normalized);
   if (runResult) {
-    const accounted = Number(runResult[1]);
-    const matched = Number(runResult[2]);
-    if (accounted === 0) {
-      const matchedHits = matched === 1 ? "hit was" : "hits were";
-      return {
-        title: "No transactions auto-accounted",
-        detail: matched === 0
-          ? "No unaccounted transactions matched your enabled rules."
-          : `${matched} matched rule ${matchedHits} found, but no transactions were accounted.`,
-        tone: matched === 0 ? "info" : "warning",
-      };
-    }
-    return {
-      title: `Auto-accounted ${accounted} transaction${accounted === 1 ? "" : "s"}`,
-      detail: `${matched} matched rule ${matched === 1 ? "hit" : "hits"}.`,
-      tone: "success",
-    };
+    return autoAccountingRunNotice(Number(runResult[1]), Number(runResult[2]));
   }
 
   return { ...splitNotice(normalized), tone: autoAccountingTone(normalized) };
