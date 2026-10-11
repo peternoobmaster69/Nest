@@ -228,7 +228,7 @@ test("the configured admin page formats storage, tiny costs, latency and configu
   for (const label of ["Ready", "1.5 GB", "512 MB used", "< $0.0001", "$0.0002", "BUDGET PREFERENCE", "2 sec", "1 min", "finance-model", "120 days", "ACTIVE"])
     assert.ok(view.getByText(label), label);
   assert.ok(!view.container.textContent.includes("test-private-provider-key"));
-  assert.ok(!view.container.textContent.includes("https://provider.example.test"));
+  assert.deepEqual(view.queryAllByText("https://provider.example.test", { exact: false }), []);
   assert.equal(adminChecks, 1);
 });
 
