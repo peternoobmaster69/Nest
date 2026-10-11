@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { ApiAuthError, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
 import { CACHE_POLICIES } from "@/lib/api/contracts";
+import { runSecureApiRoute } from "@/lib/api-security";
 import { withQueryTelemetry } from "@/lib/observability/query-telemetry";
 
 const DASHBOARD_CACHE_HEADERS = {
@@ -25,11 +25,81 @@ function toNumber(value: number | bigint | null | undefined) {
   return Number(value ?? 0);
 }
 
-export async function GET() {
-  try {
-    const { workspaceId } = await requireWorkspaceAccess();
-    const requestId = randomUUID();
+type CashFlowRow = {
+  year: number;
+  month: number;
+  accountId: string;
+  budgetId: string | null;
+  direction: string;
+  amountCents: number | bigint;
+};
+type CashFlowTotals = { inflowCents: number; outflowCents: number };
+type CashFlowMonth = CashFlowTotals & {
+  accounts: Map<string, CashFlowTotals>;
+  budgets: Map<string, CashFlowTotals>;
+};
 
+function accumulateCashFlow(month: CashFlowMonth, row: CashFlowRow) {
+  const amountCents = toNumber(row.amountCents);
+  const account = month.accounts.get(row.accountId) ?? { inflowCents: 0, outflowCents: 0 };
+  const budget = row.budgetId
+    ? month.budgets.get(row.budgetId) ?? { inflowCents: 0, outflowCents: 0 }
+    : null;
+  const field = row.direction === "CREDIT" ? "inflowCents" : "outflowCents";
+  month[field] += amountCents;
+  account[field] += amountCents;
+  if (budget) budget[field] += amountCents;
+  month.accounts.set(row.accountId, account);
+  if (row.budgetId && budget) month.budgets.set(row.budgetId, budget);
+}
+
+function cashFlowBalance(totals: CashFlowTotals) {
+  return {
+    inflowCents: totals.inflowCents,
+    outflowCents: totals.outflowCents,
+    netCents: totals.inflowCents - totals.outflowCents,
+  };
+}
+
+function cashFlowGroups(groups: Map<string, CashFlowTotals>) {
+  return Object.fromEntries([...groups].map(([id, totals]) => [id, cashFlowBalance(totals)]));
+}
+
+function buildCashFlow(monthStarts: Date[], rows: CashFlowRow[]) {
+  const months = monthStarts.map((date) => ({
+    key: getMonthKey(date),
+    label: getMonthLabel(date),
+    totals: { inflowCents: 0, outflowCents: 0, accounts: new Map<string, CashFlowTotals>(), budgets: new Map<string, CashFlowTotals>() },
+  }));
+  const byMonth = new Map(months.map((month) => [month.key, month.totals]));
+  for (const row of rows) {
+    const month = byMonth.get(`${row.year}-${String(row.month).padStart(2, "0")}`);
+    if (month) accumulateCashFlow(month, row);
+  }
+  return months.map(({ key, label, totals }) => ({
+    key,
+    label,
+    ...cashFlowBalance(totals),
+    accounts: cashFlowGroups(totals.accounts),
+    budgets: cashFlowGroups(totals.budgets),
+  }));
+}
+
+async function getDashboardWorkspaceId() {
+  try {
+    return (await requireWorkspaceAccess()).workspaceId;
+  } catch (error) {
+    if (error instanceof ApiAuthError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function GET(request: Request) {
+  const response = await runSecureApiRoute(request, { errorMessage: "Failed to fetch dashboard summary" }, async ({ requestId }) => {
+    const workspaceId = await getDashboardWorkspaceId();
+    if (!workspaceId) {
+      return NextResponse.json({ totalBalanceCents: 0, bankDiscrepancies: [], budgets: [], recentTransactions: [], cashFlow: [] });
+    }
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -93,16 +163,7 @@ export async function GET() {
       }),
       getBankConsistency(prisma, workspaceId),
       getOutstandingCreditCardStatements(prisma, { workspaceId, limit: 500 }),
-      prisma.$queryRaw<
-        Array<{
-          year: number;
-          month: number;
-          accountId: string;
-          budgetId: string | null;
-          direction: string;
-          amountCents: number | bigint;
-        }>
-      >(Prisma.sql`
+      prisma.$queryRaw<CashFlowRow[]>(Prisma.sql`
         SELECT TOP (10000)
           YEAR([date]) AS [year],
           MONTH([date]) AS [month],
@@ -171,82 +232,11 @@ export async function GET() {
     const totalOutstandingCents = nextDueCards.reduce((sum, item) => sum + item.outstandingCents, 0);
     const overdueCount = nextDueCards.filter((item) => new Date(item.paymentDueDate).getTime() < now.getTime()).length;
     const dueSoonCount = nextDueCards.filter((item) => {
-      const diffDays = Math.ceil((new Date(item.paymentDueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 7;
+      const dueInMs = new Date(item.paymentDueDate).getTime() - now.getTime();
+      return dueInMs >= 0 && dueInMs <= 7 * 24 * 60 * 60 * 1000;
     }).length;
 
-    const cashFlowByMonth = new Map<string, {
-      inflowCents: number;
-      outflowCents: number;
-      accounts: Map<string, { inflowCents: number; outflowCents: number }>;
-      budgets: Map<string, { inflowCents: number; outflowCents: number }>;
-    }>();
-    for (const month of cashFlowMonthStarts) {
-      cashFlowByMonth.set(getMonthKey(month), {
-        inflowCents: 0,
-        outflowCents: 0,
-        accounts: new Map(),
-        budgets: new Map(),
-      });
-    }
-    for (const row of cashFlowRows) {
-      const month = cashFlowByMonth.get(`${row.year}-${String(row.month).padStart(2, "0")}`);
-      if (!month) continue;
-
-      const amountCents = toNumber(row.amountCents);
-      const account = month.accounts.get(row.accountId) ?? { inflowCents: 0, outflowCents: 0 };
-      const budget = row.budgetId
-        ? month.budgets.get(row.budgetId) ?? { inflowCents: 0, outflowCents: 0 }
-        : null;
-      if (row.direction === "CREDIT") {
-        month.inflowCents += amountCents;
-        account.inflowCents += amountCents;
-        if (budget) budget.inflowCents += amountCents;
-      } else {
-        month.outflowCents += amountCents;
-        account.outflowCents += amountCents;
-        if (budget) budget.outflowCents += amountCents;
-      }
-      month.accounts.set(row.accountId, account);
-      if (row.budgetId && budget) month.budgets.set(row.budgetId, budget);
-    }
-
-    const cashFlow = cashFlowMonthStarts.map((month) => {
-      const key = getMonthKey(month);
-      const data = cashFlowByMonth.get(key) ?? {
-        inflowCents: 0,
-        outflowCents: 0,
-        accounts: new Map(),
-        budgets: new Map(),
-      };
-      return {
-        key,
-        label: getMonthLabel(month),
-        inflowCents: data.inflowCents,
-        outflowCents: data.outflowCents,
-        netCents: data.inflowCents - data.outflowCents,
-        accounts: Object.fromEntries(
-          [...data.accounts.entries()].map(([accountId, account]) => [
-            accountId,
-            {
-              inflowCents: account.inflowCents,
-              outflowCents: account.outflowCents,
-              netCents: account.inflowCents - account.outflowCents,
-            },
-          ]),
-        ),
-        budgets: Object.fromEntries(
-          [...data.budgets.entries()].map(([budgetId, budget]) => [
-            budgetId,
-            {
-              inflowCents: budget.inflowCents,
-              outflowCents: budget.outflowCents,
-              netCents: budget.inflowCents - budget.outflowCents,
-            },
-          ]),
-        ),
-      };
-    });
+    const cashFlow = buildCashFlow(cashFlowMonthStarts, cashFlowRows);
 
     return NextResponse.json(
       {
@@ -279,31 +269,8 @@ export async function GET() {
         },
         cashFlow,
       },
-      { headers: { ...DASHBOARD_CACHE_HEADERS, "X-Request-Id": requestId } },
     );
-  } catch (err) {
-    if (err instanceof ApiAuthError) {
-      if (err.status === 404) {
-        return NextResponse.json({
-          totalBalanceCents: 0,
-          bankDiscrepancies: [],
-          budgets: [],
-          recentTransactions: [],
-          cashFlow: [],
-        });
-      }
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
-    return NextResponse.json(
-      {
-        totalBalanceCents: 0,
-        bankDiscrepancies: [],
-        budgets: [],
-        recentTransactions: [],
-        cashFlow: [],
-        error: err instanceof Error ? err.message : "Unknown error",
-      },
-      { status: 500 },
-    );
-  }
+  });
+  for (const [name, value] of Object.entries(DASHBOARD_CACHE_HEADERS)) response.headers.set(name, value);
+  return response;
 }

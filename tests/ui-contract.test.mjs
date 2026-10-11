@@ -570,8 +570,8 @@ test("phone layouts use the native-style mobile application shell", async () => 
   assert.match(shell, /queryKey:\s*queryKeys\.key\(\["receivables-summary", navigationWorkspaceId\]\)[\s\S]*?\/api\/receivables\/summary\?workspaceId=\$\{navigationWorkspaceId\}/);
   assert.match(moreNavigation, /mobileReceivablesCount \? <span className="mobile-more-badge">\{mobileReceivablesCount\}<\/span>/);
   assert.match(shell, /className="mobile-more-workspace-switcher"[\s\S]*?mobile-more-link mobile-more-workspace-trigger/);
-  assert.match(shell, /aria-controls="mobile-more-workspace-options"[\s\S]*?id="mobile-more-workspace-options"[\s\S]*?role="listbox"/);
-  assert.match(shell, /className=\{`mobile-more-workspace-option[\s\S]*?role="option"[\s\S]*?aria-selected=\{isCurrent\}/);
+  assert.match(shell, /aria-controls="mobile-more-workspace-options"[\s\S]*?<fieldset id="mobile-more-workspace-options"[\s\S]*?aria-label="Workspaces"/);
+  assert.match(shell, /className=\{`mobile-more-workspace-option[\s\S]*?type="button"[\s\S]*?aria-pressed=\{isCurrent\}/);
   assert.match(shell, /currentDestination[\s\S]*?buildWorkspacePath\(nextWorkspaceId, currentDestination\)/);
   assert.ok(shell.indexOf('className="mobile-more-workspace-switcher"') < shell.indexOf('className="mobile-more-logout"'));
   assert.match(styles, /\.mobile-more-workspace-trigger\s*\{[^}]*width:\s*100%[^}]*background:\s*transparent[^}]*font:\s*inherit/s);

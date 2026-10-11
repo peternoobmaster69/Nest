@@ -326,9 +326,9 @@ export function AppShell({
           <ChevronDown className="mobile-more-workspace-chevron" size={17} aria-hidden="true" />
         </Button>
         {workspaceChooserOpen ? (
-          <div id="mobile-more-workspace-options" className="mobile-more-workspace-options" role="listbox" aria-label="Workspaces">
+          <fieldset id="mobile-more-workspace-options" className="mobile-more-workspace-options" aria-label="Workspaces">
             {renderWorkspaceOptions()}
-          </div>
+          </fieldset>
         ) : null}
       </div>
     );
@@ -344,8 +344,7 @@ export function AppShell({
         <Button
           className={`mobile-more-workspace-option${isCurrent ? " is-current" : ""}`}
           type="button"
-          role="option"
-          aria-selected={isCurrent}
+          aria-pressed={isCurrent}
           key={workspace.id}
           onClick={() => void switchMobileWorkspace(workspace.id)}
           disabled={isCurrent || isSwitching}

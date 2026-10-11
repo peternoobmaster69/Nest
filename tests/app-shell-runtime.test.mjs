@@ -141,9 +141,10 @@ test("mobile workspace switching preserves the destination and waits for a succe
   const view = show({ title: "Transactions", currentPath: "/transactions" });
   const more = within(await openMore(view));
   fireEvent.click(more.getByRole("button", { name: /Switch workspace in this tab/ }));
-  const option = await more.findByRole("option", { name: /Travel/ });
-  assert.equal(more.getByRole("option", { name: /Household/ }).getAttribute("aria-selected"), "true");
-  fireEvent.click(more.getByRole("option", { name: /Household/ }));
+  const choices = within(more.getByRole("group", { name: "Workspaces" }));
+  const option = await choices.findByRole("button", { name: /Travel/ });
+  assert.equal(choices.getByRole("button", { name: /Household/ }).getAttribute("aria-pressed"), "true");
+  fireEvent.click(choices.getByRole("button", { name: /Household/ }));
   assert.equal(requests.filter(({ method }) => method === "POST").length, 0);
   fireEvent.click(option);
   await waitFor(() => assert.equal(requests.filter(({ method }) => method === "POST").length, 1));
@@ -383,7 +384,7 @@ test("mobile workspace choices report loading and retrieval errors", async t => 
   assert.ok(more.getByText("Loading workspaces..."));
   await act(async () => resolve(Response.json({ error: "Unavailable" }, { status: 503 })));
   assert.ok(await more.findByText("Workspaces could not be loaded."));
-  assert.ok(!(more.queryByRole("option")));
+  assert.ok(!within(more.getByRole("group", { name: "Workspaces" })).queryByRole("button"));
 });
 
 test("desktop workspace choices report loading and retrieval errors", async t => {

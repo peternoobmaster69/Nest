@@ -62,10 +62,10 @@ export function isAuthoritativeFinancialHostname(value: string) {
     AUTHORITATIVE_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
 }
 
-function parseAllowedUrl(rawUrl: string) {
+function parseAllowedUrl(rawUrl: string, baseUrl?: URL) {
   let url: URL;
   try {
-    url = new URL(rawUrl);
+    url = new URL(rawUrl, baseUrl);
   } catch {
     throw new PublicFinancialSourceError("INVALID_URL", "The public source URL is invalid.");
   }
@@ -159,7 +159,8 @@ function extractHtmlDocument(html: string) {
 
 async function fetchAuthoritativeSource(initialUrl: URL) {
   let url = initialUrl;
-  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+  let redirectCount = 0;
+  while (true) {
     await assertPublicDns(url);
     let response: Response;
     try {
@@ -182,7 +183,8 @@ async function fetchAuthoritativeSource(initialUrl: URL) {
       if (!location || redirectCount === MAX_REDIRECTS) {
         throw new PublicFinancialSourceError("UNAVAILABLE", "The authoritative source returned too many redirects.");
       }
-      url = parseAllowedUrl(new URL(location, url).toString());
+      url = parseAllowedUrl(location, url);
+      redirectCount += 1;
       continue;
     }
     if (!response.ok) {
@@ -190,7 +192,6 @@ async function fetchAuthoritativeSource(initialUrl: URL) {
     }
     return { response, url };
   }
-  throw new PublicFinancialSourceError("UNAVAILABLE", "The authoritative source could not be opened.");
 }
 
 export async function readPublicFinancialSource(rawUrl: string): Promise<PublicFinancialSourceResult> {

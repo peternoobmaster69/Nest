@@ -227,7 +227,7 @@ function TransactionAgentPicker({ draft, active, locked, filter, onFilter, onSen
   onFilter: (value: string) => void;
   onSend: SendRequest;
 }>) {
-  if (!active || !draft || !draft.choices.length) return null;
+  if (!active || !draft?.choices.length) return null;
   const choices = draft.choices;
   const reference = { draftId: draft.draftId, revision: draft.revision };
   const suggestionsOnly = draft.pending === "budget" && choices.every((choice) => choice.kind === "budget" && choice.suggested);

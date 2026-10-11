@@ -353,7 +353,7 @@ export function AppSidebar({
   function renderWorkspaceOptions() {
     if (workspacesQuery.isLoading) return (
       <div className="sb-user-menu-item sb-user-menu-loading">
-        <span className="sb-workspace-spinner" />
+        <span className="sb-workspace-spinner" />{" "}
         Loading...
       </div>
     );

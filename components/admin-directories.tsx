@@ -15,11 +15,11 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-SG", {
   timeZone: "Asia/Singapore",
 });
 
-const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region", fallback: "code" });
 
 function loginLocation(countryCode: string | null, ipAddress: string | null) {
   const country = countryCode
-    ? REGION_NAMES.of(countryCode) ?? countryCode
+    ? REGION_NAMES.of(countryCode)
     : "Country unavailable";
   return `${country} · ${ipAddress ?? "IP unavailable"}`;
 }
