@@ -533,9 +533,9 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
     );
   }
 
-  function renderWorkspaceDefaults() {
+  function renderWorkspaceCurrency() {
     if (section !== "workspaces" || context.data?.role !== "OWNER") return null;
-    return (<><div className="card settings-card-block">
+    return (<div className="card settings-card-block">
       <div className="settings-row">
         <div>
           <div className="settings-section-title">Currency Display</div>
@@ -545,6 +545,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
         </div>
         <Select
           className="input settings-select-sm"
+          aria-label="Workspace currency"
           value={baseCurrency}
           onChange={(event) => updateCurrency.mutate(event.target.value)}
           disabled={!workspaceId || updateCurrency.isPending}
@@ -557,9 +558,72 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
         </Select>
       </div>
       <ActionableAuthenticationMessage message={currencyMessage} className="settings-message" />
-    </div>
+    </div>);
+  }
 
-    </>);
+  function renderReceivableDefaults() {
+    if (section !== "workspaces") return null;
+    return (
+      <div className="card settings-card-block">
+        <div className="settings-row">
+          <div>
+            <div className="settings-section-title">Receivable Default Account</div>
+            <div className="settings-section-copy">
+              Closed receivables are credited into this account automatically.
+            </div>
+          </div>
+          <Select
+            className="input settings-select-md"
+            aria-label="Receivable default account"
+            value={defaultReceivableAccountId ?? ""}
+            onChange={(event) =>
+              updateReceivableDefaults.mutate({
+                accountId: event.target.value || null,
+                budgetId: null,
+              })
+            }
+            disabled={!workspaceId || accounts.isLoading || updateReceivableDefaults.isPending}
+          >
+            <option value="">Not configured</option>
+            {(accounts.data ?? []).filter((account) => account.isActive).map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="settings-row settings-row-spaced">
+          <div>
+            <div className="settings-section-title">Receivable Default Subaccount</div>
+            <div className="settings-section-copy">
+              Closed receivables are posted into this subaccount under the default account.
+            </div>
+          </div>
+          <Select
+            className="input settings-select-md"
+            aria-label="Receivable default subaccount"
+            value={defaultReceivableBudgetId ?? ""}
+            onChange={(event) =>
+              updateReceivableDefaults.mutate({
+                accountId: undefined,
+                budgetId: event.target.value || null,
+              })
+            }
+            disabled={!workspaceId || !defaultReceivableAccountId || budgets.isLoading || updateReceivableDefaults.isPending}
+          >
+            <option value="">Not configured</option>
+            {(budgets.data ?? [])
+              .filter((budget) => budget.isActive && budget.accountId === defaultReceivableAccountId)
+              .map((budget) => (
+                <option key={budget.id} value={budget.id}>
+                  {budget.name}
+                </option>
+              ))}
+          </Select>
+        </div>
+        <ActionableAuthenticationMessage message={receivableAccountMessage} className="settings-message" />
+      </div>
+    );
   }
 
   return (
@@ -573,7 +637,8 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
 
       {section === "automation" && context.data?.role === "OWNER" ? <GmailSettingsCard controller={gmail} routeWorkspaceId={routeWorkspaceId} /> : null}
 
-      {renderWorkspaceDefaults()}
+      {renderWorkspaceCurrency()}
+      {renderReceivableDefaults()}
 
       {section === "automation" ? <AutoAccountingSettings controller={autoRuleSettings} baseCurrency={baseCurrency} /> : null}
 

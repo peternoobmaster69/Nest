@@ -47,6 +47,10 @@ import {
 const CREDIT_TX_MONTH_COOKIE = "nest_credit_tx_month";
 const CREDIT_TX_CARD_COOKIE = "nest_credit_tx_card";
 
+function focusPickerTrigger(container: HTMLElement | null) {
+  container?.querySelector<HTMLButtonElement>("button[aria-expanded]")?.focus();
+}
+
 function readCookie(name: string) {
   if (typeof document === "undefined") return null;
   const entry = document.cookie
@@ -205,6 +209,9 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (isMobileCardPickerOpen) focusPickerTrigger(mobileCardPickerRef.current);
+        if (isMobileMonthPickerOpen) focusPickerTrigger(mobileMonthPickerRef.current);
+        if (isMobileYearPickerOpen) focusPickerTrigger(mobileYearPickerRef.current);
         setIsMobileCardPickerOpen(false);
         setIsMobileMonthPickerOpen(false);
         setIsMobileYearPickerOpen(false);
@@ -1204,16 +1211,19 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
   const selectMobileCard = (cardId: string) => {
     setSelectedCardId(cardId);
     closeMobileCardPicker();
+    focusPickerTrigger(mobileCardPickerRef.current);
   };
 
   const selectMobileMonth = (month: number) => {
     setSelectedMonth(month);
     setIsMobileMonthPickerOpen(false);
+    focusPickerTrigger(mobileMonthPickerRef.current);
   };
 
   const selectMobileYear = (year: number) => {
     setSelectedYear(year);
     setIsMobileYearPickerOpen(false);
+    focusPickerTrigger(mobileYearPickerRef.current);
   };
 
   const scrollCardRail = (direction: -1 | 1) => {
@@ -1416,7 +1426,6 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
       <Button
         type="button"
         className="cct-mobile-card-trigger"
-        aria-haspopup="listbox"
         aria-expanded={isMobileCardPickerOpen}
         aria-controls="mobile-credit-card-options"
         onClick={() => {
@@ -1466,8 +1475,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
         key={card.id}
         type="button"
         className={`cct-mobile-card-option${isSelected ? " is-selected" : ""}`}
-        role="option"
-        aria-selected={isSelected}
+        aria-pressed={isSelected}
         onClick={() => selectMobileCard(card.id)}
       >
         <span className="cct-mobile-card-leading" aria-hidden="true">
@@ -1729,8 +1737,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
       <Button
         type="button"
         className={`cct-mobile-card-option${selectedCardId === "all" ? " is-selected" : ""}`}
-        role="option"
-        aria-selected={selectedCardId === "all"}
+        aria-pressed={selectedCardId === "all"}
         onClick={() => selectMobileCard("all")}
       >
         <span className="cct-mobile-card-leading" aria-hidden="true">
@@ -1764,7 +1771,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                 />
               </div>
             ) : null}
-            <div id="mobile-credit-card-options" className="cct-mobile-card-options" role="listbox" aria-label="Credit cards">
+            <fieldset id="mobile-credit-card-options" className="cct-mobile-card-options" aria-label="Credit cards">
               {!mobileCardQuery.trim() ? (
                 renderAllCardsOption()
               ) : null}
@@ -1772,7 +1779,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
               {mobileCardOptions.length === 0 ? (
                 <div className="cct-mobile-card-empty">No matching cards.</div>
               ) : null}
-            </div>
+            </fieldset>
           </div>
         ) : null}
       </div>
@@ -1855,7 +1862,6 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
               type="button"
               className={`cct-mobile-period-trigger${selectedMonthPaymentDueTone ? " " + selectedMonthPaymentDueTone : ""}`}
               aria-label="Statement month"
-              aria-haspopup="listbox"
               aria-expanded={isMobileMonthPickerOpen}
               aria-controls="mobile-statement-month-options"
               onClick={() => {
@@ -1875,10 +1881,9 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
               <ChevronDown size={17} aria-hidden="true" />
             </Button>
             {isMobileMonthPickerOpen ? (
-              <div
+              <fieldset
                 id="mobile-statement-month-options"
                 className="cct-mobile-period-dropdown cct-mobile-month-dropdown"
-                role="listbox"
                 aria-label="Statement months"
               >
                 {[-1, ...MONTHS.map((_, index) => index)].map((monthIndex) => {
@@ -1892,8 +1897,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                       key={month}
                       type="button"
                       className={`cct-mobile-period-option${paymentDueTone ? " " + paymentDueTone : ""}${isSelected ? " is-selected" : ""}`}
-                      role="option"
-                      aria-selected={isSelected}
+                      aria-pressed={isSelected}
                       aria-label={paymentDueDate ? `${month}, payment due` : month}
                       onClick={() => selectMobileMonth(monthIndex)}
                     >
@@ -1911,7 +1915,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                     </Button>
                   );
                 })}
-              </div>
+              </fieldset>
             ) : null}
           </div>
           <div className="cct-mobile-period-picker cct-mobile-year-picker" ref={mobileYearPickerRef}>
@@ -1919,7 +1923,6 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
               type="button"
               className="cct-mobile-period-trigger"
               aria-label="Statement year"
-              aria-haspopup="listbox"
               aria-expanded={isMobileYearPickerOpen}
               aria-controls="mobile-statement-year-options"
               onClick={() => {
@@ -1933,10 +1936,9 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
               <ChevronDown size={17} aria-hidden="true" />
             </Button>
             {isMobileYearPickerOpen ? (
-              <div
+              <fieldset
                 id="mobile-statement-year-options"
                 className="cct-mobile-period-dropdown cct-mobile-year-dropdown"
-                role="listbox"
                 aria-label="Statement years"
               >
                 {statementYearOptions.map((year) => {
@@ -1946,8 +1948,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                       key={year}
                       type="button"
                       className={`cct-mobile-period-option${isSelected ? " is-selected" : ""}`}
-                      role="option"
-                      aria-selected={isSelected}
+                      aria-pressed={isSelected}
                       onClick={() => selectMobileYear(year)}
                     >
                       <span>{year}</span>
@@ -1960,7 +1961,7 @@ export function CreditTransactionsPage({ initialCards }: Readonly<{ initialCards
                     </Button>
                   );
                 })}
-              </div>
+              </fieldset>
             ) : null}
           </div>
         </div>

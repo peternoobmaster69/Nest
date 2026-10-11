@@ -1263,6 +1263,41 @@ export function TransactionsPage() {
     );
   }
 
+  function renderCustomMonthOptions() {
+    const currentYear = new Date().getFullYear();
+    const earliestYear = transactionList.length > 0
+      ? Math.min(2020, ...transactionList.map((tx) => new Date(tx.date).getFullYear()))
+      : 2020;
+    const yearsToShow = [];
+    for (let year = currentYear; year >= earliestYear; year--) {
+      yearsToShow.push(year);
+    }
+    return yearsToShow.map((year) => (
+      <div key={year} className="tx-popover-year">
+        <div className="tx-popover-year-label">{year}</div>
+        <div className="tx-popover-months">
+          {MONTH_NAMES.map((month, idx) => {
+            const isCurrentMonth = year === new Date().getFullYear() && idx === new Date().getMonth();
+            const monthKey = `${year}-${String(idx + 1).padStart(2, "0")}`;
+            const isSelected = draftCustomMonths.includes(monthKey);
+            return (
+              <Button
+                key={`${year}-${month}`}
+                type="button"
+                className={`tx-popover-month ${isSelected ? "is-active" : ""} ${isCurrentMonth ? "is-current" : ""}`}
+                aria-pressed={isSelected}
+                onClick={() => toggleCustomMonth(idx, year)}
+                disabled={!isSelected && draftCustomMonths.length >= 24}
+              >
+                {month}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+    ));
+  }
+
   function renderTransactionFilters() {
     return (
       <div className="tx-filter-bar" ref={customMonthBtnRef}>
@@ -1366,40 +1401,7 @@ export function TransactionsPage() {
               </div>
               <div className="tx-popover-body">
                 {/* Generate years from current year down to earliest transaction year (or 2020 as default) */}
-                {(() => {
-                  const currentYear = new Date().getFullYear();
-                  const earliestYear = transactionList.length > 0
-                    ? Math.min(2020, ...transactionList.map((tx) => new Date(tx.date).getFullYear()))
-                    : 2020;
-                  const yearsToShow = [];
-                  for (let year = currentYear; year >= earliestYear; year--) {
-                    yearsToShow.push(year);
-                  }
-                  return yearsToShow.map((year) => (
-                    <div key={year} className="tx-popover-year">
-                      <div className="tx-popover-year-label">{year}</div>
-                      <div className="tx-popover-months">
-                        {MONTH_NAMES.map((month, idx) => {
-                          const isCurrentMonth = year === new Date().getFullYear() && idx === new Date().getMonth();
-                          const monthKey = `${year}-${String(idx + 1).padStart(2, "0")}`;
-                          const isSelected = draftCustomMonths.includes(monthKey);
-                          return (
-                            <Button
-                              key={`${year}-${month}`}
-                              type="button"
-                              className={`tx-popover-month ${isSelected ? "is-active" : ""} ${isCurrentMonth ? "is-current" : ""}`}
-                              aria-pressed={isSelected}
-                              onClick={() => toggleCustomMonth(idx, year)}
-                              disabled={!isSelected && draftCustomMonths.length >= 24}
-                            >
-                              {month}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ));
-                })()}
+                {renderCustomMonthOptions()}
               </div>
               <div className="tx-popover-actions">
                 <Button type="button" className="btn btn-ghost btn-sm" onClick={() => setDraftCustomMonths([])} disabled={!draftCustomMonths.length}>

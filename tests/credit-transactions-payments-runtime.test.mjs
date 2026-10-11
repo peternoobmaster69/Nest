@@ -165,6 +165,6 @@ for (const [balance, allocated, total, expected] of [
     fixtures.set("GET /api/credit-transactions", creditResponse([creditFixture({ isAllocated: allocated, amountCents: total })]));
     const view = show();
     await loaded(view);
-    await view.findByText(expected);
+    assert.ok(await view.findByText(expected));
   });
 }

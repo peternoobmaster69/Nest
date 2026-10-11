@@ -494,7 +494,9 @@ test("credit transaction card selection uses a compact mobile-only dropdown", as
   const component = await readFile(path.join(root, "components/credit-transactions-page.tsx"), "utf8");
   const styles = await readAppStyles(root);
 
-  assert.match(component, /className="cct-mobile-card-trigger"[\s\S]*?aria-haspopup="listbox"/);
+  assert.match(component, /className="cct-mobile-card-trigger"[\s\S]*?aria-expanded=\{isMobileCardPickerOpen\}[\s\S]*?aria-controls="mobile-credit-card-options"/);
+  assert.match(component, /<fieldset id="mobile-credit-card-options"[\s\S]*?aria-label="Credit cards"/);
+  assert.doesNotMatch(component, /role="listbox"|role="option"/);
   assert.match(component, /className="cct-mobile-card-dropdown"/);
   assert.match(component, /card\.bankName \|\| "Card"} ••{card\.last4Digit}/);
   assert.doesNotMatch(component, /cct-mobile-card-label|title="Select card"|mobileSheet/);
@@ -698,7 +700,9 @@ test("settings groups related controls into focused tabs", async () => {
   assert.match(automation, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
   assert.match(notices, /No transactions auto-accounted[\s\S]*?No unaccounted transactions matched your enabled rules/);
   assert.match(styles, /\.settings-auto-notice\s*\{[^}]*margin-bottom:\s*18px/s);
-  assert.match(settings, /function renderWorkspaceDefaults[\s\S]*?section !== "workspaces" \|\| context\.data\?\.role !== "OWNER"[\s\S]*?Currency Display/);
+  assert.match(settings, /function renderWorkspaceCurrency[\s\S]*?section !== "workspaces" \|\| context\.data\?\.role !== "OWNER"[\s\S]*?Currency Display/);
+  assert.match(settings, /function renderReceivableDefaults[\s\S]*?section !== "workspaces"[\s\S]*?Receivable Default Account[\s\S]*?Receivable Default Subaccount/);
+  assert.match(settings, /\{renderWorkspaceCurrency\(\)\}[\s\S]*?\{renderReceivableDefaults\(\)\}/);
   assert.match(settings, /section === "workspaces"[\s\S]*?Bank accounts/);
   assert.match(settings, /section === "data"[\s\S]*?<DataImportSection/);
   const dataLayout = settings.slice(
@@ -763,7 +767,7 @@ test("workspace settings flow from selection through configuration and access", 
   assert.match(collaborators, /function renderWorkspaceDetails[\s\S]*?Workspace details[\s\S]*?\{renderMembers\(\)\}/);
   assert.ok(layout.indexOf("{workspaceSettings}") < layout.indexOf("Invite people"));
   assert.ok(layout.indexOf("Invite people") < layout.indexOf("Audit log"));
-  assert.match(settings, /function renderWorkspaceDefaults[\s\S]*?Currency Display[\s\S]*?Bank accounts/);
+  assert.match(settings, /function renderWorkspaceCurrency[\s\S]*?Currency Display[\s\S]*?Receivable Default Account[\s\S]*?Bank accounts/);
   assert.doesNotMatch(settings, /settings-page-section-header/);
   assert.doesNotMatch(collaborators, /workspace-settings-card-(?:heading|title)/);
   assert.match(collaborators, /settings-section-title">Choose workspace/);

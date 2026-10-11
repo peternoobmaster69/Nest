@@ -8,7 +8,7 @@ const expectFilter = async fields => ui.waitFor(() => {
   for (const [name, value] of Object.entries(fields)) assert.equal(lastFilter()?.get(name), value);
 });
 const cardTrigger = view => view.container.querySelector(".cct-mobile-card-trigger");
-const cardOptions = view => ui.within(view.getByRole("listbox", { name: "Credit cards" }));
+const cardOptions = view => ui.within(view.getByRole("group", { name: "Credit cards" }));
 
 for (const [month, expected, label] of [["all", null, "All months"], ["-1", null, "All months"], ["1", "1", "Jan"], ["12", "12", "Dec"], ["13", "10", "Oct"], ["bad", "10", "Oct"]]) {
   test(`URL statement month ${month} uses the supported period or the current-month fallback`, async () => {
@@ -66,20 +66,20 @@ test("the mobile card picker selects a card, persists it, handles failed logos a
   ui.fireEvent.click(cardTrigger(view));
   assert.equal(cardTrigger(view).getAttribute("aria-expanded"), "true");
   assert.ok(!view.queryByRole("searchbox"));
-  assert.equal(cardOptions(view).getByRole("option", { name: /Daily card/ }).getAttribute("aria-selected"), "true");
-  ui.fireEvent.click(cardOptions(view).getByRole("option", { name: /Travel card/ }));
+  assert.equal(cardOptions(view).getByRole("button", { name: /Daily card/ }).getAttribute("aria-pressed"), "true");
+  ui.fireEvent.click(cardOptions(view).getByRole("button", { name: /Travel card/ }));
   await expectFilter({ cardId: "card-two" });
   assert.equal(cardTrigger(view).getAttribute("aria-expanded"), "false");
   assert.match(cardTrigger(view).textContent, /Travel cardCard ••1234/);
   assert.match(document.cookie, /nest_credit_tx_card=card-two/);
   ui.fireEvent.click(cardTrigger(view));
-  ui.fireEvent.click(cardOptions(view).getByRole("option", { name: /All cards/ }));
+  ui.fireEvent.click(cardOptions(view).getByRole("button", { name: /All cards/ }));
   await expectFilter({ cardId: "all" });
   assert.match(cardTrigger(view).textContent, /All cards2 cards/);
   ui.fireEvent.click(cardTrigger(view));
-  assert.equal(cardOptions(view).getByRole("option", { name: /All cards/ }).getAttribute("aria-selected"), "true");
+  assert.equal(cardOptions(view).getByRole("button", { name: /All cards/ }).getAttribute("aria-pressed"), "true");
   ui.fireEvent.click(cardTrigger(view));
-  assert.ok(!view.queryByRole("listbox"));
+  assert.ok(!view.queryByRole("group"));
 });
 
 test("card search matches name, bank and final digits, reports no results, and clears after selection", async () => {
@@ -90,20 +90,20 @@ test("card search matches name, bank and final digits, reports no results, and c
   const search = view.getByRole("searchbox", { name: "Search cards" });
   for (const query of ["Travel 0", "ocbc", "7000"]) {
     ui.fireEvent.change(search, { target: { value: query } });
-    assert.equal(cardOptions(view).getAllByRole("option").length, 1);
-    assert.match(cardOptions(view).getByRole("option").textContent, /Travel 0/);
+    assert.equal(cardOptions(view).getAllByRole("button").length, 1);
+    assert.match(cardOptions(view).getByRole("button").textContent, /Travel 0/);
   }
-  ui.fireEvent.error(cardOptions(view).getByRole("option").querySelector("img"));
-  assert.ok(!cardOptions(view).getByRole("option").querySelector("img"));
+  ui.fireEvent.error(cardOptions(view).getByRole("button").querySelector("img"));
+  assert.ok(!cardOptions(view).getByRole("button").querySelector("img"));
   ui.fireEvent.change(search, { target: { value: "missing" } });
   assert.ok(view.getByText("No matching cards."));
-  assert.equal(cardOptions(view).queryAllByRole("option").length, 0);
+  assert.equal(cardOptions(view).queryAllByRole("button").length, 0);
   ui.fireEvent.change(search, { target: { value: "Travel 0" } });
-  ui.fireEvent.click(cardOptions(view).getByRole("option"));
+  ui.fireEvent.click(cardOptions(view).getByRole("button"));
   await expectFilter({ cardId: "card-2" });
   ui.fireEvent.click(cardTrigger(view));
   assert.equal(view.getByRole("searchbox").value, "");
-  assert.equal(cardOptions(view).getAllByRole("option").length, 8);
+  assert.equal(cardOptions(view).getAllByRole("button").length, 8);
 });
 
 test("month and year pickers show due-date urgency, select periods and close other open pickers", async () => {
@@ -115,27 +115,27 @@ test("month and year pickers show due-date urgency, select periods and close oth
   await ui.waitFor(() => assert.equal(month.classList.contains("is-due-later"), true));
   ui.fireEvent.click(cardTrigger(view));
   ui.fireEvent.click(month);
-  assert.ok(!view.queryByRole("listbox", { name: "Credit cards" }));
-  const months = ui.within(view.getByRole("listbox", { name: "Statement months" }));
-  assert.equal(months.getByRole("option", { name: "Sep, payment due" }).classList.contains("is-due-soon"), true);
-  assert.equal(months.getByRole("option", { name: "Oct, payment due" }).classList.contains("is-due-later"), true);
-  assert.equal(months.getByRole("option", { name: "Oct, payment due" }).getAttribute("aria-selected"), "true");
-  ui.fireEvent.click(months.getByRole("option", { name: "Sep, payment due" }));
+  assert.ok(!view.queryByRole("group", { name: "Credit cards" }));
+  const months = ui.within(view.getByRole("group", { name: "Statement months" }));
+  assert.equal(months.getByRole("button", { name: "Sep, payment due" }).classList.contains("is-due-soon"), true);
+  assert.equal(months.getByRole("button", { name: "Oct, payment due" }).classList.contains("is-due-later"), true);
+  assert.equal(months.getByRole("button", { name: "Oct, payment due" }).getAttribute("aria-pressed"), "true");
+  ui.fireEvent.click(months.getByRole("button", { name: "Sep, payment due" }));
   await expectFilter({ month: "9" });
   assert.equal(month.getAttribute("aria-expanded"), "false");
   assert.equal(month.classList.contains("is-due-soon"), true);
   ui.fireEvent.click(month);
   ui.fireEvent.click(year);
-  assert.ok(!view.queryByRole("listbox", { name: "Statement months" }));
-  const years = ui.within(view.getByRole("listbox", { name: "Statement years" }));
-  assert.equal(years.getByRole("option", { name: "2026" }).getAttribute("aria-selected"), "true");
-  ui.fireEvent.click(years.getByRole("option", { name: "2025" }));
+  assert.ok(!view.queryByRole("group", { name: "Statement months" }));
+  const years = ui.within(view.getByRole("group", { name: "Statement years" }));
+  assert.equal(years.getByRole("button", { name: "2026" }).getAttribute("aria-pressed"), "true");
+  ui.fireEvent.click(years.getByRole("button", { name: "2025" }));
   await expectFilter({ year: "2025" });
   ui.fireEvent.click(year);
   ui.fireEvent.click(cardTrigger(view));
-  assert.ok(!view.queryByRole("listbox", { name: "Statement years" }));
+  assert.ok(!view.queryByRole("group", { name: "Statement years" }));
   ui.fireEvent.click(month);
-  ui.fireEvent.click(view.getByRole("option", { name: "All months" }));
+  ui.fireEvent.click(view.getByRole("button", { name: "All months" }));
   await expectFilter({ month: null });
   assert.equal(month.classList.contains("is-due-soon"), false);
   assert.equal(month.classList.contains("is-due-later"), false);
@@ -146,7 +146,7 @@ test("picker dismissal respects inside clicks, outside clicks and Escape", async
   await loaded(view);
   for (const trigger of [cardTrigger(view), view.getByRole("button", { name: "Statement month", exact: true }), view.getByRole("button", { name: "Statement year", exact: true })]) {
     ui.fireEvent.click(trigger);
-    ui.fireEvent.pointerDown(view.getByRole("listbox"));
+    ui.fireEvent.pointerDown(view.getByRole("group"));
     ui.fireEvent.keyDown(document, { key: "Tab" });
     assert.equal(trigger.getAttribute("aria-expanded"), "true");
     ui.fireEvent.keyDown(document, { key: "Escape" });
@@ -154,6 +154,34 @@ test("picker dismissal respects inside clicks, outside clicks and Escape", async
     ui.fireEvent.click(trigger);
     ui.fireEvent.pointerDown(document.body);
     assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  }
+});
+
+test("mobile filters use native buttons and restore keyboard focus after selection or Escape", async () => {
+  const view = show([cardFixture(), cardFixture({ id: "card-two", cardName: "Travel card" })]);
+  await loaded(view);
+  for (const { trigger, groupName, choiceName, key, filter } of [
+    { trigger: cardTrigger(view), groupName: "Credit cards", choiceName: /Travel card/, key: "{Enter}", filter: { cardId: "card-two" } },
+    { trigger: view.getByRole("button", { name: "Statement month", exact: true }), groupName: "Statement months", choiceName: "Feb", key: " ", filter: { month: "2" } },
+    { trigger: view.getByRole("button", { name: "Statement year", exact: true }), groupName: "Statement years", choiceName: "2025", key: "{Enter}", filter: { year: "2025" } },
+  ]) {
+    trigger.focus();
+    await ui.user.keyboard("{Enter}");
+    const group = view.getByRole("group", { name: groupName });
+    assert.equal(group.tagName, "FIELDSET");
+    const choice = ui.within(group).getByRole("button", { name: choiceName });
+    assert.equal(choice.tagName, "BUTTON");
+    choice.focus();
+    await ui.user.keyboard(key);
+    await expectFilter(filter);
+    assert.equal(view.queryByRole("group", { name: groupName }), null);
+    assert.equal(document.activeElement, trigger);
+    assert.equal(trigger.getAttribute("aria-expanded"), "false");
+    await ui.user.keyboard("{Enter}");
+    ui.within(view.getByRole("group", { name: groupName })).getAllByRole("button")[0].focus();
+    await ui.user.keyboard("{Escape}");
+    assert.equal(trigger.getAttribute("aria-expanded"), "false");
+    assert.equal(document.activeElement, trigger);
   }
 });
 
@@ -201,7 +229,7 @@ test("all-card counts and the picker remain usable when every transaction is alr
   assert.match(cardTrigger(view).textContent, /1 card/);
   assert.ok(!cardTrigger(view).querySelector(".cct-mobile-card-count"));
   ui.fireEvent.click(cardTrigger(view));
-  assert.ok(!view.getByRole("listbox").querySelector(".cct-mobile-card-count"));
+  assert.ok(!view.getByRole("group").querySelector(".cct-mobile-card-count"));
   ui.fireEvent.click(view.getByRole("button", { name: "Statement year", exact: true }));
-  assert.equal(view.getByRole("option", { name: "2030" }).getAttribute("aria-selected"), "true");
+  assert.equal(view.getByRole("button", { name: "2030" }).getAttribute("aria-pressed"), "true");
 });

@@ -184,7 +184,7 @@ export async function verifyCoverage() {
 }
 
 function meetsCoverageMinimum(value, requireEntries) {
-  if (!value || value.skipped !== 0) return false;
+  if (value?.skipped !== 0) return false;
   const { total, covered } = value;
   if (!Number.isSafeInteger(total) || !Number.isSafeInteger(covered) || total < 0 || covered < 0 || covered > total) return false;
   if (total === 0) return !requireEntries;

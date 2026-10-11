@@ -404,3 +404,86 @@ test("the investment return toggle uses native keyboard activation and keeps the
   assert.equal(ui.window.sessionStorage.getItem("nest:view:investments:returnMode"), '"absolute"');
   assert.ok(requests.every(({ method }) => method === "GET"));
 });
+
+function configureReceivableDefaults(role = "OWNER") {
+  let context = { ...fixtures.get("/api/context"), role, defaultAccountId: "bank-one", defaultBudgetId: "budget-one" };
+  fixtures.set("/api/context", context);
+  fixtures.set("/api/accounts", [
+    { id: "bank-one", name: "Everyday bank", isActive: true },
+    { id: "bank-two", name: "Reserve bank", isActive: true },
+    { id: "bank-closed", name: "Closed bank", isActive: false },
+  ].map((account) => ({ bankName: "DBS", startingCents: 0, currentBalanceCents: 0, linkedBudgetTotalCents: 0, discrepancyCents: 0,
+    updatedAt: "2026-10-01T12:00:00Z", ...account })));
+  fixtures.set("/api/budgets", [
+    { id: "budget-one", accountId: "bank-one", name: "Everyday receivables", isActive: true },
+    { id: "budget-old", accountId: "bank-one", name: "Closed subaccount", isActive: false },
+    { id: "budget-two", accountId: "bank-two", name: "Reserve receivables", isActive: true },
+  ]);
+  const save = ({ body }) => {
+    assert.equal(body.workspaceId, "fixture-workspace");
+    context = { ...context };
+    if (Object.hasOwn(body, "receivableDefaultAccountId")) context.defaultAccountId = body.receivableDefaultAccountId;
+    if (Object.hasOwn(body, "receivableDefaultBudgetId")) context.defaultBudgetId = body.receivableDefaultBudgetId;
+    fixtures.set("/api/context", context);
+    return Response.json({ defaultAccountId: context.defaultAccountId, defaultBudgetId: context.defaultBudgetId });
+  };
+  fixtures.set("PATCH /api/context", save);
+  return save;
+}
+
+for (const role of ["OWNER", "EDITOR"]) {
+  test(role + " can configure receivable defaults using active accounts and their own subaccounts", async () => {
+    configureReceivableDefaults(role);
+    const view = show(SettingsPage, "settings", { section: "workspaces" });
+    const account = await view.findByRole("combobox", { name: "Receivable default account" });
+    const budget = view.getByRole("combobox", { name: "Receivable default subaccount" });
+    await waitFor(() => assert.deepEqual([...account.options].map((option) => option.value), ["", "bank-one", "bank-two"]));
+    await waitFor(() => assert.deepEqual([...budget.options].map((option) => option.value), ["", "budget-one"]));
+    assert.equal(account.value, "bank-one");
+    assert.equal(budget.value, "budget-one");
+    assert.equal(Boolean(view.queryByRole("combobox", { name: "Workspace currency" })), role === "OWNER");
+
+    fireEvent.change(account, { target: { value: "bank-two" } });
+    await waitFor(() => assert.equal(account.value, "bank-two"));
+    await waitFor(() => assert.deepEqual([...budget.options].map((option) => option.value), ["", "budget-two"]));
+    assert.equal(budget.value, "");
+    const changes = () => requests.filter(({ method }) => method === "PATCH");
+    assert.deepEqual(changes()[0].body, { workspaceId: "fixture-workspace", receivableDefaultAccountId: "bank-two", receivableDefaultBudgetId: null });
+
+    fireEvent.change(budget, { target: { value: "budget-two" } });
+    await waitFor(() => assert.equal(budget.value, "budget-two"));
+    assert.deepEqual(changes()[1].body, { workspaceId: "fixture-workspace", receivableDefaultBudgetId: "budget-two" });
+    fireEvent.change(budget, { target: { value: "" } });
+    await waitFor(() => assert.equal(budget.value, ""));
+    assert.equal(changes()[2].body.receivableDefaultBudgetId, null);
+
+    fireEvent.change(account, { target: { value: "" } });
+    await waitFor(() => assert.equal(account.value, ""));
+    assert.equal(budget.disabled, true);
+    assert.deepEqual(changes()[3].body, { workspaceId: "fixture-workspace", receivableDefaultAccountId: null, receivableDefaultBudgetId: null });
+    assert.ok(changes().every(({ headers }) => headers.get("x-workspace-id") === "fixture-workspace"));
+  });
+}
+
+test("a rejected default-account change keeps the saved account and subaccount available for retry", async () => {
+  const save = configureReceivableDefaults();
+  fixtures.set("PATCH /api/context", () => Response.json({ error: "Default account unavailable" }, { status: 503 }));
+  const view = show(SettingsPage, "settings", { section: "workspaces" });
+  const account = await view.findByRole("combobox", { name: "Receivable default account" });
+  const budget = view.getByRole("combobox", { name: "Receivable default subaccount" });
+  await waitFor(() => assert.equal(account.disabled, false));
+  await waitFor(() => assert.equal(budget.value, "budget-one"));
+  fireEvent.change(account, { target: { value: "bank-two" } });
+  await view.findByText("Default account unavailable");
+  assert.equal(account.value, "bank-one");
+  assert.equal(budget.value, "budget-one");
+  assert.equal(account.disabled, false);
+  fixtures.set("PATCH /api/context", save);
+  fireEvent.change(account, { target: { value: "bank-two" } });
+  await waitFor(() => assert.equal(account.value, "bank-two"));
+  await view.findByText("Default receivable account updated.");
+  assert.equal(view.queryByText("Default account unavailable"), null);
+  const changes = requests.filter(({ method }) => method === "PATCH");
+  assert.equal(changes.length, 2);
+  assert.deepEqual(changes[1].body, changes[0].body);
+});
