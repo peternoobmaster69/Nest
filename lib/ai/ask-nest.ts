@@ -509,6 +509,19 @@ function resolveVisualization(toolOutputs: Record<string, unknown>[]): AskNestVi
   return undefined;
 }
 
+function resolveAnswerEvidence(items: AskNestEvidence[], evidenceIds: string[]) {
+  const availableEvidence = uniqueEvidence(items);
+  const evidenceById = new Map(availableEvidence.map((item) => [item.id, item]));
+  let resolvedEvidence = evidenceIds
+    .map((id) => evidenceById.get(id))
+    .filter((item): item is AskNestEvidence => Boolean(item));
+  if (!resolvedEvidence.length && availableEvidence.length) {
+    resolvedEvidence = availableEvidence;
+  }
+
+  return resolvedEvidence;
+}
+
 export async function answerAskNest(input: AskNestInput): Promise<AskNestResult> {
   const startedAt = Date.now();
   const configuration = await getAgentConfiguration("ask-nest");
@@ -613,61 +626,63 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
   let totalToolCalls = 0;
   let toolRoundsUsed = 0;
 
+  const runToolCall = async (call: ResponseFunctionToolCall) => {
+    const callStartedAt = Date.now();
+    let toolOutput: Record<string, unknown>;
+    let args: unknown = {};
+    let status: AskNestToolDiagnostic["status"] = "SUCCESS";
+    try {
+      if (!availableTools.some((tool) => tool.name === call.name)) throw new AskNestToolInputError("This tool is not enabled for the agent.");
+      args = parseToolArguments(call);
+      const result = await executeAskNestTool(call.name, args, {
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        currency,
+        callId: call.call_id,
+      });
+      toolOutput = result.output;
+      if (result.output.ok === false) status = "UNAVAILABLE";
+      successfulToolOutputs.push(result.output);
+      evidenceItems.push(...result.evidence);
+      toolsUsed.push(call.name);
+    } catch (error) {
+      status = "INVALID_ARGUMENTS";
+      toolOutput = safeToolError(error);
+    }
+    const resultCount = toolResultCount(toolOutput);
+    toolDiagnostics.push({
+      name: call.name,
+      arguments: diagnosticArguments(args),
+      status,
+      durationMs: Date.now() - callStartedAt,
+      resultCount,
+      emptyResult: status === "SUCCESS" && resultCount === 0,
+    });
+    requestItems.push({
+      type: "function_call_output",
+      call_id: call.call_id,
+      output: JSON.stringify(toolOutput),
+    });
+    toolOutputs.push(JSON.stringify(toolOutput));
+  };
+
   // Executes the model's tool calls until it answers or the configured budget is spent.
   const runToolRounds = async (roundLimit: number) => {
-  for (let round = toolRoundsUsed; round < roundLimit; round += 1) {
-    const calls = response.output.filter((item): item is ResponseFunctionToolCall => item.type === "function_call");
-    if (!calls.length) break;
+    for (let round = toolRoundsUsed; round < roundLimit; round += 1) {
+      const calls = response.output.filter((item): item is ResponseFunctionToolCall => item.type === "function_call");
+      if (!calls.length) break;
 
-    totalToolCalls += calls.length;
-    if (totalToolCalls > configuration.maxToolCalls) {
-      throw new AskNestResponseError("AI_LOOKUP_LIMIT");
-    }
-
-    requestItems.push(...response.output as ResponseInputItem[]);
-    for (const call of calls) {
-      const callStartedAt = Date.now();
-      let toolOutput: Record<string, unknown>;
-      let args: unknown = {};
-      let status: AskNestToolDiagnostic["status"] = "SUCCESS";
-      try {
-        if (!availableTools.some((tool) => tool.name === call.name)) throw new AskNestToolInputError("This tool is not enabled for the agent.");
-        args = parseToolArguments(call);
-        const result = await executeAskNestTool(call.name, args, {
-          workspaceId: input.workspaceId,
-          userId: input.userId,
-          currency,
-          callId: call.call_id,
-        });
-        toolOutput = result.output;
-        if (result.output.ok === false) status = "UNAVAILABLE";
-        successfulToolOutputs.push(result.output);
-        evidenceItems.push(...result.evidence);
-        toolsUsed.push(call.name);
-      } catch (error) {
-        status = "INVALID_ARGUMENTS";
-        toolOutput = safeToolError(error);
+      totalToolCalls += calls.length;
+      if (totalToolCalls > configuration.maxToolCalls) {
+        throw new AskNestResponseError("AI_LOOKUP_LIMIT");
       }
-      const resultCount = toolResultCount(toolOutput);
-      toolDiagnostics.push({
-        name: call.name,
-        arguments: diagnosticArguments(args),
-        status,
-        durationMs: Date.now() - callStartedAt,
-        resultCount,
-        emptyResult: status === "SUCCESS" && resultCount === 0,
-      });
-      requestItems.push({
-        type: "function_call_output",
-        call_id: call.call_id,
-        output: JSON.stringify(toolOutput),
-      });
-      toolOutputs.push(JSON.stringify(toolOutput));
-    }
 
-    toolRoundsUsed = round + 1;
-    response = await createResponse(round + 1 >= roundLimit || totalToolCalls >= configuration.maxToolCalls ? "none" : "auto");
-  }
+      requestItems.push(...response.output as ResponseInputItem[]);
+      for (const call of calls) await runToolCall(call);
+
+      toolRoundsUsed = round + 1;
+      response = await createResponse(round + 1 >= roundLimit || totalToolCalls >= configuration.maxToolCalls ? "none" : "auto");
+    }
   };
   await runToolRounds(configuration.maxToolRounds);
 
@@ -713,10 +728,10 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
     (output.domain === "CIO" || output.domain === "PUBLIC_FINANCIAL_RESEARCH") && output.ok === true
   ))
     ? [
-        ...userSuppliedNumericContext,
-        ...referencedConversationContext,
-        ...normalizedUserCurrencyContext,
-      ]
+      ...userSuppliedNumericContext,
+      ...referencedConversationContext,
+      ...normalizedUserCurrencyContext,
+    ]
     : [];
   let cioAllowedContext = buildCioAllowedContext();
   const groundingText = [
@@ -759,14 +774,7 @@ export async function answerAskNest(input: AskNestInput): Promise<AskNestResult>
   }
   const groundedAnswer = ensureCioDataDate(generated.answer, successfulToolOutputs);
 
-  const availableEvidence = uniqueEvidence(evidenceItems);
-  const evidenceById = new Map(availableEvidence.map((item) => [item.id, item]));
-  let resolvedEvidence = generated.evidence_ids
-    .map((id) => evidenceById.get(id))
-    .filter((item): item is AskNestEvidence => Boolean(item));
-  if (!resolvedEvidence.length && availableEvidence.length) {
-    resolvedEvidence = availableEvidence;
-  }
+  const resolvedEvidence = resolveAnswerEvidence(evidenceItems, generated.evidence_ids);
 
   return {
     memoryCandidates: configuration.capabilities.includes("memory") ? generated.memory_candidates : [],

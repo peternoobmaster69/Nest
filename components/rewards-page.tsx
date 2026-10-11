@@ -855,108 +855,11 @@ export function RewardsPage({
   ]);
 
   const activeTabAction =
-    activeTab === "credit-cards" && data?.cardsWithoutRewards.length ? (
-      <Button className="btn btn-primary rewards-tab-action" onClick={openCardRewardModal}>
-        <Plus size={16} aria-hidden="true" />
-        Add card rewards
-      </Button>
-    ) : activeTab === "frequent-flyers" ? (
-      <Button className="btn btn-primary rewards-tab-action" onClick={openAddFFModal}>
-        <Plus size={16} aria-hidden="true" />
-        Add frequent flyer
-      </Button>
-    ) : activeTab === "hotel-rewards" ? (
-      <Button className="btn btn-primary rewards-tab-action" onClick={openAddHotelModal}>
-        <Plus size={16} aria-hidden="true" />
-        Add hotel rewards
-      </Button>
-    ) : activeTab === "conversions" && data?.creditCards.length && data?.frequentFlyers.length ? (
-      <Button className="btn btn-primary rewards-tab-action" onClick={openConversionModal}>
-        <Plus size={16} aria-hidden="true" />
-        Add conversion rate
-      </Button>
-    ) : null;
+    renderActiveTabAction();
 
-  return (
-    <div ref={rewardsTopRef} className="rewards-page-top">
-      {/* Summary Stats */}
-      <RewardsOverview
-        loading={isLoading}
-        cardMiles={totalCreditCardMiles}
-        cardCount={data?.creditCards.length ?? 0}
-        frequentFlyerMiles={totalMiles}
-        frequentFlyerCount={data?.frequentFlyers.length ?? 0}
-        hotelPoints={totalHotelPoints}
-        hotelCount={data?.hotelRewards.length ?? 0}
-        hotelValue={totalHotelValueCents}
-        combinedMiles={totalCombinedMiles}
-        formatCurrency={formatCurrency}
-      />
-
-      <MutationErrorSummary
-        error={updateCardReward.error || updateConversion.error || updateEarnTransaction.error || deleteCardReward.error || deleteFrequentFlyer.error || deleteHotelReward.error || deleteConversion.error}
-        onReload={refreshRewardsAndHistory}
-      />
-
-      {isError && (
-        <div className="card" style={{ marginBottom: "20px" }}>
-          <EmptyState
-            icon="⚠️"
-            title="Failed to load rewards"
-            action={
-              <Button className="btn btn-primary" onClick={() => refetch()}>
-                Retry
-              </Button>
-            }
-          />
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="rewards-tabs-row">
-        <div className="segmented rewards-tabs">
-          <Button
-            type="button"
-            aria-label="Credit cards"
-            className={`segmented-btn ${activeTab === "credit-cards" ? "on" : ""}`}
-            onClick={() => setActiveTab("credit-cards")}
-          >
-            <CreditCard className="rewards-tab-icon" size={16} aria-hidden="true" />
-            <span className="rewards-tab-label">Credit cards</span>
-          </Button>
-          <Button
-            type="button"
-            aria-label="Frequent flyer"
-            className={`segmented-btn ${activeTab === "frequent-flyers" ? "on" : ""}`}
-            onClick={() => setActiveTab("frequent-flyers")}
-          >
-            <Plane className="rewards-tab-icon" size={16} aria-hidden="true" />
-            <span className="rewards-tab-label">Frequent flyer</span>
-          </Button>
-          <Button
-            type="button"
-            aria-label="Hotel rewards"
-            className={`segmented-btn ${activeTab === "hotel-rewards" ? "on" : ""}`}
-            onClick={() => setActiveTab("hotel-rewards")}
-          >
-            <Building2 className="rewards-tab-icon" size={16} aria-hidden="true" />
-            <span className="rewards-tab-label">Hotel rewards</span>
-          </Button>
-          <Button
-            type="button"
-            aria-label="Conversions"
-            className={`segmented-btn ${activeTab === "conversions" ? "on" : ""}`}
-            onClick={() => setActiveTab("conversions")}
-          >
-            <ArrowLeftRight className="rewards-tab-icon" size={16} aria-hidden="true" />
-            <span className="rewards-tab-label">Conversions</span>
-          </Button>
-        </div>
-        {activeTabAction}
-      </div>
-
-      {/* Credit Cards Tab */}
-      {activeTab === "credit-cards" && (
+  function renderCreditCardRewards() {
+    return (
+      activeTab === "credit-cards" && (
         <div>
           <div className="rewards-cc-grid">
             {isLoading && <RewardsCardGridSkeleton />}
@@ -1052,9 +955,13 @@ export function RewardsPage({
             </div>
           ) : null}
         </div>
-      )}
-      {/* Frequent Flyer Tab */}
-      {activeTab === "frequent-flyers" && (
+      )
+    );
+  }
+
+  function renderFrequentFlyerRewards() {
+    return (
+      activeTab === "frequent-flyers" && (
         <div>
           <div className="grid-2 rewards-program-grid">
             {isLoading && <RewardsCardGridSkeleton />}
@@ -1105,7 +1012,7 @@ export function RewardsPage({
                   <div className="rewards-item-meta">
                     miles
                     {ff.targetMiles && ` / ${formatNumber(ff.targetMiles)} goal`}
-                    {` • ${ff.mileNeverExpire ? "never expires" : `valid ${ff.validityPeriodYears} years`}`}
+                    {ff.mileNeverExpire ? " • never expires" : ` • valid ${ff.validityPeriodYears} years`}
                   </div>
                 </div>
                 {ff.expirySummary.length > 0 && (
@@ -1379,10 +1286,13 @@ export function RewardsPage({
             </section>
           )}
         </div>
-      )}
+      )
+    );
+  }
 
-      {/* Hotel Rewards Tab */}
-      {activeTab === "hotel-rewards" && (
+  function renderHotelRewards() {
+    return (
+      activeTab === "hotel-rewards" && (
         <div>
           <div className="grid-2 rewards-program-grid">
             {isLoading && <RewardsCardGridSkeleton variant="hotel" />}
@@ -1450,10 +1360,13 @@ export function RewardsPage({
             })}
           </div>
         </div>
-      )}
+      )
+    );
+  }
 
-      {/* Conversions Tab */}
-      {activeTab === "conversions" && (
+  function renderRewardConversions() {
+    return (
+      activeTab === "conversions" && (
         <div>
           <div className="rewards-conversion-list">
             {isLoading && <RewardsRowsSkeleton />}
@@ -1546,10 +1459,13 @@ export function RewardsPage({
             </div>
           ) : null}
         </div>
-      )}
+      )
+    );
+  }
 
-      {/* Credit Card Rewards Modal */}
-      {isCardRewardModalOpen && data?.cardsWithoutRewards.length ? (
+  function renderCreditCardRewardModal() {
+    return (
+      isCardRewardModalOpen && data?.cardsWithoutRewards.length ? (
         <Dialog open onClose={closeCardRewardModal} title="Add card rewards" surface="custom" overlayClassName="st-modal-overlay">
           <dialog open className="st-modal">
             <div className="st-modal-header">
@@ -1646,10 +1562,13 @@ export function RewardsPage({
             </form>
           </dialog>
         </Dialog>
-      ) : null}
+      ) : null
+    );
+  }
 
-      {/* Conversion Rate Modal */}
-      {isConversionModalOpen && data?.creditCards.length && data?.frequentFlyers.length ? (
+  function renderConversionModal() {
+    return (
+      isConversionModalOpen && data?.creditCards.length && data?.frequentFlyers.length ? (
         <Dialog open onClose={closeConversionModal} title="Add point conversion" surface="custom" overlayClassName="st-modal-overlay">
           <dialog open className="st-modal">
             <div className="st-modal-header">
@@ -1744,10 +1663,13 @@ export function RewardsPage({
             </form>
           </dialog>
         </Dialog>
-      ) : null}
+      ) : null
+    );
+  }
 
-      {/* Hotel Rewards Modal */}
-      {isHotelModalOpen && (
+  function renderHotelRewardModal() {
+    return (
+      isHotelModalOpen && (
         <Dialog open onClose={closeHotelModal} title="Hotel reward account" surface="custom" overlayClassName="st-modal-overlay">
           <dialog open className="st-modal">
             <div className="st-modal-header">
@@ -1845,22 +1767,19 @@ export function RewardsPage({
                   className="btn btn-primary"
                   disabled={createHotelReward.isPending || updateHotelReward.isPending}
                 >
-                  {editingHotelId
-                    ? updateHotelReward.isPending
-                      ? "Saving..."
-                      : "Save Changes"
-                    : createHotelReward.isPending
-                      ? "Adding..."
-                      : "Add Program"}
+                  {getHotelSubmitLabel()}
                 </Button>
               </div>
             </form>
           </dialog>
         </Dialog>
-      )}
+      )
+    );
+  }
 
-      {/* Frequent Flyer Modal */}
-      {isFFModalOpen && (
+  function renderFrequentFlyerModal() {
+    return (
+      isFFModalOpen && (
         <Dialog open onClose={closeFFModal} title="Frequent flyer account" surface="custom" overlayClassName="st-modal-overlay">
           <dialog open className="st-modal">
             <div className="st-modal-header">
@@ -1990,22 +1909,19 @@ export function RewardsPage({
                   className="btn btn-primary"
                   disabled={createFrequentFlyer.isPending || updateFrequentFlyer.isPending}
                 >
-                  {editingFFId
-                    ? updateFrequentFlyer.isPending
-                      ? "Saving..."
-                      : "Save Changes"
-                    : createFrequentFlyer.isPending
-                      ? "Adding..."
-                      : "Add Program"}
+                  {getFrequentFlyerSubmitLabel()}
                 </Button>
               </div>
             </form>
           </dialog>
         </Dialog>
-      )}
+      )
+    );
+  }
 
-      {/* Add Earn Transaction Modal */}
-      {isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
+  function renderEarnMilesModal() {
+    return (
+      isAddEarnModalOpen && selectedHistoryFrequentFlyer && (
         <Dialog open onClose={() => setIsAddEarnModalOpen(false)} title="Add miles earned" surface="custom" overlayClassName="st-modal-overlay">
           <dialog open className="st-modal">
             <div className="st-modal-header">
@@ -2089,10 +2005,13 @@ export function RewardsPage({
             </form>
           </dialog>
         </Dialog>
-      )}
+      )
+    );
+  }
 
-      {/* Redeem Miles Modal */}
-      {isRedeemModalOpen && selectedHistoryFrequentFlyer && (
+  function renderRedeemMilesModal() {
+    return (
+      isRedeemModalOpen && selectedHistoryFrequentFlyer && (
         <Dialog open onClose={() => setIsRedeemModalOpen(false)} title="Redeem miles" surface="custom" overlayClassName="st-modal-overlay">
           <dialog open className="st-modal">
             <div className="st-modal-header">
@@ -2166,7 +2085,170 @@ export function RewardsPage({
             </form>
           </dialog>
         </Dialog>
+      )
+    );
+  }
+
+  function renderActiveTabAction() {
+    if (activeTab === "credit-cards" && data?.cardsWithoutRewards.length) {
+      return (<Button className="btn btn-primary rewards-tab-action" onClick={openCardRewardModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add card rewards
+      </Button>);
+    }
+    if (activeTab === "frequent-flyers") {
+      return (<Button className="btn btn-primary rewards-tab-action" onClick={openAddFFModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add frequent flyer
+      </Button>);
+    }
+    if (activeTab === "hotel-rewards") {
+      return (<Button className="btn btn-primary rewards-tab-action" onClick={openAddHotelModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add hotel rewards
+      </Button>);
+    }
+    if (activeTab === "conversions" && data?.creditCards.length && data?.frequentFlyers.length) {
+      return (<Button className="btn btn-primary rewards-tab-action" onClick={openConversionModal}>
+        <Plus size={16} aria-hidden="true" />
+        Add conversion rate
+      </Button>);
+    }
+    return (null);
+  }
+
+  function getHotelSubmitLabel() {
+    if (editingHotelId) {
+      if (updateHotelReward.isPending) {
+        return ("Saving...");
+      }
+      return ("Save Changes");
+    }
+    if (createHotelReward.isPending) {
+      return ("Adding...");
+    }
+    return ("Add Program");
+  }
+
+  function getFrequentFlyerSubmitLabel() {
+    if (editingFFId) {
+      if (updateFrequentFlyer.isPending) {
+        return ("Saving...");
+      }
+      return ("Save Changes");
+    }
+    if (createFrequentFlyer.isPending) {
+      return ("Adding...");
+    }
+    return ("Add Program");
+  }
+
+  return (
+    <div ref={rewardsTopRef} className="rewards-page-top">
+      {/* Summary Stats */}
+      <RewardsOverview
+        loading={isLoading}
+        cardMiles={totalCreditCardMiles}
+        cardCount={data?.creditCards.length ?? 0}
+        frequentFlyerMiles={totalMiles}
+        frequentFlyerCount={data?.frequentFlyers.length ?? 0}
+        hotelPoints={totalHotelPoints}
+        hotelCount={data?.hotelRewards.length ?? 0}
+        hotelValue={totalHotelValueCents}
+        combinedMiles={totalCombinedMiles}
+        formatCurrency={formatCurrency}
+      />
+
+      <MutationErrorSummary
+        error={updateCardReward.error || updateConversion.error || updateEarnTransaction.error || deleteCardReward.error || deleteFrequentFlyer.error || deleteHotelReward.error || deleteConversion.error}
+        onReload={refreshRewardsAndHistory}
+      />
+
+      {isError && (
+        <div className="card" style={{ marginBottom: "20px" }}>
+          <EmptyState
+            icon="⚠️"
+            title="Failed to load rewards"
+            action={
+              <Button className="btn btn-primary" onClick={() => refetch()}>
+                Retry
+              </Button>
+            }
+          />
+        </div>
       )}
+
+      {/* Tabs */}
+      <div className="rewards-tabs-row">
+        <div className="segmented rewards-tabs">
+          <Button
+            type="button"
+            aria-label="Credit cards"
+            className={`segmented-btn ${activeTab === "credit-cards" ? "on" : ""}`}
+            onClick={() => setActiveTab("credit-cards")}
+          >
+            <CreditCard className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Credit cards</span>
+          </Button>
+          <Button
+            type="button"
+            aria-label="Frequent flyer"
+            className={`segmented-btn ${activeTab === "frequent-flyers" ? "on" : ""}`}
+            onClick={() => setActiveTab("frequent-flyers")}
+          >
+            <Plane className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Frequent flyer</span>
+          </Button>
+          <Button
+            type="button"
+            aria-label="Hotel rewards"
+            className={`segmented-btn ${activeTab === "hotel-rewards" ? "on" : ""}`}
+            onClick={() => setActiveTab("hotel-rewards")}
+          >
+            <Building2 className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Hotel rewards</span>
+          </Button>
+          <Button
+            type="button"
+            aria-label="Conversions"
+            className={`segmented-btn ${activeTab === "conversions" ? "on" : ""}`}
+            onClick={() => setActiveTab("conversions")}
+          >
+            <ArrowLeftRight className="rewards-tab-icon" size={16} aria-hidden="true" />
+            <span className="rewards-tab-label">Conversions</span>
+          </Button>
+        </div>
+        {activeTabAction}
+      </div>
+
+      {/* Credit Cards Tab */}
+      {renderCreditCardRewards()}
+      {/* Frequent Flyer Tab */}
+      {renderFrequentFlyerRewards()}
+
+      {/* Hotel Rewards Tab */}
+      {renderHotelRewards()}
+
+      {/* Conversions Tab */}
+      {renderRewardConversions()}
+
+      {/* Credit Card Rewards Modal */}
+      {renderCreditCardRewardModal()}
+
+      {/* Conversion Rate Modal */}
+      {renderConversionModal()}
+
+      {/* Hotel Rewards Modal */}
+      {renderHotelRewardModal()}
+
+      {/* Frequent Flyer Modal */}
+      {renderFrequentFlyerModal()}
+
+      {/* Add Earn Transaction Modal */}
+      {renderEarnMilesModal()}
+
+      {/* Redeem Miles Modal */}
+      {renderRedeemMilesModal()}
     </div>
   );
 }

@@ -99,6 +99,7 @@ for (const [route, Component, emptyTitle, action, dialog] of [
     fireEvent.click(view.getByRole("button", { name: action, exact: true }));
     const form = await view.findByRole("dialog", { name: dialog, exact: true });
     assert.ok(form.querySelector("input"), "a user can enter a new record");
+    if (route === "receivables") assert.equal(form.querySelector(".txn-modal-actions").parentElement, form.querySelector("form"));
     fireEvent.click(within(form).getByRole("button", { name: "Cancel", exact: true }));
     assert.equal(view.queryByRole("dialog"), null);
     assert.ok(requests.every((request) => request.method === "GET"), "cancel must not persist any changes");
@@ -382,3 +383,24 @@ for (const scenario of [
     for (const [key, value] of Object.entries(scenario.expected)) assert.equal(writes[1].body[key], value);
   });
 }
+
+
+test("the investment return toggle uses native keyboard activation and keeps the displayed mode", async () => {
+  const view = show(InvestmentsPage, "investments");
+  await waitFor(() => assert.equal(client.getQueryState(queryKeys.investments("fixture-workspace"))?.status, "success"));
+  await view.findByRole("heading", { name: "No investment accounts yet" });
+  const toggle = view.container.querySelector(".inv-return-toggle");
+  assert.equal(toggle.tagName, "BUTTON");
+  assert.equal(toggle.getAttribute("aria-pressed"), "false");
+  toggle.focus();
+  assert.equal(document.activeElement, toggle);
+  await ui.user.keyboard("{Enter}");
+  assert.equal(toggle.getAttribute("aria-pressed"), "true");
+  assert.ok(within(toggle).getByText("Annualized Return"));
+  assert.equal(ui.window.sessionStorage.getItem("nest:view:investments:returnMode"), '"annualized"');
+  await ui.user.keyboard(" ");
+  assert.equal(toggle.getAttribute("aria-pressed"), "false");
+  assert.ok(within(toggle).getByText("Return"));
+  assert.equal(ui.window.sessionStorage.getItem("nest:view:investments:returnMode"), '"absolute"');
+  assert.ok(requests.every(({ method }) => method === "GET"));
+});

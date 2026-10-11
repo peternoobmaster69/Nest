@@ -31,85 +31,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { useSearchParams } from "next/navigation";
 import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 
-type AppContext = {
-  workspaceId: string | null;
-  workspaceName?: string | null;
-  role?: "OWNER" | "EDITOR" | "VIEWER";
-  baseCurrency?: string | null;
-};
-
-type InvestmentEntry = {
-  id: string;
-  date: string;
-  investedCents: number;
-  currentValueCents: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type InvestmentAccount = {
-  id: string;
-  displayName?: string | null;
-  institutionName: string;
-  productName: string;
-  inceptionDate: string;
-  divestedDate?: string | null;
-  isLiquid: boolean;
-  entries: InvestmentEntry[];
-};
-
-type TimeRange = "90D" | "180D" | "1Y" | "ALL";
-
-type InvestmentChartPoint = {
-  id: string;
-  x: number;
-  yInvested: number;
-  yCurrent: number;
-  label: string;
-  invested: number;
-  current: number;
-};
-
-function toIsoFromDateInput(value: string) {
-  return new Date(`${value}T00:00:00.000Z`).toISOString();
-}
-
-function dateInputFromIso(value: string | null | undefined) {
-  if (!value) return "";
-  return new Date(value).toISOString().slice(0, 10);
-}
-
-function isWithinLastDay(value: string) {
-  const timestamp = new Date(value).getTime();
-  if (Number.isNaN(timestamp)) return false;
-  return Date.now() - timestamp < 24 * 60 * 60 * 1000;
-}
-
-function formatInceptionBadge(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const year = String(date.getFullYear());
-  return {
-    full: `Since ${year}`,
-    compact: `Since ’${year.slice(-2)}`,
-  };
-}
-
-function buildLinePath(points: Array<{ x: number; y: number }>) {
-  if (!points.length) return "";
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-
-  const [first, ...rest] = points;
-  return rest.reduce((path, point) => `${path} L ${point.x} ${point.y}`, `M ${first.x} ${first.y}`);
-}
-
-function buildAreaPath(points: Array<{ x: number; y: number }>, baselineY: number) {
-  if (!points.length) return "";
-  const linePath = buildLinePath(points);
-  const first = points[0];
-  const last = points.at(-1)!;
-  return `${linePath} L ${last.x} ${baselineY} L ${first.x} ${baselineY} Z`;
-}
+import { type AppContext, type InvestmentEntry, type InvestmentAccount, type TimeRange, type InvestmentChartPoint, toIsoFromDateInput, dateInputFromIso, isWithinLastDay, formatInceptionBadge, buildLinePath, buildAreaPath } from "@/lib/investment-view";
 
 export function InvestmentsPage() {
   const routeWorkspaceId = useWorkspaceId();
@@ -591,17 +513,17 @@ export function InvestmentsPage() {
     const list = showAllAccounts
       ? aggregatedAllAccountsData
       : selectedEntries.map((entry) => ({
-          id: entry.id,
-          date: new Date(entry.date),
-          invested: entry.investedCents,
-          current: entry.currentValueCents,
-        }));
+        id: entry.id,
+        date: new Date(entry.date),
+        invested: entry.investedCents,
+        current: entry.currentValueCents,
+      }));
     if (timeRange === "ALL") return list;
 
     const now = currentTimestamp;
     const day = 24 * 60 * 60 * 1000;
-    const threshold =
-      timeRange === "90D" ? now - 90 * day : timeRange === "180D" ? now - 180 * day : now - 365 * day;
+    const daysByRange = { "90D": 90, "180D": 180, "1Y": 365 };
+    const threshold = now - daysByRange[timeRange] * day;
     return list.filter((row) => row.date.getTime() >= threshold);
   }, [selectedEntries, timeRange, showAllAccounts, aggregatedAllAccountsData, currentTimestamp]);
 
@@ -665,143 +587,678 @@ export function InvestmentsPage() {
 
   const activePoint = tooltip.item;
 
+  function renderPortfolioHeader() {
+    return (
+      <section className="card inv-portfolio-card">
+        <div className="inv-portfolio-header">
+          {/* Total Portfolio Value - Primary */}
+          <div style={{ flex: "1 1 200px" }}>
+            <div className="inv-header-total-label">
+              Total Portfolio Value
+            </div>
+            <div className="inv-header-total-value">
+              {formatCents(totalCurrentAcrossAll)}
+            </div>
+            <div className="inv-withdrawable-summary">
+              <span>Amount Available to withdraw</span>
+              <strong>{formatCents(liquidCurrentAcrossAll)}</strong>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ width: "1px", height: "50px", background: "var(--border-subtle)", flexShrink: 0 }} />
+
+          {/* Invested Amount */}
+          <div className="inv-header-stat">
+            <div className="inv-contribution-tooltip-shell inv-header-stat-label">
+              <Button
+                type="button"
+                className="inv-contribution-tooltip-trigger"
+                aria-label="Total Invested contribution history"
+                aria-describedby="inv-annual-contributions"
+              >
+                <span>Total Invested</span>
+                <Info size={12} aria-hidden="true" />
+              </Button>
+              <div id="inv-annual-contributions" className="inv-contribution-tooltip" role="tooltip">
+                <dl>
+                  <div className="is-ytd">
+                    <dt>{currentYear} YTD</dt>
+                    <dd>
+                      <ContributionTrendIndicator
+                        currentCents={ytdContributionCents}
+                        previousCents={contributionsByYear.get(currentYear - 1)}
+                        previousYear={currentYear - 1}
+                      />
+                      {formatCents(ytdContributionCents)}
+                    </dd>
+                  </div>
+                  {priorAnnualContributions.map((contribution) => (
+                    <div key={contribution.year}>
+                      <dt>{contribution.year}</dt>
+                      <dd>
+                        <ContributionTrendIndicator
+                          currentCents={contribution.contributedCents}
+                          previousCents={contributionsByYear.get(contribution.year - 1)}
+                          previousYear={contribution.year - 1}
+                        />
+                        {formatCents(contribution.contributedCents)}
+                      </dd>
+                    </div>
+                  ))}
+                  {!priorAnnualContributions.length ? (
+                    <div>
+                      <dt>Earlier</dt>
+                      <dd>None recorded</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <small>Net change in total invested</small>
+              </div>
+            </div>
+            <div className="inv-header-stat-value is-invested">
+              {formatCents(totalInvestedAcrossAll)}
+            </div>
+          </div>
+
+          {/* Gain/Loss */}
+          <div className="inv-header-stat">
+            <div className="inv-header-stat-label">
+              {isProfit ? "Gain" : "Loss"}
+            </div>
+            <div className={`inv-header-stat-value ${isProfit ? "positive" : "negative"}`}>
+              {isProfit ? "+" : "-"}{formatCents(Math.abs(totalGainCents))}
+            </div>
+          </div>
+
+          {/* Return Percentage */}
+          <Button type="button"
+            className="inv-return-toggle inv-header-stat"
+            aria-pressed={returnDisplayMode === "annualized"}
+            title={
+              getReturnToggleTitle()
+            }
+            onClick={() => setReturnDisplayMode((mode) => (mode === "absolute" ? "annualized" : "absolute"))}
+          >
+            <span className="inv-header-stat-label inv-return-toggle-label">
+              <span>{returnDisplayMode === "absolute" ? "Return" : "Annualized Return"}</span>
+              <ArrowRightLeft size={10} aria-hidden="true" />
+            </span>
+            <span
+              className={`inv-header-stat-value is-return ${getReturnTone()
+                }`}
+            >
+              {displayedReturnPercentage === null ? (
+                <span>—</span>
+              ) : (
+                <>
+                  <span>{displayedReturnIsProfit ? "▲" : "▼"}</span>
+                  <span>{Math.abs(displayedReturnPercentage).toFixed(2)}%</span>
+                </>
+              )}
+            </span>
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  function renderInvestmentAccounts() {
+    return (
+      <section className="inv-account-grid">
+        {accountsError && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <EmptyState
+              icon="⚠️"
+              title="Failed to load investments"
+              action={
+                <Button className="btn btn-primary" onClick={() => refetch()}>
+                  Retry
+                </Button>
+              }
+            />
+          </div>
+        )}
+
+        {!accountsError && (accounts.data ?? []).length === 0 && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <EmptyState
+              icon="📈"
+              title="No investment accounts yet"
+              description="Add your first investment account to start tracking your portfolio performance."
+              action={
+                <Button className="btn btn-primary" onClick={openCreateAccountModal}>
+                  + Add Investment Account
+                </Button>
+              }
+            />
+          </div>
+        )}
+
+        {!accountsError && (accounts.data ?? [])
+          .map((account) => ({ account, latest: getLatestInvestmentEntry(account.entries) }))
+          .sort((a, b) => {
+            const currentValueDifference = (b.latest?.currentValueCents ?? 0) - (a.latest?.currentValueCents ?? 0);
+            return currentValueDifference ||
+              (a.account.displayName || a.account.productName).localeCompare(b.account.displayName || b.account.productName);
+          })
+          .map(({ account, latest }) => {
+            const recentlyUpdated = account.entries.some((entry) => isWithinLastDay(entry.updatedAt || entry.createdAt));
+            const selected = !showAllAccounts && account.id === selectedAccountId;
+            const investedCents = latest?.investedCents ?? 0;
+            const currentCents = latest?.currentValueCents ?? 0;
+            const currentValueClass = currentCents >= investedCents ? "positive" : "negative";
+            const gainCents = currentCents - investedCents;
+            const accountIsProfit = gainCents >= 0;
+            const returnPercentage = investedCents > 0 ? (gainCents / investedCents) * 100 : null;
+            const inceptionBadge = formatInceptionBadge(account.inceptionDate);
+            return (
+              <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""} ${recentlyUpdated ? "is-recently-updated" : ""}`}>
+                <Button
+                  className="inv-edit-icon"
+                  type="button"
+                  onClick={() => openEditAccountModal(account)}
+                  aria-label="Edit investment account"
+                  title="Edit"
+                >
+                  ✎
+                </Button>
+                <Button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
+                  <div className="inv-account-head">
+                    <div className="inv-account-title-row">
+                      <strong>{account.displayName || account.productName}</strong>
+                      <span
+                        className={`inv-account-liquidity-status ${account.isLiquid ? "is-liquid" : "is-locked"}`}
+                        role="img"
+                        aria-label={account.isLiquid ? "Liquid account" : "Non-liquid account"}
+                        title={account.isLiquid ? "Liquid account" : "Non-liquid account"}
+                      >
+                        {account.isLiquid
+                          ? <Droplet size={13} aria-hidden="true" />
+                          : <Lock size={12} aria-hidden="true" />}
+                      </span>
+                    </div>
+                    <span className="inv-account-subtitle">{account.productName} · {account.institutionName}</span>
+                  </div>
+                  <div className="inv-account-amounts">
+                    <div>
+                      <small>Invested</small>
+                      <p className="positive">{formatCents(investedCents)}</p>
+                    </div>
+                    <div>
+                      <small>Current</small>
+                      <p className={currentValueClass}>{formatCents(currentCents)}</p>
+                    </div>
+                  </div>
+                  <div
+                    className={`inv-account-performance ${currentValueClass}`}
+                    title={`All-time ${accountIsProfit ? "gain" : "loss"} on this account`}
+                  >
+                    <span aria-hidden="true">{accountIsProfit ? "▲" : "▼"}</span>
+                    <span>{accountIsProfit ? "+" : "-"}{formatCents(Math.abs(gainCents))}</span>
+                    {returnPercentage !== null ? (
+                      <span className="inv-account-performance-return">
+                        ({Math.abs(returnPercentage).toFixed(2)}%)
+                      </span>
+                    ) : null}
+                  </div>
+                </Button>
+                <div className="inv-account-actions">
+                  {inceptionBadge ? (
+                    <span
+                      className="inv-inception-chip"
+                      title={inceptionBadge.full}
+                      data-compact-label={inceptionBadge.compact}
+                    >
+                      {inceptionBadge.full}
+                    </span>
+                  ) : null}
+                  <Button
+                    className="btn btn-primary btn-icon btn-xs inv-add-update-btn"
+                    type="button"
+                    onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}
+                    title="Add Update"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13.5 8A5.5 5.5 0 1 1 10 3.07" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <polygon points="10,1 14,4 10,5.5" fill="currentColor" />
+                    </svg>
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+      </section>
+    );
+  }
+
+  function renderSelectedPerformance() {
+    if ((showAllAccounts || selectedAccount)) {
+      return (<>
+        {renderPerformanceChart()}
+
+        {/* History section - only show for single account view */}
+        {!showAllAccounts && selectedAccount && (
+          <section className="card inv-history-card">
+            <div className="inv-history-head">
+              <div className="inv-title">History</div>
+              <Button className="btn btn-primary btn-xs" type="button" onClick={() => selectedAccount && openCreateEntryModal(selectedAccount)}>
+                + Add Entry
+              </Button>
+            </div>
+            <div className="inv-history-list">
+              {selectedEntries.length ? (
+                selectedEntries
+                  .slice()
+                  .reverse()
+                  .map((entry) => (
+                    <div key={entry.id} className="inv-history-row">
+                      <div>
+                        <strong>{new Date(entry.date).toLocaleDateString()}</strong>
+                        <span>Invested: {formatCents(entry.investedCents)}</span>
+                        <span>Current: {formatCents(entry.currentValueCents)}</span>
+                      </div>
+                      <Button
+                        className="btn btn-ghost btn-icon"
+                        style={{ width: "32px", height: "32px" }}
+                        type="button"
+                        onClick={() => openEditEntryModal(entry)}
+                        title="Edit"
+                        aria-label="Edit entry"
+                      >
+                        ✎
+                      </Button>
+                    </div>
+                  ))
+              ) : (
+                <EmptyState
+                  icon="📋"
+                  title="No entries yet"
+                  description="Add your first entry to track invested amount and current value."
+                />
+              )}
+            </div>
+          </section>
+        )}
+      </>);
+    }
+    if (!accountsLoading && !accountsError) {
+      return (<EmptyState
+        icon="📈"
+        title="Select an investment account"
+        description="Choose an account from above to view its performance chart and history."
+      />);
+    }
+    return (null);
+  }
+
+  function renderInvestmentAccountModal() {
+    return (
+      accountModalOpen && typeof document !== "undefined" && createPortal(
+        <Dialog open onClose={closeAccountModal} title="Investment account" surface="custom" overlayClassName="profile-modal-overlay">
+          <dialog open className="profile-modal inv-modal">
+            <div className="profile-modal-head">
+              <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
+              <ModalCloseButton onClick={closeAccountModal} label={`Close ${accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}`} />
+            </div>
+            <form className="modal-form-shell" onSubmit={(event: SubmitEvent) => {
+              event.preventDefault();
+              if (!workspaceId) {
+                setAccountError("Workspace is not ready. Please wait and try again.");
+                return;
+              }
+              if (accountModalMode === "edit" && editingAccountId) {
+                updateAccount.mutate(editingAccountId);
+                return;
+              }
+              createAccount.mutate();
+            }}>
+              <div className="profile-modal-body inv-modal-body">
+                <label className="profile-field" htmlFor="investment-display-name">
+                  <span>Display Name of the Account</span>
+                  <Input id="investment-display-name" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                </label>
+                <label className="profile-field" htmlFor="investment-institution-name">
+                  <span>Financial Institution Name</span>
+                  <Input id="investment-institution-name" className="input" value={institutionName} onChange={(e) => setInstitutionName(e.target.value)} required />
+                </label>
+                <label className="profile-field" htmlFor="investment-product-name">
+                  <span>Product Name</span>
+                  <Input id="investment-product-name" className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required />
+                </label>
+                <label className="profile-field" htmlFor="investment-inception-date">
+                  <span>Inception Date</span>
+                  <Input id="investment-inception-date" className="input" type="date" value={inceptionDate} onChange={(e) => setInceptionDate(e.target.value)} required />
+                </label>
+                <label className="profile-field" htmlFor="investment-divested-date">
+                  <span>Divested Date (Optional)</span>
+                  <Input id="investment-divested-date" className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
+                </label>
+                <div className="profile-field">
+                  <span>Is liquid (Available to withdraw anytime?)</span>
+                  <fieldset className="segmented-toggle inv-liquidity-toggle" aria-label="Is liquid">
+                    <Button
+                      type="button"
+                      className={`segmented-toggle-btn inv-liquidity-toggle-btn ${isLiquid ? "is-active" : ""}`}
+                      aria-pressed={isLiquid}
+                      onClick={() => setIsLiquid(true)}
+                    >
+                      Yes
+                    </Button>
+                    <Button
+                      type="button"
+                      className={`segmented-toggle-btn inv-liquidity-toggle-btn ${!isLiquid ? "is-active" : ""}`}
+                      aria-pressed={!isLiquid}
+                      onClick={() => setIsLiquid(false)}
+                    >
+                      No
+                    </Button>
+                  </fieldset>
+                </div>
+                {accountError ? <div className="profile-error">{accountError}</div> : null}
+              </div>
+              <div className="profile-actions inv-modal-actions">
+                {accountModalMode === "edit" && editingAccountId ? (
+                  <Button
+                    type="button"
+                    className="btn btn-ghost btn-xs modal-action-destructive"
+                    onClick={() => confirmDeleteAccount(editingAccountId)}
+                    disabled={deleteAccount.isPending}
+                  >
+                    {deleteAccount.isPending ? "Deleting..." : "Delete"}
+                  </Button>
+                ) : <span />}
+                <div className="inv-modal-primary-actions modal-action-group">
+                  <Button type="button" className="btn btn-ghost btn-xs" onClick={closeAccountModal}>Cancel</Button>
+                  <Button type="submit" className="btn btn-primary btn-xs" disabled={createAccount.isPending || updateAccount.isPending}>
+                    {getAccountSubmitLabel()}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </dialog>
+        </Dialog>,
+        document.body
+      )
+    );
+  }
+
+  function renderInvestmentEntryModal() {
+    return (
+      entryModalOpen && typeof document !== "undefined" && createPortal(
+        <Dialog open onClose={closeEntryModal} title="Investment entry" surface="custom" overlayClassName="profile-modal-overlay">
+          <dialog open className="profile-modal inv-modal">
+            <div className="profile-modal-head">
+              <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
+              <ModalCloseButton onClick={closeEntryModal} label={`Close ${entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}`} />
+            </div>
+            <form className="modal-form-shell" onSubmit={(event: SubmitEvent) => {
+              event.preventDefault();
+              if (entryModalMode === "edit" && editingEntryId) {
+                updateEntry.mutate(editingEntryId);
+                return;
+              }
+              if (entryAccountId) {
+                createEntry.mutate(entryAccountId);
+              } else {
+                setEntryError("Please select an investment account first.");
+              }
+            }}>
+              <div className="profile-modal-body inv-modal-body">
+                <div className="profile-field">
+                  <span>Date</span>
+                  <Input className="input" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
+                </div>
+                {entryModalMode === "create" ? (
+                  <div className="profile-field">
+                    <span>New Funds Added</span>
+                    <NumericCalculatorInput step="0.01" value={newFunds} onValueChange={setNewFunds} />
+                  </div>
+                ) : null}
+                <div className="profile-field">
+                  <span>Total Invested Amount</span>
+                  <NumericCalculatorInput step="0.01" value={entryInvested} onValueChange={setEntryInvested} required />
+                </div>
+                <div className="profile-field">
+                  <span>Current Value</span>
+                  <NumericCalculatorInput step="0.01" value={entryCurrentValue} onValueChange={setEntryCurrentValue} required />
+                </div>
+                {entryError ? <div className="profile-error">{entryError}</div> : null}
+              </div>
+              <div className="profile-actions inv-modal-actions">
+                {entryModalMode === "edit" && editingEntryId ? (
+                  <Button
+                    type="button"
+                    className="btn btn-ghost btn-xs modal-action-destructive"
+                    onClick={() => confirmDeleteEntry(editingEntryId)}
+                    disabled={deleteEntry.isPending}
+                  >
+                    {deleteEntry.isPending ? "Deleting..." : "Delete"}
+                  </Button>
+                ) : <span />}
+                <div className="inv-modal-primary-actions modal-action-group">
+                  <Button type="button" className="btn btn-ghost btn-xs" onClick={closeEntryModal}>Cancel</Button>
+                  <Button type="submit" className="btn btn-primary btn-xs" disabled={createEntry.isPending || updateEntry.isPending}>
+                    {getEntrySubmitLabel()}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </dialog>
+        </Dialog>,
+        document.body
+      )
+    );
+  }
+
+  function getReturnToggleTitle() {
+    if (returnDisplayMode === "absolute") {
+      return ("All-time return since inception. Tap for the annualized return, which accounts for when each contribution was made.");
+    }
+    if (annualizedReturnPercentage === null) {
+      return ("Not enough contribution history to annualize yet. Tap for the all-time return.");
+    }
+    return ("Annualized return, weighted by when each contribution was made. Tap for the all-time return.");
+  }
+
+  function getReturnTone() {
+    if (displayedReturnPercentage === null) {
+      return ("is-muted");
+    }
+    if (displayedReturnIsProfit) {
+      return ("positive");
+    }
+    return ("negative");
+  }
+
+  function getAccountViewTitle() {
+    if (showAllAccounts) {
+      return ("All Accounts");
+    }
+    if (selectedAccount) {
+      return (`${selectedAccount.displayName || selectedAccount.productName}`);
+    }
+    return ("Select an account to view details");
+  }
+
+  function getAccountSubmitLabel() {
+    if (accountModalMode === "edit") {
+      if (updateAccount.isPending) {
+        return ("Saving...");
+      }
+      return ("Save");
+    }
+    if (createAccount.isPending) {
+      return ("Adding...");
+    }
+    return ("Add");
+  }
+
+  function getEntrySubmitLabel() {
+    if (entryModalMode === "edit") {
+      if (updateEntry.isPending) {
+        return ("Saving...");
+      }
+      return ("Save");
+    }
+    if (createEntry.isPending) {
+      return ("Adding...");
+    }
+    return ("Add");
+  }
+
+  function renderPerformanceChart() {
+    return (
+      <section className="card inv-chart-card">
+        <div className="inv-chart-head">
+          <div>
+            {showAllAccounts ? (
+              <>
+                <div className="inv-title">All Investment Accounts</div>
+                <div className="inv-subtitle">Combined portfolio performance</div>
+              </>
+            ) : (
+              <>
+                <div className="inv-title">{selectedAccount?.displayName || selectedAccount?.productName}</div>
+                <div className="inv-subtitle">{selectedAccount?.productName} · {selectedAccount?.institutionName}</div>
+              </>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div className="inv-range">
+              {(["90D", "180D", "1Y", "ALL"] as TimeRange[]).map((range) => (
+                <Button
+                  key={range}
+                  type="button"
+                  className={`inv-range-btn ${timeRange === range ? "on" : ""}`}
+                  onClick={() => setTimeRange(range)}
+                >
+                  {range}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {chart.points.length ? (
+          <div ref={chartWrapRef} className="inv-chart-wrap">
+            <svg
+              viewBox={`0 0 ${chart.width} ${chart.height}`}
+              className="inv-chart"
+              role="img"
+              aria-label="Investment time series chart"
+              onPointerLeave={tooltip.clear}
+            >
+              <defs>
+                <linearGradient id="invCurrentGainFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="var(--amount-positive)" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="var(--amount-positive)" stopOpacity="0" />
+                </linearGradient>
+                <linearGradient id="invCurrentLossFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="var(--amount-negative)" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="var(--amount-negative)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {chart.gridLines.map((line) => (
+                <g key={line.id}>
+                  <line x1={36} x2={chart.width - 36} y1={line.y} y2={line.y} className="inv-grid-line" />
+                  <text x={10} y={line.y + 4} className="inv-grid-label">
+                    {formatCents(Math.round(line.value))}
+                  </text>
+                </g>
+              ))}
+              <path
+                d={chart.currentAreaPath}
+                className={`inv-area ${chart.currentTone}`}
+                fill={chart.currentTone === "gain" ? "url(#invCurrentGainFill)" : "url(#invCurrentLossFill)"}
+              />
+              <path d={chart.investedPath} className="inv-line invested" />
+              <path d={chart.currentPath} className={`inv-line current ${chart.currentTone}`} />
+              {chart.points.map((point, index) => {
+                const previousPoint = chart.points[index - 1] ?? null;
+                const nextPoint = chart.points[index + 1] ?? null;
+                const hitX = previousPoint ? (previousPoint.x + point.x) / 2 : 36;
+                const hitRight = nextPoint ? (point.x + nextPoint.x) / 2 : chart.width - 36;
+                const isActive = activePoint?.id === point.id;
+
+                return (
+                  <g key={point.id}>
+                    <rect
+                      className="inv-hit-area"
+                      x={hitX}
+                      y={36}
+                      width={Math.max(16, hitRight - hitX)}
+                      height={chart.height - 72}
+                      rx="8"
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${point.label}: Invested ${formatCents(point.invested)}, current ${formatCents(point.current)}`}
+                      onPointerEnter={(event) => tooltip.showAtPointer(event, point)}
+                      onPointerMove={(event) => tooltip.showAtPointer(event, point)}
+                      onFocus={(event) => {
+                        const wrapper = chartWrapRef.current;
+                        const targetRect = event.currentTarget.getBoundingClientRect();
+                        const wrapperRect = wrapper?.getBoundingClientRect();
+                        if (!wrapperRect) return;
+                        tooltip.showAtLocalPoint(
+                          targetRect.left - wrapperRect.left + targetRect.width / 2,
+                          targetRect.top - wrapperRect.top + targetRect.height / 2,
+                          point,
+                        );
+                      }}
+                      onBlur={tooltip.clear}
+                    />
+                    <circle
+                      cx={point.x}
+                      cy={point.yInvested}
+                      r={isActive ? 4 : 3}
+                      className="inv-dot invested"
+                    />
+                    <circle
+                      cx={point.x}
+                      cy={point.yCurrent}
+                      r={isActive ? 4 : 3}
+                      className={`inv-dot current ${chart.currentTone}`}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="inv-chart-legend">
+              <span><i className="inv-legend-dot invested" /> Invested Amount</span>
+              <span><i className={`inv-legend-dot current ${chart.currentTone}`} /> Current Value</span>
+            </div>
+            {activePoint && tooltip.position ? (
+              <ChartCursorTooltip position={tooltip.position}>
+                <strong>{activePoint.label}</strong>
+                <span>Invested: {formatCents(activePoint.invested)}</span>
+                <span>Current: {formatCents(activePoint.current)}</span>
+              </ChartCursorTooltip>
+            ) : null}
+          </div>
+        ) : (
+          <EmptyState
+            icon="📊"
+            title="No data points yet"
+            description="Add your first fund/value update to start tracking performance over time."
+          />
+        )}
+      </section>
+    );
+  }
+
   return (
     <div className="inv-page">
       {/* Modern Fintech-Style Dashboard Header */}
       {accountsLoading ? (
         <InvestmentsPortfolioHeaderSkeleton />
       ) : (
-        <section className="card inv-portfolio-card">
-          <div className="inv-portfolio-header">
-              {/* Total Portfolio Value - Primary */}
-              <div style={{ flex: "1 1 200px" }}>
-                <div className="inv-header-total-label">
-                  Total Portfolio Value
-                </div>
-                <div className="inv-header-total-value">
-                  {formatCents(totalCurrentAcrossAll)}
-                </div>
-                <div className="inv-withdrawable-summary">
-                  <span>Amount Available to withdraw</span>
-                  <strong>{formatCents(liquidCurrentAcrossAll)}</strong>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div style={{ width: "1px", height: "50px", background: "var(--border-subtle)", flexShrink: 0 }} />
-
-              {/* Invested Amount */}
-              <div className="inv-header-stat">
-                <div className="inv-contribution-tooltip-shell inv-header-stat-label">
-                  <Button
-                    type="button"
-                    className="inv-contribution-tooltip-trigger"
-                    aria-label="Total Invested contribution history"
-                    aria-describedby="inv-annual-contributions"
-                  >
-                    <span>Total Invested</span>
-                    <Info size={12} aria-hidden="true" />
-                  </Button>
-                  <div id="inv-annual-contributions" className="inv-contribution-tooltip" role="tooltip">
-                    <dl>
-                      <div className="is-ytd">
-                        <dt>{currentYear} YTD</dt>
-                        <dd>
-                          <ContributionTrendIndicator
-                            currentCents={ytdContributionCents}
-                            previousCents={contributionsByYear.get(currentYear - 1)}
-                            previousYear={currentYear - 1}
-                          />
-                          {formatCents(ytdContributionCents)}
-                        </dd>
-                      </div>
-                      {priorAnnualContributions.map((contribution) => (
-                        <div key={contribution.year}>
-                          <dt>{contribution.year}</dt>
-                          <dd>
-                            <ContributionTrendIndicator
-                              currentCents={contribution.contributedCents}
-                              previousCents={contributionsByYear.get(contribution.year - 1)}
-                              previousYear={contribution.year - 1}
-                            />
-                            {formatCents(contribution.contributedCents)}
-                          </dd>
-                        </div>
-                      ))}
-                      {!priorAnnualContributions.length ? (
-                        <div>
-                          <dt>Earlier</dt>
-                          <dd>None recorded</dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                    <small>Net change in total invested</small>
-                  </div>
-                </div>
-                <div className="inv-header-stat-value is-invested">
-                  {formatCents(totalInvestedAcrossAll)}
-                </div>
-              </div>
-
-              {/* Gain/Loss */}
-              <div className="inv-header-stat">
-                <div className="inv-header-stat-label">
-                  {isProfit ? "Gain" : "Loss"}
-                </div>
-                <div className={`inv-header-stat-value ${isProfit ? "positive" : "negative"}`}>
-                  {isProfit ? "+" : "-"}{formatCents(Math.abs(totalGainCents))}
-                </div>
-              </div>
-
-              {/* Return Percentage */}
-              <div
-                className="inv-return-toggle inv-header-stat"
-                role="button"
-                tabIndex={0}
-                aria-pressed={returnDisplayMode === "annualized"}
-                title={
-                  returnDisplayMode === "absolute"
-                    ? "All-time return since inception. Tap for the annualized return, which accounts for when each contribution was made."
-                    : annualizedReturnPercentage === null
-                      ? "Not enough contribution history to annualize yet. Tap for the all-time return."
-                      : "Annualized return, weighted by when each contribution was made. Tap for the all-time return."
-                }
-                onClick={() => setReturnDisplayMode((mode) => (mode === "absolute" ? "annualized" : "absolute"))}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  setReturnDisplayMode((mode) => (mode === "absolute" ? "annualized" : "absolute"));
-                }}
-              >
-                <div className="inv-header-stat-label inv-return-toggle-label">
-                  <span>{returnDisplayMode === "absolute" ? "Return" : "Annualized Return"}</span>
-                  <ArrowRightLeft size={10} aria-hidden="true" />
-                </div>
-                <div
-                  className={`inv-header-stat-value is-return ${
-                    displayedReturnPercentage === null
-                      ? "is-muted"
-                      : displayedReturnIsProfit ? "positive" : "negative"
-                  }`}
-                >
-                  {displayedReturnPercentage === null ? (
-                    <span>—</span>
-                  ) : (
-                    <>
-                      <span>{displayedReturnIsProfit ? "▲" : "▼"}</span>
-                      <span>{Math.abs(displayedReturnPercentage).toFixed(2)}%</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-        </section>
+        renderPortfolioHeader()
       )}
 
       {/* View Toggle */}
       <section className="card inv-view-toggle">
         <div style={{ fontSize: "13px", fontWeight: 600 }}>
-          {showAllAccounts ? "All Accounts" : selectedAccount ? `${selectedAccount.displayName || selectedAccount.productName}` : "Select an account to view details"}
+          {getAccountViewTitle()}
         </div>
         <div className="segmented">
           <Button
@@ -841,472 +1298,15 @@ export function InvestmentsPage() {
       {accountsLoading ? (
         <InvestmentsAccountGridSkeleton />
       ) : (
-        <section className="inv-account-grid">
-        {accountsError && (
-          <div style={{ gridColumn: "1 / -1" }}>
-            <EmptyState
-              icon="⚠️"
-              title="Failed to load investments"
-              action={
-                <Button className="btn btn-primary" onClick={() => refetch()}>
-                  Retry
-                </Button>
-              }
-            />
-          </div>
-        )}
-
-        {!accountsError && (accounts.data ?? []).length === 0 && (
-          <div style={{ gridColumn: "1 / -1" }}>
-            <EmptyState
-              icon="📈"
-              title="No investment accounts yet"
-              description="Add your first investment account to start tracking your portfolio performance."
-              action={
-                <Button className="btn btn-primary" onClick={openCreateAccountModal}>
-                  + Add Investment Account
-                </Button>
-              }
-            />
-          </div>
-        )}
-
-        {!accountsError && (accounts.data ?? [])
-          .map((account) => ({ account, latest: getLatestInvestmentEntry(account.entries) }))
-          .sort((a, b) => {
-            const currentValueDifference = (b.latest?.currentValueCents ?? 0) - (a.latest?.currentValueCents ?? 0);
-            return currentValueDifference ||
-              (a.account.displayName || a.account.productName).localeCompare(b.account.displayName || b.account.productName);
-          })
-          .map(({ account, latest }) => {
-          const recentlyUpdated = account.entries.some((entry) => isWithinLastDay(entry.updatedAt || entry.createdAt));
-          const selected = !showAllAccounts && account.id === selectedAccountId;
-          const investedCents = latest?.investedCents ?? 0;
-          const currentCents = latest?.currentValueCents ?? 0;
-          const currentValueClass = currentCents >= investedCents ? "positive" : "negative";
-          const gainCents = currentCents - investedCents;
-          const accountIsProfit = gainCents >= 0;
-          const returnPercentage = investedCents > 0 ? (gainCents / investedCents) * 100 : null;
-          const inceptionBadge = formatInceptionBadge(account.inceptionDate);
-          return (
-            <article key={account.id} className={`card inv-account-card ${selected ? "is-selected" : ""} ${recentlyUpdated ? "is-recently-updated" : ""}`}>
-              <Button
-                className="inv-edit-icon"
-                type="button"
-                onClick={() => openEditAccountModal(account)}
-                aria-label="Edit investment account"
-                title="Edit"
-              >
-                ✎
-              </Button>
-              <Button className="inv-account-select" type="button" onClick={() => { setSelectedAccountId(account.id); setShowAllAccounts(false); }}>
-                <div className="inv-account-head">
-                  <div className="inv-account-title-row">
-                    <strong>{account.displayName || account.productName}</strong>
-                    <span
-                      className={`inv-account-liquidity-status ${account.isLiquid ? "is-liquid" : "is-locked"}`}
-                      role="img"
-                      aria-label={account.isLiquid ? "Liquid account" : "Non-liquid account"}
-                      title={account.isLiquid ? "Liquid account" : "Non-liquid account"}
-                    >
-                      {account.isLiquid
-                        ? <Droplet size={13} aria-hidden="true" />
-                        : <Lock size={12} aria-hidden="true" />}
-                    </span>
-                  </div>
-                  <span className="inv-account-subtitle">{account.productName} · {account.institutionName}</span>
-                </div>
-                <div className="inv-account-amounts">
-                  <div>
-                    <small>Invested</small>
-                    <p className="positive">{formatCents(investedCents)}</p>
-                  </div>
-                  <div>
-                    <small>Current</small>
-                    <p className={currentValueClass}>{formatCents(currentCents)}</p>
-                  </div>
-                </div>
-                <div
-                  className={`inv-account-performance ${currentValueClass}`}
-                  title={`All-time ${accountIsProfit ? "gain" : "loss"} on this account`}
-                >
-                  <span aria-hidden="true">{accountIsProfit ? "▲" : "▼"}</span>
-                  <span>{accountIsProfit ? "+" : "-"}{formatCents(Math.abs(gainCents))}</span>
-                  {returnPercentage !== null ? (
-                    <span className="inv-account-performance-return">
-                      ({Math.abs(returnPercentage).toFixed(2)}%)
-                    </span>
-                  ) : null}
-                </div>
-              </Button>
-              <div className="inv-account-actions">
-                {inceptionBadge ? (
-                  <span
-                    className="inv-inception-chip"
-                    title={inceptionBadge.full}
-                    data-compact-label={inceptionBadge.compact}
-                  >
-                    {inceptionBadge.full}
-                  </span>
-                ) : null}
-                <Button
-                  className="btn btn-primary btn-icon btn-xs inv-add-update-btn"
-                  type="button"
-                  onClick={() => { setSelectedAccountId(account.id); openCreateEntryModal(account); }}
-                  title="Add Update"
-                >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M13.5 8A5.5 5.5 0 1 1 10 3.07" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <polygon points="10,1 14,4 10,5.5" fill="currentColor"/>
-              </svg>
-                </Button>
-              </div>
-            </article>
-          );
-        })}
-        </section>
+        renderInvestmentAccounts()
       )}
 
       {/* Chart Section - Show for All Accounts or Selected Account */}
-      {(showAllAccounts || selectedAccount) ? (
-        <>
-          <section className="card inv-chart-card">
-            <div className="inv-chart-head">
-              <div>
-                {showAllAccounts ? (
-                  <>
-                    <div className="inv-title">All Investment Accounts</div>
-                    <div className="inv-subtitle">Combined portfolio performance</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="inv-title">{selectedAccount?.displayName || selectedAccount?.productName}</div>
-                    <div className="inv-subtitle">{selectedAccount?.productName} · {selectedAccount?.institutionName}</div>
-                  </>
-                )}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div className="inv-range">
-                  {(["90D", "180D", "1Y", "ALL"] as TimeRange[]).map((range) => (
-                    <Button
-                      key={range}
-                      type="button"
-                      className={`inv-range-btn ${timeRange === range ? "on" : ""}`}
-                      onClick={() => setTimeRange(range)}
-                    >
-                      {range}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {chart.points.length ? (
-              <div ref={chartWrapRef} className="inv-chart-wrap">
-                <svg
-                  viewBox={`0 0 ${chart.width} ${chart.height}`}
-                  className="inv-chart"
-                  role="img"
-                  aria-label="Investment time series chart"
-                  onPointerLeave={tooltip.clear}
-                >
-                  <defs>
-                    <linearGradient id="invCurrentGainFill" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="var(--amount-positive)" stopOpacity="0.22" />
-                      <stop offset="100%" stopColor="var(--amount-positive)" stopOpacity="0" />
-                    </linearGradient>
-                    <linearGradient id="invCurrentLossFill" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="var(--amount-negative)" stopOpacity="0.22" />
-                      <stop offset="100%" stopColor="var(--amount-negative)" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  {chart.gridLines.map((line) => (
-                    <g key={line.id}>
-                      <line x1={36} x2={chart.width - 36} y1={line.y} y2={line.y} className="inv-grid-line" />
-                      <text x={10} y={line.y + 4} className="inv-grid-label">
-                        {formatCents(Math.round(line.value))}
-                      </text>
-                    </g>
-                  ))}
-                  <path
-                    d={chart.currentAreaPath}
-                    className={`inv-area ${chart.currentTone}`}
-                    fill={chart.currentTone === "gain" ? "url(#invCurrentGainFill)" : "url(#invCurrentLossFill)"}
-                  />
-                  <path d={chart.investedPath} className="inv-line invested" />
-                  <path d={chart.currentPath} className={`inv-line current ${chart.currentTone}`} />
-                  {chart.points.map((point, index) => {
-                    const previousPoint = chart.points[index - 1] ?? null;
-                    const nextPoint = chart.points[index + 1] ?? null;
-                    const hitX = previousPoint ? (previousPoint.x + point.x) / 2 : 36;
-                    const hitRight = nextPoint ? (point.x + nextPoint.x) / 2 : chart.width - 36;
-                    const isActive = activePoint?.id === point.id;
+      {renderSelectedPerformance()}
 
-                    return (
-                      <g key={point.id}>
-                        <rect
-                          className="inv-hit-area"
-                          x={hitX}
-                          y={36}
-                          width={Math.max(16, hitRight - hitX)}
-                          height={chart.height - 72}
-                          rx="8"
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`${point.label}: Invested ${formatCents(point.invested)}, current ${formatCents(point.current)}`}
-                          onPointerEnter={(event) => tooltip.showAtPointer(event, point)}
-                          onPointerMove={(event) => tooltip.showAtPointer(event, point)}
-                          onFocus={(event) => {
-                            const wrapper = chartWrapRef.current;
-                            const targetRect = event.currentTarget.getBoundingClientRect();
-                            const wrapperRect = wrapper?.getBoundingClientRect();
-                            if (!wrapperRect) return;
-                            tooltip.showAtLocalPoint(
-                              targetRect.left - wrapperRect.left + targetRect.width / 2,
-                              targetRect.top - wrapperRect.top + targetRect.height / 2,
-                              point,
-                            );
-                          }}
-                          onBlur={tooltip.clear}
-                        />
-                        <circle
-                          cx={point.x}
-                          cy={point.yInvested}
-                          r={isActive ? 4 : 3}
-                          className="inv-dot invested"
-                        />
-                        <circle
-                          cx={point.x}
-                          cy={point.yCurrent}
-                          r={isActive ? 4 : 3}
-                          className={`inv-dot current ${chart.currentTone}`}
-                        />
-                      </g>
-                    );
-                  })}
-                </svg>
-                <div className="inv-chart-legend">
-                  <span><i className="inv-legend-dot invested" /> Invested Amount</span>
-                  <span><i className={`inv-legend-dot current ${chart.currentTone}`} /> Current Value</span>
-                </div>
-                {activePoint && tooltip.position ? (
-                  <ChartCursorTooltip position={tooltip.position}>
-                    <strong>{activePoint.label}</strong>
-                    <span>Invested: {formatCents(activePoint.invested)}</span>
-                    <span>Current: {formatCents(activePoint.current)}</span>
-                  </ChartCursorTooltip>
-                ) : null}
-              </div>
-            ) : (
-              <EmptyState
-                icon="📊"
-                title="No data points yet"
-                description="Add your first fund/value update to start tracking performance over time."
-              />
-            )}
-          </section>
+      {renderInvestmentAccountModal()}
 
-          {/* History section - only show for single account view */}
-          {!showAllAccounts && selectedAccount && (
-            <section className="card inv-history-card">
-              <div className="inv-history-head">
-                <div className="inv-title">History</div>
-                <Button className="btn btn-primary btn-xs" type="button" onClick={() => selectedAccount && openCreateEntryModal(selectedAccount)}>
-                  + Add Entry
-                </Button>
-              </div>
-              <div className="inv-history-list">
-                {selectedEntries.length ? (
-                  selectedEntries
-                    .slice()
-                    .reverse()
-                    .map((entry) => (
-                      <div key={entry.id} className="inv-history-row">
-                        <div>
-                          <strong>{new Date(entry.date).toLocaleDateString()}</strong>
-                          <span>Invested: {formatCents(entry.investedCents)}</span>
-                          <span>Current: {formatCents(entry.currentValueCents)}</span>
-                        </div>
-                        <Button
-                          className="btn btn-ghost btn-icon"
-                          style={{ width: "32px", height: "32px" }}
-                          type="button"
-                          onClick={() => openEditEntryModal(entry)}
-                          title="Edit"
-                          aria-label="Edit entry"
-                        >
-                          ✎
-                        </Button>
-                      </div>
-                    ))
-                ) : (
-                  <EmptyState
-                    icon="📋"
-                    title="No entries yet"
-                    description="Add your first entry to track invested amount and current value."
-                  />
-                )}
-              </div>
-            </section>
-          )}
-        </>
-      ) : !accountsLoading && !accountsError ? (
-        <EmptyState
-          icon="📈"
-          title="Select an investment account"
-          description="Choose an account from above to view its performance chart and history."
-        />
-      ) : null}
-
-      {accountModalOpen && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={closeAccountModal} title="Investment account" surface="custom" overlayClassName="profile-modal-overlay">
-          <dialog open className="profile-modal inv-modal">
-            <div className="profile-modal-head">
-              <h3>{accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}</h3>
-              <ModalCloseButton onClick={closeAccountModal} label={`Close ${accountModalMode === "edit" ? "Edit Investment Account" : "Add Investment Account"}`} />
-            </div>
-            <form className="modal-form-shell" onSubmit={(event: SubmitEvent) => {
-              event.preventDefault();
-              if (!workspaceId) {
-                setAccountError("Workspace is not ready. Please wait and try again.");
-                return;
-              }
-              if (accountModalMode === "edit" && editingAccountId) {
-                updateAccount.mutate(editingAccountId);
-                return;
-              }
-              createAccount.mutate();
-            }}>
-              <div className="profile-modal-body inv-modal-body">
-              <label className="profile-field" htmlFor="investment-display-name">
-                <span>Display Name of the Account</span>
-                <Input id="investment-display-name" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-              </label>
-              <label className="profile-field" htmlFor="investment-institution-name">
-                <span>Financial Institution Name</span>
-                <Input id="investment-institution-name" className="input" value={institutionName} onChange={(e) => setInstitutionName(e.target.value)} required />
-              </label>
-              <label className="profile-field" htmlFor="investment-product-name">
-                <span>Product Name</span>
-                <Input id="investment-product-name" className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required />
-              </label>
-              <label className="profile-field" htmlFor="investment-inception-date">
-                <span>Inception Date</span>
-                <Input id="investment-inception-date" className="input" type="date" value={inceptionDate} onChange={(e) => setInceptionDate(e.target.value)} required />
-              </label>
-              <label className="profile-field" htmlFor="investment-divested-date">
-                <span>Divested Date (Optional)</span>
-                <Input id="investment-divested-date" className="input" type="date" value={divestedDate} onChange={(e) => setDivestedDate(e.target.value)} />
-              </label>
-              <div className="profile-field">
-                <span>Is liquid (Available to withdraw anytime?)</span>
-                <fieldset className="segmented-toggle inv-liquidity-toggle" aria-label="Is liquid">
-                  <Button
-                    type="button"
-                    className={`segmented-toggle-btn inv-liquidity-toggle-btn ${isLiquid ? "is-active" : ""}`}
-                    aria-pressed={isLiquid}
-                    onClick={() => setIsLiquid(true)}
-                  >
-                    Yes
-                  </Button>
-                  <Button
-                    type="button"
-                    className={`segmented-toggle-btn inv-liquidity-toggle-btn ${!isLiquid ? "is-active" : ""}`}
-                    aria-pressed={!isLiquid}
-                    onClick={() => setIsLiquid(false)}
-                  >
-                    No
-                  </Button>
-                </fieldset>
-              </div>
-              {accountError ? <div className="profile-error">{accountError}</div> : null}
-              </div>
-              <div className="profile-actions inv-modal-actions">
-                {accountModalMode === "edit" && editingAccountId ? (
-                  <Button
-                    type="button"
-                    className="btn btn-ghost btn-xs modal-action-destructive"
-                    onClick={() => confirmDeleteAccount(editingAccountId)}
-                    disabled={deleteAccount.isPending}
-                  >
-                    {deleteAccount.isPending ? "Deleting..." : "Delete"}
-                  </Button>
-                ) : <span />}
-                <div className="inv-modal-primary-actions modal-action-group">
-                  <Button type="button" className="btn btn-ghost btn-xs" onClick={closeAccountModal}>Cancel</Button>
-                  <Button type="submit" className="btn btn-primary btn-xs" disabled={createAccount.isPending || updateAccount.isPending}>
-                    {accountModalMode === "edit" ? (updateAccount.isPending ? "Saving..." : "Save") : (createAccount.isPending ? "Adding..." : "Add")}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>,
-        document.body
-      )}
-
-      {entryModalOpen && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={closeEntryModal} title="Investment entry" surface="custom" overlayClassName="profile-modal-overlay">
-          <dialog open className="profile-modal inv-modal">
-            <div className="profile-modal-head">
-              <h3>{entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}</h3>
-              <ModalCloseButton onClick={closeEntryModal} label={`Close ${entryModalMode === "edit" ? "Edit Entry" : "Add Funds / Update Value"}`} />
-            </div>
-            <form className="modal-form-shell" onSubmit={(event: SubmitEvent) => {
-              event.preventDefault();
-              if (entryModalMode === "edit" && editingEntryId) {
-                updateEntry.mutate(editingEntryId);
-                return;
-              }
-              if (entryAccountId) {
-                createEntry.mutate(entryAccountId);
-              } else {
-                setEntryError("Please select an investment account first.");
-              }
-            }}>
-              <div className="profile-modal-body inv-modal-body">
-              <div className="profile-field">
-                <span>Date</span>
-                <Input className="input" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
-              </div>
-              {entryModalMode === "create" ? (
-                <div className="profile-field">
-                  <span>New Funds Added</span>
-                  <NumericCalculatorInput step="0.01" value={newFunds} onValueChange={setNewFunds} />
-                </div>
-              ) : null}
-              <div className="profile-field">
-                <span>Total Invested Amount</span>
-                <NumericCalculatorInput step="0.01" value={entryInvested} onValueChange={setEntryInvested} required />
-              </div>
-              <div className="profile-field">
-                <span>Current Value</span>
-                <NumericCalculatorInput step="0.01" value={entryCurrentValue} onValueChange={setEntryCurrentValue} required />
-              </div>
-              {entryError ? <div className="profile-error">{entryError}</div> : null}
-              </div>
-              <div className="profile-actions inv-modal-actions">
-                {entryModalMode === "edit" && editingEntryId ? (
-                  <Button
-                    type="button"
-                    className="btn btn-ghost btn-xs modal-action-destructive"
-                    onClick={() => confirmDeleteEntry(editingEntryId)}
-                    disabled={deleteEntry.isPending}
-                  >
-                    {deleteEntry.isPending ? "Deleting..." : "Delete"}
-                  </Button>
-                ) : <span />}
-                <div className="inv-modal-primary-actions modal-action-group">
-                  <Button type="button" className="btn btn-ghost btn-xs" onClick={closeEntryModal}>Cancel</Button>
-                  <Button type="submit" className="btn btn-primary btn-xs" disabled={createEntry.isPending || updateEntry.isPending}>
-                    {entryModalMode === "edit" ? (updateEntry.isPending ? "Saving..." : "Save") : (createEntry.isPending ? "Adding..." : "Add")}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>,
-        document.body
-      )}
+      {renderInvestmentEntryModal()}
     </div>
   );
 }

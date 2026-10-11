@@ -25,106 +25,7 @@ import { MutationErrorSummary } from "@/components/ui/mutation-error-summary";
 import { useSearchParams } from "next/navigation";
 import { useUrlFilterSync } from "@/lib/use-url-filter-sync";
 
-type AppContext = {
-  workspaceId: string | null;
-  workspaceName?: string | null;
-  role?: "OWNER" | "EDITOR" | "VIEWER";
-  defaultAccountId: string | null;
-  defaultBudgetId: string | null;
-  baseCurrency?: string | null;
-  workspaces: Array<{ id: string; name: string }>;
-};
-
-type DeductionAccount = {
-  id: string;
-  name: string;
-  workspaceId: string;
-  workspace: {
-    id: string;
-    name: string;
-  };
-};
-
-type Receivable = {
-  id: string;
-  updatedAt: string;
-  title: string;
-  amountCents: number;
-  date: string;
-  transactionDate?: string | null;
-  remarkTogether?: string | null;
-  notes?: string | null;
-  status: "OPEN" | "PARTIAL" | "PAID" | "VOID";
-  accountId?: string | null;
-  budgetId?: string | null;
-  account?: DeductionAccount | null;
-  budget?: {
-    id: string;
-    name: string;
-    availableCents: number;
-  } | null;
-  subaccount?: {
-    id: string;
-    name: string;
-  } | null;
-};
-
-type DeductionBudget = {
-  id: string;
-  name: string;
-  icon?: string | null;
-  accountId: string;
-  isActive: boolean;
-  availableCents: number;
-};
-
-function getAmountToneClass(valueCents: number) {
-  if (valueCents < 0) return "negative";
-  if (valueCents > 0) return "positive";
-  return "zero";
-}
-
-function toIsoFromDateInput(value: string) {
-  return new Date(`${value}T00:00:00.000Z`).toISOString();
-}
-
-function toDateInputFromIso(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function todayDateInputValue() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getMonthEndDateInputValue(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return todayDateInputValue();
-  const monthEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
-  const year = monthEnd.getUTCFullYear();
-  const month = String(monthEnd.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(monthEnd.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatDisplayDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
+import { getAmountToneClass, toIsoFromDateInput, toDateInputFromIso, todayDateInputValue, getMonthEndDateInputValue, formatDisplayDate, type AppContext, type DeductionBudget, type Receivable } from "@/lib/receivable-view";
 
 export function ReceivablesPage() {
   const routeWorkspaceId = useWorkspaceId();
@@ -480,6 +381,23 @@ export function ReceivablesPage() {
     setIsModalOpen(true);
   };
 
+  function submitReceivableEdit(id: string, accountId: string | undefined, budgetId: string | undefined) {
+    const currentReceivable = receivables.data?.find((receivable) => receivable.id === id);
+    if (!currentReceivable) return;
+    updateReceivable.mutate({
+      id,
+      receivableDate: toIsoFromDateInput(formReceivableDate),
+      transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : null,
+      amountCents: Math.round(Number(formAmount) * 100),
+      title: formTitle.trim() || "Receivable",
+      notes: formNotes.trim() || null,
+      status: formStatus,
+      accountId: formUseCrossWorkspaceDeduction ? accountId : null,
+      budgetId: formUseCrossWorkspaceDeduction ? budgetId : null,
+      expectedUpdatedAt: currentReceivable.updatedAt,
+    });
+  }
+
   const onSubmit = (event: SubmitEvent) => {
     event.preventDefault();
     if (!workspaceId || !formReceivableDate || !formAmount) return;
@@ -489,20 +407,7 @@ export function ReceivablesPage() {
     if (formUseCrossWorkspaceDeduction && !accountId) return;
 
     if (modalMode === "edit" && activeId) {
-      const currentReceivable = receivables.data?.find((receivable) => receivable.id === activeId);
-      if (!currentReceivable) return;
-      updateReceivable.mutate({
-        id: activeId,
-        receivableDate: toIsoFromDateInput(formReceivableDate),
-        transactionDate: formTransactionDate ? toIsoFromDateInput(formTransactionDate) : null,
-        amountCents: Math.round(Number(formAmount) * 100),
-        title: formTitle.trim() || "Receivable",
-        notes: formNotes.trim() || null,
-        status: formStatus,
-        accountId: formUseCrossWorkspaceDeduction ? accountId : null,
-        budgetId: formUseCrossWorkspaceDeduction ? budgetId : null,
-        expectedUpdatedAt: currentReceivable.updatedAt,
-      });
+      submitReceivableEdit(activeId, accountId, budgetId);
       return;
     }
 
@@ -522,6 +427,202 @@ export function ReceivablesPage() {
     if (!formTransactionDate) return;
     setFormReceivableDate(getMonthEndDateInputValue(formTransactionDate));
   }, [modalMode, formTransactionDate]);
+
+  function renderReceivableCloseAction(r: Receivable, isDeleting: boolean, isClosing: boolean) {
+    if (isDeleting) return (<span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-tertiary)" }}>Deleting...</span>);
+    return (r.status !== "PAID" ? (
+      <Button
+        className="btn btn-primary btn-xs"
+        onClick={() => void confirmCloseReceivable(r)}
+        disabled={Boolean(closingReceivableId) || !receivableDefaultAccountId || !receivableDefaultBudgetId}
+        title={
+          receivableDefaultAccountId && receivableDefaultBudgetId
+            ? "Close receivable"
+            : "Configure default receivable account and subaccount in Settings"
+        }
+      >
+        {isClosing ? "Closing..." : "Close"}
+      </Button>
+    ) : null);
+  }
+
+  function renderReceivableFormActions() {
+    const savingLabel = modalMode === "edit" ? "Saving..." : "Adding...";
+    const readyLabel = modalMode === "edit" ? "Save" : "Add";
+    return (
+      <div className="txn-modal-actions">
+        <Button className="btn btn-ghost" type="button" onClick={closeModal} disabled={isSavingReceivable}>
+          Cancel
+        </Button>
+        <Button
+          className={`btn btn-primary ${isSavingReceivable ? "recv-save-btn is-saving" : ""}`}
+          type="submit"
+          disabled={isSavingReceivable}
+        >
+          {isSavingReceivable ? (
+            <>
+              <span className="recv-save-spinner" aria-hidden="true" />
+              {savingLabel}
+            </>
+          ) : (
+            readyLabel
+          )}
+        </Button>
+      </div>
+    );
+  }
+
+  function renderReceivableModal() {
+    return (
+      isModalOpen && typeof document !== "undefined" && createPortal(
+        <Dialog open onClose={closeModal} title={modalMode === "edit" ? "Edit receivable" : "Add receivable"} closeDisabled={isSavingReceivable} surface="custom" overlayClassName="profile-modal-overlay">
+          <dialog open className="profile-modal recv-modal">
+            <div className="profile-modal-head">
+              <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>
+              <ModalCloseButton onClick={closeModal} disabled={isSavingReceivable} label={`Close ${modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}`} />
+            </div>
+            <form className="modal-form-shell" onSubmit={onSubmit}>
+              <div className="profile-modal-body recv-modal-body">
+                <div className="recv-modal-form">
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Title
+                    <Input className="input" placeholder="Title" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} />
+                  </label>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Receivable Date
+                    <Input className="input" type="date" value={formReceivableDate} onChange={(e) => setFormReceivableDate(e.target.value)} />
+                  </label>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Transaction Date
+                    <Input className="input" type="date" value={formTransactionDate} onChange={(e) => setFormTransactionDate(e.target.value)} />
+                  </label>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Amount
+                    <NumericCalculatorInput
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formAmount}
+                      onValueChange={setFormAmount}
+                    />
+                  </label>
+                  <MarkdownEditor
+                    className="modal-grid-span-2"
+                    label="Notes"
+                    value={formNotes}
+                    onChange={setFormNotes}
+                    placeholder="Write notes in Markdown"
+                    calculator
+                  />
+                  <label className="modal-grid-span-2" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                    <Input
+                      type="checkbox"
+                      checked={formUseCrossWorkspaceDeduction}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormUseCrossWorkspaceDeduction(checked);
+                        if (!checked) {
+                          setFormDeductWorkspaceId("");
+                          setFormDeductAccountId("");
+                        }
+                      }}
+                    />
+                    Deduct from another workspace
+                  </label>
+                  {formUseCrossWorkspaceDeduction && (
+                    <>
+                      <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                        Deduction Workspace
+                        <Select
+                          className="input"
+                          value={formDeductWorkspaceId}
+                          onChange={(e) => {
+                            setFormDeductWorkspaceId(e.target.value);
+                            setFormDeductAccountId("");
+                            setFormDeductBudgetId("");
+                          }}
+                        >
+                          <option value="">Select workspace</option>
+                          {workspacesForDeduction.map((workspace) => (
+                            <option key={workspace.id} value={workspace.id}>
+                              {workspace.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </label>
+                      <label htmlFor="receivable-deduction-subaccount" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                        Deduction Sub Account
+                        <div className={`recv-field-shell ${isDeductionSubaccountsLoading ? "is-loading" : ""}`}>
+                          <Select id="receivable-deduction-subaccount"
+                            className="input"
+                            value={formDeductBudgetId}
+                            onChange={(e) => {
+                              const budgetId = e.target.value;
+                              setFormDeductBudgetId(budgetId);
+                              const selectedBudget = deductionBudgetById.get(budgetId);
+                              setFormDeductAccountId(selectedBudget?.accountId ?? "");
+                            }}
+                            disabled={
+                              !formDeductWorkspaceId ||
+                              isDeductionSubaccountsLoading ||
+                              (deductionBudgets.data ?? []).length === 0
+                            }
+                          >
+                            <option value="">
+                              {isDeductionSubaccountsLoading ? "Loading subaccounts..." : "Select subaccount"}
+                            </option>
+                            {(deductionBudgets.data ?? [])
+                              .filter((budget) => budget.isActive !== false)
+                              .map((budget) => (
+                                <option key={budget.id} value={budget.id}>
+                                  {budget.icon ? `${budget.icon} ` : ""}
+                                  {budget.name}
+                                </option>
+                              ))}
+                          </Select>
+                        </div>
+                      </label>
+                    </>
+                  )}
+                  {modalMode === "edit" && (
+                    <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                      Status
+                      <Select className="input" value={formStatus} onChange={(e) => setFormStatus(e.target.value as Receivable["status"])}>
+                        <option value="OPEN">OPEN</option>
+                        <option value="PARTIAL">PARTIAL</option>
+                        <option value="PAID">PAID</option>
+                        <option value="VOID">VOID</option>
+                      </Select>
+                    </label>
+                  )}
+                  {isSavingReceivable && (
+                    <div className="modal-grid-span-2 recv-save-status" aria-live="polite">
+                      <div className="workspace-save-progress" aria-hidden="true">
+                        <div className="workspace-save-progress-bar" />
+                      </div>
+                      <div className="recv-save-status-text">
+                        {modalMode === "edit" ? "Saving receivable..." : "Creating receivable..."}
+                      </div>
+                    </div>
+                  )}
+                  <MutationErrorSummary
+                    className="modal-grid-span-2"
+                    error={createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error}
+                    onReload={async () => {
+                      closeModal();
+                      await receivables.refetch();
+                    }}
+                  />
+                </div>
+              </div>
+              {renderReceivableFormActions()}
+            </form>
+          </dialog>
+        </Dialog>,
+        document.body
+      )
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: "14px" }}>
@@ -618,76 +719,61 @@ export function ReceivablesPage() {
             )}
 
             {!isError && monthFilteredReceivables.map((r) => {
-            const isClosing = closingReceivableId === r.id;
-            const isDeleting = deletingReceivableIds.includes(r.id);
-            return (
-              <div key={r.id} className="crud-row recv-row">
-                <div className="recv-row-main">
-                  <div className="recv-row-title">
-                    {r.title || "Untitled"}
+              const isClosing = closingReceivableId === r.id;
+              const isDeleting = deletingReceivableIds.includes(r.id);
+              return (
+                <div key={r.id} className="crud-row recv-row">
+                  <div className="recv-row-main">
+                    <div className="recv-row-title">
+                      {r.title || "Untitled"}
+                    </div>
+
+                    <div className="recv-row-meta">
+                      {r.transactionDate ? formatDisplayDate(r.transactionDate) : "—"}
+                      {r.account ? ` · 💰 ${r.account.workspace.name} - ${r.budget?.name ?? r.account.name}` : ""}
+                    </div>
                   </div>
 
-                  <div className="recv-row-meta">
-                    {r.transactionDate ? formatDisplayDate(r.transactionDate) : "—"}
-                    {r.account ? ` · 💰 ${r.account.workspace.name} - ${r.budget?.name ?? r.account.name}` : ""}
+                  <div className={`recv-row-amount ${getAmountToneClass(r.amountCents)}`}>
+                    {formatCents(r.amountCents)}
                   </div>
-                </div>
 
-                <div className={`recv-row-amount ${getAmountToneClass(r.amountCents)}`}>
-                  {formatCents(r.amountCents)}
-                </div>
-
-                <div className="recv-row-actions">
-                  {isDeleting ? (
-                    <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-tertiary)" }}>Deleting...</span>
-                  ) : r.status !== "PAID" ? (
+                  <div className="recv-row-actions">
+                    {renderReceivableCloseAction(r, isDeleting, isClosing)}
                     <Button
-                      className="btn btn-primary btn-xs"
-                      onClick={() => void confirmCloseReceivable(r)}
-                      disabled={Boolean(closingReceivableId) || !receivableDefaultAccountId || !receivableDefaultBudgetId}
-                      title={
-                        receivableDefaultAccountId && receivableDefaultBudgetId
-                          ? "Close receivable"
-                          : "Configure default receivable account and subaccount in Settings"
-                      }
+                      className="btn btn-ghost btn-icon"
+                      style={{ width: "32px", height: "32px" }}
+                      onClick={() => openEditModal(r)}
+                      title="Edit"
+                      aria-label="Edit receivable"
+                      disabled={isDeleting}
                     >
-                      {isClosing ? "Closing..." : "Close"}
+                      ✎
                     </Button>
-                  ) : null}
-                  <Button
-                    className="btn btn-ghost btn-icon"
-                    style={{ width: "32px", height: "32px" }}
-                    onClick={() => openEditModal(r)}
-                    title="Edit"
-                    aria-label="Edit receivable"
-                    disabled={isDeleting}
-                  >
-                    ✎
-                  </Button>
-                  <Button
-                    className="btn btn-ghost btn-icon"
-                    style={{ width: "32px", height: "32px", color: "var(--danger)" }}
-                    onClick={async () => {
-                      if (await confirmDestructiveAction("Delete this receivable?", "Delete receivable?", {
-                        workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
-                        reversal: "This cannot be undone. Close the receivable instead if you need an auditable paid record.",
-                      })) {
-                        if (deletingReceivableIds.includes(r.id)) return;
-                        setDeletingReceivableIds((current) => [...current, r.id]);
-                        window.setTimeout(() => {
-                          deleteReceivable.mutate(r.id);
-                        }, 180);
-                      }
-                    }}
-                    disabled={deleteReceivable.isPending || isDeleting}
-                    title="Delete"
-                    aria-label="Delete receivable"
-                  >
-                    🗑
-                  </Button>
+                    <Button
+                      className="btn btn-ghost btn-icon"
+                      style={{ width: "32px", height: "32px", color: "var(--danger)" }}
+                      onClick={async () => {
+                        if (await confirmDestructiveAction("Delete this receivable?", "Delete receivable?", {
+                          workspace: { name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" },
+                          reversal: "This cannot be undone. Close the receivable instead if you need an auditable paid record.",
+                        })) {
+                          if (deletingReceivableIds.includes(r.id)) return;
+                          setDeletingReceivableIds((current) => [...current, r.id]);
+                          window.setTimeout(() => {
+                            deleteReceivable.mutate(r.id);
+                          }, 180);
+                        }
+                      }}
+                      disabled={deleteReceivable.isPending || isDeleting}
+                      title="Delete"
+                      aria-label="Delete receivable"
+                    >
+                      🗑
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            );
+              );
             })}
             {!isError && monthFilteredReceivables.length === 0 && (
               <EmptyState
@@ -705,171 +791,7 @@ export function ReceivablesPage() {
         )}
       </section>
 
-      {isModalOpen && typeof document !== "undefined" && createPortal(
-        <Dialog open onClose={closeModal} title={modalMode === "edit" ? "Edit receivable" : "Add receivable"} closeDisabled={isSavingReceivable} surface="custom" overlayClassName="profile-modal-overlay">
-          <dialog open className="profile-modal recv-modal">
-            <div className="profile-modal-head">
-              <h3>{modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}</h3>
-              <ModalCloseButton onClick={closeModal} disabled={isSavingReceivable} label={`Close ${modalMode === "edit" ? "Edit Receivable" : "Add Receivable"}`} />
-            </div>
-            <form className="modal-form-shell" onSubmit={onSubmit}>
-              <div className="profile-modal-body recv-modal-body">
-                <div className="recv-modal-form">
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Title
-                  <Input className="input" placeholder="Title" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} />
-                </label>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Receivable Date
-                  <Input className="input" type="date" value={formReceivableDate} onChange={(e) => setFormReceivableDate(e.target.value)} />
-                </label>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Transaction Date
-                  <Input className="input" type="date" value={formTransactionDate} onChange={(e) => setFormTransactionDate(e.target.value)} />
-                </label>
-                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Amount
-                  <NumericCalculatorInput
-                    min="0.01"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={formAmount}
-                    onValueChange={setFormAmount}
-                  />
-                </label>
-                <MarkdownEditor
-                  className="modal-grid-span-2"
-                  label="Notes"
-                  value={formNotes}
-                  onChange={setFormNotes}
-                  placeholder="Write notes in Markdown"
-                  calculator
-                />
-                <label className="modal-grid-span-2" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                  <Input
-                    type="checkbox"
-                    checked={formUseCrossWorkspaceDeduction}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setFormUseCrossWorkspaceDeduction(checked);
-                      if (!checked) {
-                        setFormDeductWorkspaceId("");
-                        setFormDeductAccountId("");
-                      }
-                    }}
-                  />
-                  Deduct from another workspace
-                </label>
-                {formUseCrossWorkspaceDeduction && (
-                  <>
-                    <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Deduction Workspace
-                      <Select
-                        className="input"
-                        value={formDeductWorkspaceId}
-                      onChange={(e) => {
-                        setFormDeductWorkspaceId(e.target.value);
-                        setFormDeductAccountId("");
-                        setFormDeductBudgetId("");
-                      }}
-                      >
-                        <option value="">Select workspace</option>
-                        {workspacesForDeduction.map((workspace) => (
-                          <option key={workspace.id} value={workspace.id}>
-                            {workspace.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </label>
-                    <label htmlFor="receivable-deduction-subaccount" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Deduction Sub Account
-                      <div className={`recv-field-shell ${isDeductionSubaccountsLoading ? "is-loading" : ""}`}>
-                        <Select id="receivable-deduction-subaccount"
-                          className="input"
-                          value={formDeductBudgetId}
-                          onChange={(e) => {
-                            const budgetId = e.target.value;
-                            setFormDeductBudgetId(budgetId);
-                            const selectedBudget = deductionBudgetById.get(budgetId);
-                            setFormDeductAccountId(selectedBudget?.accountId ?? "");
-                          }}
-                          disabled={
-                            !formDeductWorkspaceId ||
-                            isDeductionSubaccountsLoading ||
-                            (deductionBudgets.data ?? []).length === 0
-                          }
-                        >
-                          <option value="">
-                            {isDeductionSubaccountsLoading ? "Loading subaccounts..." : "Select subaccount"}
-                          </option>
-                          {(deductionBudgets.data ?? [])
-                            .filter((budget) => budget.isActive !== false)
-                            .map((budget) => (
-                              <option key={budget.id} value={budget.id}>
-                                {budget.icon ? `${budget.icon} ` : ""}
-                                {budget.name}
-                              </option>
-                            ))}
-                        </Select>
-                      </div>
-                    </label>
-                  </>
-                )}
-                {modalMode === "edit" && (
-                  <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Status
-                    <Select className="input" value={formStatus} onChange={(e) => setFormStatus(e.target.value as Receivable["status"])}>
-                      <option value="OPEN">OPEN</option>
-                      <option value="PARTIAL">PARTIAL</option>
-                      <option value="PAID">PAID</option>
-                      <option value="VOID">VOID</option>
-                    </Select>
-                  </label>
-                )}
-                {isSavingReceivable && (
-                  <div className="modal-grid-span-2 recv-save-status" aria-live="polite">
-                    <div className="workspace-save-progress" aria-hidden="true">
-                      <div className="workspace-save-progress-bar" />
-                    </div>
-                    <div className="recv-save-status-text">
-                      {modalMode === "edit" ? "Saving receivable..." : "Creating receivable..."}
-                    </div>
-                  </div>
-                )}
-                <MutationErrorSummary
-                  className="modal-grid-span-2"
-                  error={createReceivable.error || updateReceivable.error || closeReceivable.error || deleteReceivable.error}
-                  onReload={async () => {
-                    closeModal();
-                    await receivables.refetch();
-                  }}
-                />
-                </div>
-              </div>
-              <div className="txn-modal-actions">
-                <Button className="btn btn-ghost" type="button" onClick={closeModal} disabled={isSavingReceivable}>
-                  Cancel
-                </Button>
-                <Button
-                  className={`btn btn-primary ${isSavingReceivable ? "recv-save-btn is-saving" : ""}`}
-                  type="submit"
-                  disabled={isSavingReceivable}
-                >
-                  {isSavingReceivable ? (
-                    <>
-                      <span className="recv-save-spinner" aria-hidden="true" />
-                      {modalMode === "edit" ? "Saving..." : "Adding..."}
-                    </>
-                  ) : (
-                    modalMode === "edit" ? "Save" : "Add"
-                  )}
-                </Button>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>,
-        document.body
-      )}
+      {renderReceivableModal()}
     </div>
   );
 }

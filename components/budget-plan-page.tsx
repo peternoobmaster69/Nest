@@ -36,114 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 
-type WorkspaceMember = {
-  user: { id: string; name: string | null; email: string | null };
-};
-
-type SubAccount = {
-  id: string;
-  name: string;
-  availableCents: number;
-};
-
-type SetupItem = {
-  id: string;
-  title: string;
-  amountCents: number;
-  isMonthly: boolean;
-  destinationSubAccountId: string | null;
-  destinationSubAccount?: SubAccount | null;
-};
-
-type SetupSource = {
-  id: string;
-  title: string;
-  amountCents: number;
-  ownerId: string;
-  owner?: { id: string; name: string | null; email: string | null } | null;
-};
-
-type MonthlyBudgetPlanItem = {
-  id: string;
-  planId: string;
-  templateItemId?: string | null;
-  title: string;
-  amountCents: number;
-  destinationSubAccountId: string | null;
-  destinationSubAccount?: SubAccount | null;
-  sortOrder?: number;
-  appliedCents?: number;
-};
-
-type MonthlyBudgetPlanSource = {
-  id: string;
-  planId: string;
-  templateSourceId?: string | null;
-  title: string;
-  amountCents: number;
-  ownerId: string;
-  owner?: { id: string; name: string | null; email: string | null } | null;
-  sortOrder?: number;
-};
-
-type MonthlyBudgetPlan = {
-  id: string;
-  year: number;
-  month: number;
-  status: "DRAFT" | "CONFIRMING" | "CONFIRMED" | "REVIEW";
-  confirmedAt: string | null;
-  sources: MonthlyBudgetPlanSource[];
-  items: MonthlyBudgetPlanItem[];
-};
-
-type BudgetPlanData = {
-  setup: {
-    items: SetupItem[];
-    sources: SetupSource[];
-  };
-  monthlyPlan: MonthlyBudgetPlan | null;
-  members: WorkspaceMember[];
-  subAccounts: SubAccount[];
-};
-
-type AppContext = {
-  workspaceId: string | null;
-  workspaceName?: string | null;
-  role?: "OWNER" | "EDITOR" | "VIEWER";
-  baseCurrency?: string | null;
-};
-
-type ModalScope = "template" | "monthly";
-type EditModalState = { scope: ModalScope; id: string | null };
-type DeleteType = "templateItem" | "templateSource" | "monthlyItem" | "monthlySource";
-
-type ItemFields = {
-  title: string;
-  amountCents: number;
-  isMonthly: boolean;
-  destinationSubAccountId: string | null;
-};
-
-type SourceFields = {
-  title: string;
-  amountCents: number;
-  ownerId: string;
-};
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function requestBody(action: string, workspaceId: string, payload: Record<string, unknown> = {}) {
-  return JSON.stringify({ workspaceId, action, ...payload });
-}
-
-function toCents(value: string) {
-  const amount = Number(value);
-  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : null;
-}
-
-function personLabel(person?: { name: string | null; email: string | null } | null) {
-  return person?.name || person?.email || "Unknown member";
-}
+import { type SetupItem, type SetupSource, type MonthlyBudgetPlanItem, type MonthlyBudgetPlanSource, type MonthlyBudgetPlan, type BudgetPlanData, type AppContext, type ModalScope, type EditModalState, type DeleteType, type ItemFields, type SourceFields, MONTHS, requestBody, toCents, personLabel } from "@/lib/budget-plan-view";
 
 function ModalShell({
   title,
@@ -644,314 +537,314 @@ export function BudgetPlanPage() {
     createTemplateSource.error || updateTemplateSource.error || createMonthlySource.error || updateMonthlySource.error || deleteEntity.error;
   const planActionError = startPlan.error || discardDraft.error;
 
-  return (
-    <div className="bp-container">
-      {!showSetup && (
+  function renderMonthlyPlan() {
+    return (
+      !showSetup && (
         <section className="card" style={{ padding: "18px 20px" }}>
-        <div
-          className="card-header"
-          style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "18px" }}
-        >
-          <div>
-            <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0 }}>
-              {MONTHS[selectedMonth - 1]} {selectedYear} Monthly Budget
-            </h3>
-            <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
-              Manage this month without changing Budget Setup.
-            </p>
-          </div>
-          <Button className="btn btn-ghost" type="button" onClick={() => setShowSetup(true)}>
-            <LayoutTemplate size={16} />
-            Budget Setup
-            <ChevronDown size={15} />
-          </Button>
-        </div>
-
-        <div className="bp-form" style={{ paddingBottom: "18px", borderBottom: "1px solid var(--border-subtle)" }}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="label" htmlFor="budget-plan-month">Month</label>
-              <Select
-                id="budget-plan-month"
-                className="input"
-                value={selectedMonth}
-                onChange={(event) => setSelectedMonth(Number(event.target.value))}
-              >
-                {MONTHS.map((month, index) => (
-                  <option key={month} value={index + 1}>{month}</option>
-                ))}
-              </Select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="budget-plan-selected-year" className="label">Year</label>
-              <NumericCalculatorInput id="budget-plan-selected-year"
-                value={selectedYear}
-                allowDecimal={false}
-                min={2024}
-                max={2100}
-                onValueChange={(value) => setSelectedYear(Number.parseInt(value || String(now.getFullYear()), 10))}
-              />
-            </div>
-          </div>
-        </div>
-
-        {planQuery.isLoading && (
-          <div className="bp-two-col" aria-busy="true">
-            <div className="bp-col"><BudgetPlanCompactCardsSkeleton /></div>
-            <div className="bp-col"><BudgetPlanCompactCardsSkeleton /></div>
-          </div>
-        )}
-
-        {planQuery.isError && (
           <div
-            role="alert"
-            style={{ marginTop: "18px", padding: "14px", color: "var(--danger)", background: "var(--danger-bg)", borderRadius: "var(--r-md)" }}
+            className="card-header"
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "18px" }}
           >
-            {planQuery.error instanceof Error ? planQuery.error.message : "Could not load the monthly budget."}
-          </div>
-        )}
-
-        {!planQuery.isLoading && !planQuery.isError && !monthlyPlan && (
-          <div className="empty-state" style={{ padding: "36px 16px 24px" }}>
-            <div className="empty-state-icon" aria-hidden="true"><CalendarRange size={28} /></div>
-            <h3 className="empty-state-title">No monthly budget</h3>
-            <p className="empty-state-desc">Start with Budget Setup or create an empty monthly plan.</p>
-            <div className="empty-state-action" style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
-              <Button
-                className="btn btn-primary"
-                type="button"
-                onClick={() => startPlan.mutate("startFromSetup")}
-                disabled={!workspaceId || !hasSetupSeed || startPlan.isPending}
-                title={hasSetupSeed ? "Create this month from Budget Setup" : "Add recurring items or sources to Budget Setup first"}
-              >
-                <LayoutTemplate size={16} />
-                {startPlan.isPending && startPlan.variables === "startFromSetup" ? "Starting..." : "Start from Setup"}
-              </Button>
-              <Button
-                className="btn btn-ghost"
-                type="button"
-                onClick={() => startPlan.mutate("startBlank")}
-                disabled={!workspaceId || startPlan.isPending}
-              >
-                <FilePlus2 size={16} />
-                {startPlan.isPending && startPlan.variables === "startBlank" ? "Starting..." : "Start Blank"}
-              </Button>
+            <div>
+              <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0 }}>
+                {MONTHS[selectedMonth - 1]} {selectedYear} Monthly Budget
+              </h3>
+              <p style={{ fontSize: "13px", color: "var(--text-tertiary)", margin: "4px 0 0" }}>
+                Manage this month without changing Budget Setup.
+              </p>
             </div>
-            {planActionError && <p style={{ marginTop: "12px", color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
+            <Button className="btn btn-ghost" type="button" onClick={() => setShowSetup(true)}>
+              <LayoutTemplate size={16} />
+              Budget Setup
+              <ChevronDown size={15} />
+            </Button>
           </div>
-        )}
 
-        {!planQuery.isLoading && !planQuery.isError && monthlyPlan && (
-          <>
-            {isConfirmed && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  marginTop: "18px",
-                  padding: "12px 14px",
-                  color: "var(--success)",
-                  background: "var(--success-bg)",
-                  border: "1px solid var(--success)",
-                  borderRadius: "var(--r-md)",
-                }}
-              >
-                <Lock size={16} />
-                <span style={{ fontSize: "13px" }}>This monthly budget is confirmed and read-only.</span>
+          <div className="bp-form" style={{ paddingBottom: "18px", borderBottom: "1px solid var(--border-subtle)" }}>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="label" htmlFor="budget-plan-month">Month</label>
+                <Select
+                  id="budget-plan-month"
+                  className="input"
+                  value={selectedMonth}
+                  onChange={(event) => setSelectedMonth(Number(event.target.value))}
+                >
+                  {MONTHS.map((month, index) => (
+                    <option key={month} value={index + 1}>{month}</option>
+                  ))}
+                </Select>
               </div>
-            )}
-
-            {isReview && (
-              <div
-                role="alert"
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "10px",
-                  marginTop: "18px",
-                  padding: "12px 14px",
-                  color: "var(--warning)",
-                  background: "var(--warning-bg)",
-                  border: "1px solid var(--warning)",
-                  borderRadius: "var(--r-md)",
-                }}
-              >
-                <AlertTriangle size={17} style={{ flexShrink: 0, marginTop: "1px" }} />
-                <span style={{ fontSize: "13px" }}>This migrated monthly budget needs review and is read-only.</span>
-              </div>
-            )}
-
-            {isConfirming && (
-              <output
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "10px",
-                  marginTop: "18px",
-                  padding: "12px 14px",
-                  color: "var(--warning)",
-                  background: "var(--warning-bg)",
-                  border: "1px solid var(--warning)",
-                  borderRadius: "var(--r-md)",
-                }}
-              >
-                <RefreshCw size={17} style={{ flexShrink: 0, marginTop: "1px" }} />
-                <span style={{ fontSize: "13px" }}>This monthly budget is being confirmed and is temporarily read-only.</span>
-              </output>
-            )}
-
-            <div className="bp-stat-grid" style={{ marginTop: "18px" }}>
-              <div className="bp-stat">
-                <div className="bp-stat-label">Sources</div>
-                <div className="bp-stat-value">{formatCents(sourceTotalCents)}</div>
-                <div className="bp-stat-sub">{monthlySources.length} {monthlySources.length === 1 ? "source" : "sources"}</div>
-              </div>
-              <div className="bp-stat">
-                <div className="bp-stat-label">Budget Items</div>
-                <div className="bp-stat-value">{formatCents(itemTotalCents)}</div>
-                <div className="bp-stat-sub">{monthlyItems.length} {monthlyItems.length === 1 ? "item" : "items"}</div>
-              </div>
-              <div className={`bp-stat ${differenceCents === 0 ? "positive" : "negative"}`}>
-                <div className="bp-stat-label">Difference</div>
-                <div className="bp-stat-value">{formatCents(Math.abs(differenceCents))}</div>
-                <div className="bp-stat-sub">
-                  {differenceCents === 0 ? "Balanced" : differenceCents > 0 ? "Left to budget" : "Over budget"}
-                </div>
+              <div className="form-group">
+                <label htmlFor="budget-plan-selected-year" className="label">Year</label>
+                <NumericCalculatorInput id="budget-plan-selected-year"
+                  value={selectedYear}
+                  allowDecimal={false}
+                  min={2024}
+                  max={2100}
+                  onValueChange={(value) => setSelectedYear(Number.parseInt(value || String(now.getFullYear()), 10))}
+                />
               </div>
             </div>
+          </div>
 
-            {isDraft && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  flexWrap: "wrap",
-                  marginTop: "18px",
-                  paddingTop: "18px",
-                  borderTop: "1px solid var(--border-subtle)",
-                }}
-              >
-                <p style={{ margin: 0, color: canConfirm ? "var(--success)" : "var(--text-tertiary)", fontSize: "12px" }}>
-                  {canConfirm
-                    ? "Source and budget item totals match."
-                    : monthlySources.length === 0 || monthlyItems.length === 0
-                      ? "Add at least one source and one budget item before confirming."
-                      : `Totals must match before confirming (${formatCents(Math.abs(differenceCents))} ${differenceCents > 0 ? "left to budget" : "over budget"}).`}
-                </p>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {monthlySources.length === 0 && monthlyItems.length === 0 && (
-                    <Button
-                      className="btn btn-ghost"
-                      type="button"
-                      onClick={() => startPlan.mutate("startFromSetup")}
-                      disabled={!hasSetupSeed || startPlan.isPending || discardDraft.isPending}
-                      title={hasSetupSeed ? "Fill this empty draft from Budget Setup" : "Add recurring items or sources to Budget Setup first"}
-                    >
-                      <LayoutTemplate size={15} />
-                      {startPlan.isPending ? "Applying..." : "Start from Setup"}
-                    </Button>
-                  )}
-                  <Button className="btn btn-danger" type="button" onClick={handleDiscardDraft} disabled={discardDraft.isPending}>
-                    <Trash2 size={15} />
-                    {discardDraft.isPending ? "Discarding..." : "Discard Draft"}
-                  </Button>
-                  <Button className="btn btn-primary" type="button" onClick={() => setShowConfirmModal(true)} disabled={!canConfirm}>
-                    <Check size={16} />
-                    Confirm Monthly Budget
-                  </Button>
-                </div>
-                {planActionError && <p style={{ width: "100%", margin: 0, color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
+          {planQuery.isLoading && (
+            <div className="bp-two-col" aria-busy="true">
+              <div className="bp-col"><BudgetPlanCompactCardsSkeleton /></div>
+              <div className="bp-col"><BudgetPlanCompactCardsSkeleton /></div>
+            </div>
+          )}
+
+          {planQuery.isError && (
+            <div
+              role="alert"
+              style={{ marginTop: "18px", padding: "14px", color: "var(--danger)", background: "var(--danger-bg)", borderRadius: "var(--r-md)" }}
+            >
+              {planQuery.error instanceof Error ? planQuery.error.message : "Could not load the monthly budget."}
+            </div>
+          )}
+
+          {!planQuery.isLoading && !planQuery.isError && !monthlyPlan && (
+            <div className="empty-state" style={{ padding: "36px 16px 24px" }}>
+              <div className="empty-state-icon" aria-hidden="true"><CalendarRange size={28} /></div>
+              <h3 className="empty-state-title">No monthly budget</h3>
+              <p className="empty-state-desc">Start with Budget Setup or create an empty monthly plan.</p>
+              <div className="empty-state-action" style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
+                <Button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => startPlan.mutate("startFromSetup")}
+                  disabled={!workspaceId || !hasSetupSeed || startPlan.isPending}
+                  title={hasSetupSeed ? "Create this month from Budget Setup" : "Add recurring items or sources to Budget Setup first"}
+                >
+                  <LayoutTemplate size={16} />
+                  {startPlan.isPending && startPlan.variables === "startFromSetup" ? "Starting..." : "Start from Setup"}
+                </Button>
+                <Button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={() => startPlan.mutate("startBlank")}
+                  disabled={!workspaceId || startPlan.isPending}
+                >
+                  <FilePlus2 size={16} />
+                  {startPlan.isPending && startPlan.variables === "startBlank" ? "Starting..." : "Start Blank"}
+                </Button>
               </div>
-            )}
+              {planActionError && <p style={{ marginTop: "12px", color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
+            </div>
+          )}
 
-            <div className="bp-two-col">
-              <div className="bp-col">
-                <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
-                  <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Sources</h4>
-                  {isDraft && (
-                    <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")}>
-                      <Plus size={14} /> Add Source
-                    </Button>
-                  )}
+          {!planQuery.isLoading && !planQuery.isError && monthlyPlan && (
+            <>
+              {isConfirmed && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    marginTop: "18px",
+                    padding: "12px 14px",
+                    color: "var(--success)",
+                    background: "var(--success-bg)",
+                    border: "1px solid var(--success)",
+                    borderRadius: "var(--r-md)",
+                  }}
+                >
+                  <Lock size={16} />
+                  <span style={{ fontSize: "13px" }}>This monthly budget is confirmed and read-only.</span>
                 </div>
-                <div className="st-grid">
-                  {monthlySources.map((source) => {
-                    const owner = source.owner ?? memberById.get(source.ownerId);
-                    return (
-                      <BudgetSourceCard key={source.id} title={source.title} ownerLabel={personLabel(owner)} amountLabel={formatCents(source.amountCents)}>
-                        {isDraft ? (
-                          <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlySource(source)} title="Edit source" aria-label={`Edit ${source.title}`}>
-                            <Pencil size={13} />
-                          </Button>
-                        ) : <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only source" />}
-                      </BudgetSourceCard>
-                    );
-                  })}
-                  {monthlySources.length === 0 && (
-                    <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
-                      <CircleDollarSign size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
-                      <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly sources</div>
-                      {isDraft && <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Source</Button>}
-                    </div>
-                  )}
+              )}
+
+              {isReview && (
+                <div
+                  role="alert"
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                    marginTop: "18px",
+                    padding: "12px 14px",
+                    color: "var(--warning)",
+                    background: "var(--warning-bg)",
+                    border: "1px solid var(--warning)",
+                    borderRadius: "var(--r-md)",
+                  }}
+                >
+                  <AlertTriangle size={17} style={{ flexShrink: 0, marginTop: "1px" }} />
+                  <span style={{ fontSize: "13px" }}>This migrated monthly budget needs review and is read-only.</span>
+                </div>
+              )}
+
+              {isConfirming && (
+                <output
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                    marginTop: "18px",
+                    padding: "12px 14px",
+                    color: "var(--warning)",
+                    background: "var(--warning-bg)",
+                    border: "1px solid var(--warning)",
+                    borderRadius: "var(--r-md)",
+                  }}
+                >
+                  <RefreshCw size={17} style={{ flexShrink: 0, marginTop: "1px" }} />
+                  <span style={{ fontSize: "13px" }}>This monthly budget is being confirmed and is temporarily read-only.</span>
+                </output>
+              )}
+
+              <div className="bp-stat-grid" style={{ marginTop: "18px" }}>
+                <div className="bp-stat">
+                  <div className="bp-stat-label">Sources</div>
+                  <div className="bp-stat-value">{formatCents(sourceTotalCents)}</div>
+                  <div className="bp-stat-sub">{monthlySources.length} {monthlySources.length === 1 ? "source" : "sources"}</div>
+                </div>
+                <div className="bp-stat">
+                  <div className="bp-stat-label">Budget Items</div>
+                  <div className="bp-stat-value">{formatCents(itemTotalCents)}</div>
+                  <div className="bp-stat-sub">{monthlyItems.length} {monthlyItems.length === 1 ? "item" : "items"}</div>
+                </div>
+                <div className={`bp-stat ${differenceCents === 0 ? "positive" : "negative"}`}>
+                  <div className="bp-stat-label">Difference</div>
+                  <div className="bp-stat-value">{formatCents(Math.abs(differenceCents))}</div>
+                  <div className="bp-stat-sub">
+                    {getBudgetDifferenceLabel()}
+                  </div>
                 </div>
               </div>
 
-              <div className="bp-col">
-                <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
-                  <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Budget Items</h4>
-                  {isDraft && (
-                    <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")}>
-                      <Plus size={14} /> Add Item
+              {isDraft && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                    marginTop: "18px",
+                    paddingTop: "18px",
+                    borderTop: "1px solid var(--border-subtle)",
+                  }}
+                >
+                  <p style={{ margin: 0, color: canConfirm ? "var(--success)" : "var(--text-tertiary)", fontSize: "12px" }}>
+                    {getPlanConfirmationHint()}
+                  </p>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {monthlySources.length === 0 && monthlyItems.length === 0 && (
+                      <Button
+                        className="btn btn-ghost"
+                        type="button"
+                        onClick={() => startPlan.mutate("startFromSetup")}
+                        disabled={!hasSetupSeed || startPlan.isPending || discardDraft.isPending}
+                        title={hasSetupSeed ? "Fill this empty draft from Budget Setup" : "Add recurring items or sources to Budget Setup first"}
+                      >
+                        <LayoutTemplate size={15} />
+                        {startPlan.isPending ? "Applying..." : "Start from Setup"}
+                      </Button>
+                    )}
+                    <Button className="btn btn-danger" type="button" onClick={handleDiscardDraft} disabled={discardDraft.isPending}>
+                      <Trash2 size={15} />
+                      {discardDraft.isPending ? "Discarding..." : "Discard Draft"}
                     </Button>
-                  )}
+                    <Button className="btn btn-primary" type="button" onClick={() => setShowConfirmModal(true)} disabled={!canConfirm}>
+                      <Check size={16} />
+                      Confirm Monthly Budget
+                    </Button>
+                  </div>
+                  {planActionError && <p style={{ width: "100%", margin: 0, color: "var(--danger)", fontSize: "13px" }}>{planActionError.message}</p>}
                 </div>
-                <div className="st-grid">
-                  {monthlyItems.map((item) => {
-                    const destinationName = item.destinationSubAccount?.name ?? (item.destinationSubAccountId ? subAccountNameById.get(item.destinationSubAccountId) : null);
-                    return (
-                      <div key={item.id} className="st-card bp-compact-card">
-                        <div className="bp-compact-row">
-                          <div className="bp-compact-left">
-                            <IconTile icon={ListChecks} tone="item" />
-                            <div className="bp-compact-info">
-                              <span className="bp-compact-title">{item.title}</span>
-                              <span className="bp-compact-meta">{destinationName || "No destination sub-account"}</span>
+              )}
+
+              <div className="bp-two-col">
+                <div className="bp-col">
+                  <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
+                    <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Sources</h4>
+                    {isDraft && (
+                      <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")}>
+                        <Plus size={14} /> Add Source
+                      </Button>
+                    )}
+                  </div>
+                  <div className="st-grid">
+                    {monthlySources.map((source) => {
+                      const owner = source.owner ?? memberById.get(source.ownerId);
+                      return (
+                        <BudgetSourceCard key={source.id} title={source.title} ownerLabel={personLabel(owner)} amountLabel={formatCents(source.amountCents)}>
+                          {isDraft ? (
+                            <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlySource(source)} title="Edit source" aria-label={`Edit ${source.title}`}>
+                              <Pencil size={13} />
+                            </Button>
+                          ) : <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only source" />}
+                        </BudgetSourceCard>
+                      );
+                    })}
+                    {monthlySources.length === 0 && (
+                      <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
+                        <CircleDollarSign size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
+                        <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly sources</div>
+                        {isDraft && <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewSource("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Source</Button>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bp-col">
+                  <div className="st-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "12px" }}>
+                    <h4 className="st-title" style={{ fontSize: "16px", margin: 0 }}>Budget Items</h4>
+                    {isDraft && (
+                      <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")}>
+                        <Plus size={14} /> Add Item
+                      </Button>
+                    )}
+                  </div>
+                  <div className="st-grid">
+                    {monthlyItems.map((item) => {
+                      const destinationName = item.destinationSubAccount?.name ?? (item.destinationSubAccountId ? subAccountNameById.get(item.destinationSubAccountId) : null);
+                      return (
+                        <div key={item.id} className="st-card bp-compact-card">
+                          <div className="bp-compact-row">
+                            <div className="bp-compact-left">
+                              <IconTile icon={ListChecks} tone="item" />
+                              <div className="bp-compact-info">
+                                <span className="bp-compact-title">{item.title}</span>
+                                <span className="bp-compact-meta">{destinationName || "No destination sub-account"}</span>
+                              </div>
+                            </div>
+                            <div className="bp-compact-right">
+                              <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
+                              {isDraft ? (
+                                <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlyItem(item)} title="Edit budget item" aria-label={`Edit ${item.title}`}>
+                                  <Pencil size={13} />
+                                </Button>
+                              ) : (
+                                <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only budget item" />
+                              )}
                             </div>
                           </div>
-                          <div className="bp-compact-right">
-                            <span className="bp-compact-amount">{formatCents(item.amountCents)}</span>
-                            {isDraft ? (
-                              <Button className="btn btn-ghost btn-icon" type="button" onClick={() => openMonthlyItem(item)} title="Edit budget item" aria-label={`Edit ${item.title}`}>
-                                <Pencil size={13} />
-                              </Button>
-                            ) : (
-                              <Lock size={14} color="var(--text-tertiary)" aria-label="Read-only budget item" />
-                            )}
-                          </div>
                         </div>
+                      );
+                    })}
+                    {monthlyItems.length === 0 && (
+                      <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
+                        <ListChecks size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
+                        <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly budget items</div>
+                        {isDraft && <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Item</Button>}
                       </div>
-                    );
-                  })}
-                  {monthlyItems.length === 0 && (
-                    <div className="st-grid-empty" style={{ padding: "18px", border: "1px dashed var(--border-default)", borderRadius: "var(--r-md)", textAlign: "center" }}>
-                      <ListChecks size={22} style={{ margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
-                      <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No monthly budget items</div>
-                      {isDraft && <Button className="btn btn-ghost btn-xs" type="button" onClick={() => openNewItem("monthly")} style={{ marginTop: "8px" }}><Plus size={14} /> Add Item</Button>}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
         </section>
-      )}
+      )
+    );
+  }
 
-      {showSetup && (
+  function renderBudgetSetup() {
+    return (
+      showSetup && (
         <section
           className="card"
           style={{ padding: "18px 20px", borderTop: "3px solid var(--brand-500)" }}
@@ -1069,9 +962,13 @@ export function BudgetPlanPage() {
             </div>
           </div>
         </section>
-      )}
+      )
+    );
+  }
 
-      {itemModal && (
+  function renderBudgetItemModal() {
+    return (
+      itemModal && (
         <ModalShell
           title={`${itemModal.id ? "Edit" : "Add"} ${itemModal.scope === "template" ? "Setup" : "Monthly"} Item`}
           onClose={closeItemModal}
@@ -1117,14 +1014,18 @@ export function BudgetPlanPage() {
               )}
               <Button className="btn btn-ghost" type="button" onClick={closeItemModal} disabled={itemSaving || deleteEntity.isPending}>Cancel</Button>
               <Button className="btn btn-primary" type="submit" disabled={itemSaving || deleteEntity.isPending}>
-                {itemSaving ? "Saving..." : itemModal.id ? "Save Changes" : "Add Item"}
+                {getItemSubmitLabel(Boolean(itemModal.id))}
               </Button>
             </div>
           </form>
         </ModalShell>
-      )}
+      )
+    );
+  }
 
-      {sourceModal && (
+  function renderBudgetSourceModal() {
+    return (
+      sourceModal && (
         <ModalShell
           title={`${sourceModal.id ? "Edit" : "Add"} ${sourceModal.scope === "template" ? "Setup" : "Monthly"} Source`}
           onClose={closeSourceModal}
@@ -1162,14 +1063,18 @@ export function BudgetPlanPage() {
               )}
               <Button className="btn btn-ghost" type="button" onClick={closeSourceModal} disabled={sourceSaving || deleteEntity.isPending}>Cancel</Button>
               <Button className="btn btn-primary" type="submit" disabled={sourceSaving || deleteEntity.isPending || !sourceOwnerId}>
-                {sourceSaving ? "Saving..." : sourceModal.id ? "Save Changes" : "Add Source"}
+                {getSourceSubmitLabel(Boolean(sourceModal.id))}
               </Button>
             </div>
           </form>
         </ModalShell>
-      )}
+      )
+    );
+  }
 
-      {showConfirmModal && monthlyPlan && (
+  function renderPlanConfirmation() {
+    return (
+      showConfirmModal && monthlyPlan && (
         <ModalShell title="Confirm Monthly Budget" onClose={() => setShowConfirmModal(false)} closeDisabled={confirmPlan.isPending}>
           <div className="st-modal-form">
             <div style={{ padding: "20px", display: "grid", gap: "16px" }}>
@@ -1212,7 +1117,61 @@ export function BudgetPlanPage() {
             </div>
           </div>
         </ModalShell>
-      )}
+      )
+    );
+  }
+
+  function getBudgetDifferenceLabel() {
+    if (differenceCents === 0) {
+      return ("Balanced");
+    }
+    if (differenceCents > 0) {
+      return ("Left to budget");
+    }
+    return ("Over budget");
+  }
+
+  function getPlanConfirmationHint() {
+    if (canConfirm) {
+      return ("Source and budget item totals match.");
+    }
+    if (monthlySources.length === 0 || monthlyItems.length === 0) {
+      return ("Add at least one source and one budget item before confirming.");
+    }
+    return (`Totals must match before confirming (${formatCents(Math.abs(differenceCents))} ${differenceCents > 0 ? "left to budget" : "over budget"}).`);
+  }
+
+  function getItemSubmitLabel(editing: boolean) {
+    if (itemSaving) {
+      return ("Saving...");
+    }
+    if (editing) {
+      return ("Save Changes");
+    }
+    return ("Add Item");
+  }
+
+  function getSourceSubmitLabel(editing: boolean) {
+    if (sourceSaving) {
+      return ("Saving...");
+    }
+    if (editing) {
+      return ("Save Changes");
+    }
+    return ("Add Source");
+  }
+
+  return (
+    <div className="bp-container">
+      {renderMonthlyPlan()}
+
+      {renderBudgetSetup()}
+
+      {renderBudgetItemModal()}
+
+      {renderBudgetSourceModal()}
+
+      {renderPlanConfirmation()}
     </div>
   );
 }

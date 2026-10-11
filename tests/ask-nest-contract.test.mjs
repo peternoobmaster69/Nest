@@ -5,13 +5,15 @@ import test from "node:test";
 import { readAppStyles } from "./read-app-styles.mjs";
 import { AskNestRequestSchema } from "../lib/ai/ask-nest-contracts.ts";
 import { resolveTransactionUrlFilters } from "../lib/transaction-view-filters.ts";
+import { AskNestRequestError, readAskNestAnswer } from "../lib/ask-nest-view.ts";
 
 const root = process.cwd();
 const source = (file) => readFile(path.join(root, file), "utf8");
-// The panel is split into the controller and its answer visualizations.
+// The panel shares display helpers with its controller and answer visualizations.
 const panelSource = async () => (await Promise.all([
   "components/ask-nest.tsx",
   "components/ask-nest-visualization.tsx",
+  "lib/ask-nest-view.ts",
 ].map(source))).join("\n");
 
 test("Ask Nest keeps Azure credentials server-side and uses the v1 Responses API", async () => {
@@ -171,6 +173,10 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
     "AI_AMBIGUOUS_CURRENCY",
   ]) {
     assert.match(orchestration, new RegExp(code));
+    await assert.rejects(
+      readAskNestAnswer(Response.json({ error: "Grounding failed", code }, { status: 422 })),
+      (error) => error instanceof AskNestRequestError && error.code === code && error.message === "Grounding failed",
+    );
   }
   assert.match(orchestration, /not too many transaction results/);
   assert.match(orchestration, /incomplete_details\?\.reason/);
@@ -178,7 +184,8 @@ test("Ask Nest reports the specific reason a response could not be grounded", as
   assert.match(orchestration, /one compact Markdown table/);
   assert.match(route, /errorResponse\(error\.publicMessage, error\.code, error\.status\)/);
   assert.doesNotMatch(route, /could not produce a grounded answer\. Try rephrasing/);
-  assert.match(panel, /payload\.code/);
+  assert.match(panel, /await readAskNestAnswer\(response\)/);
+  assert.match(panel, /errorCode: error instanceof AskNestRequestError \? error\.code : "AI_INTERNAL_ERROR"/);
   assert.match(panel, /Edit question/);
   assert.match(panel, /Retry same question/);
   assert.match(panel, /ASK_NEST_ERROR_LABELS/);

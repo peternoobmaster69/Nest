@@ -5547,11 +5547,16 @@ html[data-mobile-more-open="true"] .scroll-to-top-button {
 }
 
 .inv-return-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
   cursor: pointer;
   border-radius: 6px;
   transition: background-color var(--t);
-  /* The global coarse-pointer rule inflates [role="button"] to the 44px touch
-     target; centering our own content keeps it aligned with sibling stats. */
+  /* Center the native button within the same touch target as sibling stats. */
   display: flex;
   flex-direction: column;
   justify-content: center;

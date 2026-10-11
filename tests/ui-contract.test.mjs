@@ -198,7 +198,8 @@ test("dashboard uses one responsive overview and a clear content hierarchy", asy
   assert.match(component, /className="card cash-flow-card dashboard-cash-flow-panel"/);
   assert.match(component, /className="card cc-home-panel dashboard-payments-panel"/);
   assert.match(component, /className="card dashboard-recent-panel"/);
-  assert.match(component, /className="dashboard-home-main-stack"[\s\S]*?dashboard-cash-flow-panel[\s\S]*?dashboard-recent-panel[\s\S]*?Credit Card Summary/);
+  assert.match(component, /function renderRecentTransactions\(\)[\s\S]*?className="card dashboard-recent-panel"/);
+  assert.match(component, /className="dashboard-home-main-stack"[\s\S]*?dashboard-cash-flow-panel[\s\S]*?\{renderRecentTransactions\(\)\}[\s\S]*?Credit Card Summary/);
   assert.match(component, /className="dashboard-reconciliation-list"/);
   assert.match(component, /className="tx-reconciliation dashboard-reconciliation"/);
   assert.match(component, /discrepancyAmount} unallocated/);
@@ -397,7 +398,8 @@ test("modal action bars remain outside independently scrolling content", async (
   const transactionCorrection = await readFile(path.join(root, "components/transactions/transaction-correction-dialog.tsx"), "utf8");
   const receivables = await readFile(path.join(root, "components/receivables-page.tsx"), "utf8");
   assert.match(transactionCorrection, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body txn-modal-body txn-modal-form">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
-  assert.match(receivables, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body recv-modal-body">[\s\S]*?<MarkdownEditor[\s\S]*?<div className="txn-modal-actions"/);
+  assert.match(receivables, /<form className="modal-form-shell" onSubmit={onSubmit}>[\s\S]*?<div className="profile-modal-body recv-modal-body">[\s\S]*?<MarkdownEditor[\s\S]*?\{renderReceivableFormActions\(\)\}/);
+  assert.match(receivables, /function renderReceivableFormActions[\s\S]*?className="txn-modal-actions"/);
 });
 
 test("compact dialog and form contract is keyboard-aware and uniform", async () => {
@@ -696,15 +698,15 @@ test("settings groups related controls into focused tabs", async () => {
   assert.match(automation, /settings-auto-actions[\s\S]*?Run Now[\s\S]*?SettingsOperationNotice[\s\S]*?notice=\{autoRuleNotice\}/);
   assert.match(notices, /No transactions auto-accounted[\s\S]*?No unaccounted transactions matched your enabled rules/);
   assert.match(styles, /\.settings-auto-notice\s*\{[^}]*margin-bottom:\s*18px/s);
-  assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display/);
+  assert.match(settings, /function renderWorkspaceDefaults[\s\S]*?section !== "workspaces" \|\| context\.data\?\.role !== "OWNER"[\s\S]*?Currency Display/);
   assert.match(settings, /section === "workspaces"[\s\S]*?Bank accounts/);
   assert.match(settings, /section === "data"[\s\S]*?<DataImportSection/);
   const dataLayout = settings.slice(
     settings.indexOf('{section === "data" ? ('),
     settings.indexOf('{section === "workspaces" ? (', settings.indexOf('{section === "data" ? (')),
   );
-  assert.ok(dataLayout.indexOf('<SettingsPrivacyControls view="data" />') < dataLayout.indexOf("{publicShareSettings}"));
-  assert.ok(dataLayout.indexOf("{publicShareSettings}") < dataLayout.indexOf("<DataImportSection"));
+  assert.ok(dataLayout.indexOf('<SettingsPrivacyControls view="data" />') < dataLayout.indexOf("{renderPublicShareSettings()}"));
+  assert.ok(dataLayout.indexOf("{renderPublicShareSettings()}") < dataLayout.indexOf("<DataImportSection"));
   assert.match(privacyControls, /view === "privacy"[\s\S]*?Optional telemetry[\s\S]*?Offline storage/);
   assert.match(privacyControls, /view === "privacy"[\s\S]*?: \([\s\S]*?Account data[\s\S]*?Delete Nest account/);
   assert.match(settings, /Bank accounts/);
@@ -752,25 +754,26 @@ test("workspace settings flow from selection through configuration and access", 
     readFile(path.join(root, "components/settings-page.tsx"), "utf8"),
     readAppStyles(root),
   ]);
-  const layout = collaborators.slice(collaborators.indexOf("return ("));
+  const layout = collaborators.slice(collaborators.lastIndexOf("  return ("));
+  const collaboratorView = await readFile(path.join(root, "lib/collaborator-view.ts"), "utf8");
 
   assert.match(route, /workspaceSettings={<SettingsPage section={activeTab} \/>}/);
-  assert.ok(layout.indexOf("Choose workspace") < layout.indexOf("Workspace details"));
-  assert.ok(layout.indexOf("Workspace details") < layout.indexOf("Members"));
-  assert.ok(layout.indexOf("Members") < layout.indexOf("{workspaceSettings}"));
+  assert.ok(layout.indexOf("Choose workspace") < layout.indexOf("{renderWorkspaceDetails()}"));
+  assert.ok(layout.indexOf("{renderWorkspaceDetails()}") < layout.indexOf("{workspaceSettings}"));
+  assert.match(collaborators, /function renderWorkspaceDetails[\s\S]*?Workspace details[\s\S]*?\{renderMembers\(\)\}/);
   assert.ok(layout.indexOf("{workspaceSettings}") < layout.indexOf("Invite people"));
   assert.ok(layout.indexOf("Invite people") < layout.indexOf("Audit log"));
-  assert.match(settings, /section === "workspaces"[\s\S]*?Currency Display[\s\S]*?Bank accounts/);
+  assert.match(settings, /function renderWorkspaceDefaults[\s\S]*?Currency Display[\s\S]*?Bank accounts/);
   assert.doesNotMatch(settings, /settings-page-section-header/);
   assert.doesNotMatch(collaborators, /workspace-settings-card-(?:heading|title)/);
   assert.match(collaborators, /settings-section-title">Choose workspace/);
   assert.match(collaborators, /settings-section-title">Workspace details/);
-  assert.match(collaborators, /\{ key: "cio", label: "Nest CIO"/);
-  assert.match(collaborators, /\{ key: "budget", label: "Budget Plan"/);
+  assert.match(collaboratorView, /\{ key: "cio", label: "Nest CIO"/);
+  assert.match(collaboratorView, /\{ key: "budget", label: "Budget Plan"/);
   assert.match(collaborators, /checked=\{sidebarMoneyPages\[page\.key\] \?\? true\}/);
   assert.match(collaborators, /Sidebar navigation/);
   assert.match(collaborators, /settings-section-title">Members/);
-  assert.match(collaborators, /workspace-details-card[\s\S]*?workspace-members-section[\s\S]*?settings-section-title">Members/);
+  assert.match(collaborators, /function renderMembers[\s\S]*?workspace-members-section[\s\S]*?settings-section-title">Members/);
   assert.match(styles, /\.workspace-details-form\s*\{[^}]*grid-template-columns:/s);
   assert.match(styles, /\.workspace-money-page-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
 });
@@ -898,7 +901,9 @@ test("mobile quality uses the Phase 4 accessibility and performance contract", a
   assert.match(styles, /\.card\.inv-account-card\s*\{[^}]*padding:\s*10px 10px 8px/s);
   assert.match(investments, /className="inv-account-create-row"[\s\S]*?className="btn btn-ghost btn-sm inv-add-account-btn"/);
   assert.match(investments, /const currentValueDifference = \(b\.latest\?\.currentValueCents \?\? 0\) - \(a\.latest\?\.currentValueCents \?\? 0\)/);
-  assert.match(investments, /compact:\s*`[^`]*\$\{year\.slice\(-2\)\}`/);
+  const investmentView = await readFile(path.join(root, "lib/investment-view.ts"), "utf8");
+  assert.match(investmentView, /compact:\s*`[^`]*\$\{year\.slice\(-2\)\}`/);
+  assert.match(investments, /const inceptionBadge = formatInceptionBadge\(account\.inceptionDate\)/);
   assert.match(investments, /data-compact-label=\{inceptionBadge\.compact\}/);
   assert.match(investments, /calculateAnnualInvestmentContributions/);
   assert.match(investments, /id="inv-annual-contributions"[\s\S]*?role="tooltip"/);

@@ -10,65 +10,11 @@ import { confirmDestructiveAction } from "@/lib/confirm-destructive";
 import { useRouter } from "next/navigation";
 import { buildWorkspacePath } from "@/lib/workspace-entry";
 import { ActionableAuthenticationMessage } from "@/components/reauthentication-message";
-import type { ListEnvelope } from "@/lib/api/contracts";
 import { invalidateWorkspaceQueries, queryKeys, removeWorkspaceQueries } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 
-// Default visibility for configurable workspace navigation.
-const DEFAULT_NAVIGATION_PAGES = {
-  creditCards: true,
-  creditTransactions: true,
-  receivables: true,
-  transactions: true,
-  rewards: true,
-  investments: true,
-};
-
-const NAVIGATION_PAGE_CONFIG = [
-  { key: "cio", label: "Nest CIO", icon: "🧭" },
-  { key: "budget", label: "Budget Plan", icon: "🗓" },
-  { key: "transactions", label: "Transactions", icon: "📑" },
-  { key: "creditCards", label: "Credit Cards", icon: "💳" },
-  { key: "creditTransactions", label: "Card Transactions", icon: "🧾" },
-  { key: "receivables", label: "Receivables", icon: "↩" },
-  { key: "rewards", label: "Rewards", icon: "◎" },
-  { key: "investments", label: "Investments", icon: "📈" },
-];
-type AppContext = {
-  workspaceId: string | null;
-  workspaceName?: string | null;
-  isShared?: boolean;
-  role?: "OWNER" | "EDITOR" | "VIEWER";
-  workspaces?: Array<{ id: string; name: string; role?: "OWNER" | "EDITOR" | "VIEWER" }>;
-  sidebarMoneyPages?: Record<string, boolean>;
-};
-
-type CollaboratorData = {
-  role: "OWNER" | "EDITOR" | "VIEWER";
-  workspace: { id: string; name: string; isShared: boolean } | null;
-  members: ListEnvelope<{
-    id: string;
-    role: string;
-    user: { id: string; name: string | null; email: string | null };
-  }>;
-  invites: ListEnvelope<{
-    id: string;
-    invitedEmail: string;
-    status: string;
-    role: "EDITOR" | "VIEWER";
-    createdAt: string;
-    expiresAt: string | null;
-    invitedBy: { id: string; name: string | null; email: string | null } | null;
-  }>;
-  auditLogs: ListEnvelope<{
-    id: string;
-    action: string;
-    details: string;
-    createdAt: string;
-    actorUser: { id: string; name: string | null; email: string | null } | null;
-  }>;
-};
+import { DEFAULT_NAVIGATION_PAGES, NAVIGATION_PAGE_CONFIG, contextWorkspaceMeta, type AppContext, type CollaboratorData } from "@/lib/collaborator-view";
 
 export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSettings?: ReactNode }>) {
   const routeWorkspaceId = useWorkspaceId();
@@ -99,15 +45,7 @@ export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSet
   const invites = collab.data?.invites.items ?? [];
   const auditLogs = collab.data?.auditLogs.items ?? [];
 
-  const workspaceMeta = collab.data?.workspace
-    ? collab.data.workspace
-    : workspaceId
-      ? {
-          id: workspaceId,
-          name: context.data?.workspaceName || "",
-          isShared: Boolean(context.data?.isShared),
-        }
-      : null;
+  const workspaceMeta = collab.data?.workspace ?? contextWorkspaceMeta(context.data);
   const isShared = workspaceMeta?.isShared ?? false;
   const isOwner = collab.data?.role === "OWNER" || context.data?.role === "OWNER";
 
@@ -288,6 +226,151 @@ export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSet
     removeMember.mutate(memberId);
   };
 
+  function renderWorkspaceDetails() {
+    return (
+      <section className="card workspace-details-card">
+        <div className={`workspace-settings-card-content${isWorkspaceChanging ? " is-changing" : ""}`}>
+          <div className="settings-item-copy">
+            <div className="settings-section-title">Workspace details</div>
+            <div className="settings-section-copy">
+              {isOwner
+                ? "Update its name, access mode, and visible navigation."
+                : "Review this workspace and its members."}
+            </div>
+          </div>
+          {isOwner ? <>
+            {updateWorkspace.isPending ? (
+              <div className="workspace-save-progress" aria-label="Saving workspace info">
+                <div className="workspace-save-progress-bar" />
+              </div>
+            ) : null}
+            <form className="workspace-details-form" onSubmit={onUpdateWorkspace}>
+              <label className="workspace-settings-field">
+                <span>Name</span>
+                <Input
+                  className="input"
+                  placeholder="Workspace name"
+                  value={workspaceNameInput}
+                  onChange={(e) => setWorkspaceNameInput(e.target.value)}
+                />
+              </label>
+              <label className="workspace-settings-field">
+                <span>Access</span>
+                <Select
+                  className="input"
+                  value={workspaceMode}
+                  onChange={(e) => setWorkspaceMode(e.target.value === "SHARED" ? "SHARED" : "PRIVATE")}
+                >
+                  <option value="PRIVATE">Private workspace</option>
+                  <option value="SHARED">Shared workspace</option>
+                </Select>
+              </label>
+              <Button
+                className="btn btn-primary btn-xs"
+                type="submit"
+                disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
+              >
+                {updateWorkspace.isPending ? "Saving..." : "Save details"}
+              </Button>
+            </form>
+
+            <div className="workspace-money-pages">
+              <div className="workspace-money-pages-title">
+                Sidebar navigation
+              </div>
+              <div className="workspace-money-page-grid">
+                {NAVIGATION_PAGE_CONFIG.map((page) => (
+                  <label
+                    key={page.key}
+                    className="workspace-money-page-option"
+                  >
+                    <Input
+                      type="checkbox"
+                      checked={sidebarMoneyPages[page.key] ?? true}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSidebarMoneyPages((prev) => {
+                          const next = {
+                            ...prev,
+                            [page.key]: checked,
+                          };
+                          if (page.key === "creditCards" && !checked) {
+                            next.creditTransactions = false;
+                          }
+                          return next;
+                        });
+                      }}
+                      disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
+                    />
+                    <span className="workspace-money-page-icon" aria-hidden="true">{page.icon}</span>
+                    <span>{page.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="workspace-money-pages-help">
+                Uncheck pages that do not apply to this workspace. Changes save when you save Workspace details.
+              </div>
+            </div>
+          </> : null}
+
+          {renderMembers()}
+        </div>
+      </section>
+    );
+  }
+
+  function renderMembers() {
+    return (
+      <div className="workspace-members-section">
+        <div className="settings-section-title">Members</div>
+        <div className="simple-list">
+          {isCollabLoading && (
+            <CollaboratorsRowsSkeleton />
+          )}
+
+          {isCollabError && (
+            <EmptyState
+              icon="⚠️"
+              title="Failed to load collaborators"
+              action={<Button className="btn btn-primary" onClick={() => refetchCollab()}>Retry</Button>}
+            />
+          )}
+
+          {!isCollabLoading && !isCollabError && members.map((member) => (
+            <div key={member.id} className="crud-row">
+              <span>{member.user.name || member.user.email || member.user.id}</span>
+              <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+                {isOwner && member.role !== "OWNER" ? (
+                  <Select
+                    className="input"
+                    value={member.role === "MEMBER" ? "EDITOR" : member.role}
+                    onChange={(event) => updateMemberRole.mutate({ memberId: member.id, role: event.target.value === "VIEWER" ? "VIEWER" : "EDITOR" })}
+                    disabled={updateMemberRole.isPending || isWorkspaceChanging}
+                  >
+                    <option value="EDITOR">Editor</option>
+                    <option value="VIEWER">Viewer</option>
+                  </Select>
+                ) : <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{member.role}</span>}
+                {isOwner && member.role !== "OWNER" ? (
+                  <Button
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => confirmRemoveMember(member.id)}
+                    disabled={removeMember.isPending || isWorkspaceChanging}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          {!isCollabLoading && !isCollabError && members.length === 0 && (
+            <EmptyState icon="👥" title="No collaborators yet" description="Invite team members to collaborate on this workspace." />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="workspace-settings-page">
       {isWorkspaceChanging ? (
@@ -342,140 +425,7 @@ export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSet
         </div>
       </section>
 
-      <section className="card workspace-details-card">
-        <div className={`workspace-settings-card-content${isWorkspaceChanging ? " is-changing" : ""}`}>
-          <div className="settings-item-copy">
-            <div className="settings-section-title">Workspace details</div>
-            <div className="settings-section-copy">
-              {isOwner
-                ? "Update its name, access mode, and visible navigation."
-                : "Review this workspace and its members."}
-            </div>
-          </div>
-          {isOwner ? <>
-            {updateWorkspace.isPending ? (
-              <div className="workspace-save-progress" aria-label="Saving workspace info">
-                <div className="workspace-save-progress-bar" />
-              </div>
-            ) : null}
-            <form className="workspace-details-form" onSubmit={onUpdateWorkspace}>
-            <label className="workspace-settings-field">
-              <span>Name</span>
-              <Input
-                className="input"
-                placeholder="Workspace name"
-                value={workspaceNameInput}
-                onChange={(e) => setWorkspaceNameInput(e.target.value)}
-              />
-            </label>
-            <label className="workspace-settings-field">
-              <span>Access</span>
-              <Select
-                className="input"
-                value={workspaceMode}
-                onChange={(e) => setWorkspaceMode(e.target.value === "SHARED" ? "SHARED" : "PRIVATE")}
-              >
-                <option value="PRIVATE">Private workspace</option>
-                <option value="SHARED">Shared workspace</option>
-              </Select>
-            </label>
-            <Button
-              className="btn btn-primary btn-xs"
-              type="submit"
-              disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
-            >
-              {updateWorkspace.isPending ? "Saving..." : "Save details"}
-            </Button>
-            </form>
-
-            <div className="workspace-money-pages">
-            <div className="workspace-money-pages-title">
-              Sidebar navigation
-            </div>
-            <div className="workspace-money-page-grid">
-              {NAVIGATION_PAGE_CONFIG.map((page) => (
-                <label
-                  key={page.key}
-                  className="workspace-money-page-option"
-                >
-                  <Input
-                    type="checkbox"
-                    checked={sidebarMoneyPages[page.key] ?? true}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setSidebarMoneyPages((prev) => {
-                        const next = {
-                          ...prev,
-                          [page.key]: checked,
-                        };
-                        if (page.key === "creditCards" && !checked) {
-                          next.creditTransactions = false;
-                        }
-                        return next;
-                      });
-                    }}
-                    disabled={!workspaceMeta?.id || updateWorkspace.isPending || isWorkspaceChanging}
-                  />
-                  <span className="workspace-money-page-icon" aria-hidden="true">{page.icon}</span>
-                  <span>{page.label}</span>
-                </label>
-              ))}
-            </div>
-            <div className="workspace-money-pages-help">
-              Uncheck pages that do not apply to this workspace. Changes save when you save Workspace details.
-            </div>
-            </div>
-          </> : null}
-
-          <div className="workspace-members-section">
-            <div className="settings-section-title">Members</div>
-            <div className="simple-list">
-              {isCollabLoading && (
-                <CollaboratorsRowsSkeleton />
-              )}
-
-              {isCollabError && (
-                <EmptyState
-                  icon="⚠️"
-                  title="Failed to load collaborators"
-                  action={<Button className="btn btn-primary" onClick={() => refetchCollab()}>Retry</Button>}
-                />
-              )}
-
-              {!isCollabLoading && !isCollabError && members.map((member) => (
-                <div key={member.id} className="crud-row">
-                  <span>{member.user.name || member.user.email || member.user.id}</span>
-                  <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-                    {isOwner && member.role !== "OWNER" ? (
-                      <Select
-                        className="input"
-                        value={member.role === "MEMBER" ? "EDITOR" : member.role}
-                        onChange={(event) => updateMemberRole.mutate({ memberId: member.id, role: event.target.value === "VIEWER" ? "VIEWER" : "EDITOR" })}
-                        disabled={updateMemberRole.isPending || isWorkspaceChanging}
-                      >
-                        <option value="EDITOR">Editor</option>
-                        <option value="VIEWER">Viewer</option>
-                      </Select>
-                    ) : <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>{member.role}</span>}
-                    {isOwner && member.role !== "OWNER" ? (
-                      <Button
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => confirmRemoveMember(member.id)}
-                        disabled={removeMember.isPending || isWorkspaceChanging}
-                      >
-                        Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-              {!isCollabLoading && !isCollabError && members.length === 0 && (
-                <EmptyState icon="👥" title="No collaborators yet" description="Invite team members to collaborate on this workspace." />
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
+      {renderWorkspaceDetails()}
 
       {workspaceSettings}
 
@@ -488,9 +438,9 @@ export function CollaboratorsPage({ workspaceSettings }: Readonly<{ workspaceSet
                 className="input"
                 type="email"
                 placeholder="name@email.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-            />
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
               <Select className="input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value === "VIEWER" ? "VIEWER" : "EDITOR")}>
                 <option value="EDITOR">Editor</option>
                 <option value="VIEWER">Viewer</option>

@@ -38,7 +38,10 @@ test("workspace-scoped notifications and emails route to the exact card statemen
   assert.match(creditTransactions, /searchParams\.get\("cardId"\)/);
   assert.match(creditTransactions, /searchParams\.get\("month"\)/);
   assert.match(creditTransactions, /searchParams\.get\("year"\)/);
-  assert.match(creditTransactions, /queryMonth === "all" \|\| queryMonth === "-1"/);
+  const creditView = await source("lib/credit-transaction-view.ts");
+  assert.match(creditView, /queryMonth === "all" \|\| queryMonth === "-1"/);
+  assert.match(creditTransactions, /parseCreditMonthFilter\(queryMonth, savedMonth\)/);
+  assert.match(creditTransactions, /if \(month !== undefined\) setSelectedMonth\(month\)/);
   assert.match(creditTransactions, /setSelectedMonth\(-1\)/);
 });
 

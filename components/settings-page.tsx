@@ -111,12 +111,13 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
   const savedPublicNetWorthEnabled = Boolean(context.data?.publicNetWorthEnabled);
   const publicNetWorthEnabled = optimisticPublicNetWorthEnabled ?? savedPublicNetWorthEnabled;
   const publicNetWorthToken = context.data?.publicNetWorthToken ?? null;
+  const publicShareAvailable = publicNetWorthEnabled && publicNetWorthToken && publicOrigin;
   const publicNetWorthUrl =
-    publicNetWorthEnabled && publicNetWorthToken && publicOrigin
+    publicShareAvailable
       ? `${publicOrigin}/api/public/net-worth/${publicNetWorthToken}`
       : "";
   const publicCardsDueUrl =
-    publicNetWorthEnabled && publicNetWorthToken && publicOrigin
+    publicShareAvailable
       ? `${publicOrigin}/api/public/cards-due/${publicNetWorthToken}`
       : "";
 
@@ -182,10 +183,10 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
       queryClient.setQueryData<Context>(["app-context", routeWorkspaceId], (current) =>
         current
           ? {
-              ...current,
-              publicNetWorthEnabled: data.publicNetWorthEnabled,
-              publicNetWorthToken: data.publicNetWorthToken,
-            }
+            ...current,
+            publicNetWorthEnabled: data.publicNetWorthEnabled,
+            publicNetWorthToken: data.publicNetWorthToken,
+          }
           : current,
       );
       setOptimisticPublicNetWorthEnabled(null);
@@ -367,7 +368,7 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
     });
   };
 
-  const publicShareSettings = context.data?.role === "OWNER" ? (
+  const renderPublicShareSettings = () => context.data?.role === "OWNER" ? (
     <div className="card settings-card-block">
       <div className="settings-row settings-row-toggle">
         <div>
@@ -426,129 +427,18 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
     </div>
   );
 
-  return (
-    <div className="st-container">
-      {section === "settings" ? (
-        <>
-          <SettingsAppAccess />
-          <SettingsPrivacyControls />
-        </>
-      ) : null}
+  function renderBankLogo(account: BankAccount) {
+    const bank = getSingaporeBankByName(account.bankName);
+    const logo = getBankLogoUrl(bank);
+    if (logo && !failedLogos[account.id]) {
+      return <Image src={logo} alt={bank?.name || "Bank"} width={40} height={24} sizes="40px" className="st-bank-logo" loading="lazy" onError={() => setFailedLogos((prev) => ({ ...prev, [account.id]: true }))} />;
+    }
+    if (bank) return <span className={`st-bank-fallback st-bank-fallback-${bank.code.toLowerCase()}`}>{bank.short}</span>;
+    return <span className="st-bank-fallback st-bank-fallback-default">BNK</span>;
+  }
 
-      {section === "automation" && context.data?.role === "OWNER" ? <GmailSettingsCard controller={gmail} routeWorkspaceId={routeWorkspaceId} /> : null}
-
-      {section === "workspaces" ? (
-        <>
-          {context.data?.role === "OWNER" ? <><div className="card settings-card-block">
-        <div className="settings-row">
-          <div>
-            <div className="settings-section-title">Currency Display</div>
-            <div className="settings-section-copy">
-              Set currency display across your workspace. Default is SGD.
-            </div>
-          </div>
-          <Select
-            className="input settings-select-sm"
-            value={baseCurrency}
-            onChange={(event) => updateCurrency.mutate(event.target.value)}
-            disabled={!workspaceId || updateCurrency.isPending}
-          >
-            {SUPPORTED_CURRENCIES.map((currency) => (
-              <option key={currency} value={currency}>
-                {currency}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <ActionableAuthenticationMessage message={currencyMessage} className="settings-message" />
-      </div>
-
-      </> : null}
-
-      <div className="card settings-card-block">
-        <div className="settings-row">
-          <div>
-            <div className="settings-section-title">Receivable Default Account</div>
-            <div className="settings-section-copy">
-              Closed receivables are credited into this account automatically.
-            </div>
-          </div>
-          <Select
-            className="input settings-select-md"
-            value={defaultReceivableAccountId ?? ""}
-            onChange={(event) =>
-              updateReceivableDefaults.mutate({
-                accountId: event.target.value || null,
-                budgetId: null,
-              })
-            }
-            disabled={!workspaceId || accounts.isLoading || updateReceivableDefaults.isPending}
-          >
-            <option value="">Not configured</option>
-            {(accounts.data ?? []).filter((a) => a.isActive).map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="settings-row settings-row-spaced">
-          <div>
-            <div className="settings-section-title">Receivable Default Subaccount</div>
-            <div className="settings-section-copy">
-              Closed receivables are posted into this subaccount under the default account.
-            </div>
-          </div>
-          <Select
-            className="input settings-select-md"
-            value={defaultReceivableBudgetId ?? ""}
-            onChange={(event) =>
-              updateReceivableDefaults.mutate({
-                accountId: undefined,
-                budgetId: event.target.value || null,
-              })
-            }
-            disabled={!workspaceId || !defaultReceivableAccountId || budgets.isLoading || updateReceivableDefaults.isPending}
-          >
-            <option value="">Not configured</option>
-            {(budgets.data ?? [])
-              .filter((b) => b.isActive && b.accountId === defaultReceivableAccountId)
-              .map((budget) => (
-                <option key={budget.id} value={budget.id}>
-                  {budget.name}
-                </option>
-              ))}
-          </Select>
-        </div>
-        <ActionableAuthenticationMessage message={receivableAccountMessage} className="settings-message" />
-          </div>
-        </>
-      ) : null}
-
-      {section === "automation" ? <AutoAccountingSettings controller={autoRuleSettings} baseCurrency={baseCurrency} /> : null}
-
-      {section === "data" ? (
-        <>
-          <SettingsPrivacyControls view="data" />
-          {publicShareSettings}
-          <DataImportSection workspaceId={workspaceId} baseCurrency={baseCurrency} />
-        </>
-      ) : null}
-
-      {section === "workspaces" ? (
-        <>
-          <div className="st-header settings-accounts-header" id="bank-accounts">
-        <div className="settings-accounts-heading">
-          <h2>Bank accounts</h2>
-          <p>Manage balances, account visibility, and reconciliation.</p>
-        </div>
-        <Button className="btn btn-primary" onClick={openAddModal}>
-          <Plus size={16} aria-hidden="true" />
-          Add Account
-        </Button>
-      </div>
-
-      {/* Accounts Grid */}
+  function renderBankAccounts() {
+    return (
       <div className="st-grid">
         {accounts.isLoading && <SettingsBankAccountsSkeleton />}
 
@@ -563,35 +453,12 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
         )}
 
         {!accounts.isLoading && !accounts.isError && accounts.data?.map((account) => {
-          const bank = getSingaporeBankByName(account.bankName);
-          const logo = getBankLogoUrl(bank);
           const hasDiscrepancy = account.discrepancyCents !== 0;
 
           return (
             <div key={account.id} className={`st-card ${!account.isActive ? 'inactive' : ''}`}>
               <div className="st-card-header">
-                <div className="st-card-bank">
-                  {logo && !failedLogos[account.id] ? (
-                    <Image
-                      src={logo}
-                      alt={bank?.name || "Bank"}
-                      width={40}
-                      height={24}
-                      sizes="40px"
-                      className="st-bank-logo"
-                      loading="lazy"
-                      onError={() => setFailedLogos((prev) => ({ ...prev, [account.id]: true }))}
-                    />
-                  ) : bank ? (
-                    <span className={`st-bank-fallback st-bank-fallback-${bank.code.toLowerCase()}`}>
-                      {bank.short}
-                    </span>
-                  ) : (
-                    <span className="st-bank-fallback st-bank-fallback-default">
-                      BNK
-                    </span>
-                  )}
-                </div>
+                <div className="st-card-bank">{renderBankLogo(account)}</div>
                 <div className="st-card-actions">
                   <Button className="btn btn-ghost btn-xs" onClick={() => openEditModal(account)}>
                     Edit
@@ -663,160 +530,230 @@ export function SettingsPage({ section }: Readonly<{ section: SettingsTab }>) {
           </div>
         )}
       </div>
+    );
+  }
 
-      {/* Add Account Modal */}
-      {isAddModalOpen && (
-        <Dialog open onClose={closeAddModal} title="Add bank account" surface="custom" overlayClassName="st-modal-overlay">
-          <dialog open className="st-modal">
-            <div className="st-modal-header">
-              <h3>Add Bank Account</h3>
-              <ModalCloseButton onClick={closeAddModal} label="Close Add Bank Account" />
-            </div>
-            <form className="st-modal-form" onSubmit={onSubmitAdd}>
-              <div className="st-form-grid">
-                <div className="form-group st-span-2">
-                  <label htmlFor="settings-selected-bank-name" className="label">Bank</label>
-                  <Select id="settings-selected-bank-name"
-                    className="input"
-                    value={selectedBankName}
-                    onChange={(e) => setSelectedBankName(e.target.value)}
-                  >
-                    {SINGAPORE_BANKS.map((bank) => (
-                      <option key={bank.code} value={bank.name}>
-                        {bank.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="form-group st-span-2">
-                  <label htmlFor="settings-name" className="label">Account Name</label>
-                  <Input id="settings-name"
-                    className="input"
-                    placeholder="e.g., DBS Savings"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                  <span className="st-hint">If left empty, the bank name will be used</span>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="settings-balance" className="label">Starting Balance</label>
-                  <NumericCalculatorInput id="settings-balance"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={balance}
-                    onValueChange={setBalance}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="settings-description" className="label">Description</label>
-                  <Input id="settings-description"
-                    className="input"
-                    placeholder="Optional"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-              {createAccount.isError && (
-                <div className="st-error">
-                  Failed to save: {(createAccount.error as Error)?.message || "Unknown error"}
-                </div>
-              )}
-              <div className="st-modal-actions">
-                <Button type="button" className="btn btn-ghost" onClick={closeAddModal}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="btn btn-primary" disabled={createAccount.isPending}>
-                  {createAccount.isPending ? "Adding..." : "Add Account"}
-                </Button>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>
-      )}
+  function renderWorkspaceDefaults() {
+    if (section !== "workspaces" || context.data?.role !== "OWNER") return null;
+    return (<><div className="card settings-card-block">
+      <div className="settings-row">
+        <div>
+          <div className="settings-section-title">Currency Display</div>
+          <div className="settings-section-copy">
+            Set currency display across your workspace. Default is SGD.
+          </div>
+        </div>
+        <Select
+          className="input settings-select-sm"
+          value={baseCurrency}
+          onChange={(event) => updateCurrency.mutate(event.target.value)}
+          disabled={!workspaceId || updateCurrency.isPending}
+        >
+          {SUPPORTED_CURRENCIES.map((currency) => (
+            <option key={currency} value={currency}>
+              {currency}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <ActionableAuthenticationMessage message={currencyMessage} className="settings-message" />
+    </div>
 
-      {/* Edit Account Modal */}
-      {isEditModalOpen && editingAccountId && (
-        <Dialog open onClose={closeEditModal} title="Edit bank account" surface="custom" overlayClassName="st-modal-overlay">
-          <dialog open className="st-modal">
-            <div className="st-modal-header">
-              <h3>Edit Bank Account</h3>
-              <ModalCloseButton onClick={closeEditModal} label="Close Edit Bank Account" />
+    </>);
+  }
+
+  return (
+    <div className="st-container">
+      {section === "settings" ? (
+        <>
+          <SettingsAppAccess />
+          <SettingsPrivacyControls />
+        </>
+      ) : null}
+
+      {section === "automation" && context.data?.role === "OWNER" ? <GmailSettingsCard controller={gmail} routeWorkspaceId={routeWorkspaceId} /> : null}
+
+      {renderWorkspaceDefaults()}
+
+      {section === "automation" ? <AutoAccountingSettings controller={autoRuleSettings} baseCurrency={baseCurrency} /> : null}
+
+      {section === "data" ? (
+        <>
+          <SettingsPrivacyControls view="data" />
+          {renderPublicShareSettings()}
+          <DataImportSection workspaceId={workspaceId} baseCurrency={baseCurrency} />
+        </>
+      ) : null}
+
+      {section === "workspaces" ? (
+        <>
+          <div className="st-header settings-accounts-header" id="bank-accounts">
+            <div className="settings-accounts-heading">
+              <h2>Bank accounts</h2>
+              <p>Manage balances, account visibility, and reconciliation.</p>
             </div>
-            <form className="st-modal-form" onSubmit={onSubmitEdit}>
-              <div className="st-form-grid">
-                <div className="form-group st-span-2">
-                  <label htmlFor="settings-editing-bank-name" className="label">Bank</label>
-                  <Select id="settings-editing-bank-name"
-                    className="input"
-                    value={editingBankName}
-                    onChange={(e) => setEditingBankName(e.target.value)}
-                  >
-                    {SINGAPORE_BANKS.map((bank) => (
-                      <option key={bank.code} value={bank.name}>
-                        {bank.name}
-                      </option>
-                    ))}
-                  </Select>
+            <Button className="btn btn-primary" onClick={openAddModal}>
+              <Plus size={16} aria-hidden="true" />
+              Add Account
+            </Button>
+          </div>
+
+          {/* Accounts Grid */}
+          {renderBankAccounts()}
+
+          {/* Add Account Modal */}
+          {isAddModalOpen && (
+            <Dialog open onClose={closeAddModal} title="Add bank account" surface="custom" overlayClassName="st-modal-overlay">
+              <dialog open className="st-modal">
+                <div className="st-modal-header">
+                  <h3>Add Bank Account</h3>
+                  <ModalCloseButton onClick={closeAddModal} label="Close Add Bank Account" />
                 </div>
-                <div className="form-group st-span-2">
-                  <label htmlFor="settings-editing-name" className="label">Account Name</label>
-                  <Input id="settings-editing-name"
-                    className="input"
-                    placeholder="Account name"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
+                <form className="st-modal-form" onSubmit={onSubmitAdd}>
+                  <div className="st-form-grid">
+                    <div className="form-group st-span-2">
+                      <label htmlFor="settings-selected-bank-name" className="label">Bank</label>
+                      <Select id="settings-selected-bank-name"
+                        className="input"
+                        value={selectedBankName}
+                        onChange={(e) => setSelectedBankName(e.target.value)}
+                      >
+                        {SINGAPORE_BANKS.map((bank) => (
+                          <option key={bank.code} value={bank.name}>
+                            {bank.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="form-group st-span-2">
+                      <label htmlFor="settings-name" className="label">Account Name</label>
+                      <Input id="settings-name"
+                        className="input"
+                        placeholder="e.g., DBS Savings"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                      <span className="st-hint">If left empty, the bank name will be used</span>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="settings-balance" className="label">Starting Balance</label>
+                      <NumericCalculatorInput id="settings-balance"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={balance}
+                        onValueChange={setBalance}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="settings-description" className="label">Description</label>
+                      <Input id="settings-description"
+                        className="input"
+                        placeholder="Optional"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {createAccount.isError && (
+                    <div className="st-error">
+                      Failed to save: {(createAccount.error as Error)?.message || "Unknown error"}
+                    </div>
+                  )}
+                  <div className="st-modal-actions">
+                    <Button type="button" className="btn btn-ghost" onClick={closeAddModal}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" className="btn btn-primary" disabled={createAccount.isPending}>
+                      {createAccount.isPending ? "Adding..." : "Add Account"}
+                    </Button>
+                  </div>
+                </form>
+              </dialog>
+            </Dialog>
+          )}
+
+          {/* Edit Account Modal */}
+          {isEditModalOpen && editingAccountId && (
+            <Dialog open onClose={closeEditModal} title="Edit bank account" surface="custom" overlayClassName="st-modal-overlay">
+              <dialog open className="st-modal">
+                <div className="st-modal-header">
+                  <h3>Edit Bank Account</h3>
+                  <ModalCloseButton onClick={closeEditModal} label="Close Edit Bank Account" />
+                </div>
+                <form className="st-modal-form" onSubmit={onSubmitEdit}>
+                  <div className="st-form-grid">
+                    <div className="form-group st-span-2">
+                      <label htmlFor="settings-editing-bank-name" className="label">Bank</label>
+                      <Select id="settings-editing-bank-name"
+                        className="input"
+                        value={editingBankName}
+                        onChange={(e) => setEditingBankName(e.target.value)}
+                      >
+                        {SINGAPORE_BANKS.map((bank) => (
+                          <option key={bank.code} value={bank.name}>
+                            {bank.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="form-group st-span-2">
+                      <label htmlFor="settings-editing-name" className="label">Account Name</label>
+                      <Input id="settings-editing-name"
+                        className="input"
+                        placeholder="Account name"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="settings-editing-balance" className="label">Balance</label>
+                      <NumericCalculatorInput id="settings-editing-balance"
+                        min="0"
+                        step="0.01"
+                        value={editingBalance}
+                        onValueChange={setEditingBalance}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="settings-editing-is-active-active-inactive" className="label">Status</label>
+                      <Select id="settings-editing-is-active-active-inactive"
+                        className="input"
+                        value={editingIsActive ? "ACTIVE" : "INACTIVE"}
+                        onChange={(e) => setEditingIsActive(e.target.value === "ACTIVE")}
+                      >
+                        <option value="ACTIVE">Active</option>
+                        <option value="INACTIVE">Inactive</option>
+                      </Select>
+                    </div>
+                    <div className="form-group st-span-2">
+                      <label htmlFor="settings-editing-description" className="label">Description</label>
+                      <Input id="settings-editing-description"
+                        className="input"
+                        placeholder="Optional"
+                        value={editingDescription}
+                        onChange={(e) => setEditingDescription(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <MutationErrorSummary
+                    error={updateAccount.error}
+                    onReload={async () => {
+                      closeEditModal();
+                      await accounts.refetch();
+                    }}
                   />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="settings-editing-balance" className="label">Balance</label>
-                  <NumericCalculatorInput id="settings-editing-balance"
-                    min="0"
-                    step="0.01"
-                    value={editingBalance}
-                    onValueChange={setEditingBalance}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="settings-editing-is-active-active-inactive" className="label">Status</label>
-                  <Select id="settings-editing-is-active-active-inactive"
-                    className="input"
-                    value={editingIsActive ? "ACTIVE" : "INACTIVE"}
-                    onChange={(e) => setEditingIsActive(e.target.value === "ACTIVE")}
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                  </Select>
-                </div>
-                <div className="form-group st-span-2">
-                  <label htmlFor="settings-editing-description" className="label">Description</label>
-                  <Input id="settings-editing-description"
-                    className="input"
-                    placeholder="Optional"
-                    value={editingDescription}
-                    onChange={(e) => setEditingDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-              <MutationErrorSummary
-                error={updateAccount.error}
-                onReload={async () => {
-                  closeEditModal();
-                  await accounts.refetch();
-                }}
-              />
-              <div className="st-modal-actions">
-                <Button type="button" className="btn btn-ghost" onClick={closeEditModal}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="btn btn-primary" disabled={updateAccount.isPending}>
-                  {updateAccount.isPending ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
-            </form>
-          </dialog>
-        </Dialog>
+                  <div className="st-modal-actions">
+                    <Button type="button" className="btn btn-ghost" onClick={closeEditModal}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" className="btn btn-primary" disabled={updateAccount.isPending}>
+                      {updateAccount.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
+                </form>
+              </dialog>
+            </Dialog>
           )}
         </>
       ) : null}

@@ -364,10 +364,7 @@ export function TransactionsPage() {
     refetchOnWindowFocus: true,
   });
 
-  const isRefreshing =
-    (bankAccounts.isFetching && !bankAccounts.isLoading) ||
-    (budgets.isFetching && !budgets.isLoading) ||
-    (transactions.isFetching && !transactions.isLoading);
+  const isRefreshing = [bankAccounts, budgets, transactions].some((query) => query.isFetching && !query.isLoading);
 
   useEffect(() => {
     const target = loadMoreTransactionsRef.current;
@@ -465,16 +462,20 @@ export function TransactionsPage() {
     setHydratedUrlFilterKey(urlFilterKey);
   }, [urlFilterHydrated, urlFilterKey, bankAccounts.data, budgets.data, searchParams]);
 
-  useUrlFilterSync({
-    accountId: effectiveSelectedBankId || null,
-    budgetId: activeBudgetFilterId === "ALL" ? null : activeBudgetFilterId,
-    groupId: activeGroupFilterId === "ALL" ? null : activeGroupFilterId,
-    months: customMonthsFilter || null,
-    period: getTransactionPeriodParam(activeQuickSelect),
-    from: activeQuickSelect === "custom" && !customMonthsFilter ? dateFilter.from : null,
-    to: activeQuickSelect === "custom" && !customMonthsFilter ? dateFilter.to : null,
-    search: debouncedSearchQuery || null,
-  }, urlFilterHydrated && bankFilterHydrated);
+  function getTransactionUrlFilters() {
+    return {
+      accountId: effectiveSelectedBankId || null,
+      budgetId: activeBudgetFilterId === "ALL" ? null : activeBudgetFilterId,
+      groupId: activeGroupFilterId === "ALL" ? null : activeGroupFilterId,
+      months: customMonthsFilter || null,
+      period: getTransactionPeriodParam(activeQuickSelect),
+      from: activeQuickSelect === "custom" && !customMonthsFilter ? dateFilter.from : null,
+      to: activeQuickSelect === "custom" && !customMonthsFilter ? dateFilter.to : null,
+      search: debouncedSearchQuery || null,
+    };
+  }
+
+  useUrlFilterSync(getTransactionUrlFilters(), urlFilterHydrated && bankFilterHydrated);
 
   useEffect(() => {
     if (!targetTransactionId) focusedTransactionIdRef.current = null;
@@ -1213,32 +1214,8 @@ export function TransactionsPage() {
     if (selectedTransactionIds.length) setIsGroupModalOpen(true);
   };
 
-  return (
-    <div className="txn-page" style={{ display: "grid", gap: "14px" }}>
-      {isRefreshing ? (
-        <div className="tx-refresh-indicator" aria-live="polite">
-          <LoadingDots className="tx-refresh-dots" />
-          <span className="tx-refresh-label">Refreshing</span>
-        </div>
-      ) : null}
-
-      {/* Show full skeleton while initial loading */}
-      {bankAccounts.isLoading || budgets.isLoading ? (
-        <TransactionsInitialSkeleton />
-      ) : (
-        <>
-          <TransactionBankSelector
-            accounts={bankAccountOptions}
-            selected={selectedBank}
-            balanceCents={displayedBankBalanceCents}
-            open={isBankPickerOpen}
-            busy={updateBankBalance.isPending}
-            formatAmount={formatCents}
-            onOpenChange={setIsBankPickerOpen}
-            onSelect={setSelectedBankId}
-            onEdit={openEditBankBalance}
-          />
-
+  function renderSubAccounts() {
+    return (
       <section ref={subAccountsRef} className="card tx-subaccounts-section">
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
@@ -1283,30 +1260,11 @@ export function TransactionsPage() {
           onReceivables={setReceivableInfoBudgetId}
         />
       </section>
+    );
+  }
 
-      {activeBudgetFilterId !== "ALL" ? (
-        <TransactionGroupPanel
-          key={activeBudgetFilterId}
-          budgetName={activeBudget?.name ?? "sub-account"}
-          groups={transactionGroups.data ?? []}
-          activeId={activeGroupFilterId}
-          loading={transactionGroups.isLoading}
-          error={transactionGroups.error}
-          canGroup={filteredTransactions.length > 0}
-          formatAmount={formatCents}
-          onSelect={selectTransactionGroupFromPicker}
-          onToggle={toggleTransactionGroupFilter}
-          onEdit={setEditingGroup}
-          onGroup={() => {
-            setIsGroupingMode(true);
-            setSelectedTransactionIds([]);
-            recentTransactionsRef.current?.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
-          }}
-          onRetry={() => { void transactionGroups.refetch(); }}
-        />
-      ) : null}
-
-      {/* Month/Year Filter Bar */}
+  function renderTransactionFilters() {
+    return (
       <div className="tx-filter-bar" ref={customMonthBtnRef}>
         <div className="tx-filter-controls">
           <div className="tx-filter-pills">
@@ -1456,7 +1414,11 @@ export function TransactionsPage() {
           document.body
         )}
       </div>
-      {/* Recent Transactions List */}
+    );
+  }
+
+  function renderTransactions() {
+    return (
       <section ref={recentTransactionsRef} className="card">
         {isGroupingMode ? (
           <div className="tx-selection-bar">
@@ -1481,118 +1443,77 @@ export function TransactionsPage() {
             </Button>
           </div>
         ) : (
-        <div style={{ display: "flex", justifyContent: "center", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
-          {transactions.isLoading ? (
-            <TransactionsStatsSkeleton />
-          ) : filteredTransactions.length > 0 ? (
-            <div className="transaction-stats-row">
-              <span className="period-label-desktop">{getPeriodLabel()}</span>
-              {filteredTransactions.length > 0 && (
-                <div className="transaction-stats-summary">
-                  <span style={{ color: "var(--amount-positive)" }}>
-                    {formatCents(transactionStats.income)}
-                  </span>
-                  <span>-</span>
-                  <span style={{ color: "var(--amount-negative)" }}>
-                    {formatCents(transactionStats.expense)}
-                  </span>
-                  <span>=</span>
-                  <span className={getAmountToneClass(transactionStats.net)}>
-                    {transactionStats.net >= 0 ? "+" : ""}
-                    {formatCents(Math.abs(transactionStats.net))}
-                  </span>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
+            {renderTransactionStats()}
+          </div>
         )}
-        <div className="simple-list tx-month-groups">
-          {transactions.isLoading && <TransactionsListSkeleton />}
-
-          {transactions.isError && (
-            <div className="empty-state" style={{ padding: "40px 20px" }}>
-              <div className="empty-state-icon">⚠️</div>
-              <h3 className="empty-state-title">Failed to load transactions</h3>
-              <Button className="btn btn-primary" onClick={() => transactions.refetch()}>
-                Retry
-              </Button>
-            </div>
-          )}
-
-          {!transactions.isLoading && !transactions.isError ? (
-            <TransactionMonthList
-              groups={transactionsByMonth}
-              summaries={transactionMonthSummaryByKey}
-              useServerSummaries={!searchQuery.trim() && activeGroupFilterId === "ALL"}
-              deletingIds={deletingTransactionIds}
-              selectedIds={selectedTransactionIds}
-              targetId={targetTransactionId}
-              grouping={isGroupingMode}
-              formatAmount={formatCents}
-              onActivate={(transaction) => {
-                if (isGroupingMode) toggleTransactionSelection(transaction.id);
-                else beginEdit(transaction);
-              }}
-            />
-          ) : null}
-          {!transactions.isLoading && !transactions.isError && transactions.hasNextPage ? (
-            <div ref={loadMoreTransactionsRef} style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
-              <Button
-                className="btn btn-ghost"
-                type="button"
-                onClick={() => transactions.fetchNextPage()}
-                disabled={transactions.isFetchingNextPage}
-              >
-                {transactions.isFetchingNextPage ? <LoadingDots /> : "Load more"}
-              </Button>
-            </div>
-          ) : null}
-          {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
-            <EmptyState
-              icon={searchQuery.trim() ? "🔎" : "📑"}
-              title={searchQuery.trim() ? "No matching transactions" : "No transactions"}
-              description={searchQuery.trim() ? `No transactions match “${searchQuery.trim()}”.` : selectedMonthFilter !== "ALL" ? "No transactions for this month." : effectiveSelectedBankId ? "Add your first transaction for this bank account." : "Add your first transaction to start tracking your spending."}
-              action={!searchQuery.trim() ? (
-                <Button className="btn btn-primary" onClick={openCreateModal}>
-                  + Add Transaction
-                </Button>
-              ) : undefined}
-            />
-          )}
-        </div>
+        {renderTransactionGroups()}
       </section>
+    );
+  }
 
-      {isGroupModalOpen && workspaceId && activeBudgetFilterId !== "ALL" ? (
-        <TransactionGroupCreateDialog
-          workspaceId={workspaceId}
-          budgetId={activeBudgetFilterId}
-          budgetName={activeBudget?.name ?? "sub-account"}
-          transactionIds={selectedTransactionIds}
-          groups={transactionGroups.data ?? []}
-          defaults={getContextualGroupDefaults(activeBudget, transactionList.filter((transaction) => selectedTransactionIds.includes(transaction.id)))}
-          onClose={() => setIsGroupModalOpen(false)}
-          onSaved={() => {
-            setIsGroupModalOpen(false);
-            setIsGroupingMode(false);
-            setSelectedTransactionIds([]);
-          }}
-        />
-      ) : null}
+  function renderTransactionGroups() {
+    return (
+      <div className="simple-list tx-month-groups">
+        {transactions.isLoading && <TransactionsListSkeleton />}
 
-      {editingGroup && workspaceId ? (
-        <TransactionGroupEditDialog
-          key={editingGroup.id}
-          group={editingGroup}
-          workspaceId={workspaceId}
-          workspace={{ name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" }}
-          formatAmount={formatCents}
-          onClose={() => setEditingGroup(null)}
-          onDeleted={() => { setEditingGroup(null); setActiveGroupFilterId("ALL"); }}
-        />
-      ) : null}
+        {transactions.isError && (
+          <div className="empty-state" style={{ padding: "40px 20px" }}>
+            <div className="empty-state-icon">⚠️</div>
+            <h3 className="empty-state-title">Failed to load transactions</h3>
+            <Button className="btn btn-primary" onClick={() => transactions.refetch()}>
+              Retry
+            </Button>
+          </div>
+        )}
 
-      {isCreateModalOpen && typeof document !== "undefined" && createPortal(
+        {!transactions.isLoading && !transactions.isError ? (
+          <TransactionMonthList
+            groups={transactionsByMonth}
+            summaries={transactionMonthSummaryByKey}
+            useServerSummaries={!searchQuery.trim() && activeGroupFilterId === "ALL"}
+            deletingIds={deletingTransactionIds}
+            selectedIds={selectedTransactionIds}
+            targetId={targetTransactionId}
+            grouping={isGroupingMode}
+            formatAmount={formatCents}
+            onActivate={(transaction) => {
+              if (isGroupingMode) toggleTransactionSelection(transaction.id);
+              else beginEdit(transaction);
+            }}
+          />
+        ) : null}
+        {!transactions.isLoading && !transactions.isError && transactions.hasNextPage ? (
+          <div ref={loadMoreTransactionsRef} style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
+            <Button
+              className="btn btn-ghost"
+              type="button"
+              onClick={() => transactions.fetchNextPage()}
+              disabled={transactions.isFetchingNextPage}
+            >
+              {transactions.isFetchingNextPage ? <LoadingDots /> : "Load more"}
+            </Button>
+          </div>
+        ) : null}
+        {!transactions.isLoading && !transactions.isError && filteredTransactions.length === 0 && (
+          <EmptyState
+            icon={searchQuery.trim() ? "🔎" : "📑"}
+            title={searchQuery.trim() ? "No matching transactions" : "No transactions"}
+            description={getEmptyTransactionsDescription()}
+            action={!searchQuery.trim() ? (
+              <Button className="btn btn-primary" onClick={openCreateModal}>
+                + Add Transaction
+              </Button>
+            ) : undefined}
+          />
+        )}
+      </div>
+    );
+  }
+
+  function renderCreateTransactionModal() {
+    return (
+      isCreateModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={() => setIsCreateModalOpen(false)} title="Add transaction" surface="custom" overlayClassName="profile-modal-overlay">
           <dialog open className="profile-modal txn-modal txn-entry-modal">
             <div className="profile-modal-head">
@@ -1700,9 +1621,13 @@ export function TransactionsPage() {
           </dialog>
         </Dialog>,
         document.body
-      )}
+      )
+    );
+  }
 
-      {editingTxId && typeof document !== "undefined" && createPortal(
+  function renderTransactionCorrection() {
+    return (
+      editingTxId && typeof document !== "undefined" && createPortal(
         <TransactionCorrectionDialog
           amount={editAmount}
           budgets={editableBudgets}
@@ -1737,25 +1662,13 @@ export function TransactionsPage() {
           onSubmit={onSubmitEdit}
         />,
         document.body
-      )}
+      )
+    );
+  }
 
-      {editingBankAccount && typeof document !== "undefined" && createPortal(
-        <TransactionBankBalanceDialog
-          name={editingBankAccount.name}
-          currency={baseCurrency}
-          balance={editBankBalance}
-          valid={nextBankBalanceCents !== null}
-          pending={updateBankBalance.isPending}
-          error={updateBankBalance.error}
-          onChange={setEditBankBalance}
-          onClose={closeEditBankBalance}
-          onSubmit={onSubmitBankBalance}
-          onReload={reloadBankBalance}
-        />,
-        document.body
-      )}
-
-      {isTransferModalOpen && typeof document !== "undefined" && createPortal(
+  function renderTransferModal() {
+    return (
+      isTransferModalOpen && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={closeTransferModal} title="Transfer between sub-accounts" surface="custom" overlayClassName="profile-modal-overlay">
           <dialog open className="profile-modal txn-modal">
             <div className="profile-modal-head">
@@ -1764,48 +1677,48 @@ export function TransactionsPage() {
             </div>
             <form className="modal-form-shell" onSubmit={onSubmitTransfer}>
               <div className="profile-modal-body txn-modal-body txn-modal-form">
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Title
-                <Input className="input" placeholder="Transfer title" value={transferTitle} onChange={(e) => setTransferTitle(e.target.value)} required />
-              </label>
-              <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Amount
-                <NumericCalculatorInput
-                  min="0.01"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={transferAmount}
-                  onValueChange={setTransferAmount}
-                  required
-                />
-              </label>
-              <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Source Sub-Account
-                <Select className="input" value={transferSourceBudgetId} onChange={(e) => setTransferSourceBudgetId(e.target.value)} required>
-                  <option value="" disabled>Select source sub-account</option>
-                  {(budgets.data ?? []).map((budget) => (
-                    <option key={budget.id} value={budget.id}>
-                      {budget.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                Destination Sub-Account
-                <Select className="input" value={transferDestinationBudgetId} onChange={(e) => setTransferDestinationBudgetId(e.target.value)} required>
-                  <option value="" disabled>Select destination sub-account</option>
-                  {(budgets.data ?? []).map((budget) => (
-                    <option key={budget.id} value={budget.id}>
-                      {budget.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              {transferBetweenBudgets.isError ? (
-                <div className="modal-grid-span-2" style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
-                  {(transferBetweenBudgets.error as Error)?.message || "Transfer failed"}
-                </div>
-              ) : null}
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Title
+                  <Input className="input" placeholder="Transfer title" value={transferTitle} onChange={(e) => setTransferTitle(e.target.value)} required />
+                </label>
+                <label style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Amount
+                  <NumericCalculatorInput
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={transferAmount}
+                    onValueChange={setTransferAmount}
+                    required
+                  />
+                </label>
+                <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Source Sub-Account
+                  <Select className="input" value={transferSourceBudgetId} onChange={(e) => setTransferSourceBudgetId(e.target.value)} required>
+                    <option value="" disabled>Select source sub-account</option>
+                    {(budgets.data ?? []).map((budget) => (
+                      <option key={budget.id} value={budget.id}>
+                        {budget.name}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="modal-grid-span-2" style={{ display: "grid", gap: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Destination Sub-Account
+                  <Select className="input" value={transferDestinationBudgetId} onChange={(e) => setTransferDestinationBudgetId(e.target.value)} required>
+                    <option value="" disabled>Select destination sub-account</option>
+                    {(budgets.data ?? []).map((budget) => (
+                      <option key={budget.id} value={budget.id}>
+                        {budget.name}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                {transferBetweenBudgets.isError ? (
+                  <div className="modal-grid-span-2" style={{ color: "var(--danger)", fontSize: "12px" }} role="alert">
+                    {(transferBetweenBudgets.error as Error)?.message || "Transfer failed"}
+                  </div>
+                ) : null}
               </div>
               <div className="txn-modal-actions">
                 <Button type="button" className="btn btn-ghost" onClick={closeTransferModal}>
@@ -1830,9 +1743,13 @@ export function TransactionsPage() {
           </dialog>
         </Dialog>,
         document.body
-      )}
+      )
+    );
+  }
 
-      {receivableInfoBudgetId && typeof document !== "undefined" && createPortal(
+  function renderReceivableBreakdown() {
+    return (
+      receivableInfoBudgetId && typeof document !== "undefined" && createPortal(
         <Dialog open onClose={() => setReceivableInfoBudgetId(null)} title="Receivable details" surface="custom" overlayClassName="profile-modal-overlay">
           <dialog open className="profile-modal txn-modal">
             <div className="profile-modal-head">
@@ -1858,34 +1775,19 @@ export function TransactionsPage() {
                 <strong className={getAmountToneClass(receivableInfoTotalCents)}>{formatCents(receivableInfoTotalCents)}</strong>
               </div>
               <div className="simple-list">
-                {receivableBudgetSummary.isLoading ? (
-                  <TransactionsReceivablesListSkeleton />
-                ) : receivableInfoItems.length ? (
-                  receivableInfoItems.map((receivable) => (
-                    <div key={receivable.id} className="crud-row">
-                      <div style={{ display: "grid", gap: "3px" }}>
-                        <div style={{ fontWeight: 600 }}>{receivable.title || "Receivable"}</div>
-                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                          {new Date(receivable.date).toLocaleDateString()} · {receivable.status}
-                          {receivable.workspaceName && receivable.workspaceId !== workspaceId ? ` · ${receivable.workspaceName}` : ""}
-                        </div>
-                      </div>
-                      <div className={getAmountToneClass(receivable.amountCents)}>{formatCents(receivable.amountCents)}</div>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    No open receivables are currently linked to this sub account.
-                  </div>
-                )}
+                {renderReceivableItems()}
               </div>
             </div>
           </dialog>
         </Dialog>,
         document.body
-      )}
+      )
+    );
+  }
 
-      {isBudgetModalOpen && typeof document !== "undefined" && createPortal(
+  function renderBudgetModal() {
+    return (
+      isBudgetModalOpen && typeof document !== "undefined" && createPortal(
         <TransactionBudgetDialog
           editing={Boolean(editingBudgetId)}
           name={editingBudgetId ? editingBudgetName : createBudgetName}
@@ -1912,7 +1814,207 @@ export function TransactionsPage() {
           onDelete={confirmDeleteBudget}
         />,
         document.body
-      )}
+      )
+    );
+  }
+
+  function renderTransactionStats() {
+    if (transactions.isLoading) {
+      return (<TransactionsStatsSkeleton />);
+    }
+    if (filteredTransactions.length > 0) {
+      return (<div className="transaction-stats-row">
+        <span className="period-label-desktop">{getPeriodLabel()}</span>
+        {filteredTransactions.length > 0 && (
+          <div className="transaction-stats-summary">
+            <span style={{ color: "var(--amount-positive)" }}>
+              {formatCents(transactionStats.income)}
+            </span>
+            <span>-</span>
+            <span style={{ color: "var(--amount-negative)" }}>
+              {formatCents(transactionStats.expense)}
+            </span>
+            <span>=</span>
+            <span className={getAmountToneClass(transactionStats.net)}>
+              {transactionStats.net >= 0 ? "+" : ""}
+              {formatCents(Math.abs(transactionStats.net))}
+            </span>
+          </div>
+        )}
+      </div>);
+    }
+    return (null);
+  }
+
+  function getEmptyTransactionsDescription() {
+    if (searchQuery.trim()) {
+      return (`No transactions match “${searchQuery.trim()}”.`);
+    }
+    if (selectedMonthFilter !== "ALL") {
+      return ("No transactions for this month.");
+    }
+    if (effectiveSelectedBankId) {
+      return ("Add your first transaction for this bank account.");
+    }
+    return ("Add your first transaction to start tracking your spending.");
+  }
+
+  function renderReceivableItems() {
+    if (receivableBudgetSummary.isLoading) {
+      return (<TransactionsReceivablesListSkeleton />);
+    }
+    if (receivableInfoItems.length) {
+      return (receivableInfoItems.map((receivable) => (
+        <div key={receivable.id} className="crud-row">
+          <div style={{ display: "grid", gap: "3px" }}>
+            <div style={{ fontWeight: 600 }}>{receivable.title || "Receivable"}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+              {new Date(receivable.date).toLocaleDateString()} · {receivable.status}
+              {receivable.workspaceName && receivable.workspaceId !== workspaceId ? ` · ${receivable.workspaceName}` : ""}
+            </div>
+          </div>
+          <div className={getAmountToneClass(receivable.amountCents)}>{formatCents(receivable.amountCents)}</div>
+        </div>
+      )));
+    }
+    return (<div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+      No open receivables are currently linked to this sub account.
+    </div>);
+  }
+
+  function renderGroupFilters() {
+    return (
+      activeBudgetFilterId !== "ALL" ? (
+        <TransactionGroupPanel
+          key={activeBudgetFilterId}
+          budgetName={activeBudget?.name ?? "sub-account"}
+          groups={transactionGroups.data ?? []}
+          activeId={activeGroupFilterId}
+          loading={transactionGroups.isLoading}
+          error={transactionGroups.error}
+          canGroup={filteredTransactions.length > 0}
+          formatAmount={formatCents}
+          onSelect={selectTransactionGroupFromPicker}
+          onToggle={toggleTransactionGroupFilter}
+          onEdit={setEditingGroup}
+          onGroup={() => {
+            setIsGroupingMode(true);
+            setSelectedTransactionIds([]);
+            recentTransactionsRef.current?.scrollIntoView({ behavior: getMotionSafeScrollBehavior(), block: "start" });
+          }}
+          onRetry={() => { void transactionGroups.refetch(); }}
+        />
+      ) : null
+    );
+  }
+
+  function renderCreateGroupDialog() {
+    return (
+      isGroupModalOpen && workspaceId && activeBudgetFilterId !== "ALL" ? (
+        <TransactionGroupCreateDialog
+          workspaceId={workspaceId}
+          budgetId={activeBudgetFilterId}
+          budgetName={activeBudget?.name ?? "sub-account"}
+          transactionIds={selectedTransactionIds}
+          groups={transactionGroups.data ?? []}
+          defaults={getContextualGroupDefaults(activeBudget, transactionList.filter((transaction) => selectedTransactionIds.includes(transaction.id)))}
+          onClose={() => setIsGroupModalOpen(false)}
+          onSaved={() => {
+            setIsGroupModalOpen(false);
+            setIsGroupingMode(false);
+            setSelectedTransactionIds([]);
+          }}
+        />
+      ) : null
+    );
+  }
+
+  function renderEditGroupDialog() {
+    return (
+      editingGroup && workspaceId ? (
+        <TransactionGroupEditDialog
+          key={editingGroup.id}
+          group={editingGroup}
+          workspaceId={workspaceId}
+          workspace={{ name: context.data?.workspaceName || "Current workspace", role: context.data?.role || "EDITOR" }}
+          formatAmount={formatCents}
+          onClose={() => setEditingGroup(null)}
+          onDeleted={() => { setEditingGroup(null); setActiveGroupFilterId("ALL"); }}
+        />
+      ) : null
+    );
+  }
+
+  function renderBankBalanceDialog() {
+    return (
+      editingBankAccount && typeof document !== "undefined" && createPortal(
+        <TransactionBankBalanceDialog
+          name={editingBankAccount.name}
+          currency={baseCurrency}
+          balance={editBankBalance}
+          valid={nextBankBalanceCents !== null}
+          pending={updateBankBalance.isPending}
+          error={updateBankBalance.error}
+          onChange={setEditBankBalance}
+          onClose={closeEditBankBalance}
+          onSubmit={onSubmitBankBalance}
+          onReload={reloadBankBalance}
+        />,
+        document.body
+      )
+    );
+  }
+
+  return (
+    <div className="txn-page" style={{ display: "grid", gap: "14px" }}>
+      {isRefreshing ? (
+        <div className="tx-refresh-indicator" aria-live="polite">
+          <LoadingDots className="tx-refresh-dots" />
+          <span className="tx-refresh-label">Refreshing</span>
+        </div>
+      ) : null}
+
+      {/* Show full skeleton while initial loading */}
+      {bankAccounts.isLoading || budgets.isLoading ? (
+        <TransactionsInitialSkeleton />
+      ) : (
+        <>
+          <TransactionBankSelector
+            accounts={bankAccountOptions}
+            selected={selectedBank}
+            balanceCents={displayedBankBalanceCents}
+            open={isBankPickerOpen}
+            busy={updateBankBalance.isPending}
+            formatAmount={formatCents}
+            onOpenChange={setIsBankPickerOpen}
+            onSelect={setSelectedBankId}
+            onEdit={openEditBankBalance}
+          />
+
+          {renderSubAccounts()}
+
+          {renderGroupFilters()}
+
+          {/* Month/Year Filter Bar */}
+          {renderTransactionFilters()}
+          {/* Recent Transactions List */}
+          {renderTransactions()}
+
+          {renderCreateGroupDialog()}
+
+          {renderEditGroupDialog()}
+
+          {renderCreateTransactionModal()}
+
+          {renderTransactionCorrection()}
+
+          {renderBankBalanceDialog()}
+
+          {renderTransferModal()}
+
+          {renderReceivableBreakdown()}
+
+          {renderBudgetModal()}
         </>
       )}
     </div>
