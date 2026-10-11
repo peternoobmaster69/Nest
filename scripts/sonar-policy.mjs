@@ -183,11 +183,18 @@ export async function verifyCoverage() {
   if (sourceStats.some((source) => source.mtimeMs > reportStat.mtimeMs)) throw new Error("Coverage predates source changes; rerun npm run test:coverage.");
 }
 
+function meetsCoverageMinimum(value, requireEntries) {
+  if (!value || value.skipped !== 0) return false;
+  const { total, covered } = value;
+  if (!Number.isSafeInteger(total) || !Number.isSafeInteger(covered) || total < 0 || covered < 0 || covered > total) return false;
+  if (total === 0) return !requireEntries;
+  return BigInt(covered) * 100n >= BigInt(total) * BigInt(policy.minimumCoverage);
+}
+
 export function coverageFailures(summary) {
-  return ["lines", "statements", "functions", "branches"].filter((metric) => {
-    const value = summary.total?.[metric];
-    return !value || !Number.isFinite(value.total) || value.total < 0 || (value.total === 0 && ["lines", "statements"].includes(metric)) || value.covered !== value.total || value.skipped !== 0;
-  }).map((metric) => `${metric} coverage must be exactly 100%, with no skipped entries.`);
+  return ["lines", "statements", "functions", "branches"].filter((metric) => (
+    !meetsCoverageMinimum(summary?.total?.[metric], ["lines", "statements"].includes(metric))
+  )).map((metric) => `${metric} coverage must be at least ${policy.minimumCoverage}%, with no skipped entries.`);
 }
 
 export function analysisFailures(task, status) {

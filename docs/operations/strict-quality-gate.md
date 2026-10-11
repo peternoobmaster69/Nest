@@ -12,11 +12,11 @@ The [2026-10-01 baseline](strict-quality-baseline-2026-10-01.md) records the ini
 | --- | --- |
 | Sonar issues, at every severity | Zero overall and on new code |
 | Accepted issues | Zero overall and on new code |
-| Line and branch coverage | 100% overall and on new code |
+| Combined, line, and branch coverage | At least 80% overall and on new code |
 | Duplicated lines | 0% overall and on new code |
 | Security hotspots | 100% reviewed overall and on new code |
 | Small changes | Coverage and duplication conditions always apply |
-| Local coverage | Exactly 100% of lines, statements, functions, and branches; no skipped entries in the coverage report |
+| Local coverage | At least 80% of lines, statements, functions, and branches; no skipped entries in the coverage report |
 | Dependencies, including development tools | No known vulnerabilities at low severity or above |
 | CodeQL | `security-and-quality` suite; zero results, including suppressed results |
 | Secrets | Gitleaks scan of repository history |
@@ -26,6 +26,8 @@ The [2026-10-01 baseline](strict-quality-baseline-2026-10-01.md) records the ini
 **Nest comprehensive** inherits the strongest curated Sonar profile for JavaScript, TypeScript, CSS, HTML, JSON, YAML, Docker, secrets, and text. On Community Build 26.9, that built-in is called **Sonar way**; newer documentation calls its replacement **Sonar way comprehensive**. All additional stable, non-template rules with security or reliability impact and all stable security hotspot rules are activated. JavaScript and TypeScript also report `NOSONAR` comments. Inheriting the curated maintainability rules avoids enabling mutually conflicting style rules. No scanner can prove that all defects are absent.
 
 The verifier rejects missing conditions, altered thresholds, a different assigned gate, missing or modified inherited rules, missing extra security rules, and small-change exemptions. The new-code window is 30 days. Overall conditions also apply, so the first analysis and a missing comparison baseline cannot hide existing issues.
+
+On 2026-10-11 the repository owner approved an 80% coverage minimum, replacing the original 100% requirement with a practical baseline for continued CI maintenance. Policy version 2 applies that minimum to all four local coverage metrics and Sonar's overall and new-code coverage. The coverage scope, zero-issue and duplication requirements, security checks, and 100% hotspot review requirement remain in force. Local enforcement uses exact covered and total counts; rounded percentages cannot make a result below 80% pass.
 
 ## Local use
 
@@ -90,9 +92,9 @@ Reviewed 2026-10-01:
 
 - [GitHub: reviewing AI-generated code](https://docs.github.com/en/copilot/tutorials/review-ai-generated-code): compile, test, and analyze; verify intent and architecture; scrutinize dependencies; watch for omitted or weakened tests.
 - [GitHub: responsible use of agents](https://docs.github.com/en/copilot/responsible-use/agents): retain human responsibility and combine review with security, dependency, and secret checks.
-- [Sonar: quality gate for agentic AI](https://docs.sonarsource.com/sonarqube-server/quality-standards-administration/ai-code-assurance/quality-gate-for-agentic-ai): stronger reliability, security, maintainability, and dependency checks; its documented coverage/duplication limits are 80%/3%. Nest deliberately tightens these to 100%/0% and applies them to overall code too.
+- [Sonar: quality gate for agentic AI](https://docs.sonarsource.com/sonarqube-server/quality-standards-administration/ai-code-assurance/quality-gate-for-agentic-ai): stronger reliability, security, maintainability, and dependency checks; its documented coverage/duplication limits are 80%/3%. Nest requires 80% coverage and 0% duplication and applies both to overall code too.
 - [Sonar: built-in profiles](https://docs.sonarsource.com/sonarqube-server/quality-standards-administration/managing-quality-profiles/built-in-quality-profiles): comprehensive is the strongest curated profile and replaces the former Sonar way name.
 - [Sonar Community: quality gates](https://docs.sonarsource.com/sonarqube-community-build/quality-standards-administration/managing-quality-gates/introduction-to-quality-gates): zero issues is stronger than relying on A ratings; small-change exemptions otherwise skip some conditions.
 - [Sonar Community: JavaScript/TypeScript coverage](https://docs.sonarsource.com/sonarqube-community-build/analyzing-source-code/test-coverage/javascript-typescript-test-coverage): coverage must be produced by tests and imported through LCOV.
 
-This is a project quality policy informed by that guidance, not a claim of Sonar's licensed AI Code Assurance certification. Static analysis and 100% coverage support review; neither establishes that the product meets its requirements or that every important behavior was tested.
+This is a project quality policy informed by that guidance, not a claim of Sonar's licensed AI Code Assurance certification. Static analysis and coverage measurements support review; neither establishes that the product meets its requirements or that every important behavior was tested.

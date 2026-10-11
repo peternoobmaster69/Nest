@@ -10,11 +10,11 @@ import { checkSarif } from "../scripts/check-codeql-results.mjs";
 test("quality gate detects relaxed, missing, and unexpected conditions regardless of order", () => {
   const strict = [
     { metric: "violations", op: "GT", error: "0" },
-    { metric: "coverage", op: "LT", error: "100" },
+    { metric: "coverage", op: "LT", error: "80" },
   ];
   assert.deepEqual(gateDrift([...strict].reverse(), strict), []);
   assert.equal(gateDrift([strict[0]], strict).length, 1);
-  assert.equal(gateDrift([strict[0], { ...strict[1], error: "80" }], strict).length, 2);
+  assert.equal(gateDrift([strict[0], { ...strict[1], error: "79" }], strict).length, 2);
   assert.equal(gateDrift([...strict, { metric: "new_coverage", op: "GT", error: "50" }], strict).length, 1);
 });
 
@@ -27,12 +27,51 @@ test("coverage cannot hide unloaded source files or pass on an empty LCOV report
   assert.throws(() => checkLcov("SF:lib/executed.ts\n", ["lib/executed.ts"], directory), /empty or invalid/);
 });
 
-test("coverage thresholds use exact counts, including branches, and reject ignored coverage", () => {
-  const total = Object.fromEntries(["lines", "statements", "functions", "branches"].map((metric) => [metric, { total: 10, covered: 10, skipped: 0, pct: 100 }]));
-  assert.deepEqual(coverageFailures({ total }), []);
-  assert.equal(coverageFailures({}).length, 4);
-  assert.equal(coverageFailures({ total: { ...total, branches: { total: 100_000, covered: 99_999, skipped: 0, pct: 100 } } }).length, 1);
-  assert.equal(coverageFailures({ total: { ...total, lines: { ...total.lines, skipped: 1 } } }).length, 1);
+const coveredMetrics = ["lines", "statements", "functions", "branches"];
+const coverageTotal = (covered = 8) => Object.fromEntries(coveredMetrics.map((metric) => [metric, { total: 10, covered, skipped: 0, pct: covered * 10 }]));
+
+test("local and Sonar coverage minimums are 80% while hotspot review remains complete", () => {
+  assert.equal(policy.minimumCoverage, 80);
+  const metrics = ["coverage", "new_coverage", "line_coverage", "new_line_coverage", "branch_coverage", "new_branch_coverage"];
+  assert.deepEqual(policy.conditions.filter(({ metric }) => metrics.includes(metric)), metrics.map((metric) => ({ metric, op: "LT", error: String(policy.minimumCoverage) })));
+  for (const metric of ["security_hotspots_reviewed", "new_security_hotspots_reviewed"]) {
+    assert.deepEqual(policy.conditions.find((condition) => condition.metric === metric), { metric, op: "LT", error: "100" });
+  }
+});
+
+test("coverage passes at or above 80% using exact counts for every metric", () => {
+  for (const covered of [8, 9, 10]) assert.deepEqual(coverageFailures({ total: coverageTotal(covered) }), []);
+  for (const metric of coveredMetrics) {
+    const total = coverageTotal();
+    total[metric] = { total: 100_000, covered: 79_999, skipped: 0, pct: 80 };
+    assert.deepEqual(coverageFailures({ total }), [`${metric} coverage must be at least 80%, with no skipped entries.`]);
+    total[metric] = { total: 5, covered: 4, skipped: 0, pct: 0 };
+    assert.deepEqual(coverageFailures({ total }), []);
+  }
+});
+
+test("coverage rejects missing reports, skipped entries, and invalid counts", () => {
+  for (const summary of [undefined, null, {}, { total: {} }]) assert.equal(coverageFailures(summary).length, 4);
+  const invalid = [
+    undefined, null, {}, { total: -1, covered: 0 }, { total: 1, covered: -1 },
+    { total: 1.5, covered: 1 }, { total: 1, covered: 0.8 }, { total: 1, covered: 2 },
+    { total: Infinity, covered: 1 }, { total: 1, covered: NaN }, { total: "10", covered: 8 },
+    { total: 10, covered: "8" }, { total: Number.MAX_SAFE_INTEGER + 1, covered: 1 },
+    { total: 10, covered: 8, skipped: 1 }, { total: 10, covered: 8, skipped: undefined },
+  ];
+  for (const metric of coveredMetrics) {
+    for (const value of invalid) {
+      const entry = value && { skipped: 0, ...value };
+      assert.equal(coverageFailures({ total: { ...coverageTotal(), [metric]: entry } }).length, 1);
+    }
+  }
+});
+
+test("empty lines and statements fail, while modules without functions or branches remain valid", () => {
+  for (const metric of coveredMetrics) {
+    const total = { ...coverageTotal(), [metric]: { total: 0, covered: 0, skipped: 0, pct: 100 } };
+    assert.equal(coverageFailures({ total }).length, ["lines", "statements"].includes(metric) ? 1 : 0);
+  }
 });
 
 test("only a completed analysis with a passing, non-exempt quality gate can pass", () => {

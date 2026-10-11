@@ -69,7 +69,7 @@ CI starts SQL Server, bootstraps the retained baseline, seeds it, exercises inte
 ## Coverage Gaps
 
 - No browser-driven end-to-end test framework is configured.
-- No numeric code-coverage threshold is configured.
+- `npm run coverage:check` requires at least 80% coverage for lines, statements, functions, and branches. See the [strict quality policy](../operations/strict-quality-gate.md) for scope and CI enforcement.
 - Most external integrations are validated with source/contract tests rather than live provider sandboxes.
 - AI evaluation depends on external configuration and is not part of `npm run check`.
 - Disaster recovery and production-scale load tests are not represented.
@@ -96,7 +96,7 @@ CI starts SQL Server, bootstraps the retained baseline, seeds it, exercises inte
 ## Future Improvements
 
 - Add Playwright coverage for authentication, workspace switching, posting, and reversals.
-- Add coverage reporting with thresholds based on risk-critical modules.
+- Extend runtime coverage of risk-critical modules while maintaining the 80% minimum across the full coverage scope.
 - Add reproducible provider emulators or recorded fixtures.
 
 ## Last Updated

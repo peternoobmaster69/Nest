@@ -6,7 +6,7 @@ test("quality evidence preserves recognized measurements without copying arbitra
   const summary = qualityGateSummary({
     status: "ERROR", ignoredConditions: true, unexpected: "untrusted payload",
     conditions: [
-      { metricKey: "coverage", status: "ERROR", actualValue: "18.12", errorThreshold: "80", comparator: "GT", unknown: "untrusted payload" },
+      { metricKey: "coverage", status: "ERROR", actualValue: "18.12", errorThreshold: "100", comparator: "GT", unknown: "untrusted payload" },
       { metricKey: "violations", status: "OK", actualValue: "0" },
       { metricKey: "untrusted payload", status: "OK", actualValue: "1" },
     ],
@@ -14,7 +14,7 @@ test("quality evidence preserves recognized measurements without copying arbitra
   assert.equal(summary.status, "ERROR");
   assert.equal(summary.ignoredConditions, true);
   assert.deepEqual(summary.conditions.find((condition) => condition.metricKey === "coverage"), {
-    metricKey: "coverage", status: "ERROR", actualValue: 18.12, errorThreshold: 100, comparator: "LT",
+    metricKey: "coverage", status: "ERROR", actualValue: 18.12, errorThreshold: 80, comparator: "LT",
   });
   assert.equal(summary.conditions.length, 2);
   assert.doesNotMatch(JSON.stringify(summary), /untrusted payload/);

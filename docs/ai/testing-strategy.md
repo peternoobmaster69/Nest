@@ -63,7 +63,7 @@ Run `npm run audit:public` for release/security/dependency-sensitive work.
 
 ## Known Limitations
 
-- No browser E2E or coverage threshold currently exists.
+- CI runs Playwright browser checks and enforces an 80% minimum for lines, statements, functions, and branches. See the [strict quality policy](../operations/strict-quality-gate.md).
 
 ## Future Improvements
 
