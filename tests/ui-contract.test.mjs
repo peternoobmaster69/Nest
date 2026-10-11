@@ -316,7 +316,8 @@ test("month dropdown identifies outstanding payment due dates", async () => {
   const styles = await readAppStyles(root);
 
   assert.match(component, /fetchJson<PaymentDueMonthsResponse>\(`\/api\/credit-transactions\/payment-due\?\$\{/);
-  assert.match(component, /return getDaysUntil\(paymentDueDate\) <= 5 \? "is-due-soon" : "is-due-later";/);
+  const viewHelpers = await readFile(path.join(root, "lib/credit-transaction-view.ts"), "utf8");
+  assert.match(viewHelpers, /return getDaysUntil\(paymentDueDate\) <= 5 \? "is-due-soon" : "is-due-later";/);
   assert.match(component, /className="cct-mobile-period-picker cct-mobile-month-picker" ref=\{mobileMonthPickerRef\}/);
   assert.match(component, /className=\{`cct-mobile-period-trigger\$\{selectedMonthPaymentDueTone[\s\S]*?aria-expanded=\{isMobileMonthPickerOpen\}/);
   assert.match(component, /aria-label=\{paymentDueDate \? `\$\{month\}, payment due` : month\}/);
